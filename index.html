@@ -315,7 +315,7 @@
 
             initPresets();
             loadDayData();
-            setupRealtimeSync();
+            // setupRealtimeSync();
         });
     </script>
 
@@ -480,7 +480,11 @@
 
             if(unsubscribe) unsubscribe();
 
-            const q = query(window.collection(window.db, "food_records"), window.where("room", "==", roomCode), window.where("date", "==", currentDate));
+            const q = window.query(
+                window.collection(window.db, "food_records"),
+                window.where("room", "==", roomCode),
+                window.where("date", "==", currentDate)
+            );
             
             unsubscribe = window.onSnapshot(q, (snapshot) => {
                 let items = [];
