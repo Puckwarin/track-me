@@ -1,0 +1,1031 @@
+From a96611654c04b7bc287bb8a6a077e0b838aba2f9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 15:06:22 +0000
+Subject: [PATCH] v1.1.0: period tracking, weight & measurements, offline mode,
+ last-sync doctor summary
+
+---
+ README.md            |  26 +-
+ icon-192.png         | Bin 0 -> 1391 bytes
+ icon-512.png         | Bin 0 -> 3895 bytes
+ index.html           | 641 +++++++++++++++++++++++++++++++++++++++++--
+ manifest.webmanifest |  14 +
+ sw.js                |  82 ++++++
+ 6 files changed, 732 insertions(+), 31 deletions(-)
+ create mode 100644 icon-192.png
+ create mode 100644 icon-512.png
+ create mode 100644 manifest.webmanifest
+ create mode 100644 sw.js
+
+diff --git a/README.md b/README.md
+index abd49c1..9e23c52 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,25 @@
+-# track-me
+\ No newline at end of file
++# Track Me
++
++เว็บแอปบันทึกสุขภาพส่วนตัว: อาหาร/แคลอรี่ (พร้อม Gemini AI), **ประจำเดือน**, **น้ำหนักและสัดส่วน**
++ซิงค์ข้ามอุปกรณ์ผ่าน Firebase Firestore และ **ใช้งานแบบออฟไลน์ได้**
++
++## ฟีเจอร์ใหม่ (v1.1.0)
++- **การ์ด "สรุปสุขภาพล่าสุด"** ด้านบนสุด: ประจำเดือนครั้งล่าสุด (LMP) + กี่วันที่แล้ว, รอบเฉลี่ย, น้ำหนักและสัดส่วนล่าสุด, และเวลา **ซิงค์ล่าสุด** — เปิดดูตอนพบแพทย์ได้ทันที มีปุ่มคัดลอกข้อความสรุป
++- **แท็บประจำเดือน**: บันทึกวันเริ่ม/สิ้นสุด ปริมาณ อาการ, คำนวณความยาวรอบ ค่าเฉลี่ย และคาดการณ์รอบหน้า
++- **แท็บน้ำหนัก & สัดส่วน**: น้ำหนัก รอบอก/เอว/สะโพก พร้อมกราฟแนวโน้มและส่วนต่างจากครั้งก่อน
++- **ออฟไลน์**: Service Worker เก็บตัวแอป + Firestore persistent cache เก็บข้อมูล (บันทึกตอนไม่มีเน็ตได้ แล้วซิงค์เองเมื่อกลับมาออนไลน์)
++- ป้ายสถานะ: ซิงค์แล้ว / กำลังซิงค์ / ออฟไลน์ · รอซิงค์
++- ติดตั้งเป็นแอปบนมือถือได้ (Add to Home Screen)
++
++## วิธีใช้ออฟไลน์
++เปิดเว็บ **ตอนออนไลน์อย่างน้อย 1–2 ครั้ง** เพื่อให้เบราว์เซอร์เก็บไฟล์และข้อมูลไว้ก่อน หลังจากนั้นเปิดตอนไม่มีเน็ตได้
++(ต้องเปิดผ่าน https หรือ localhost เท่านั้น เช่น GitHub Pages)
++
++## ข้อควรระวังด้านความเป็นส่วนตัว
++ข้อมูลสุขภาพแยกกันด้วย "รหัสห้อง" (room code) เท่านั้น — ควรตั้งรหัสที่เดายากและยาว
++และควรตั้ง Firestore Security Rules ให้รัดกุม (ดู roadmap: Firebase Anonymous Auth)
++
++## ไฟล์
++- `index.html` — แอปทั้งหมด
++- `sw.js` — Service Worker (แคชแอป/ไลบรารี CDN)
++- `manifest.webmanifest`, `icon-*.png` — การติดตั้งเป็นแอป
+diff --git a/icon-192.png b/icon-192.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..0975078b73fdb7eded7ebea31dddb1e095b6b083
+GIT binary patch
+literal 1391
+zcmeAS@N?(olHy`uVBq!ia0vp^2SAvE2}s`E_d9@rfz`~@#WAE}&fB}zMIw#@t`~(G
+z3vP&59~9#jGP6z$wuq4MHA!-_-M{91^~~=#xI$t}t#^xZnfRYyug_a?rTr>*gE^BE
+z2cu$3gMgC*hoVA@fPfPRhayXh0QtfTwCncoSr^x2!n7-8b$gqh0?^b83%577E0(l0
+z+$)dc;oaK}vhKZwlo`*$VwRFuMXDwxO(3EFJ5vuBwA@o#P@kvY+*Ss1#;@1+79J9~
+zB@mE(MZm$KUwOBigYGp(-cbGyrlwWwBH=a%FEM_#`hAM`D({L<E6YR77wkLrEW%`g
+z;Pcqc3%eMv+PrksVl(kOXmXm><X6vX(-7?iS<9^**ET%Un3}n;A#Gmv+_qILA<tdZ
+zR|{RJah;?qcwyD%H5UT@HE7Lw<n)s{O1pO7N#-C6`&QGQ$(9T5sH-a#J6H)VpJTS*
+zNV=M8x<k`f4!xD#a~LzdZU!7`2%0x}O%7w{b>)3~*lle0?^_e+EFYKt`Q`8JSG`{-
+zpJe&8YPqD|kB+}AMfRNE1E1J7-g%w*Z+e2vgx}ZRuhBnZs_@#^{&}_KG{&EK-&vQ5
+zr+yR4-F3SBW7XQSSq`GFGV`Xt6cJ##$?~K$o=q}#jk|-J^sVmGs?sb^Hch=78MC9x
+zL2R}~-@m8c>`V673U}l;l{j2jE<NGLT=U7F!aCTN>`C=Lk=K#oP_XdF?hUQwx7X{(
+zudh4%e7?QfnkTVM`_+E$sA7D5SLp1;>-s&OEq7RES=PPteSYFh&y}`-qnuY(&;DG$
+z;eo@Ys?K=^b-S(`zm>ng;;%(m29vMF-M_o9NV+-+XS~>Jx_qAHeZMS@r}G^qU$*?Y
+z@1^_1Q!G*?;cHi=e_<+Vo8aZ3tg}8{c~g($B{r4PoS^QP-bxB{8*^MzE~_xT^83&y
+z9up+a$vnwc>t?HK3b)6f2}h=XZ}`gCX>(duGw1HF2CGdw_UnpO?hav0v}1DenAgxF
+z$Lr?3H>=QrYklLjY558BI9pUFv7~$t*bx0;q6%Z8DE8DmL51<=-~YC|S>-*21j2x+
+zUx#nS<N4l3RT?ERuRiTJKgt5i8!Dj=V*ZBRuJ`mp9cJX$I@HE9AASFR-|6UoY<ER~
+z?%k#cbfyZ=3QxJI4<_w8At|tIB1guN%`va~<TpyRiZ4(Tx}c!M+o_X0;S8f`<KgIi
+z4HsMNa#SzNOXW9T7Obq>`b9Xyyi#b1yp8oj&MSZHbC&vgx~KoyVg(fb((syR-rQ>}
+zSv3#tm<Byw9{OX$RPJrf{V5>@Pv%UR?a<4A*LIm%UDQX;lD^I&{iD+}4*vFOe6~%4
+zjYWA8W9GeF?vtSC_N_SmEchPR-G&55D}|@l`BEQ!C-AK}nSVdy*Yx#r0mV0tIO^!#
+zQCN_+X=?4xm`&~uXVaZ`8|;dh-LT-Kro!UiMu%P-iPlTkU;T96Lh6Y2+}_J9w=DC%
+zgaQ+&WWeUT@09mVe=HSHeD90!HSr{w0OR|=dVi}%>~oo4T(h>!KmD<7V_8{y;`Rs1
+zo@y8T>P41%rcc&g(3|FV^3qL}%9gnTHd+T&OD7gH?cG`?mHIYqy8VK)e|j!0-@H=j
+zLSBid>#mzqxihYBUy^nA%`3K&ci)zrdREleATa6k@d_VjGK#G~jOW-VRrGwfaRe5m
+N44$rjF6*2UngF3BQ3wD4
+
+literal 0
+HcmV?d00001
+
+diff --git a/icon-512.png b/icon-512.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd8dcc076f679630022288aad1f4501c181d85c9
+GIT binary patch
+literal 3895
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/index.html b/index.html
+index a4ebb70..9d06b38 100644
+--- a/index.html
++++ b/index.html
+@@ -3,7 +3,11 @@
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Daily Food Tracker & Smart AI Analyzer</title>
++    <meta name="theme-color" content="#059669">
++    <link rel="manifest" href="manifest.webmanifest">
++    <link rel="apple-touch-icon" href="icon-192.png">
++    <meta name="apple-mobile-web-app-capable" content="yes">
++    <title>Track Me — อาหาร ประจำเดือน น้ำหนัก</title>
+     <!-- Tailwind CSS -->
+     <script src="https://cdn.tailwindcss.com"></script>
+     <!-- FontAwesome Icons -->
+@@ -14,10 +18,10 @@
+         body { font-family: 'Prompt', sans-serif; }
+     </style>
+ </head>
+-<body class="bg-slate-50 text-slate-800 min-t-screen pb-12">
++<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+ 
+     <!-- Navbar -->
+-    <header class="bg-emerald-600 text-shadow shadow-md sticky top-0 z-40">
++    <header class="bg-emerald-600 shadow-md sticky top-0 z-40">
+         <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+             <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                 <i class="fa-solid fa-utensils"></i> Daily Food Tracker & AI
+@@ -33,7 +37,30 @@
+         </div>
+     </header>
+ 
+-    <main class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
++    <!-- Doctor Summary (works offline from local cache) -->
++    <section class="max-w-6xl mx-auto px-4 mt-6">
++        <div class="bg-white rounded-2xl shadow-sm border border-rose-100 p-5">
++            <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
++                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
++                    <i class="fa-solid fa-user-doctor text-rose-500"></i> สรุปสุขภาพล่าสุด (เปิดดูตอนพบแพทย์)
++                </h2>
++                <button onclick="copySummary()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1">
++                    <i class="fa-regular fa-copy"></i> คัดลอกสรุป
++                </button>
++            </div>
++            <div id="summary-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
++            <p id="sum-sync" class="text-xs text-slate-500 mt-3"></p>
++        </div>
++    </section>
++
++    <!-- Tabs -->
++    <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto">
++        <button id="tabbtn-food" onclick="showTab('food')" class="px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap"><i class="fa-solid fa-utensils"></i> อาหาร</button>
++        <button id="tabbtn-period" onclick="showTab('period')" class="px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap"><i class="fa-solid fa-droplet"></i> ประจำเดือน</button>
++        <button id="tabbtn-body" onclick="showTab('body')" class="px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap"><i class="fa-solid fa-weight-scale"></i> น้ำหนัก & สัดส่วน</button>
++    </nav>
++
++    <main id="tab-food" class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+         
+         <!-- Column 1 & 2: Main Dashboard & Input -->
+         <div class="lg:col-span-2 space-y-6">
+@@ -195,6 +222,141 @@
+ 
+     </main>
+ 
++    <!-- Tab: Period -->
++    <main id="tab-period" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
++        <div class="lg:col-span-2 space-y-6">
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
++                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
++                    <i class="fa-solid fa-droplet text-rose-500"></i> บันทึกประจำเดือน
++                </h2>
++                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">วันแรกที่มา *</label>
++                        <input type="date" id="period-start" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">วันสุดท้าย (เว้นว่างได้ ถ้ายังไม่หมด)</label>
++                        <input type="date" id="period-end" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">ปริมาณ</label>
++                        <select id="period-flow" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white outline-none">
++                            <option value="">ไม่ระบุ</option>
++                            <option value="น้อย">น้อย</option>
++                            <option value="ปานกลาง">ปานกลาง</option>
++                            <option value="มาก">มาก</option>
++                        </select>
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">อาการ / หมายเหตุ</label>
++                        <input type="text" id="period-note" placeholder="เช่น ปวดท้อง, ปวดหลัง" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                </div>
++                <div class="flex justify-end">
++                    <button onclick="savePeriod()" class="bg-rose-500 hover:bg-rose-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center gap-2">
++                        <i class="fa-solid fa-plus"></i> บันทึกรอบเดือน
++                    </button>
++                </div>
++            </div>
++
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
++                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-list text-rose-500"></i> ประวัติประจำเดือน</h3>
++                <div class="overflow-x-auto">
++                    <table class="w-full text-left text-sm">
++                        <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
++                            <tr>
++                                <th class="p-3">เริ่ม</th>
++                                <th class="p-3">สิ้นสุด</th>
++                                <th class="p-3 text-right">ระยะเวลา</th>
++                                <th class="p-3 text-right">รอบ (วัน)</th>
++                                <th class="p-3">หมายเหตุ</th>
++                                <th class="p-3 text-center">จัดการ</th>
++                            </tr>
++                        </thead>
++                        <tbody id="period-table-body" class="divide-y divide-slate-100"></tbody>
++                    </table>
++                </div>
++            </div>
++        </div>
++
++        <div class="space-y-6">
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
++                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-chart-simple text-rose-500"></i> สถิติรอบเดือน</h3>
++                <div id="period-stats" class="space-y-2 text-sm text-slate-700"></div>
++                <p class="text-xs text-slate-400">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
++            </div>
++        </div>
++    </main>
++
++    <!-- Tab: Body -->
++    <main id="tab-body" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
++        <div class="lg:col-span-2 space-y-6">
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
++                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
++                    <i class="fa-solid fa-weight-scale text-sky-500"></i> บันทึกน้ำหนัก & สัดส่วน
++                </h2>
++                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">วันที่</label>
++                        <input type="date" id="body-date" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">น้ำหนัก (กก.)</label>
++                        <input type="number" step="0.1" inputmode="decimal" id="body-weight" placeholder="0.0" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">รอบอก (ซม.)</label>
++                        <input type="number" step="0.1" inputmode="decimal" id="body-bust" placeholder="0.0" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">รอบเอว (ซม.)</label>
++                        <input type="number" step="0.1" inputmode="decimal" id="body-waist" placeholder="0.0" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">รอบสะโพก (ซม.)</label>
++                        <input type="number" step="0.1" inputmode="decimal" id="body-hip" placeholder="0.0" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                    <div>
++                        <label class="block text-xs font-semibold text-slate-600 mb-1">หมายเหตุ</label>
++                        <input type="text" id="body-note" placeholder="ไม่บังคับ" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none">
++                    </div>
++                </div>
++                <p class="text-xs text-slate-400">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
++                <div class="flex justify-end">
++                    <button onclick="saveBody()" class="bg-sky-500 hover:bg-sky-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center gap-2">
++                        <i class="fa-solid fa-plus"></i> บันทึก
++                    </button>
++                </div>
++            </div>
++
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
++                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-list text-sky-500"></i> ประวัติ</h3>
++                <div class="overflow-x-auto">
++                    <table class="w-full text-left text-sm">
++                        <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
++                            <tr>
++                                <th class="p-3">วันที่</th>
++                                <th class="p-3 text-right">น้ำหนัก</th>
++                                <th class="p-3 text-right">อก</th>
++                                <th class="p-3 text-right">เอว</th>
++                                <th class="p-3 text-right">สะโพก</th>
++                                <th class="p-3 text-center">จัดการ</th>
++                            </tr>
++                        </thead>
++                        <tbody id="body-table-body" class="divide-y divide-slate-100"></tbody>
++                    </table>
++                </div>
++            </div>
++        </div>
++
++        <div class="space-y-6">
++            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
++                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-chart-line text-sky-500"></i> แนวโน้มน้ำหนัก</h3>
++                <div id="weight-chart"></div>
++            </div>
++        </div>
++    </main>
++
+     <!-- Modal: Settings & Sync Room -->
+     <div id="settings-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+         <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+@@ -278,7 +440,7 @@
+     <!-- Firebase SDKs -->
+     <script type="module">
+         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
++        import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, getDocs, deleteDoc, updateDoc, doc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+         
+         const firebaseConfig = {
+             apiKey: "AIzaSyAZoQyNdJLVj2MRlJ-M32FR1c9VTiFGdmM",
+@@ -291,7 +453,16 @@
+         };
+ 
+         const app = initializeApp(firebaseConfig);
+-        const db = getFirestore(app);
++        // เปิด offline persistence (IndexedDB): เขียนตอนออฟไลน์ได้ และอ่านข้อมูลเดิมได้ แล้วซิงค์เองเมื่อกลับมาออนไลน์
++        let db;
++        try {
++            db = initializeFirestore(app, {
++                localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
++            });
++        } catch (e) {
++            console.warn('Persistent cache unavailable, fallback to memory cache', e);
++            db = getFirestore(app);
++        }
+ 
+         // Global State
+         window.db = db;
+@@ -299,24 +470,14 @@
+         window.addDoc = addDoc;
+         window.getDocs = getDocs;
+         window.deleteDoc = deleteDoc;
++        window.updateDoc = updateDoc;
+         window.doc = doc;
+         window.query = query;
+         window.where = where;
+         window.onSnapshot = onSnapshot;
+ 
+-        // Init App on Load
+-        window.addEventListener('DOMContentLoaded', () => {
+-            const todayStr = new Date().toISOString().split('T')[0];
+-            document.getElementById('current-date').value = todayStr;
+-            
+-            // Load settings
+-            document.getElementById('input-gemini-key').value = localStorage.getItem('gemini_key') || '';
+-            document.getElementById('input-room-code').value = localStorage.getItem('room_code') || 'default_room';
+-
+-            initPresets();
+-            loadDayData();
+-            // setupRealtimeSync();
+-        });
++        // Init App on Load (initApp อยู่ใน script ด้านล่าง)
++        window.addEventListener('DOMContentLoaded', () => initApp());
+     </script>
+ 
+     <script>
+@@ -337,7 +498,7 @@
+ 
+         function initPresets() {
+             const datalist = document.getElementById('preset-datalist');
+-            datalist.innerHTML = getPresets().map(p => `<option value="${p.name}"> (${p.calories} kcal | P:${p.protein}g)</option>`).join('');
++            datalist.innerHTML = getPresets().map(p => `<option value="${esc(p.name)}"> (${p.calories} kcal | P:${p.protein}g)</option>`).join('');
+         }
+ 
+         function autofillPreset(val) {
+@@ -475,9 +636,6 @@
+             const roomCode = localStorage.getItem('room_code') || 'default_room';
+             const currentDate = document.getElementById('current-date').value;
+ 
+-            document.getElementById('sync-text').innerText = `ห้อง: ${roomCode}`;
+-            document.getElementById('sync-dot').className = "w-2 h-2 rounded-full bg-emerald-400";
+-
+             if(unsubscribe) unsubscribe();
+ 
+             const q = window.query(
+@@ -486,14 +644,15 @@
+                 window.where("date", "==", currentDate)
+             );
+             
+-            unsubscribe = window.onSnapshot(q, (snapshot) => {
++            unsubscribe = window.onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
++                reportSnapshot("food_records", snapshot);
+                 let items = [];
+                 snapshot.forEach((doc) => {
+                     items.push({ id: doc.id, ...doc.data() });
+                 });
+                 renderTable(items);
+                 updateAnalytics(items);
+-            });
++            }, onSyncError);
+         }
+ 
+         function loadDayData() {
+@@ -516,7 +675,7 @@
+             }
+ 
+             try {
+-                await window.addDoc(window.collection(window.db, "food_records"), {
++                window.addDoc(window.collection(window.db, "food_records"), {
+                     room: roomCode,
+                     date: date,
+                     meal: meal,
+@@ -526,7 +685,7 @@
+                     carbs: carbs,
+                     fat: fat,
+                     timestamp: new Date()
+-                });
++                }).catch(e => alert('เกิดข้อผิดพลาดในการบันทึก: ' + e.message));
+ 
+                 // Clear inputs
+                 document.getElementById('food-name').value = '';
+@@ -541,7 +700,7 @@
+ 
+         async function deleteItem(id) {
+             if(confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) {
+-                await window.deleteDoc(window.doc(window.db, "food_records", id));
++                window.deleteDoc(window.doc(window.db, "food_records", id)).catch(e => alert("ลบไม่สำเร็จ: " + e.message));
+             }
+         }
+ 
+@@ -554,8 +713,8 @@
+ 
+             tbody.innerHTML = items.map(item => `
+                 <tr class="hover:bg-slate-50 transition">
+-                    <td class="p-3 text-xs font-semibold text-emerald-700">${item.meal}</td>
+-                    <td class="p-3 text-sm font-medium text-slate-800">${item.name}</td>
++                    <td class="p-3 text-xs font-semibold text-emerald-700">${esc(item.meal)}</td>
++                    <td class="p-3 text-sm font-medium text-slate-800">${esc(item.name)}</td>
+                     <td class="p-3 text-right text-sm font-bold text-slate-700">${item.calories}</td>
+                     <td class="p-3 text-right text-sm text-slate-600">${item.protein}g</td>
+                     <td class="p-3 text-center">
+@@ -593,6 +752,428 @@
+             }
+         }
+ 
++
++        // =====================================================
++        // Utilities
++        // =====================================================
++        function esc(s) {
++            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
++        }
++        // วันที่แบบ local (YYYY-MM-DD) — toISOString() เป็น UTC ทำให้ช่วงเช้า 00:00-07:00 ในไทยได้วันเมื่อวาน
++        function localDateStr(d = new Date()) {
++            const z = n => String(n).padStart(2, '0');
++            return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
++        }
++        function parseLocal(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
++        function daysBetween(a, b) { return Math.round((parseLocal(b) - parseLocal(a)) / 86400000); }
++        function fmtDate(s) { return parseLocal(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); }
++        function fmtDateTime(ts) {
++            return new Date(ts).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
++        }
++        function getRoom() { return localStorage.getItem('room_code') || 'default_room'; }
++        function numOrNull(id) {
++            const v = parseFloat(document.getElementById(id).value);
++            return Number.isFinite(v) ? v : null;
++        }
++
++        // =====================================================
++        // Sync status (online/offline, pending writes, last sync)
++        // =====================================================
++        const syncState = {
++            pending: {},
++            error: null,
++            lastSync: Number(localStorage.getItem('last_sync') || 0)
++        };
++
++        function reportSnapshot(key, snap) {
++            const m = snap.metadata;
++            syncState.pending[key] = m.hasPendingWrites;
++            syncState.error = null;
++            // fromCache=false และไม่มี pending = ข้อมูลตรงกับเซิร์ฟเวอร์จริง ๆ
++            if (!m.fromCache && !m.hasPendingWrites) {
++                syncState.lastSync = Date.now();
++                try { localStorage.setItem('last_sync', String(syncState.lastSync)); } catch (e) {}
++            }
++            renderSyncStatus();
++        }
++
++        function onSyncError(err) {
++            console.error('Firestore error:', err);
++            syncState.error = err.code || err.message;
++            renderSyncStatus();
++        }
++
++        function renderSyncStatus() {
++            const online = navigator.onLine;
++            const pending = Object.values(syncState.pending).some(Boolean);
++            const dot = document.getElementById('sync-dot');
++            const text = document.getElementById('sync-text');
++            if (!dot || !text) return;
++
++            if (syncState.error) {
++                dot.className = 'w-2 h-2 rounded-full bg-rose-400';
++                text.innerText = 'เชื่อมต่อไม่ได้ (' + syncState.error + ')';
++            } else if (!online) {
++                dot.className = 'w-2 h-2 rounded-full bg-slate-300';
++                text.innerText = pending ? 'ออฟไลน์ · รอซิงค์' : 'ออฟไลน์';
++            } else if (pending) {
++                dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
++                text.innerText = 'กำลังซิงค์...';
++            } else {
++                dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
++                text.innerText = 'ซิงค์แล้ว';
++            }
++            renderSyncLine();
++        }
++
++        function syncLineText() {
++            const online = navigator.onLine;
++            const pending = Object.values(syncState.pending).some(Boolean);
++            let t = syncState.lastSync
++                ? `ซิงค์กับเซิร์ฟเวอร์ล่าสุด: ${fmtDateTime(syncState.lastSync)}`
++                : 'ยังไม่เคยซิงค์กับเซิร์ฟเวอร์';
++            if (!online) t += ' · ออฟไลน์ (แสดงข้อมูลที่จำไว้ในเครื่อง)';
++            if (pending) t += ' · มีข้อมูลที่ยังรอซิงค์';
++            return t;
++        }
++
++        function renderSyncLine() {
++            const el = document.getElementById('sum-sync');
++            if (el) el.innerText = `🔄 ${syncLineText()} · ห้อง: ${getRoom()}`;
++        }
++
++        window.addEventListener('online', renderSyncStatus);
++        window.addEventListener('offline', renderSyncStatus);
++
++        // =====================================================
++        // Tabs
++        // =====================================================
++        function showTab(name) {
++            ['food', 'period', 'body'].forEach(t => {
++                document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
++                const btn = document.getElementById('tabbtn-' + t);
++                btn.className = 'px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap ' +
++                    (t === name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50');
++            });
++            try { localStorage.setItem('active_tab', name); } catch (e) {}
++        }
++
++        // =====================================================
++        // Period + Body: realtime sync (Firestore offline cache)
++        // =====================================================
++        let periodItems = [];
++        let bodyItems = [];
++        const loaded = { period: false, body: false };
++        let currentSummary = null;
++
++        function setupPeriodBodySync() {
++            const room = getRoom();
++            const watch = (name, setter) => {
++                const q = window.query(window.collection(window.db, name), window.where('room', '==', room));
++                window.onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
++                    setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
++                    loaded[name === 'period_records' ? 'period' : 'body'] = true;
++                    reportSnapshot(name, snap);
++                    if (name === 'period_records') renderPeriod(); else renderBody();
++                    renderSummary();
++                }, onSyncError);
++            };
++            watch('period_records', items => { periodItems = items; });
++            watch('body_records', items => { bodyItems = items; });
++        }
++
++        // ---------- Period ----------
++        function periodStats(items) {
++            const asc = items.filter(i => i.start).slice().sort((a, b) => a.start.localeCompare(b.start));
++            if (!asc.length) return null;
++            const last = asc[asc.length - 1];
++            const cycles = [];
++            for (let i = 1; i < asc.length; i++) cycles.push(daysBetween(asc[i - 1].start, asc[i].start));
++            const recent = cycles.slice(-6);
++            const avg = arr => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
++            const avgCycle = recent.length ? avg(recent) : null;
++            const durs = asc.filter(i => i.end).map(i => daysBetween(i.start, i.end) + 1).slice(-6);
++            const avgDur = durs.length ? avg(durs) : null;
++            let next = null;
++            if (avgCycle) {
++                const d = parseLocal(last.start);
++                d.setDate(d.getDate() + avgCycle);
++                next = localDateStr(d);
++            }
++            return { lastStart: last.start, lastEnd: last.end || null, avgCycle, avgDur, next, count: asc.length };
++        }
++
++        function renderPeriod() {
++            const body = document.getElementById('period-table-body');
++            const desc = periodItems.slice().sort((a, b) => b.start.localeCompare(a.start));
++            if (!desc.length) {
++                body.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูลประจำเดือน</td></tr>`;
++            } else {
++                body.innerHTML = desc.map((p, idx) => {
++                    const older = desc[idx + 1];
++                    const cycle = older ? daysBetween(older.start, p.start) : '-';
++                    const dur = p.end ? (daysBetween(p.start, p.end) + 1) + ' วัน' : '-';
++                    const endCell = p.end
++                        ? esc(fmtDate(p.end))
++                        : `<button onclick="endPeriodToday('${esc(p.id)}')" class="text-xs bg-rose-50 text-rose-600 px-2 py-1 rounded-lg hover:bg-rose-100">หมดวันนี้</button>`;
++                    return `
++                    <tr class="hover:bg-slate-50 transition">
++                        <td class="p-3 font-medium text-slate-800">${esc(fmtDate(p.start))}</td>
++                        <td class="p-3 text-slate-600">${endCell}</td>
++                        <td class="p-3 text-right text-slate-600">${dur}</td>
++                        <td class="p-3 text-right text-slate-600">${cycle}</td>
++                        <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
++                        <td class="p-3 text-center"><button onclick="deletePeriod('${esc(p.id)}')" class="text-rose-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button></td>
++                    </tr>`;
++                }).join('');
++            }
++
++            const s = periodStats(periodItems);
++            const box = document.getElementById('period-stats');
++            if (!s) { box.innerHTML = '<p class="text-slate-400 text-xs">บันทึกอย่างน้อย 2 รอบเพื่อดูสถิติ</p>'; return; }
++            const ago = daysBetween(s.lastStart, localDateStr());
++            box.innerHTML = `
++                <div class="flex justify-between"><span>ครั้งล่าสุด</span><b>${esc(fmtDate(s.lastStart))}</b></div>
++                <div class="flex justify-between"><span>ผ่านมาแล้ว</span><b>${ago} วัน</b></div>
++                <div class="flex justify-between"><span>รอบเฉลี่ย</span><b>${s.avgCycle ? s.avgCycle + ' วัน' : '-'}</b></div>
++                <div class="flex justify-between"><span>มาเฉลี่ย</span><b>${s.avgDur ? s.avgDur + ' วัน' : '-'}</b></div>
++                <div class="flex justify-between"><span>คาดว่ารอบหน้า</span><b>${s.next ? '~ ' + esc(fmtDate(s.next)) : '-'}</b></div>
++                <div class="flex justify-between"><span>จำนวนรอบที่บันทึก</span><b>${s.count}</b></div>`;
++        }
++
++        function savePeriod() {
++            const start = document.getElementById('period-start').value;
++            const end = document.getElementById('period-end').value;
++            if (!start) { alert('กรุณาเลือกวันแรกที่ประจำเดือนมา'); return; }
++            if (end && end < start) { alert('วันสุดท้ายต้องไม่ก่อนวันแรก'); return; }
++            if (periodItems.some(p => p.start === start) && !confirm('มีบันทึกที่เริ่มวันเดียวกันอยู่แล้ว ต้องการเพิ่มซ้ำหรือไม่?')) return;
++
++            // ไม่ใช้ await: ตอนออฟไลน์ promise จะไม่ resolve จนกว่าจะซิงค์ได้ แต่ข้อมูลถูกเก็บในเครื่องและแสดงผลทันที
++            window.addDoc(window.collection(window.db, 'period_records'), {
++                room: getRoom(),
++                start,
++                end: end || null,
++                flow: document.getElementById('period-flow').value,
++                note: document.getElementById('period-note').value.trim(),
++                timestamp: new Date()
++            }).catch(e => alert('เกิดข้อผิดพลาดในการบันทึก: ' + e.message));
++
++            document.getElementById('period-end').value = '';
++            document.getElementById('period-flow').value = '';
++            document.getElementById('period-note').value = '';
++        }
++
++        function endPeriodToday(id) {
++            const p = periodItems.find(i => i.id === id);
++            if (!p) return;
++            let end = localDateStr();
++            if (end < p.start) end = p.start;
++            window.updateDoc(window.doc(window.db, 'period_records', id), { end })
++                .catch(e => alert('เกิดข้อผิดพลาด: ' + e.message));
++        }
++
++        function deletePeriod(id) {
++            if (!confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) return;
++            window.deleteDoc(window.doc(window.db, 'period_records', id)).catch(e => alert('ลบไม่สำเร็จ: ' + e.message));
++        }
++
++        // ---------- Body ----------
++        function sortBodyDesc(items) {
++            return items.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
++        }
++
++        function bodyLatest(items) {
++            const desc = sortBodyDesc(items);
++            const out = {};
++            ['weight', 'bust', 'waist', 'hip'].forEach(k => {
++                const f = desc.find(i => typeof i[k] === 'number');
++                if (f) out[k] = { v: f[k], d: f.date };
++            });
++            return out;
++        }
++
++        function renderBody() {
++            const body = document.getElementById('body-table-body');
++            const desc = sortBodyDesc(bodyItems);
++            const cell = v => (typeof v === 'number' ? v : '-');
++
++            if (!desc.length) {
++                body.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูล</td></tr>`;
++            } else {
++                body.innerHTML = desc.map((r, idx) => {
++                    const prev = desc.slice(idx + 1).find(x => typeof x.weight === 'number');
++                    let delta = '';
++                    if (typeof r.weight === 'number' && prev) {
++                        const d = +(r.weight - prev.weight).toFixed(1);
++                        if (d !== 0) delta = ` <span class="text-xs ${d > 0 ? 'text-rose-500' : 'text-emerald-600'}">${d > 0 ? '+' : ''}${d}</span>`;
++                    }
++                    return `
++                    <tr class="hover:bg-slate-50 transition">
++                        <td class="p-3 font-medium text-slate-800">${esc(fmtDate(r.date))}${r.note ? `<div class="text-xs text-slate-400 font-normal">${esc(r.note)}</div>` : ''}</td>
++                        <td class="p-3 text-right text-slate-700">${cell(r.weight)}${delta}</td>
++                        <td class="p-3 text-right text-slate-600">${cell(r.bust)}</td>
++                        <td class="p-3 text-right text-slate-600">${cell(r.waist)}</td>
++                        <td class="p-3 text-right text-slate-600">${cell(r.hip)}</td>
++                        <td class="p-3 text-center"><button onclick="deleteBody('${esc(r.id)}')" class="text-rose-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button></td>
++                    </tr>`;
++                }).join('');
++            }
++            renderWeightChart();
++        }
++
++        function renderWeightChart() {
++            const el = document.getElementById('weight-chart');
++            const pts = bodyItems.filter(i => typeof i.weight === 'number' && i.date)
++                .sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
++            if (pts.length < 2) {
++                el.innerHTML = '<p class="text-xs text-slate-400">บันทึกน้ำหนักอย่างน้อย 2 ครั้งเพื่อดูกราฟ</p>';
++                return;
++            }
++            const W = 320, H = 160, P = 28;
++            const ws = pts.map(p => p.weight);
++            let min = Math.min(...ws), max = Math.max(...ws);
++            if (max - min < 1) { min -= 0.5; max += 0.5; }
++            const ts = pts.map(p => parseLocal(p.date).getTime());
++            const t0 = ts[0], t1 = ts[ts.length - 1] || t0 + 1;
++            const x = t => P + ((t - t0) / (t1 - t0 || 1)) * (W - 2 * P);
++            const y = w => H - P - ((w - min) / (max - min)) * (H - 2 * P);
++            const line = pts.map((p, i) => `${x(ts[i]).toFixed(1)},${y(p.weight).toFixed(1)}`).join(' ');
++            const dots = pts.map((p, i) => `<circle cx="${x(ts[i]).toFixed(1)}" cy="${y(p.weight).toFixed(1)}" r="3" fill="#0ea5e9"><title>${esc(fmtDate(p.date))}: ${p.weight} กก.</title></circle>`).join('');
++            el.innerHTML = `
++                <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
++                    <polyline points="${line}" fill="none" stroke="#0ea5e9" stroke-width="2"/>
++                    ${dots}
++                    <text x="4" y="${y(max) + 4}" font-size="10" fill="#64748b">${max.toFixed(1)}</text>
++                    <text x="4" y="${y(min) + 4}" font-size="10" fill="#64748b">${min.toFixed(1)}</text>
++                    <text x="${P}" y="${H - 6}" font-size="10" fill="#94a3b8">${esc(fmtDate(pts[0].date))}</text>
++                    <text x="${W - P}" y="${H - 6}" font-size="10" fill="#94a3b8" text-anchor="end">${esc(fmtDate(pts[pts.length - 1].date))}</text>
++                </svg>`;
++        }
++
++        function saveBody() {
++            const date = document.getElementById('body-date').value;
++            const rec = {
++                weight: numOrNull('body-weight'),
++                bust: numOrNull('body-bust'),
++                waist: numOrNull('body-waist'),
++                hip: numOrNull('body-hip')
++            };
++            if (!date) { alert('กรุณาเลือกวันที่'); return; }
++            if (Object.values(rec).every(v => v === null)) { alert('กรุณากรอกอย่างน้อย 1 ค่า'); return; }
++            for (const [k, v] of Object.entries(rec)) {
++                if (v !== null && (v <= 0 || v > 400)) { alert('ค่าไม่สมเหตุสมผล: ' + k); return; }
++            }
++            window.addDoc(window.collection(window.db, 'body_records'), {
++                room: getRoom(),
++                date,
++                ...rec,
++                note: document.getElementById('body-note').value.trim(),
++                timestamp: new Date()
++            }).catch(e => alert('เกิดข้อผิดพลาดในการบันทึก: ' + e.message));
++
++            ['body-weight', 'body-bust', 'body-waist', 'body-hip', 'body-note'].forEach(id => document.getElementById(id).value = '');
++        }
++
++        function deleteBody(id) {
++            if (!confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) return;
++            window.deleteDoc(window.doc(window.db, 'body_records', id)).catch(e => alert('ลบไม่สำเร็จ: ' + e.message));
++        }
++
++        // =====================================================
++        // Doctor summary (cached in localStorage so it shows instantly/offline)
++        // =====================================================
++        function renderSummary() {
++            const live = loaded.period && loaded.body;
++            let s = null;
++            if (live) {
++                s = { period: periodStats(periodItems), body: bodyLatest(bodyItems) };
++                try { localStorage.setItem('summary_cache', JSON.stringify(s)); } catch (e) {}
++            } else {
++                try { s = JSON.parse(localStorage.getItem('summary_cache') || 'null'); } catch (e) { s = null; }
++            }
++            currentSummary = s;
++
++            const card = (icon, title, main, sub) => `
++                <div class="bg-rose-50/40 border border-rose-100 rounded-xl p-3">
++                    <div class="text-xs text-slate-500 mb-1"><i class="${icon}"></i> ${title}</div>
++                    <div class="text-base font-bold text-slate-800">${main}</div>
++                    <div class="text-xs text-slate-500 mt-0.5">${sub}</div>
++                </div>`;
++            const empty = '<span class="text-slate-400 font-normal text-sm">ยังไม่มีข้อมูล</span>';
++            const p = s && s.period;
++            const b = (s && s.body) || {};
++
++            let c1, c2;
++            if (p) {
++                const ago = daysBetween(p.lastStart, localDateStr());
++                c1 = card('fa-solid fa-droplet text-rose-500', 'ประจำเดือนครั้งล่าสุด (LMP)', esc(fmtDate(p.lastStart)),
++                    `${ago} วันที่แล้ว${p.lastEnd ? ' · มา ' + (daysBetween(p.lastStart, p.lastEnd) + 1) + ' วัน' : ''}`);
++                c2 = card('fa-solid fa-rotate text-rose-500', 'รอบเฉลี่ย',
++                    p.avgCycle ? p.avgCycle + ' วัน' : empty,
++                    p.next ? 'คาดรอบหน้า ~ ' + esc(fmtDate(p.next)) : 'ต้องมีอย่างน้อย 2 รอบ');
++            } else {
++                c1 = card('fa-solid fa-droplet text-rose-500', 'ประจำเดือนครั้งล่าสุด (LMP)', empty, 'ไปที่แท็บประจำเดือนเพื่อบันทึก');
++                c2 = card('fa-solid fa-rotate text-rose-500', 'รอบเฉลี่ย', empty, '');
++            }
++            const c3 = card('fa-solid fa-weight-scale text-sky-500', 'น้ำหนักล่าสุด',
++                b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : '');
++            const m = ['bust', 'waist', 'hip'].map(k => ({ bust: 'อก', waist: 'เอว', hip: 'สะโพก' }[k] + ' ' + (b[k] ? b[k].v : '-'))).join(' / ');
++            const c4 = card('fa-solid fa-ruler text-sky-500', 'สัดส่วนล่าสุด (ซม.)',
++                (b.bust || b.waist || b.hip) ? `<span class="text-sm">${m}</span>` : empty, '');
++
++            document.getElementById('summary-grid').innerHTML = c1 + c2 + c3 + c4;
++            renderSyncLine();
++        }
++
++        function copySummary() {
++            const s = currentSummary;
++            if (!s) { alert('ยังไม่มีข้อมูลให้คัดลอก'); return; }
++            const p = s.period, b = s.body || {};
++            const lines = [`สรุปสุขภาพ (ณ ${fmtDate(localDateStr())})`];
++            if (p) {
++                lines.push(`ประจำเดือนครั้งล่าสุด (LMP): ${fmtDate(p.lastStart)} (${daysBetween(p.lastStart, localDateStr())} วันที่แล้ว)`);
++                if (p.avgCycle) lines.push(`รอบเฉลี่ย: ${p.avgCycle} วัน`);
++                if (p.avgDur) lines.push(`มาเฉลี่ย: ${p.avgDur} วัน`);
++            }
++            if (b.weight) lines.push(`น้ำหนักล่าสุด: ${b.weight.v} กก. (${fmtDate(b.weight.d)})`);
++            const m = [['อก', b.bust], ['เอว', b.waist], ['สะโพก', b.hip]].filter(x => x[1]).map(x => `${x[0]} ${x[1].v}`);
++            if (m.length) lines.push(`สัดส่วน: ${m.join(' / ')} ซม.`);
++            lines.push(syncLineText());
++            const text = lines.join('\n');
++            if (navigator.clipboard && navigator.clipboard.writeText) {
++                navigator.clipboard.writeText(text).then(() => alert('คัดลอกแล้ว'), () => prompt('คัดลอกข้อความนี้:', text));
++            } else {
++                prompt('คัดลอกข้อความนี้:', text);
++            }
++        }
++
++        // =====================================================
++        // App init (called from module script on DOMContentLoaded)
++        // =====================================================
++        function initApp() {
++            const today = localDateStr();
++            document.getElementById('current-date').value = today;
++            document.getElementById('period-start').value = today;
++            document.getElementById('body-date').value = today;
++
++            document.getElementById('input-gemini-key').value = localStorage.getItem('gemini_key') || '';
++            document.getElementById('input-room-code').value = getRoom();
++
++            showTab(localStorage.getItem('active_tab') || 'food');
++            renderSummary();      // แสดงจากแคชในเครื่องทันที ก่อน Firestore ตอบกลับ
++            renderSyncStatus();
++            initPresets();
++            loadDayData();
++            setupPeriodBodySync();
++        }
++
++        // Offline support
++        if ('serviceWorker' in navigator) {
++            window.addEventListener('load', () => {
++                navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW register failed', err));
++            });
++        }
++
+         // Gemini AI Image Scanner
+         async function handleImageScan(event) {
+             const file = event.target.files[0];
+diff --git a/manifest.webmanifest b/manifest.webmanifest
+new file mode 100644
+index 0000000..6722a59
+--- /dev/null
++++ b/manifest.webmanifest
+@@ -0,0 +1,14 @@
++{
++  "name": "Track Me — อาหาร ประจำเดือน น้ำหนัก",
++  "short_name": "Track Me",
++  "lang": "th",
++  "start_url": "./index.html",
++  "scope": "./",
++  "display": "standalone",
++  "background_color": "#f8fafc",
++  "theme_color": "#059669",
++  "icons": [
++    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
++    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
++  ]
++}
+diff --git a/sw.js b/sw.js
+new file mode 100644
+index 0000000..89ab32f
+--- /dev/null
++++ b/sw.js
+@@ -0,0 +1,82 @@
++// Service worker: ทำให้เปิดแอปได้แม้ไม่มีอินเทอร์เน็ต
++// - App shell (index.html ฯลฯ): network-first แล้ว fallback เป็นแคช
++// - ไลบรารีจาก CDN (Tailwind, FontAwesome, Google Fonts, Firebase SDK): stale-while-revalidate
++// - Firestore / Gemini: ไม่ยุ่ง (Firestore จัดการแคชข้อมูลเองด้วย IndexedDB)
++const VERSION = 'trackme-v3';
++
++const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
++
++const CDN_PRECACHE = [
++  // [url, mode]
++  ['https://cdn.tailwindcss.com', 'no-cors'],
++  ['https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', 'no-cors'],
++  ['https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap', 'no-cors'],
++  // ES modules ต้องใช้ CORS
++  ['https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js', 'cors'],
++  ['https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js', 'cors'],
++];
++
++const CDN_HOSTS = new Set([
++  'cdn.tailwindcss.com',
++  'cdnjs.cloudflare.com',
++  'fonts.googleapis.com',
++  'fonts.gstatic.com',
++  'www.gstatic.com',
++]);
++
++self.addEventListener('install', (event) => {
++  event.waitUntil((async () => {
++    const cache = await caches.open(VERSION);
++    await cache.addAll(SHELL);
++    // CDN: พลาดบางตัวได้ ไม่ให้ install ล้ม (runtime caching จะเก็บให้ตอนใช้งานจริง)
++    await Promise.allSettled(CDN_PRECACHE.map(async ([url, mode]) => {
++      const res = await fetch(new Request(url, { mode }));
++      if (res.ok || res.type === 'opaque') await cache.put(url, res);
++    }));
++    await self.skipWaiting();
++  })());
++});
++
++self.addEventListener('activate', (event) => {
++  event.waitUntil((async () => {
++    const keys = await caches.keys();
++    await Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)));
++    await self.clients.claim();
++  })());
++});
++
++self.addEventListener('fetch', (event) => {
++  const req = event.request;
++  if (req.method !== 'GET') return;
++  const url = new URL(req.url);
++
++  // หน้าเว็บหลัก: ลองเน็ตก่อน ถ้าไม่ได้ใช้แคช
++  if (req.mode === 'navigate') {
++    event.respondWith((async () => {
++      try {
++        const fresh = await fetch(req);
++        const cache = await caches.open(VERSION);
++        cache.put('./index.html', fresh.clone());
++        return fresh;
++      } catch (e) {
++        return (await caches.match(req, { ignoreSearch: true })) ||
++               (await caches.match('./index.html')) ||
++               Response.error();
++      }
++    })());
++    return;
++  }
++
++  const sameOrigin = url.origin === self.location.origin;
++  if (!sameOrigin && !CDN_HOSTS.has(url.hostname)) return; // Firestore, Gemini ฯลฯ ผ่านตามปกติ
++
++  event.respondWith((async () => {
++    const cache = await caches.open(VERSION);
++    const cached = await cache.match(req);
++    const network = fetch(req).then((res) => {
++      if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
++      return res;
++    }).catch(() => null);
++    return cached || (await network) || Response.error();
++  })());
++});
+-- 
+2.43.0
+
