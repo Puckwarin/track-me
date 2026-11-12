@@ -7,6 +7,7 @@ import { periodStats } from './period.js';
 import { sortBodyDesc, weightChartSvg } from './body.js';
 import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
 import { syncLineText } from './sync.js';
+import { TYPES, SECTIONS, repLabel } from './workout.js';
 
 let root, data = null;
 
@@ -26,11 +27,12 @@ export function mountReport(el) {
         <label><input type="checkbox" id="r-inc-sym" checked> อาการรายวัน</label>
         <label><input type="checkbox" id="r-inc-body" checked> น้ำหนัก/สัดส่วน</label>
         <label><input type="checkbox" id="r-inc-food" checked> อาหาร/สารอาหาร</label>
+        <label><input type="checkbox" id="r-inc-workout" checked> ออกกำลังกาย</label>
       </div>
       <div class="flex flex-wrap gap-2">
         <button id="r-gen" class="btn btn-primary"><i class="fa-solid fa-file-lines"></i> สร้างรายงาน</button>
         <button id="r-print" class="btn btn-soft" disabled><i class="fa-solid fa-print"></i> พิมพ์ / บันทึกเป็น PDF</button>
-        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option></select>
+        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option></select>
         <button id="r-csv" class="btn btn-ghost"><i class="fa-solid fa-file-csv"></i> ดาวน์โหลด CSV</button>
       </div>
       <p class="text-xs text-slate-400">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
@@ -51,10 +53,10 @@ async function load() {
   const range = name => getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
     .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
   // ประจำเดือน/น้ำหนักอยู่ในหน่วยความจำแล้ว; อาหาร/อาการดึงตามช่วงวันที่ (ตอนออฟไลน์จะอ่านจากแคชในเครื่อง)
-  const [food, symptoms] = await Promise.all([range('food_records'), range('symptom_records')]);
+  const [food, symptoms, workouts] = await Promise.all([range('food_records'), range('symptom_records'), range('workout_records')]);
   const period = state.period.filter(p => p.start <= to && (p.end || p.start) >= from).sort((a, b) => a.start.localeCompare(b.start));
   const body = state.body.filter(b => b.date >= from && b.date <= to);
-  return { from, to, food, symptoms, period, body };
+  return { from, to, food, symptoms, workouts, period, body };
 }
 
 async function generate() {
@@ -93,6 +95,14 @@ async function generate() {
     h += sec('อาหารและสารอาหาร', days.length ? `<p class="text-sm mb-2">บันทึก ${days.length} วัน · <b>เฉลี่ยต่อวัน:</b> ${Math.round(avg('cal'))} kcal · โปรตีน ${avg('p')} g · คาร์บ ${avg('c')} g · ไขมัน ${avg('f')} g</p>` +
       tbl(['วันที่', 'รายการ', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน'], days.map(k => [esc(fmtDate(k)), by[k].n, Math.round(by[k].cal), round1(by[k].p), round1(by[k].c), round1(by[k].f)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
   }
+  if (inc('workout')) {
+    const ws = d.workouts.slice().sort((a, b) => a.date.localeCompare(b.date)), by = {};
+    ws.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
+    const rowT = r => `${esc(r.name)} — ${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
+    h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2">${ws.length} ครั้ง · ${Object.entries(by).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
+      tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '-',
+        SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '-'])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+  }
   h += `<p class="text-xs text-slate-400 mt-6">ข้อมูลนี้ผู้ใช้บันทึกเอง ค่าคาดการณ์เป็นการประมาณ ไม่ใช่การวินิจฉัยทางการแพทย์</p>`;
   $('#report-preview', root).innerHTML = h;
   $('#r-print', root).disabled = false;
@@ -105,6 +115,7 @@ async function csv() {
     period: [['เริ่ม', 'สิ้นสุด', 'ปริมาณ', 'หมายเหตุ'], ...d.period.map(p => [p.start, p.end || '', p.flow || '', p.note || ''])],
     symptoms: [['วันที่', ...SYMPTOMS.map(s => s[1]), 'อารมณ์(1-5)', 'เครียด(1-5)', 'หมายเหตุ'], ...d.symptoms.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, ...SYMPTOMS.map(([k]) => r.symptoms?.[k] ?? 0), r.mood ?? '', r.stress ?? '', r.note || ''])],
     body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.note || ''])],
+    workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
     food: [['วันที่', 'มื้อ', 'เมนู', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน', 'น้ำตาล', 'โซเดียม(mg)'], ...d.food.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.meal, r.name, r.calories, r.protein, r.carbs, r.fat, r.sugar ?? '', r.sodium ?? ''])]
   }[kind];
   downloadFile(`trackme-${kind}-${d.from}_${d.to}.csv`, toCsv(rows), 'text/csv');

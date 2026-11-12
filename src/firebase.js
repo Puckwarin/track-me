@@ -16,7 +16,6 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
 
-// Offline persistence (IndexedDB): เขียน/อ่านตอนไม่มีเน็ตได้ แล้วซิงค์เองเมื่อกลับมาออนไลน์
 export const db = (() => {
   try {
     return initializeFirestore(app, {
@@ -28,8 +27,7 @@ export const db = (() => {
   }
 })();
 
-export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records'];
+export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings'];
 
-// ข้อมูลทุกอย่างอยู่ใต้ users/{uid}/... เพื่อให้ Rules ตรวจแค่ "uid ตรงกับเจ้าของ"
 export const userCol = (uid, name) => collection(db, 'users', uid, name);
 export const userDoc = (uid, name, id) => doc(db, 'users', uid, name, id);

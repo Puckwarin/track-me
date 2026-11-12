@@ -4,6 +4,8 @@ import { state, on } from './state.js';
 import { watch } from './sync.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiError } from './nutrition.js';
+import { openFoodSearch } from './foodsearch.js';
+import { getMeals, getTargets } from './profile.js';
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
 const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
@@ -116,9 +118,7 @@ export function mountFood(el) {
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label class="lbl">มื้อ</label>
-          <select id="f-meal" class="input">
-            <option>มื้อเช้า</option><option>มื้อกลางวัน</option><option>มื้อเย็น</option><option>ของว่าง/เครื่องดื่ม</option>
-          </select>
+          <select id="f-meal" class="input"></select>
           <button id="f-copy-meal" type="button" class="chip bg-lav-soft text-brand-dark mt-2"><i class="fa-regular fa-copy"></i> คัดลอกจากมื้อเดิม</button>
         </div>
         <div class="sm:col-span-2">
@@ -162,13 +162,21 @@ export function mountFood(el) {
   </div>`;
 
   $('#f-date', root).value = localDateStr();
+  fillMealSelect();
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
   $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
-  $('#f-online', root).addEventListener('click', openOnlineSearch);
+  $('#f-online', root).addEventListener('click', () => openFoodSearch({
+    onUse: food => {
+      const fields = { 'f-name':food.name, 'f-cal':food.calories, 'f-pro':food.protein, 'f-carb':food.carbs, 'f-fat':food.fat, 'f-sugar':food.sugar, 'f-sodium':food.sodium };
+      Object.entries(fields).forEach(([id,v]) => { const el=$('#'+id,root); if(el) el.value=v ?? ''; });
+      const qty=$('#f-qty',root); if(qty) qty.value=1;
+    },
+    onSaveLibrary: food => addDoc(userCol(state.uid,'custom_foods'), { name:food.name, brand:food.brand||'', unit:food.unit||'100 กรัม', gramsPerUnit:food.gramsPerUnit??100, category:guessFoodCategory(food.name), calories:food.calories, protein:food.protein, carbs:food.carbs, fat:food.fat, sugar:food.sugar, sodium:food.sodium, favorite:false, createdAt:new Date() }).catch(e=>toast('บันทึกเข้าคลังไม่สำเร็จ: '+e.message,'err'))
+  }));
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
   $('#f-hiwpinto', root).addEventListener('click', () => openHiwpintoCalculator());
   $('#f-photo', root).addEventListener('change', onPhoto);
@@ -180,6 +188,7 @@ export function mountFood(el) {
     if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'food_records', b.dataset.del)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
   });
   on('customFoods', refreshDatalist);
+  on('profile', fillMealSelect);
   refreshDatalist();
   syncFoodWeightForm();
   renderDay();
@@ -325,6 +334,13 @@ export function watchDay() {
   watch('food', query(userCol(state.uid, 'food_records'), where('date', '==', date)), list => { items = list; renderDay(); });
 }
 
+function fillMealSelect() {
+  if (!root) return;
+  const sel = $('#f-meal', root), keep = sel.value;
+  sel.innerHTML = getMeals().map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
 function refreshDatalist() {
   if (!root) return;
   $('#f-datalist', root).innerHTML = getPresets().map(p => `<option value="${esc(label(p))}"></option>`).join('');
@@ -415,7 +431,8 @@ function saveFood() {
   };
   const rec = {
     date: $('#f-date', root).value,
-    meal: $('#f-meal', root).value,
+    mealId: $('#f-meal', root).value,
+    meal: $('#f-meal', root).selectedOptions[0]?.textContent || '',
     name: foodLogName(name), quantity: qty, unitNutrition,
     calories: Math.round(unitNutrition.calories * qty),
     protein: m(unitNutrition.protein), carbs: m(unitNutrition.carbs), fat: m(unitNutrition.fat),
@@ -517,7 +534,8 @@ function editFoodQuantity(id) {
 function renderDay() {
   if (!root) return;
   const body = $('#f-body', root);
-  const meals = [...MEAL_ORDER, ...new Set(items.map(i => i.meal || 'ไม่ระบุมื้อ').filter(m => !MEAL_ORDER.includes(m)))];
+  const meals = [...getMeals().map(m => m.name), ...MEAL_ORDER.filter(m => !getMeals().some(x => x.name === m)), ...new Set(items.map(i => i.meal || 'ไม่ระบุมื้อ').filter(m => !getMeals().some(x => x.name === m) && !MEAL_ORDER.includes(m)))];
+  const targets = getTargets();
   body.innerHTML = items.length ? meals.map(meal => {
     const rows = items.filter(i => (i.meal || 'ไม่ระบุมื้อ') === meal);
     if (!rows.length) return '';
@@ -535,14 +553,14 @@ function renderDay() {
 
   const sum = k => items.reduce((a, i) => a + num(i[k]), 0);
   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
-  $('#f-total', root).textContent = `${Math.round(t.cal)} / ${GOALS.cal.toLocaleString()}`;
+  $('#f-total', root).textContent = `${Math.round(t.cal)} / ${targets.kcal.toLocaleString()}`;
   const bar = (name, v, goal, color, unit = 'g') => `
     <div><div class="flex justify-between text-xs font-semibold mb-1"><span>${name}</span><span>${round1(v)} / ${goal}${unit}</span></div>
     <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="${color} h-full transition-all" style="width:${Math.min(v / goal * 100, 100)}%"></div></div></div>`;
-  $('#f-stats', root).innerHTML = bar('โปรตีน', t.p, GOALS.protein, 'bg-blue-400') + bar('คาร์โบไฮเดรต', t.c, GOALS.carbs, 'bg-violet-400') + bar('ไขมัน', t.f, GOALS.fat, 'bg-pink-400') +
+  $('#f-stats', root).innerHTML = bar('โปรตีน', t.p, targets.protein, 'bg-blue-400') + bar('คาร์โบไฮเดรต', t.c, targets.carbs, 'bg-violet-400') + bar('ไขมัน', t.f, targets.fat, 'bg-pink-400') +
     `<p class="text-xs text-slate-500">น้ำตาล ${round1(t.sugar)} g · โซเดียม ${Math.round(t.na)} mg (เฉพาะรายการที่กรอกค่านี้)</p>`;
   $('#f-advice', root).textContent = t.cal === 0 ? 'ยังไม่มีข้อมูลวันนี้ เริ่มบันทึกมื้อแรกกันเลย!'
-    : t.p < 50 ? '⚠️ วันนี้โปรตีนค่อนข้างน้อย ลองเสริมไข่ อกไก่ หรือปลาในมื้อถัดไป'
+    : t.p < targets.protein * 0.5 ? '⚠️ วันนี้โปรตีนค่อนข้างน้อย ลองเสริมไข่ อกไก่ หรือปลาในมื้อถัดไป'
     : '✨ สารอาหารวันนี้อยู่ในเกณฑ์ดี รักษาระดับไว้นะ';
 }
 

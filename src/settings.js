@@ -1,5 +1,7 @@
 import { $, toast } from './util.js';
 import { getGeminiKey, setGeminiKey } from './nutrition.js';
+import { getUsdaKey, setUsdaKey } from './foodsearch.js';
+import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
 import { mountMigrate } from './migrate.js';
 import { checkReminder } from './period.js';
@@ -38,6 +40,15 @@ export function mountSettings(el) {
       <button id="st-key-save" class="btn btn-primary">บันทึกคีย์</button>
     </div>
 
+    <div class="card space-y-3 lg:col-span-2" id="st-profile"></div>
+
+    <div class="card space-y-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-database text-brand"></i> แหล่งข้อมูลโภชนาการอื่น</h3>
+      <p class="text-xs text-slate-500"><b>Open Food Facts</b> ใช้ได้เลย · <b>USDA FoodData Central</b> ขอคีย์ฟรีที่ fdc.nal.usda.gov/api-key-signup (เก็บในเครื่องนี้)</p>
+      <input type="password" id="st-usda" class="input" placeholder="USDA API Key (ไม่บังคับ)" autocomplete="off">
+      <button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button>
+    </div>
+
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> เตือนรอบเดือน</h3>
       <p class="text-xs text-slate-500">แสดงแบนเนอร์เตือน (และการแจ้งเตือนของเครื่องถ้าอนุญาต) <b>เมื่อเปิดแอป</b> — เตือนตอนปิดแอปไม่ได้ เพราะต้องใช้เซิร์ฟเวอร์แบบเสียเงิน · ตั้งค่านี้เก็บในเครื่องนี้</p>
@@ -52,6 +63,9 @@ export function mountSettings(el) {
   $('#st-key', el).value = getGeminiKey();
   $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); toast('บันทึกคีย์แล้ว'); });
   $('#st-out', el).addEventListener('click', signOutUser);
+  $('#st-usda', el).value = getUsdaKey();
+  $('#st-usda-save', el).addEventListener('click', () => { setUsdaKey($('#st-usda', el).value); toast('บันทึกคีย์ USDA แล้ว'); });
+  mountProfile($('#st-profile', el));
   const theme = $('#st-theme', el);
   theme.value = localStorage.getItem('trackme-theme') || 'pastel';
   theme.addEventListener('change', () => applyTheme(theme.value));
