@@ -27,6 +27,16 @@ export const SANITIZERS = {
   custom_foods: o => str(o.name) && str(o.unit, 60) && num(o.calories) !== null ? {
     name: str(o.name), brand: str(o.brand, 80), unit: str(o.unit, 60), gramsPerUnit: num(o.gramsPerUnit),
     calories: num(o.calories), protein: num(o.protein), carbs: num(o.carbs), fat: num(o.fat), sugar: num(o.sugar), sodium: num(o.sodium),
+    ...(o.hiwpinto && typeof o.hiwpinto === 'object' && {
+      hiwpinto: {
+        shopCalories: num(o.hiwpinto.shopCalories), shopProtein: num(o.hiwpinto.shopProtein),
+        shopCarbs: num(o.hiwpinto.shopCarbs), shopFat: num(o.hiwpinto.shopFat),
+        sideCarbs: num(o.hiwpinto.sideCarbs), includedRice: o.hiwpinto.includedRice === true,
+        riceProfile: o.hiwpinto.riceProfile === 'brown' ? 'brown' : 'white',
+        riceGrams: o.hiwpinto.riceGrams === 180 ? 180 : 140,
+        originalRiceGrams: num(o.hiwpinto.originalRiceGrams), kcalWarn: str(o.hiwpinto.kcalWarn, 300)
+      }
+    }),
     favorite: o.favorite === true, createdAt: ts(o.createdAt)
   } : null
 };
