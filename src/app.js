@@ -11,27 +11,30 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { query, where } from 'firebase/firestore';
+import { addDoc, query, where } from 'firebase/firestore';
 
 import { userCol } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, localDateStr, addDays } from './util.js';
+import { $, localDateStr, addDays, toast } from './util.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import { TAB_ACTIVE, TAB_IDLE, TAB_BASE } from './theme.js';
-import { mountFood, watchDay } from './food.js';
+import { mountFood, watchDay, guessFoodCategory } from './food.js';
+import { openFoodSearch } from './foodsearch.js';
 import { mountPeriod, render as renderPeriod, checkReminder } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList } from './symptoms.js';
 import { mountCare, watchCare } from './care.js';
 import { mountInventory, watchInventory } from './inventory.js';
 import { mountBody, render as renderBody } from './body.js';
 import { mountReport } from './reports.js';
+import { mountWorkout, render as renderWorkout } from './workout.js';
+import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['food', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
+const TABS = ['food', 'workout', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
 export function showTab(name) {
   TABS.forEach(t => {
     $('#tab-' + t).classList.toggle('hidden', t !== name);
@@ -42,10 +45,33 @@ export function showTab(name) {
 }
 
 let mounted = false;
+function addFoodSearchShortcut() {
+  const root = $('#tab-food');
+  if (!root || $('#f-search-online', root)) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'lg:col-span-3 card flex flex-wrap items-center justify-between gap-2';
+  wrap.innerHTML = '<div><b class="text-sm">ค้นหาอาหารจากฐานข้อมูล</b><p class="text-xs text-slate-500">Open Food Facts · USDA · Gemini AI</p></div><button id="f-search-online" class="btn btn-soft"><i class="fa-solid fa-magnifying-glass"></i> ค้นหาโภชนาการ</button>';
+  root.prepend(wrap);
+  $('#f-search-online', root).addEventListener('click', () => openFoodSearch({
+    onUse: food => {
+      const fields = { 'f-name': food.name, 'f-cal': food.calories, 'f-pro': food.protein, 'f-carb': food.carbs, 'f-fat': food.fat, 'f-sugar': food.sugar, 'f-sodium': food.sodium };
+      Object.entries(fields).forEach(([id, value]) => { const el = $('#' + id, root); if (el) el.value = value ?? ''; });
+      const qty = $('#f-qty', root); if (qty) qty.value = 1;
+    },
+    onSaveLibrary: food => addDoc(userCol(state.uid, 'custom_foods'), {
+      name: food.name, brand: food.brand || '', unit: food.unit || '100 กรัม', gramsPerUnit: food.gramsPerUnit ?? 100,
+      category: guessFoodCategory(food.name), calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat,
+      sugar: food.sugar, sodium: food.sodium, favorite: false, createdAt: new Date()
+    }).catch(e => toast('บันทึกเข้าคลังไม่สำเร็จ: ' + e.message, 'err'))
+  }));
+}
+
 function mountAll() {
   if (mounted) return;
   mounted = true;
   mountFood($('#tab-food'));
+  addFoodSearchShortcut();
+  mountWorkout($('#tab-workout'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
   mountCare($('#tab-care'));
@@ -59,24 +85,26 @@ function startData() {
   const uid = state.uid;
   state.loaded = { period: false, body: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderSummary(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderSummary(); refreshProfile(); emit('profile'); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   watchCare(uid);
   watchInventory(uid);
-  // อาการ: โหลดย้อนหลัง ~13 เดือน (ช่วงเก่ากว่านั้นดูได้ในรายงาน)
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); });
+  watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
+  watch('settings', userCol(uid, 'settings'), list => { state.profile = list.find(x => x.id === 'profile') || null; refreshProfile(); emit('profile'); });
   watchDay();
 }
 
 on('auth', user => {
   stopAll();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.workouts = []; state.templates = []; state.profile = null;
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
     refreshAccount();
-    renderSummary();      // แสดงจากแคชในเครื่องทันที ก่อน Firestore ตอบกลับ
+    renderSummary();
     startData();
     showTab(localStorage.getItem('active_tab') || 'food');
   }
