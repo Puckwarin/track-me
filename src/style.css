@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* ธีม Track Me: ฟ้า · ชมพู · ม่วง บนพื้นหลังสว่าง */
+@theme {
+  --font-sans: "Prompt", ui-sans-serif, system-ui, sans-serif;
+  --color-sky-soft: #dbeafe;
+  --color-pink-soft: #fce7f3;
+  --color-lav-soft: #ede9fe;
+  --color-app-bg: #faf8ff;
+  --color-brand: #6d5bd0;       /* ม่วง: ปุ่มหลัก */
+  --color-brand-dark: #5b49b8;
+  --color-ok-soft: #dcfce7;     /* เขียวอ่อน: สถานะสำเร็จ */
+}
+
+body { background: var(--color-app-bg); }
+
+.card { background: #fff; border-radius: 1rem; border: 1px solid #ede9fe; box-shadow: 0 1px 2px rgb(109 91 208 / 0.06); padding: 1.25rem; }
+.input { width: 100%; border: 1px solid #d8d4ee; border-radius: 0.5rem; padding: 0.6rem 0.7rem; font-size: 0.875rem; background: #fff; outline: none; }
+.input:focus { border-color: #8b7ae0; box-shadow: 0 0 0 3px #ede9fe; }
+.lbl { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; }
+.btn { display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 0.75rem; padding: 0.6rem 1.1rem; font-size: 0.875rem; font-weight: 500; transition: background .15s; cursor: pointer; }
+.btn-primary { background: var(--color-brand); color: #fff; }
+.btn-primary:hover { background: var(--color-brand-dark); }
+.btn-sky { background: #3b82f6; color: #fff; }
+.btn-sky:hover { background: #2563eb; }
+.btn-pink { background: #ec4899; color: #fff; }
+.btn-pink:hover { background: #db2777; }
+.btn-soft { background: var(--color-lav-soft); color: #5b49b8; }
+.btn-soft:hover { background: #ddd6fe; }
+.btn-ghost { background: #f1f5f9; color: #334155; }
+.btn-ghost:hover { background: #e2e8f0; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; padding: .35rem .7rem; border-radius: .6rem; font-weight: 500; cursor: pointer; }
+th { font-weight: 600; }
+
+/* ปฏิทินประจำเดือน */
+.cal-day { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: .6rem; font-size: .8rem; position: relative; cursor: pointer; border: 1px solid transparent; }
+.cal-day:hover { background: #f5f3ff; }
+.cal-period { background: #ec4899; color: #fff; font-weight: 600; }
+.cal-pred { background: #fdf2f8; border: 1px dashed #f472b6; color: #be185d; }
+.cal-today { box-shadow: 0 0 0 2px #8b7ae0 inset; }
+.cal-sel { outline: 2px solid #6d5bd0; outline-offset: 1px; }
+.cal-dot { width: 5px; height: 5px; border-radius: 9999px; background: #7c3aed; position: absolute; bottom: 4px; }
+.cal-period .cal-dot { background: #fff; }
+
+/* พิมพ์รายงานเป็น PDF: ซ่อนทุกอย่างยกเว้นรายงาน */
+@media print {
+  header, nav, #summary-section, #login-screen, #reminder-banner, .no-print { display: none !important; }
+  main:not(#tab-report) { display: none !important; }
+  body { background: #fff; }
+  #tab-report { display: block !important; margin: 0; padding: 0; max-width: none; }
+  #report-preview { border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+  .report-section { break-inside: avoid; }
+  @page { margin: 14mm; }
+}

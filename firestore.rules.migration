@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// กฎ "ชั่วคราว" สำหรับช่วงย้ายข้อมูลจาก Room Code เดิมเท่านั้น
+// = กฎชุดสุดท้าย + อนุญาตให้ผู้ที่ล็อกอินแล้วอ่าน/ลบข้อมูลเดิมแบบ top-level ได้
+// ย้ายข้อมูลเสร็จแล้วให้เปลี่ยนกลับเป็น firestore.rules ทันที
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function knownCollection(c) {
+      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods'];
+    }
+
+    match /users/{uid}/{collection}/{recordId} {
+      allow read, delete: if isOwner(uid) && knownCollection(collection);
+      allow create, update: if isOwner(uid) && knownCollection(collection)
+                            && request.resource.data.keys().size() <= 30;
+    }
+
+    // ข้อมูลเดิม (ชั่วคราว)
+    match /{legacy}/{docId} {
+      allow read, delete: if request.auth != null
+                          && legacy in ['food_records', 'period_records', 'body_records'];
+    }
+  }
+}
