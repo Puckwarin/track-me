@@ -4,6 +4,7 @@ import { state, on } from './state.js';
 import { watch } from './sync.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiError } from './nutrition.js';
+import { openFoodSearch } from './foodsearch.js';
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
 const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
@@ -168,7 +169,14 @@ export function mountFood(el) {
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
-  $('#f-online', root).addEventListener('click', openOnlineSearch);
+  $('#f-online', root).addEventListener('click', () => openFoodSearch({
+    onUse: food => {
+      const fields = { 'f-name':food.name, 'f-cal':food.calories, 'f-pro':food.protein, 'f-carb':food.carbs, 'f-fat':food.fat, 'f-sugar':food.sugar, 'f-sodium':food.sodium };
+      Object.entries(fields).forEach(([id,v]) => { const el=$('#'+id,root); if(el) el.value=v ?? ''; });
+      const qty=$('#f-qty',root); if(qty) qty.value=1;
+    },
+    onSaveLibrary: food => addDoc(userCol(state.uid,'custom_foods'), { name:food.name, brand:food.brand||'', unit:food.unit||'100 กรัม', gramsPerUnit:food.gramsPerUnit??100, category:guessFoodCategory(food.name), calories:food.calories, protein:food.protein, carbs:food.carbs, fat:food.fat, sugar:food.sugar, sodium:food.sodium, favorite:false, createdAt:new Date() }).catch(e=>toast('บันทึกเข้าคลังไม่สำเร็จ: '+e.message,'err'))
+  }));
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
   $('#f-hiwpinto', root).addEventListener('click', () => openHiwpintoCalculator());
   $('#f-photo', root).addEventListener('change', onPhoto);
