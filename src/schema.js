@@ -25,7 +25,7 @@ export const SANITIZERS = {
     mood: int(o.mood, 1, 5), stress: int(o.stress, 1, 5), note: str(o.note), updatedAt: ts(o.updatedAt)
   } : null,
   custom_foods: o => str(o.name) && str(o.unit, 60) && num(o.calories) !== null ? {
-    name: str(o.name), brand: str(o.brand, 80), unit: str(o.unit, 60), gramsPerUnit: num(o.gramsPerUnit),
+    name: str(o.name), brand: str(o.brand, 80), unit: str(o.unit, 60), gramsPerUnit: num(o.gramsPerUnit), defaultQuantity:num(o.defaultQuantity), category:str(o.category,80),
     calories: num(o.calories), protein: num(o.protein), carbs: num(o.carbs), fat: num(o.fat), sugar: num(o.sugar), sodium: num(o.sodium),
     ...(o.hiwpinto && typeof o.hiwpinto === 'object' && {
       hiwpinto: {
@@ -39,11 +39,20 @@ export const SANITIZERS = {
       }
     }),
     favorite: o.favorite === true, createdAt: ts(o.createdAt)
-  } : null
+  } : null,
+  skincare_products: o => str(o.name) ? {
+    name: str(o.name), openedDate: isDateStr(o.openedDate) ? o.openedDate : null, paoMonths: int(o.paoMonths, 1, 120), expiryDate: isDateStr(o.expiryDate) ? o.expiryDate : null,
+    ingredients: str(o.ingredients, 3000), pros: str(o.pros, 2000), cons: str(o.cons, 2000), createdAt: ts(o.createdAt)
+  } : null,
+  skin_records: o => isDateStr(o.date) ? { date:o.date, symptoms:Object.fromEntries(['rash','itch','burning','redness','peeling','dryness'].map(k=>[k,int(o.symptoms?.[k],0,3)??0])), result:str(o.result,2000), updatedAt:ts(o.updatedAt) } : null,
+  ingredient_blacklist: o => ({ ingredients:str(o.ingredients,5000), updatedAt:ts(o.updatedAt) }),
+  pet_profiles: o => str(o.name) && num(o.weightKg) !== null ? { name:str(o.name), kind:str(o.kind,120), weightKg:num(o.weightKg), lifeStage:['neutered','intact','inactive','puppy-young','puppy-old'].includes(o.lifeStage)?o.lifeStage:'neutered', createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
+  pet_care_records: o => str(o.type,80) && isDateStr(o.date) ? { petId:str(o.petId,80), type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
+  pet_food_records: o => str(o.name) && num(o.grams)!==null && isDateStr(o.date) ? { petId:str(o.petId,80), date:o.date, name:str(o.name), grams:num(o.grams), kcalPer100:num(o.kcalPer100), allergy:['yes','no','unknown'].includes(o.allergy)?o.allergy:'unknown', note:str(o.note,2000), createdAt:ts(o.createdAt) } : null
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', skincare_products:'ผลิตภัณฑ์สกินแคร์', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง'
 };
 // symptom_records ใช้วันที่เป็น doc id
-export const docIdFor = (col, o, fallback) => col === 'symptom_records' ? o.date : fallback;
+export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : fallback;

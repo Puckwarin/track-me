@@ -9,7 +9,7 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
     function knownCollection(c) {
-      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods'];
+      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records'];
     }
 
     match /users/{uid}/{collection}/{recordId} {

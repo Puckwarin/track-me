@@ -14,13 +14,9 @@ const MEAL_COLORS = {
   'ของว่าง/เครื่องดื่ม': { header: 'bg-pink-100 text-pink-900', row: 'bg-pink-50/60', icon: 'fa-mug-hot' }
 };
 const DEFAULT_PRESETS = [
-  { id: 'builtin-boiled-chicken', name: 'อกไก่ต้ม', unit: '100 กรัม', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
-  { name: 'ข้าวสวย', unit: '1 ทัพพี (100 กรัม)', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
-  { name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
-  { name: 'ข้าวโพดหวานต้มทั้งฝัก (แกะเปลือกแล้ว)', unit: '100 กรัมเมล็ด', gramsPerUnit: 100, calories: 96, protein: 3.4, carbs: 21, fat: 1.5, edibleFraction: 0.54, edibleFractionSource: 'ตั้งต้นประมาณ 54% ตามอัตรา yield ของ USDA สำหรับข้าวโพดสดแกะเปลือก; ปรับได้ตามฝักจริง' },
-  { name: 'ฝรั่ง', unit: '120 กรัม', calories: 82, protein: 3.1, carbs: 17.2, fat: 1.2 },
-  { id: 'builtin-grilled-chicken', name: 'อกไก่ย่าง', unit: '150 กรัม', calories: 220, protein: 45, carbs: 1, fat: 4 },
-  { name: 'นมจืดพร่องมันเนย', unit: '250 มล.', calories: 120, protein: 8, carbs: 12, fat: 5 }
+  { id: 'builtin-rice', name: 'ข้าวสวย', unit: '100 g', gramsPerUnit: 100, calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
+  { id: 'builtin-egg', name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
+  { id: 'builtin-guava', name: 'ฝรั่ง', unit: '120 g', gramsPerUnit: 120, calories: 82, protein: 3.1, carbs: 17.2, fat: 1.2 }
 ];
 const FOOD_IMPORT_ROWS = [
   ['Alpen Muesli', '40.0', 'g', '148', '4.4', '29.2', '2.2'],
@@ -42,9 +38,36 @@ const FOOD_IMPORT_ROWS = [
 const label = p => `${p.name}${p.brand ? ' · ' + p.brand : ''} (${p.unit})`;
 const HIDDEN_BUILTINS_KEY = 'trackme-hidden-builtins';
 const hiddenBuiltins = () => { try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_BUILTINS_KEY) || '[]')); } catch { return new Set(); } };
+const BUILTIN_FAV_KEY = 'trackme-builtin-favorites';
+const builtinFavorites = () => { try { return new Set(JSON.parse(localStorage.getItem(BUILTIN_FAV_KEY) || '[]')); } catch { return new Set(); } };
+const categoryNames = ['ข้าว/เส้น', 'โปรตีน', 'ผลไม้', 'ผัก', 'ซีเรียล/กราโนลา', 'ขนม/ของว่าง', 'ขนมปัง/เบเกอรี่', 'เครื่องดื่ม/นม', 'อาหารคลีน/Hiwpinto', 'อื่น ๆ'];
+export function guessFoodCategory(name = '') {
+  const n = String(name).toLowerCase();
+  if (/hiwp|hiwpinto|คลีน|น้ำตก|ห่อหมก|กะหล่ำปลีผัด/.test(n)) return 'อาหารคลีน/Hiwpinto';
+  if (/ข้าว|ไรซ์|rice|บะหมี่|เส้น|พาสต้า|noodle/.test(n)) return 'ข้าว/เส้น';
+  if (/ไก่|หมู|เนื้อ|ปลา|ไข่|กุ้ง|เต้าหู้|protein/.test(n)) return 'โปรตีน';
+  if (/กล้วย|ฝรั่ง|แอปเปิล|ผลไม้|ส้ม|มะม่วง|berry/.test(n)) return 'ผลไม้';
+  if (/ผัก|เห็ด|กะหล่ำ|แครอท|บรอกโคลี/.test(n)) return 'ผัก';
+  if (/granola|muesli|ซีเรียล/.test(n)) return 'ซีเรียล/กราโนลา';
+  if (/bread|ขนมปัง|sourdough|biscuits|biscuit/.test(n)) return 'ขนมปัง/เบเกอรี่';
+  if (/นม|milk|กาแฟ|ชา|น้ำผลไม้/.test(n)) return 'เครื่องดื่ม/นม';
+  if (/ขนม|bar|snack|ช็อกโกแลต|choc/.test(n)) return 'ขนม/ของว่าง';
+  return 'อื่น ๆ';
+}
+const normalizedStoredPreset = p => {
+  const row = FOOD_IMPORT_ROWS.find(r => r[0].toLowerCase() === String(p.name).toLowerCase());
+  if (!row || p.defaultQuantity) return p;
+  const amount = Number(row[1]), unit = row[2];
+  // Old bulk imports stored nutrition per package and encoded the package size in `unit`.
+  if (String(p.unit).toLowerCase() !== `${amount} ${unit}`.toLowerCase()) return p;
+  const by = /^(g|gram|grams|กรัม)$/i.test(unit) ? amount : 1;
+  return { ...p, unit: /^(g|gram|grams|กรัม)$/i.test(unit) ? 'g' : unit, gramsPerUnit: by === amount ? 1 : p.gramsPerUnit,
+    calories: p.calories / by, protein: p.protein / by, carbs: p.carbs / by, fat: p.fat / by,
+    defaultQuantity: amount, category: p.category || guessFoodCategory(p.name), _normalizedImport: true };
+};
 export const getPresets = () => [
-  ...state.customFoods.slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || a.name.localeCompare(b.name, 'th')).map(p => ({ ...p, custom: true })),
-  ...DEFAULT_PRESETS.filter(p => !hiddenBuiltins().has(p.id))
+  ...state.customFoods.map(normalizedStoredPreset).map(p => ({ ...p, category: p.category || (p.hiwpinto ? 'อาหารคลีน/Hiwpinto' : guessFoodCategory(p.name)), custom: true })).sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || a.name.localeCompare(b.name, 'th')),
+  ...DEFAULT_PRESETS.filter(p => !hiddenBuiltins().has(p.id)).map(p => ({ ...p, category: guessFoodCategory(p.name), favorite: builtinFavorites().has(p.id) }))
 ];
 
 let root, items = [], base = null;   // base = ค่าต่อ 1 หน่วยของเมนูที่เลือกจากคลัง
@@ -315,7 +338,7 @@ function pickByLabel(v) {
 function applyPreset(p, setName = true) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  $('#f-qty', root).value = 1;
+  $('#f-qty', root).value = p.defaultQuantity ?? 1;
   if (p.edibleFraction && p.gramsPerUnit > 0) {
     $('#f-gross', root).value = p.gramsPerUnit;
     $('#f-edible', root).value = Math.round(p.edibleFraction * 100);
@@ -604,7 +627,7 @@ async function onLabel(e) {
 export function openLibrary(onPick) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คลังอาหารของฉัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="flex flex-col sm:flex-row gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
+    <div class="flex flex-col sm:flex-row gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><select id="lib-category" class="input sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
     <button id="lib-restore-builtins" class="hidden chip bg-sky-soft text-blue-700 mb-2">คืนเมนูเริ่มต้นที่ซ่อนไว้</button>
     <div id="lib-bulk" class="flex flex-wrap items-center justify-between gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
@@ -612,10 +635,11 @@ export function openLibrary(onPick) {
     </div>
     <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
   const selected = new Set();
-  const visibleCustom = () => getPresets().filter(p => p.custom && label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()));
+  const matches = p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()) && (!$('#lib-category', m.el).value || (p.category || guessFoodCategory(p.name)) === $('#lib-category', m.el).value);
+  const visibleCustom = () => getPresets().filter(p => p.custom && matches(p));
   const render = () => {
     const q = $('#lib-q', m.el).value.toLowerCase();
-    const presets = getPresets().filter(p => label(p).toLowerCase().includes(q));
+    const presets = getPresets().filter(matches);
     const custom = presets.filter(p => p.custom);
     const hidden = hiddenBuiltins();
     $('#lib-restore-builtins', m.el).classList.toggle('hidden', hidden.size === 0);
@@ -628,14 +652,15 @@ export function openLibrary(onPick) {
     $('#lib-list', m.el).innerHTML = presets.map((p, i) => `
       <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div class="min-w-0 flex items-start gap-2">${p.custom ? `<input type="checkbox" class="lib-select mt-1 shrink-0" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}<div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
-        <p class="text-xs text-slate-500">${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
+        <p class="text-xs text-slate-500"><span class="inline-block rounded-full bg-slate-100 px-2 py-0.5 mr-1">${esc(p.category || guessFoodCategory(p.name))}</span>${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
         </div><div class="flex flex-wrap gap-1 sm:shrink-0">
           <button data-pick="${i}" class="chip bg-ok-soft text-green-800">เลือก</button>
-          ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : `<button data-hide-default="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ซ่อน</button>`}
+          ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : `<button data-fav-default="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button>`}
         </div>
       </div>`).join('') || '<p class="text-sm text-slate-400 py-4 text-center">ไม่พบรายการ</p>';
   };
   $('#lib-q', m.el).addEventListener('input', render);
+  $('#lib-category', m.el).addEventListener('change', render);
   $('#lib-add', m.el).addEventListener('click', () => openFoodEditor({}));
   $('#lib-bulk-add', m.el).addEventListener('click', () => openBulkFoodImport(m));
   $('#lib-restore-builtins', m.el).addEventListener('click', () => { localStorage.removeItem(HIDDEN_BUILTINS_KEY); refreshDatalist(); render(); });
@@ -674,12 +699,17 @@ export function openLibrary(onPick) {
   });
   m.el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    const list = getPresets().filter(p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()));
+    const list = getPresets().filter(matches);
     if (b.dataset.pick !== undefined) { onPick(list[+b.dataset.pick]); m.close(); }
     else if (b.dataset.hp) openHiwpintoCalculator(state.customFoods.find(f => f.id === b.dataset.hp));
     else if (b.dataset.hideDefault) {
       const hidden = hiddenBuiltins(); hidden.add(b.dataset.hideDefault);
       localStorage.setItem(HIDDEN_BUILTINS_KEY, JSON.stringify([...hidden])); refreshDatalist(); render();
+    }
+    else if (b.dataset.favDefault) {
+      const favorites = builtinFavorites();
+      favorites.has(b.dataset.favDefault) ? favorites.delete(b.dataset.favDefault) : favorites.add(b.dataset.favDefault);
+      localStorage.setItem(BUILTIN_FAV_KEY, JSON.stringify([...favorites])); render();
     }
     else if (b.dataset.edit) openFoodEditor({ id: b.dataset.edit, prefill: state.customFoods.find(f => f.id === b.dataset.edit) });
     else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateDoc(userDoc(state.uid, 'custom_foods', f.id), { favorite: !f.favorite }); }
@@ -701,33 +731,34 @@ export function openLibrary(onPick) {
 
 function openBulkFoodImport(parentModal) {
   const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">เพิ่มอาหารหลายเมนู</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <p class="text-xs text-slate-500 mb-3">รูปแบบต่อบรรทัด: ชื่อเมนู ⇥ จำนวน ⇥ หน่วย ⇥ kcal ⇥ P ⇥ C ⇥ F · ค่าที่ให้มาจะเป็นต่อหนึ่งหน่วย เช่น 40 g</p>
+    <p class="text-xs text-slate-500 mb-3">วางข้อมูลต่อบรรทัด: ชื่อเมนู ⇥ จำนวน ⇥ หน่วย ⇥ kcal ⇥ P ⇥ C ⇥ F<br>ตัวอย่าง: Daily Me Granola (Dark Choc) ⇥ 35 ⇥ g ⇥ 170 ⇥ 4 ⇥ 22 ⇥ 7<br>ใส่โภชนาการตามปริมาณที่ระบุ จำนวนเริ่มต้นจะเติมให้อัตโนมัติ</p>
     <textarea id="lib-import-data" class="input min-h-56 font-mono text-xs" spellcheck="false"></textarea>
     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="lib-import-save" class="btn btn-primary">บันทึกเข้าคลัง</button></div>`, { wide: true });
-  $('#lib-import-data', m.el).value = FOOD_IMPORT_ROWS.map(row => row.join('\t')).join('\n');
   $('#lib-import-save', m.el).addEventListener('click', async () => {
     const lines = $('#lib-import-data', m.el).value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const parsed = lines.map((line, i) => {
       const [name, amountText, unitText, calText, pText, cText, fText] = line.includes('\t') ? line.split('\t') : line.split('|').map(v => v.trim());
       const amount = Number(amountText), calories = Number(calText), protein = Number(pText), carbs = Number(cText), fat = Number(fText);
       if (!name || !unitText || !Number.isFinite(amount) || amount <= 0 || ![calories, protein, carbs, fat].every(value => Number.isFinite(value) && value >= 0)) return { error: `บรรทัด ${i + 1} มีข้อมูลไม่ครบหรือไม่ใช่ตัวเลขบวก` };
-      const gramsPerUnit = /^(g|gram|grams|กรัม)$/i.test(unitText) ? amount : null;
-      const unit = `${fmtAmount(amount)} ${unitText}`;
-      return { record: { name: name.trim(), unit, gramsPerUnit, calories, protein, carbs, fat, favorite: false, createdAt: new Date() } };
+      const grams = /^(g|gram|grams|กรัม)$/i.test(unitText);
+      const unit = grams ? 'g' : unitText;
+      const divisor = grams ? amount : 1;
+      return { record: { name: name.trim(), unit, gramsPerUnit: grams ? 1 : null, defaultQuantity: amount, calories: calories / divisor, protein: protein / divisor, carbs: carbs / divisor, fat: fat / divisor, category: guessFoodCategory(name), favorite: false, createdAt: new Date() } };
     });
     const invalid = parsed.find(item => item.error);
     if (invalid) return toast(invalid.error, 'err');
-    const identity = item => `${item.name.trim().toLowerCase()}\u0000${item.unit.trim().toLowerCase()}`;
-    const existingNames = new Set(state.customFoods.map(identity));
-    const unique = [...new Map(parsed.map(item => [identity(item.record), item.record])).values()];
-    const records = unique.filter(item => !existingNames.has(identity(item)));
-    if (!records.length) return toast('เมนูเหล่านี้อยู่ในคลังแล้ว');
+    const identity = item => item.name.trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
+    const existingNames = new Set([...state.customFoods, ...DEFAULT_PRESETS].map(identity));
+    const unique = [], seen = new Set(), duplicateNames = [];
+    parsed.forEach(({ record }) => { const key = identity(record); if (existingNames.has(key) || seen.has(key)) duplicateNames.push(record.name); else { seen.add(key); unique.push(record); } });
+    const records = unique;
+    if (!records.length) return toast(`มีเมนูอยู่แล้ว: ${[...new Set(duplicateNames)].slice(0, 4).join(', ')}`, 'err');
     const saveButton = $('#lib-import-save', m.el); saveButton.disabled = true; saveButton.textContent = 'กำลังบันทึก…';
     try {
       const batch = writeBatch(db), collectionRef = userCol(state.uid, 'custom_foods');
       records.forEach(record => batch.set(doc(collectionRef), record));
       await batch.commit();
-      m.close(); parentModal.close(); toast(`เพิ่ม ${records.length} เมนูแล้ว${unique.length > records.length ? ` · ข้ามรายการซ้ำ ${unique.length - records.length} รายการ` : ''}`);
+      m.close(); parentModal.close(); toast(`เพิ่ม ${records.length} เมนูแล้ว${duplicateNames.length ? ` · ข้าม ${duplicateNames.length} เมนูซ้ำ: ${[...new Set(duplicateNames)].slice(0, 3).join(', ')}` : ''}`);
     } catch (error) {
       saveButton.disabled = false; saveButton.textContent = 'บันทึกเข้าคลัง';
       toast('เพิ่มเมนูไม่สำเร็จ: ' + error.message, 'err');
@@ -751,6 +782,7 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
       ${scan.notes ? `<p>หมายเหตุ: ${esc(scan.notes)}</p>` : ''}</div>` : ''}
     <div class="grid grid-cols-2 gap-3">
       <div class="col-span-2"><label class="lbl">ชื่ออาหาร *</label><input id="e-name" class="input" value="${esc(v.name || '')}"></div>
+      <div class="col-span-2"><label class="lbl">หมวดหมู่ (ประเมินอัตโนมัติ ปรับได้)</label><select id="e-category" class="input">${categoryNames.map(c => `<option ${((v.category || guessFoodCategory(v.name || '')) === c) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
       <div><label class="lbl">ยี่ห้อ</label><input id="e-brand" class="input" value="${esc(v.brand || '')}"></div>
       <div><label class="lbl">หน่วยบริโภค * (เช่น 1 ซอง, 100 กรัม)</label><input id="e-unit" class="input ${scan && !v.unit ? 'border-amber-400 bg-amber-50' : ''}" value="${esc(v.unit || '')}"></div>
       <div><label class="lbl">น้ำหนักต่อ 1 หน่วย (กรัม/มล.)</label><input id="e-grams" type="number" class="input" value="${v.gramsPerUnit ?? ''}"></div>
@@ -764,6 +796,9 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="e-save" class="btn btn-primary">บันทึกเมนู</button></div>`, { wide: true });
 
   const g = k => $('#e-' + k, m.el);
+  let categoryTouched = !!v.category;
+  g('category').addEventListener('change', () => { categoryTouched = true; });
+  g('name').addEventListener('input', () => { if (!categoryTouched) g('category').value = guessFoodCategory(g('name').value); });
   const conv = $('#e-convert', m.el);
   if (conv) conv.addEventListener('click', () => {
     const k = scan.servingGrams / 100;
@@ -777,7 +812,10 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
     const ediblePercent = toNum(g('edible').value), gramsPerUnit = toNum(g('grams').value);
     if (ediblePercent !== null && (ediblePercent <= 0 || ediblePercent > 100 || !gramsPerUnit || gramsPerUnit <= 0)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100% และต้องระบุน้ำหนักต่อหน่วยด้วย', 'err');
     if (scan && !$('#e-confirm', m.el).checked) return toast('กรุณาติ๊กยืนยันว่าตรวจสอบกับฉลากแล้ว', 'err');
-    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, edibleFraction: ediblePercent === null ? null : ediblePercent / 100, favorite: g('fav').checked };
+    const key = value => String(value).trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
+    const duplicate = [...state.customFoods.filter(f => f.id !== id), ...DEFAULT_PRESETS].find(f => key(f.name) === key(name));
+    if (duplicate) return toast(`มีเมนู “${duplicate.name}” อยู่ในคลังแล้ว`, 'err');
+    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, category: g('category').value, ...(v.defaultQuantity ? { defaultQuantity: v.defaultQuantity } : {}), edibleFraction: ediblePercent === null ? null : ediblePercent / 100, favorite: g('fav').checked };
     EDIT_FIELDS.forEach(([k]) => { rec[k] = toNum(g(k).value); });
     const done = ref => { toast('บันทึกเมนูแล้ว'); if (onSaved) onSaved({ ...rec, id: ref?.id || id }); };
     if (id) { updateDoc(userDoc(state.uid, 'custom_foods', id), { ...rec, updatedAt: new Date() }).catch(e => toast(e.message, 'err')); done(); }
