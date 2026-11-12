@@ -35,13 +35,20 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 2.8rem
 th { font-weight: 600; }
 
 html[data-theme="minimal"] {
-  --color-brand: #475569;
-  --color-brand-dark: #334155;
-  --color-lav-soft: #f1f5f9;
-  --color-pink-soft: #f1f5f9;
-  --color-sky-soft: #e2e8f0;
-  --color-app-bg: #f8fafc;
+  --color-brand: #8b5e3c;
+  --color-brand-dark: #70482e;
+  --color-lav-soft: #efe4d8;
+  --color-pink-soft: #f3e5df;
+  --color-sky-soft: #e6e9e3;
+  --color-app-bg: #faf6f1;
 }
+html[data-theme="minimal"] .card { border-color: #e8d9ca; box-shadow: 0 1px 2px rgb(91 60 38 / 0.07); }
+html[data-theme="minimal"] .btn-soft { color: #68452f; }
+html[data-theme="minimal"] .input:focus { border-color: #a47755; box-shadow: 0 0 0 3px #efe4d8; }
+html[data-theme="minimal"] body { color: #46372e; }
+html[data-theme="minimal"] .text-brand, html[data-theme="minimal"] .text-blue-700, html[data-theme="minimal"] .text-green-800 { color: #70482e !important; }
+html[data-theme="minimal"] .bg-amber-50, html[data-theme="minimal"] .bg-amber-100 { background-color: #f3e8dc !important; }
+html[data-theme="minimal"] .bg-sky-100, html[data-theme="minimal"] .bg-violet-100, html[data-theme="minimal"] .bg-pink-100 { background-color: #efe4d8 !important; }
 
 html[data-theme="dark"] { color-scheme: dark; --color-brand: #8b7ae0; --color-brand-dark: #7664d0; --color-lav-soft: #29263a; --color-pink-soft: #3a2535; --color-sky-soft: #202e42; --color-app-bg: #11131a; }
 html[data-theme="dark"] body { background: var(--color-app-bg); color: #e2e8f0; }
@@ -56,6 +63,31 @@ html[data-theme="dark"] .divide-slate-100 > :not(:last-child) { border-color: #3
 html[data-theme="dark"] .hover\:bg-white\/80:hover { background-color: #242936 !important; }
 html[data-theme="dark"] select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23cbd5e1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 html[data-theme="dark"] .cal-day:hover { background: #29263a; }
+html[data-theme="dark"] .text-green-800, html[data-theme="dark"] .text-green-900,
+html[data-theme="dark"] .text-blue-700, html[data-theme="dark"] .text-blue-800,
+html[data-theme="dark"] .text-rose-600, html[data-theme="dark"] .text-rose-700,
+html[data-theme="dark"] .text-amber-800, html[data-theme="dark"] .text-amber-900,
+html[data-theme="dark"] .text-violet-800, html[data-theme="dark"] .text-violet-900,
+html[data-theme="dark"] .text-pink-800, html[data-theme="dark"] .text-sky-900 { color: #f1f5f9 !important; }
+html[data-theme="dark"] .bg-amber-50, html[data-theme="dark"] .bg-amber-100,
+html[data-theme="dark"] .bg-sky-50, html[data-theme="dark"] .bg-sky-100,
+html[data-theme="dark"] .bg-violet-50, html[data-theme="dark"] .bg-violet-100,
+html[data-theme="dark"] .bg-pink-50, html[data-theme="dark"] .bg-pink-100,
+html[data-theme="dark"] .bg-rose-50, html[data-theme="dark"] .bg-rose-100,
+html[data-theme="dark"] .bg-green-50, html[data-theme="dark"] .bg-green-100 { background-color: #292e39 !important; }
+html[data-theme="dark"] .bg-amber-50\/60, html[data-theme="dark"] .bg-sky-50\/60,
+html[data-theme="dark"] .bg-violet-50\/60, html[data-theme="dark"] .bg-pink-50\/60 { background-color: #202530 !important; }
+html[data-theme="dark"] .border-rose-300, html[data-theme="dark"] .border-amber-200 { border-color: #596273 !important; }
+html[data-theme="dark"] .bg-ok-soft\/60, html[data-theme="dark"] .bg-ok-soft { background-color: #23352f !important; }
+html[data-theme="dark"] .food-library-item, html[data-theme="dark"] #f-body tr { color: #e2e8f0; }
+html[data-theme="dark"] #f-body tr > td, html[data-theme="dark"] #f-body tr > td * { color: #e2e8f0 !important; }
+html[data-theme="dark"] #f-body tr button { color: #c4b5fd !important; }
+html[data-theme="dark"] .bg-amber-50 *, html[data-theme="dark"] .bg-amber-100 *,
+html[data-theme="dark"] .bg-sky-50 *, html[data-theme="dark"] .bg-sky-100 *,
+html[data-theme="dark"] .bg-violet-50 *, html[data-theme="dark"] .bg-violet-100 *,
+html[data-theme="dark"] .bg-pink-50 *, html[data-theme="dark"] .bg-pink-100 *,
+html[data-theme="dark"] .bg-rose-50 *, html[data-theme="dark"] .bg-rose-100 *,
+html[data-theme="dark"] .bg-green-50 *, html[data-theme="dark"] .bg-green-100 * { color: #f1f5f9 !important; }
 
 /* ปฏิทินประจำเดือน */
 .cal-day { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: .6rem; font-size: .8rem; position: relative; cursor: pointer; border: 1px solid transparent; }

@@ -606,9 +606,10 @@ function openOnlineSearch() {
 async function onLabel(e) {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
-  toast('กำลังอ่านฉลากโภชนาการ...');
+  const progress = openModal(`<div class="flex items-center gap-3"><span class="animate-spin rounded-full h-6 w-6 border-2 border-brand border-t-transparent"></span><div><h3 class="font-bold">กำลังอ่านฉลากโภชนาการ</h3><p class="text-xs text-slate-500">กำลังส่งภาพให้ Gemini อ่าน ตัวแอปจะหยุดรอภายใน 20 วินาทีหากไม่มีคำตอบ</p></div></div>`);
   try {
     const r = await readNutritionLabel(f);
+    progress.close();
     const per100 = r.basis === 'per_100g';
     openFoodEditor({
       prefill: {
@@ -620,7 +621,15 @@ async function onLabel(e) {
       scan: { basis: r.basis, servingGrams: r.servingGrams, servingSizeText: r.servingSizeText, notes: r.notes },
       onSaved: food => applyPreset(food)
     });
-  } catch (err) { toast(explainGeminiError(err), 'err'); }
+  } catch (err) {
+    if(progress.el.isConnected){
+      progress.el.querySelector('.animate-spin')?.remove();
+      const box=progress.el.querySelector('.text-xs');
+      if(box)box.outerHTML=`<p class="mt-2 text-sm text-rose-700" role="alert">${esc(explainGeminiError(err))}</p><button id="label-retry" class="btn btn-soft mt-3">เลือกภาพใหม่</button><button data-close class="btn btn-ghost mt-3">ปิด</button>`;
+      progress.el.querySelector('#label-retry')?.addEventListener('click',()=>{progress.close();$('#f-label',root).click();});
+      progress.el.querySelector('[data-close]')?.addEventListener('click',progress.close);
+    } else toast(explainGeminiError(err), 'err');
+  }
 }
 
 // ---------- Custom food library ----------
@@ -629,9 +638,12 @@ export function openLibrary(onPick) {
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คลังอาหารของฉัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="flex flex-col sm:flex-row gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><select id="lib-category" class="input sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
     <button id="lib-restore-builtins" class="hidden chip bg-sky-soft text-blue-700 mb-2">คืนเมนูเริ่มต้นที่ซ่อนไว้</button>
-    <div id="lib-bulk" class="flex flex-wrap items-center justify-between gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
+    <div id="lib-bulk" class="flex flex-wrap items-center gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
-      <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก (<span id="lib-selected-count">0</span>)</button>
+      <span>เลือกแล้ว <b id="lib-selected-count">0</b></span>
+      <select id="lib-bulk-category" class="input !w-auto min-w-40 !py-2 text-xs"><option value="">เลือกหมวดหมู่ใหม่</option>${categoryNames.map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+      <button id="lib-change-category" class="btn btn-soft !px-3 !py-2 text-xs" disabled>เปลี่ยนหมวดหมู่ที่เลือก</button>
+      <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก</button>
     </div>
     <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
   const selected = new Set();
@@ -649,6 +661,7 @@ export function openLibrary(onPick) {
     $('#lib-visible-count', m.el).textContent = custom.length;
     $('#lib-selected-count', m.el).textContent = selected.size;
     $('#lib-delete-selected', m.el).disabled = selected.size === 0;
+    $('#lib-change-category', m.el).disabled = selected.size === 0 || !$('#lib-bulk-category', m.el).value;
     $('#lib-list', m.el).innerHTML = presets.map((p, i) => `
       <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div class="min-w-0 flex items-start gap-2">${p.custom ? `<input type="checkbox" class="lib-select mt-1 shrink-0" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}<div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
@@ -667,6 +680,14 @@ export function openLibrary(onPick) {
   $('#lib-select-visible', m.el).addEventListener('change', e => {
     visibleCustom().forEach(p => e.target.checked ? selected.add(p.id) : selected.delete(p.id));
     render();
+  });
+  $('#lib-bulk-category', m.el).addEventListener('change', render);
+  $('#lib-change-category', m.el).addEventListener('click', async () => {
+    const category=$('#lib-bulk-category',m.el).value, foods=state.customFoods.filter(f=>selected.has(f.id));
+    if(!category||!foods.length)return;
+    if(!confirm(`เปลี่ยนหมวดหมู่ของ ${foods.length} เมนูที่เลือกเป็น “${category}” หรือไม่?`))return;
+    try{for(let i=0;i<foods.length;i+=450){const batch=writeBatch(db);foods.slice(i,i+450).forEach(f=>batch.update(userDoc(state.uid,'custom_foods',f.id),{category}));await batch.commit();}selected.clear();$('#lib-bulk-category',m.el).value='';toast(`เปลี่ยนหมวดหมู่ให้ ${foods.length} เมนูแล้ว`);render();}
+    catch(err){toast('เปลี่ยนหมวดหมู่ไม่สำเร็จ: '+err.message,'err');}
   });
   $('#lib-delete-selected', m.el).addEventListener('click', async () => {
     const foods = state.customFoods.filter(f => selected.has(f.id));

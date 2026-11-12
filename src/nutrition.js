@@ -15,19 +15,25 @@ async function callGemini(parts, schema) {
     generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0 }
   });
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     let res;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       res = await fetch(url, {
         method: 'POST',
         // ส่ง key ใน header (ไม่ใส่ใน URL เพื่อไม่ให้ไปค้างใน log/ประวัติเบราว์เซอร์)
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body
+        body,
+        signal: controller.signal
       });
     } catch (cause) {
-      const err = new Error(cause.message || 'Network error');
-      err.networkError = true;
+      const err = new Error(cause.name === 'AbortError' ? 'หมดเวลารอคำตอบจาก Gemini (20 วินาที)' : (cause.message || 'Network error'));
+      err.timeoutError = cause.name === 'AbortError';
+      err.networkError = !err.timeoutError;
       throw err;
+    } finally {
+      clearTimeout(timeout);
     }
 
     const data = await res.json().catch(() => ({}));
@@ -35,12 +41,13 @@ async function callGemini(parts, schema) {
       const message = data?.error?.message || `HTTP ${res.status}`;
       const err = new Error(message);
       err.status = res.status;
+      err.quotaExceeded = /daily quota|quota exceeded|resource exhausted/i.test(message);
       err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
       err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message) ||
-        (res.status === 429 && !/daily quota|quota exceeded/i.test(message));
-      if (err.retryable && attempt < 2) {
+        (res.status === 429 && !err.quotaExceeded);
+      if (err.retryable && attempt < 1) {
         const retryAfter = Number(res.headers.get('retry-after'));
-        const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 3000) : 700 * (attempt + 1);
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 1200) : 400;
         await delay(wait);
         continue;
       }
@@ -133,8 +140,12 @@ export async function estimateStockFromPhoto(file) {
 
 export const explainGeminiError = e => e.message === 'NO_KEY'
   ? 'ยังไม่ได้ใส่ Gemini API Key — ไปที่แท็บ "ตั้งค่า" (ดูวิธีขอคีย์ฟรีใน docs/SETUP.md)'
-  : e.status === 429
-    ? 'คำขอ Gemini ถึงขีดจำกัดการใช้งานชั่วคราว โปรดลองใหม่ภายหลัง'
+  : e.quotaExceeded
+    ? 'โควตา Gemini ของ API Key นี้เต็มแล้ว ต้องรอรอบโควตาถัดไปหรือตั้ง API Key ที่มีโควตาอื่น แอปจะไม่ส่งซ้ำอัตโนมัติ'
+    : e.status === 429
+      ? 'Gemini จำกัดจำนวนคำขอชั่วคราว ลองอีกครั้งภายหลัง'
+      : e.timeoutError
+        ? 'Gemini ใช้เวลานานเกิน 20 วินาที แอปหยุดรอแล้ว ลองใหม่หรือใช้ค้นหาจากคลังอาหาร'
     : e.serverBusy
       ? 'Gemini กำลังมีผู้ใช้หนาแน่น ลองอีกครั้งในอีกสักครู่ได้ค่ะ ข้อมูลยังไม่ถูกบันทึก'
       : e.networkError
