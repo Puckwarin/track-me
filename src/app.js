@@ -11,16 +11,15 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { addDoc, query, where } from 'firebase/firestore';
+import { query, where } from 'firebase/firestore';
 
 import { userCol } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, localDateStr, addDays, toast } from './util.js';
+import { $, localDateStr, addDays } from './util.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import { TAB_ACTIVE, TAB_IDLE, TAB_BASE } from './theme.js';
-import { mountFood, watchDay, guessFoodCategory } from './food.js';
-import { openFoodSearch } from './foodsearch.js';
+import { mountFood, watchDay } from './food.js';
 import { mountPeriod, render as renderPeriod, checkReminder } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList } from './symptoms.js';
 import { mountCare, watchCare } from './care.js';
@@ -45,32 +44,10 @@ export function showTab(name) {
 }
 
 let mounted = false;
-function addFoodSearchShortcut() {
-  const root = $('#tab-food');
-  if (!root || $('#f-search-online', root)) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'lg:col-span-3 card flex flex-wrap items-center justify-between gap-2';
-  wrap.innerHTML = '<div><b class="text-sm">ค้นหาอาหารจากฐานข้อมูล</b><p class="text-xs text-slate-500">Open Food Facts · USDA · Gemini AI</p></div><button id="f-search-online" class="btn btn-soft"><i class="fa-solid fa-magnifying-glass"></i> ค้นหาโภชนาการ</button>';
-  root.prepend(wrap);
-  $('#f-search-online', root).addEventListener('click', () => openFoodSearch({
-    onUse: food => {
-      const fields = { 'f-name': food.name, 'f-cal': food.calories, 'f-pro': food.protein, 'f-carb': food.carbs, 'f-fat': food.fat, 'f-sugar': food.sugar, 'f-sodium': food.sodium };
-      Object.entries(fields).forEach(([id, value]) => { const el = $('#' + id, root); if (el) el.value = value ?? ''; });
-      const qty = $('#f-qty', root); if (qty) qty.value = 1;
-    },
-    onSaveLibrary: food => addDoc(userCol(state.uid, 'custom_foods'), {
-      name: food.name, brand: food.brand || '', unit: food.unit || '100 กรัม', gramsPerUnit: food.gramsPerUnit ?? 100,
-      category: guessFoodCategory(food.name), calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat,
-      sugar: food.sugar, sodium: food.sodium, favorite: false, createdAt: new Date()
-    }).catch(e => toast('บันทึกเข้าคลังไม่สำเร็จ: ' + e.message, 'err'))
-  }));
-}
-
 function mountAll() {
   if (mounted) return;
   mounted = true;
   mountFood($('#tab-food'));
-  addFoodSearchShortcut();
   mountWorkout($('#tab-workout'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
