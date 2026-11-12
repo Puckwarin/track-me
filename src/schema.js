@@ -8,7 +8,7 @@ const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new 
 
 export const SANITIZERS = {
   food_records: o => isDateStr(o.date) && str(o.name) ? {
-    date: o.date, meal: str(o.meal, 40), mealId: typeof o.mealId === 'string' && /^[\\w-]{1,40}$/.test(o.mealId) ? o.mealId : null, name: str(o.name),
+    date: o.date, meal: str(o.meal, 40), mealId: typeof o.mealId === 'string' && /^[\w-]{1,40}$/.test(o.mealId) ? o.mealId : null, name: str(o.name),
     calories: num(o.calories) ?? 0, protein: num(o.protein) ?? 0, carbs: num(o.carbs) ?? 0, fat: num(o.fat) ?? 0,
     ...(num(o.sugar) !== null && { sugar: num(o.sugar) }), ...(num(o.sodium) !== null && { sodium: num(o.sodium) }),
     ...(num(o.quantity) !== null && { quantity: num(o.quantity) }),
@@ -75,7 +75,7 @@ export const SANITIZERS = {
     activity:['sedentary','light','moderate','active','very'].includes(o.activity)?o.activity:'light',
     adjust:typeof o.adjust==='number'&&Math.abs(o.adjust)<=1500?Math.round(o.adjust):0,
     kcalOverride:num(o.kcalOverride), proteinPerKg:num(o.proteinPerKg), fatPct:num(o.fatPct),
-    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30),pct:num(m.pct)??0})),
+    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30),pct:num(m.pct)??0})),
     updatedAt:ts(o.updatedAt)
   }),
 };
