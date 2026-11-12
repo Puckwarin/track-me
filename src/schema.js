@@ -50,11 +50,30 @@ export const SANITIZERS = {
   pet_care_records: o => str(o.type,80) && isDateStr(o.date) ? { petId:str(o.petId,80), type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
   pet_food_records: o => str(o.name) && num(o.grams)!==null && isDateStr(o.date) ? { petId:str(o.petId,80), date:o.date, name:str(o.name), grams:num(o.grams), kcalPer100:num(o.kcalPer100), allergy:['yes','no','unknown'].includes(o.allergy)?o.allergy:'unknown', note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
   tracked_products: o => str(o.name) && str(o.unit,80) ? { name:str(o.name), category:str(o.category,100), quantity:num(o.quantity), unit:str(o.unit,80), lowAt:num(o.lowAt), expiryDate:isDateStr(o.expiryDate)?o.expiryDate:null, openedDate:isDateStr(o.openedDate)?o.openedDate:null, paoMonths:int(o.paoMonths,1,120), paoExpiry:isDateStr(o.paoExpiry)?o.paoExpiry:null, ingredients:str(o.ingredients,3000), pros:str(o.pros,2000), cons:str(o.cons,2000), createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
-  replacement_records: o => str(o.name) && isDateStr(o.date) ? { name:str(o.name), date:o.date, intervalDays:int(o.intervalDays,1,3650), nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null
+  replacement_records: o => str(o.name) && isDateStr(o.date) ? { name:str(o.name), date:o.date, intervalDays:int(o.intervalDays,1,3650), nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
+
+  workout_records: o => isDateStr(o.date) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
+    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin),
+    sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
+    note:str(o.note,300), createdAt:ts(o.createdAt)
+  } : null,
+  workout_templates: o => str(o.name,60) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
+    name:str(o.name,60), type:o.type,
+    sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
+    createdAt:ts(o.createdAt)
+  } : null,
+  settings: o => ({
+    sex:o.sex==='male'?'male':'female', birthYear:int(o.birthYear,1900,2100), heightCm:num(o.heightCm), weightKg:num(o.weightKg),
+    activity:['sedentary','light','moderate','active','very'].includes(o.activity)?o.activity:'light',
+    adjust:typeof o.adjust==='number'&&Math.abs(o.adjust)<=1500?Math.round(o.adjust):0,
+    kcalOverride:num(o.kcalOverride), proteinPerKg:num(o.proteinPerKg), fatPct:num(o.fatPct),
+    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30),pct:num(m.pct)??0})),
+    updatedAt:ts(o.updatedAt)
+  }),
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
 // symptom_records ใช้วันที่เป็น doc id
 export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : fallback;
