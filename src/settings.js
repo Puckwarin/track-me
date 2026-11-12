@@ -33,21 +33,7 @@ export function mountSettings(el) {
       <p id="st-pin-state" class="text-xs text-slate-500"></p>
     </div>
 
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-brand"></i> Gemini API Key (ตัวเลือก)</h3>
-      <p class="text-xs text-slate-500">ใช้กับฟีเจอร์ถ่ายรูปอาหาร/ฉลากและค้นหาโภชนาการ ขอคีย์ฟรีได้ที่ Google AI Studio (ไม่ต้องผูกบัตร) · คีย์เก็บ<b>เฉพาะในเบราว์เซอร์เครื่องนี้</b> ไม่ซิงค์ ไม่อยู่ในไฟล์สำรอง — ต้องใส่ในแต่ละอุปกรณ์เอง</p>
-      <input type="password" id="st-key" class="input" placeholder="AIza..." autocomplete="off">
-      <button id="st-key-save" class="btn btn-primary">บันทึกคีย์</button>
-    </div>
-
     <div class="card space-y-3 lg:col-span-2" id="st-profile"></div>
-
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-database text-brand"></i> แหล่งข้อมูลโภชนาการอื่น</h3>
-      <p class="text-xs text-slate-500"><b>Open Food Facts</b> ใช้ได้เลย · <b>USDA FoodData Central</b> ขอคีย์ฟรีที่ fdc.nal.usda.gov/api-key-signup (เก็บในเครื่องนี้)</p>
-      <input type="password" id="st-usda" class="input" placeholder="USDA API Key (ไม่บังคับ)" autocomplete="off">
-      <button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button>
-    </div>
 
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> เตือนรอบเดือน</h3>
@@ -59,6 +45,12 @@ export function mountSettings(el) {
 
     <div class="card space-y-3" id="st-backup"></div>
     <div class="card space-y-3 lg:col-span-2" id="st-migrate"></div>
+    <div class="card space-y-4 lg:col-span-2" id="st-api-keys">
+      <header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-brand"></i> คีย์เชื่อมต่อ (ตัวเลือก)</h3><p class="text-xs text-slate-500 mt-1">จัดคีย์ที่นี่เป็นหมวดเดียวกัน · เก็บเฉพาะเบราว์เซอร์อุปกรณ์นี้ ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p></header>
+      <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลากและประมาณโภชนาการ · ตั้งค่าได้ใน Google AI Studio · ใช้โควตาฟรีเมื่อมีให้บริการ</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button></section>
+      <section class="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-database text-sky-500"></i> USDA FoodData Central</h4><p class="text-xs text-slate-500">ใช้ค้นหาวัตถุดิบ · ขอ API key ฟรีที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input" placeholder="USDA API Key" autocomplete="off"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button></section>
+      <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
+    </div>
   </div>`;
   $('#st-key', el).value = getGeminiKey();
   $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); toast('บันทึกคีย์แล้ว'); });
