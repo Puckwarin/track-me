@@ -119,6 +119,18 @@ export async function readNutritionLabel(file) {
   });
 }
 
+// วิเคราะห์ภาพในหน่วยความจำชั่วคราว ไม่บันทึกไฟล์ภาพลงแอป
+export async function estimateStockFromPhoto(file) {
+  const img = await imageToInlineData(file, 1400);
+  return callGemini([
+    { text: `ประเมินจากภาพสินค้า/ของใช้ที่เห็นเท่านั้น ชื่อสินค้า ปริมาณเต็มแพ็ก ปริมาณคงเหลือโดยประมาณ และหน่วย (ชิ้น, ห่อ, ml, g) ถ้าเป็นภาชนะเปิดใช้ให้ประเมินสัดส่วนอย่างระมัดระวัง ถ้าอ่านไม่ออกให้ null และระบุความไม่แน่นอน ตอบ JSON ตาม schema` },
+    { inline_data: img }
+  ], {
+    type:'OBJECT', properties:{ name:{type:'STRING',nullable:true}, totalQuantity:N, remainingQuantity:N, unit:{type:'STRING',nullable:true}, confidence:{type:'STRING',enum:['low','medium','high']}, notes:{type:'STRING',nullable:true} },
+    required:['name','totalQuantity','remainingQuantity','unit','confidence','notes']
+  });
+}
+
 export const explainGeminiError = e => e.message === 'NO_KEY'
   ? 'ยังไม่ได้ใส่ Gemini API Key — ไปที่แท็บ "ตั้งค่า" (ดูวิธีขอคีย์ฟรีใน docs/SETUP.md)'
   : e.status === 429

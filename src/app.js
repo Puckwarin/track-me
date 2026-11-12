@@ -21,8 +21,9 @@ import { initAuth } from './auth.js';
 import { TAB_ACTIVE, TAB_IDLE, TAB_BASE } from './theme.js';
 import { mountFood, watchDay } from './food.js';
 import { mountPeriod, render as renderPeriod, checkReminder } from './period.js';
-import { mountSymptoms, renderList as renderSymptomList } from './symptoms.js';
+import { mountSymptoms, renderList as renderSymptomList, renderSkinList } from './symptoms.js';
 import { mountCare, watchCare } from './care.js';
+import { mountInventory, watchInventory } from './inventory.js';
 import { mountBody, render as renderBody } from './body.js';
 import { mountReport } from './reports.js';
 import { mountSettings, refreshAccount } from './settings.js';
@@ -30,7 +31,7 @@ import { renderSummary, copySummary } from './summary.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['food', 'period', 'symptoms', 'care', 'body', 'report', 'settings'];
+const TABS = ['food', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
 export function showTab(name) {
   TABS.forEach(t => {
     $('#tab-' + t).classList.toggle('hidden', t !== name);
@@ -48,6 +49,7 @@ function mountAll() {
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
   mountCare($('#tab-care'));
+  mountInventory($('#tab-inventory'));
   mountBody($('#tab-body'));
   mountReport($('#tab-report'));
   mountSettings($('#tab-settings'));
@@ -60,15 +62,17 @@ function startData() {
   watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderSummary(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   watchCare(uid);
+  watchInventory(uid);
   // อาการ: โหลดย้อนหลัง ~13 เดือน (ช่วงเก่ากว่านั้นดูได้ในรายงาน)
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); });
+  watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
   watchDay();
 }
 
 on('auth', user => {
   stopAll();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = [];
-  ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist'].forEach(k => { state[k] = []; });
+  ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
     refreshAccount();

@@ -6,6 +6,14 @@ export const state = {
   body: [],
   customFoods: [],
   symptoms: [],
+  skinRecords: [],
+  skincareProducts: [],
+  ingredientBlacklist: [],
+  trackedProducts: [],
+  replacements: [],
+  petProfiles: [],
+  petCare: [],
+  petFoods: [],
   loaded: { period: false, body: false }
 };
 const bus = new EventTarget();

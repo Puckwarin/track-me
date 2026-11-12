@@ -31,12 +31,22 @@ export function mountSymptoms(el) {
       <button id="s-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการ</button>
     </div>
     <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
-    </div>`;
+    </div>
+    <section class="card space-y-4 lg:col-span-2"><header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-face-smile text-rose-500"></i> บันทึกผิวรายวัน</h3><p class="text-xs text-slate-500">รวมกับบันทึกอาการรายวัน เลือกวันเดียวกันเพื่อจดอาการและผลลัพธ์ต่อผิว</p></header>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${SKIN_FIELDS.map(([k,t])=>`<label class="text-sm">${t}<select id="skin-${k}" class="input">${SEVERITY.map((s,i)=>`<option value="${i}">${s}</option>`).join('')}</select></label>`).join('')}</div>
+      <textarea id="skin-result" class="input" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
+      <div class="flex justify-end gap-2"><button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button><button id="skin-save" class="btn btn-pink">บันทึกอาการผิว</button></div>
+      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="space-y-1 text-sm"></div></div>
+    </section>`;
   $('#s-date', root).value = localDateStr();
   $('#s-date', root).addEventListener('change', loadForm);
+  $('#s-date', root).addEventListener('change', loadSkinForm);
   $('#s-save', root).addEventListener('click', save);
   $('#s-del', root).addEventListener('click', del);
+  $('#skin-save', root).addEventListener('click', saveSkin);
+  $('#skin-del', root).addEventListener('click', delSkin);
   $('#s-list', root).addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) selectDate(b.dataset.d); });
+  $('#skin-list', root).addEventListener('click', e => { const b = e.target.closest('[data-skin-d]'); if (b) selectDate(b.dataset.skinD); });
   loadForm();
 }
 
@@ -49,6 +59,8 @@ export function selectDate(d) {
 }
 
 const get = date => state.symptoms.find(s => s.id === date);
+const SKIN_FIELDS = [['rash','ผื่น'],['itch','คัน'],['burning','แสบ'],['redness','แดง'],['peeling','ลอก'],['dryness','แห้ง']];
+const getSkin = date => state.skinRecords?.find(s => s.id === date);
 
 export function loadForm() {
   if (!root) return;
@@ -58,6 +70,15 @@ export function loadForm() {
   $('#s-stress', root).value = r?.stress ?? '';
   $('#s-note', root).value = r?.note ?? '';
   $('#s-del', root).classList.toggle('hidden', !r);
+  loadSkinForm();
+}
+
+function loadSkinForm() {
+  if (!root) return;
+  const r = getSkin($('#s-date', root).value);
+  SKIN_FIELDS.forEach(([k]) => { $('#skin-' + k, root).value = r?.symptoms?.[k] ?? 0; });
+  $('#skin-result', root).value = r?.result ?? '';
+  $('#skin-del', root).classList.toggle('hidden', !r);
 }
 
 export function renderList() {
@@ -69,6 +90,17 @@ export function renderList() {
       <b>${esc(fmtDate(r.id))}</b> <span class="text-slate-600">${esc(sx || 'ไม่มีอาการ')}</span>${r.mood ? ` · ${esc(MOODS[r.mood])}` : ''}</button>`;
   }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาการ</p>';
   loadForm();
+  renderSkinList();
+}
+
+export function renderSkinList() {
+  if (!root) return;
+  const rows = (state.skinRecords || []).slice().sort((a,b)=>b.id.localeCompare(a.id)).slice(0,10);
+  $('#skin-list', root).innerHTML = rows.length ? rows.map(r => {
+    const signs = SKIN_FIELDS.filter(([k])=>r.symptoms?.[k]>0).map(([k,t])=>`${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
+    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2 rounded-lg border border-rose-100 hover:bg-rose-50"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs||'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result||'')}</span></button>`;
+  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึกผิว</p>';
+  loadSkinForm();
 }
 
 function save() {
@@ -86,4 +118,16 @@ function save() {
 function del() {
   const date = $('#s-date', root).value;
   if (confirm('ลบบันทึกอาการของวันนี้?')) deleteDoc(userDoc(state.uid, 'symptom_records', date)).catch(e => toast(e.message, 'err'));
+}
+
+function saveSkin() {
+  const date = $('#s-date', root).value;
+  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  const symptoms = Object.fromEntries(SKIN_FIELDS.map(([k])=>[k,+$('#skin-'+k,root).value]));
+  setDoc(userDoc(state.uid,'skin_records',date),{date,symptoms,result:$('#skin-result',root).value.trim(),updatedAt:new Date()})
+    .then(()=>toast('บันทึกอาการผิวแล้ว')).catch(e=>toast('บันทึกอาการผิวไม่สำเร็จ: '+e.message,'err'));
+}
+function delSkin() {
+  const date=$('#s-date',root).value;
+  if(confirm('ลบบันทึกผิวของวันนี้?')) deleteDoc(userDoc(state.uid,'skin_records',date)).catch(e=>toast(e.message,'err'));
 }
