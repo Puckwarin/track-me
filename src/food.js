@@ -128,7 +128,7 @@ export function mountFood(el) {
         </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div id="f-qty-wrap"><label class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"></div>
+        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
         <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
         <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
@@ -137,8 +137,8 @@ export function mountFood(el) {
         <div><label class="lbl">น้ำตาล (g)</label><input id="f-sugar" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">โซเดียม (mg)</label><input id="f-sodium" type="number" inputmode="decimal" class="input"></div>
       </div>
-      <p class="text-xs text-slate-400">ค่าในช่องเป็นค่า "ต่อ 1 หน่วย" ยอดที่บันทึก = ค่า × จำนวน</p>
-      <div class="flex justify-end"><button id="f-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกรายการ</button></div>
+      <p class="text-xs text-slate-400">เมื่อเลือกอาหารจากคลัง ระบบคำนวณสารอาหารตามจำนวนที่กรอกให้ทันที</p>
+      <div class="flex justify-end gap-2"><button id="f-clear" type="button" class="btn btn-ghost">เคลียร์ค่า</button><button id="f-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกรายการ</button></div>
     </div>
 
     <div class="card space-y-3">
@@ -165,6 +165,9 @@ export function mountFood(el) {
   fillMealSelect();
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
+  $('#f-qty', root).addEventListener('input', updateFoodPreview);
+  ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
+  $('#f-clear', root).addEventListener('click', clearFoodForm);
   $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
@@ -184,6 +187,8 @@ export function mountFood(el) {
   $('#f-body', root).addEventListener('click', e => {
     const edit = e.target.closest('[data-edit-log]');
     if (edit) return editFoodQuantity(edit.dataset.editLog);
+    const move = e.target.closest('[data-move-log]');
+    if (move) return moveFoodMeal(move.dataset.moveLog);
     const b = e.target.closest('[data-del]');
     if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'food_records', b.dataset.del)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
   });
@@ -348,7 +353,7 @@ function refreshDatalist() {
 function pickByLabel(v) {
   const p = getPresets().find(x => label(x) === v);
   if (p) applyPreset(p, false);
-  else { base = null; syncFoodWeightForm(); }
+  else { base = null; syncFoodWeightForm(); updateFoodPreview(); }
 }
 
 function applyPreset(p, setName = true) {
@@ -362,6 +367,27 @@ function applyPreset(p, setName = true) {
   const set = (id, v) => { $('#' + id, root).value = typeof v === 'number' ? v : ''; };
   set('f-cal', p.calories); set('f-pro', p.protein); set('f-carb', p.carbs); set('f-fat', p.fat); set('f-sugar', p.sugar); set('f-sodium', p.sodium);
   syncFoodWeightForm();
+  updateFoodPreview();
+}
+
+function updateFoodPreview() {
+  if (!root) return;
+  const qty = toNum($('#f-qty', root).value) || 0;
+  const calories = (toNum($('#f-cal', root).value) || 0) * qty;
+  const protein = (toNum($('#f-pro', root).value) || 0) * qty;
+  const carbs = (toNum($('#f-carb', root).value) || 0) * qty;
+  const fat = (toNum($('#f-fat', root).value) || 0) * qty;
+  const unit = base?.unit === 'g' ? 'g' : 'หน่วย';
+  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}${unit === 'g' ? ` · ${fmtAmount(qty)} g` : ''}`;
+}
+
+function clearFoodForm() {
+  if (!root) return;
+  ['f-name','f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium','f-gross','f-edible'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
+  $('#f-qty',root).value=1;
+  base=null;
+  syncFoodWeightForm();
+  updateFoodPreview();
 }
 
 function foodLogQuantity(item) {
@@ -378,6 +404,7 @@ const foodLogPortion = item => {
     return `ชั่ง ${fmtAmount(item.weighedGrams)} g · ${fmtAmount(item.edibleFraction * 100)}% ≈ ${fmtAmount(edibleGrams)} g ที่กินได้`;
   }
   const quantity = foodLogQuantity(item);
+  if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
   return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
 };
 
@@ -399,9 +426,14 @@ function unitNutritionFor(item, quantity = foodLogQuantity(item)) {
 function syncFoodWeightForm() {
   if (!root) return;
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
+  const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
+  $('#f-qty-label', root).textContent = gramMode ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วย)';
+  $('#f-qty', root).step = gramMode ? '1' : '0.01';
+  $('#f-preview', root).textContent = gramMode ? 'สารอาหารในคลังคิดต่อ 1 กรัม · ยอดรวมปรับตามน้ำหนักที่กรอก' : '';
   $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
   if (grossMode) updateEdibleEstimate();
+  else updateFoodPreview();
 }
 
 function updateEdibleEstimate() {
@@ -438,6 +470,10 @@ function saveFood() {
     protein: m(unitNutrition.protein), carbs: m(unitNutrition.carbs), fat: m(unitNutrition.fat),
     createdAt: new Date()
   };
+  if (!grossMode && base) {
+    rec.portionUnit = base.unit || 'หน่วย';
+    rec.gramsPerUnit = Number.isFinite(base.gramsPerUnit) ? base.gramsPerUnit : null;
+  }
   if (unitNutrition.sugar !== null) rec.sugar = round1(unitNutrition.sugar * qty);
   if (unitNutrition.sodium !== null) rec.sodium = Math.round(unitNutrition.sodium * qty);
   if (grossMode) {
@@ -447,13 +483,13 @@ function saveFood() {
   }
   // ไม่ await: ตอนออฟไลน์ promise จะไม่จบจนกว่าจะซิงค์ แต่ข้อมูลถูกเก็บในเครื่องและแสดงทันที
   addDoc(userCol(state.uid, 'food_records'), rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
-  ['f-name', 'f-cal', 'f-pro', 'f-carb', 'f-fat', 'f-sugar', 'f-sodium'].forEach(id => { $('#' + id, root).value = ''; });
-  $('#f-qty', root).value = 1; $('#f-gross', root).value = ''; base = null; syncFoodWeightForm();
+  clearFoodForm();
 }
 
 async function copyRecentMeal() {
-  const date = $('#f-date', root).value, meal = $('#f-meal', root).value;
-  if (!date || !meal || !state.uid) return;
+  const date = $('#f-date', root).value, mealId = $('#f-meal', root).value;
+  const mealName=$('#f-meal',root).selectedOptions[0]?.textContent||'';
+  if (!date || !mealId || !state.uid) return;
   const button = $('#f-copy-meal', root);
   button.disabled = true;
   button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังหา…';
@@ -462,48 +498,70 @@ async function copyRecentMeal() {
     for (let days = 1; days <= 30 && !sourceItems.length; days++) {
       const candidate = addDays(date, -days);
       const result = await getDocs(query(userCol(state.uid, 'food_records'), where('date', '==', candidate)));
-      sourceItems = result.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item.meal === meal);
+      sourceItems = result.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item.mealId===mealId || item.meal===mealName);
       if (sourceItems.length) sourceDate = candidate;
     }
-    if (!sourceItems.length) return toast(`ไม่พบ${meal}ใน 30 วันก่อนหน้า`, 'err');
-    const modal = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คัดลอก${esc(meal)}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    if (!sourceItems.length) return toast(`ไม่พบ${mealName}ใน 30 วันก่อนหน้า`, 'err');
+    const modal = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คัดลอก${esc(mealName)}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
       <p class="text-sm text-slate-600 mb-3">พบมื้อวันที่ <b>${esc(sourceDate)}</b> · ${sourceItems.length} รายการ</p>
-      <div class="space-y-2 mb-4">${sourceItems.map(item => `<div class="rounded-lg bg-lav-soft/40 px-3 py-2 text-sm"><b>${esc(item.name)}</b><span class="block text-xs text-slate-500">${esc(item.calories)} kcal · P ${esc(item.protein)} · C ${esc(item.carbs)} · F ${esc(item.fat)}</span></div>`).join('')}</div>
+      <label class="flex items-center gap-2 text-sm mb-2"><input id="copy-meal-all" type="checkbox" checked> เลือกทั้งหมด</label>
+      <div class="space-y-2 mb-4">${sourceItems.map((item,i) => `<label class="rounded-lg bg-lav-soft/40 px-3 py-2 text-sm flex gap-2 items-start"><input class="copy-meal-item mt-1" type="checkbox" data-index="${i}" checked><span><b>${esc(item.name)}</b><span class="block text-xs text-slate-500">${esc(item.calories)} kcal · P ${esc(item.protein)} · C ${esc(item.carbs)} · F ${esc(item.fat)}</span></span></label>`).join('')}</div>
       <p class="text-xs text-slate-500 mb-3">จะเพิ่มรายการใหม่ในวันที่ ${esc(date)} โดยไม่แก้ไขมื้อเดิม</p>
-      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="copy-meal-confirm" class="btn btn-primary">คัดลอกมื้อนี้</button></div>`, { wide: true });
+      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="copy-meal-confirm" class="btn btn-primary">คัดลอกรายการที่เลือก</button></div>`, { wide: true });
+    const choices = () => [...$$('.copy-meal-item', modal.el)];
+    $('#copy-meal-all', modal.el).addEventListener('change', e => { choices().forEach(c => { c.checked=e.target.checked; }); });
+    choices().forEach(c => c.addEventListener('change', () => { $('#copy-meal-all',modal.el).checked=choices().every(x=>x.checked); }));
     $('#copy-meal-confirm', modal.el).addEventListener('click', async () => {
+      const selected = choices().filter(c=>c.checked).map(c=>sourceItems[Number(c.dataset.index)]);
+      if (!selected.length) return toast('เลือกรายการอาหารอย่างน้อย 1 รายการ', 'err');
       const batch = writeBatch(db), collectionRef = userCol(state.uid, 'food_records');
-      sourceItems.forEach(({ id, ...item }) => batch.set(doc(collectionRef), { ...item, date, meal, createdAt: new Date(), copiedFrom: sourceDate }));
-      try { await batch.commit(); modal.close(); toast(`คัดลอก ${sourceItems.length} รายการแล้ว`); }
+      const targetMealId=$('#f-meal',root).value, targetMealName=$('#f-meal',root).selectedOptions[0]?.textContent||mealName;
+      selected.forEach(({ id, ...item }) => batch.set(doc(collectionRef), { ...item, date, meal:targetMealName, mealId:targetMealId, createdAt: new Date(), copiedFrom: sourceDate }));
+      try { await batch.commit(); modal.close(); toast(`คัดลอก ${selected.length} รายการแล้ว`); }
       catch (error) { toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'); }
     });
   } catch (error) { toast('ค้นหามื้อก่อนหน้าไม่สำเร็จ: ' + error.message, 'err'); }
   finally { button.disabled = false; button.innerHTML = '<i class="fa-regular fa-copy"></i> คัดลอกจากมื้อเดิม'; }
 }
 
+function moveFoodMeal(id) {
+  const item=items.find(row=>row.id===id);
+  if(!item)return;
+  const options=getMeals().map(m=>`<option value="${esc(m.id)}" ${m.id===item.mealId?'selected':''}>${esc(m.name)}</option>`).join('');
+  const modal=openModal(`<h3 class="font-bold text-lg mb-3">ย้ายไปมื้ออื่น</h3><p class="text-sm text-slate-600 mb-3">${esc(foodLogName(item.name))}</p><label class="lbl">มื้อใหม่</label><select id="move-food-meal" class="input">${options}</select><div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="move-food-confirm" class="btn btn-primary">ย้ายมื้อ</button></div>`);
+  $('#move-food-confirm',modal.el).addEventListener('click',()=>{
+    const select=$('#move-food-meal',modal.el), meal=select.selectedOptions[0]?.textContent||'';
+    updateDoc(userDoc(state.uid,'food_records',id),{mealId:select.value,meal,updatedAt:new Date()})
+      .then(()=>toast(`ย้ายไป${meal}แล้ว`)).catch(e=>toast('ย้ายมื้อไม่สำเร็จ: '+e.message,'err'));
+    modal.close();
+  });
+}
+
 function editFoodQuantity(id) {
   const item = items.find(row => row.id === id);
   if (!item) return;
   const isGross = Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction) && item.edibleUnitGrams > 0;
+  const isGrams = item.portionUnit === 'g' && item.gramsPerUnit === 1;
   const currentQuantity = foodLogQuantity(item);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
-    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : 'จำนวน (หน่วยเดิม)'}</label>
-    <input id="fl-amount" type="number" min="0.01" step="${isGross ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : currentQuantity}">
-    ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Math.round(item.edibleFraction * 100)}"><p id="fl-estimate" class="mt-2 text-xs text-slate-500"></p>` : '<p class="mt-2 text-xs text-slate-500">ใช้หน่วยเดิมของรายการ เช่น เมนูต่อ 100 g ถ้ากิน 70 g ให้ใส่ 0.7</p>'}
+    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วยเดิม)'}</label>
+    <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : currentQuantity}">
+    ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Math.round(item.edibleFraction * 100)}">` : ''}
+    <p id="fl-estimate" class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="fl-save" class="btn btn-primary">บันทึกจำนวน</button></div>`);
   const updateEstimate = () => {
-    if (!isGross) return;
     const grams = toNum($('#fl-amount', m.el).value) || 0;
-    const percent = toNum($('#fl-edible', m.el).value) || 0;
-    $('#fl-estimate', m.el).textContent = `คำนวณส่วนที่กินได้ประมาณ ${fmtAmount(grams * percent / 100)} g`;
+    const percent = isGross ? (toNum($('#fl-edible', m.el).value) || 0) : null;
+    const quantity = isGross ? grams * percent / 100 / item.edibleUnitGrams : grams;
+    const nutrition=unitNutritionFor(item,currentQuantity);
+    const amountText=isGross ? `กินได้ประมาณ ${fmtAmount(grams*percent/100)} g · ` : isGrams ? `${fmtAmount(grams)} g · ` : '';
+    $('#fl-estimate', m.el).textContent = `${amountText}${Math.round(nutrition.calories*quantity)} kcal · P ${round1(nutrition.protein*quantity)} · C ${round1(nutrition.carbs*quantity)} · F ${round1(nutrition.fat*quantity)}`;
   };
-  if (isGross) {
-    $('#fl-amount', m.el).addEventListener('input', updateEstimate);
-    $('#fl-edible', m.el).addEventListener('input', updateEstimate);
-    updateEstimate();
-  }
+  $('#fl-amount', m.el).addEventListener('input', updateEstimate);
+  if (isGross) $('#fl-edible', m.el).addEventListener('input', updateEstimate);
+  updateEstimate();
   $('#fl-save', m.el).addEventListener('click', () => {
     const amount = toNum($('#fl-amount', m.el).value);
     const percent = isGross ? toNum($('#fl-edible', m.el).value) : null;
@@ -547,7 +605,7 @@ function renderDay() {
       <tr class="${tone.row} hover:bg-white/80"><td class="p-3 font-medium text-slate-800">${esc(foodLogName(i.name))}${foodLogPortion(i) ? `<span class="block text-xs font-normal text-slate-500">${esc(foodLogPortion(i))}</span>` : ''}</td>
       <td class="p-3 text-right font-bold text-slate-700">${esc(i.calories)}</td>
       <td class="p-3 text-right text-slate-600">${esc(i.protein)}g</td>
-      <td class="p-3 text-center"><div class="flex justify-center gap-2"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
+      <td class="p-3 text-center"><div class="flex justify-center gap-2"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-move-log="${esc(i.id)}" class="text-sky-600 hover:text-sky-800 p-1" aria-label="ย้ายมื้อ ${esc(foodLogName(i.name))}" title="ย้ายไปมื้ออื่น"><i class="fa-solid fa-right-left text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
   }).join('')
     : '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีรายการอาหารในวันนี้</td></tr>';
 
