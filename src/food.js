@@ -17,6 +17,7 @@ const DEFAULT_PRESETS = [
   { name: 'อกไก่ต้ม', unit: '100 กรัม', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
   { name: 'ข้าวสวย', unit: '1 ทัพพี (100 กรัม)', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
   { name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
+  { name: 'ข้าวโพดหวานต้มทั้งฝัก (แกะเปลือกแล้ว)', unit: '100 กรัมเมล็ด', gramsPerUnit: 100, calories: 96, protein: 3.4, carbs: 21, fat: 1.5, edibleFraction: 0.54, edibleFractionSource: 'ตั้งต้นประมาณ 54% ตามอัตรา yield ของ USDA สำหรับข้าวโพดสดแกะเปลือก; ปรับได้ตามฝักจริง' },
   { name: 'ฝรั่ง', unit: '120 กรัม', calories: 82, protein: 3.1, carbs: 17.2, fat: 1.2 },
   { name: 'อกไก่ย่าง', unit: '150 กรัม', calories: 220, protein: 45, carbs: 1, fat: 4 },
   { name: 'นมจืดพร่องมันเนย', unit: '250 มล.', calories: 120, protein: 8, carbs: 12, fat: 5 }
@@ -64,10 +65,10 @@ export function mountFood(el) {
           <span class="block text-xs text-slate-500">Gemini ประเมินสารอาหารให้ (ค่าประมาณ)</span>
         </label>
         <label class="border-2 border-dashed border-lav-soft bg-lav-soft/40 rounded-xl p-3 text-center cursor-pointer block">
-          <input type="file" id="f-label" accept="image/*" capture="environment" class="hidden">
+          <input type="file" id="f-label" accept="image/*" class="hidden">
           <i class="fa-solid fa-barcode text-xl text-brand"></i>
-          <span class="block text-sm font-semibold text-slate-700">ถ่ายรูปฉลากโภชนาการ</span>
-          <span class="block text-xs text-slate-500">อ่านค่าจากซอง → ตรวจสอบ → บันทึกเป็นเมนูของฉัน</span>
+          <span class="block text-sm font-semibold text-slate-700">ถ่ายรูปหรือเลือกภาพฉลากโภชนาการ</span>
+          <span class="block text-xs text-slate-500">ถ่ายใหม่หรือเลือกรูปจากคลัง → ตรวจสอบ → บันทึกเมนู</span>
         </label>
       </div>
 
@@ -85,7 +86,8 @@ export function mountFood(el) {
         </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div><label class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.25" min="0" value="1" inputmode="decimal" class="input"></div>
+        <div id="f-qty-wrap"><label class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"></div>
+        <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
         <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">คาร์บ (g)</label><input id="f-carb" type="number" inputmode="decimal" class="input"></div>
@@ -100,7 +102,7 @@ export function mountFood(el) {
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> รายการอาหารของวัน</h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-lav-soft/50 text-slate-600"><tr><th class="p-3">เมนู</th><th class="p-3 text-right">kcal</th><th class="p-3 text-right">โปรตีน</th><th class="p-3 text-center">ลบ</th></tr></thead>
+        <thead class="bg-lav-soft/50 text-slate-600"><tr><th class="p-3">เมนู</th><th class="p-3 text-right">kcal</th><th class="p-3 text-right">โปรตีน</th><th class="p-3 text-center">แก้ไข / ลบ</th></tr></thead>
         <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
       </table></div>
     </div>
@@ -120,6 +122,8 @@ export function mountFood(el) {
   $('#f-date', root).value = localDateStr();
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
+  $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
+  $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
   $('#f-online', root).addEventListener('click', openOnlineSearch);
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
@@ -127,11 +131,14 @@ export function mountFood(el) {
   $('#f-photo', root).addEventListener('change', onPhoto);
   $('#f-label', root).addEventListener('change', onLabel);
   $('#f-body', root).addEventListener('click', e => {
+    const edit = e.target.closest('[data-edit-log]');
+    if (edit) return editFoodQuantity(edit.dataset.editLog);
     const b = e.target.closest('[data-del]');
     if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'food_records', b.dataset.del)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
   });
   on('customFoods', refreshDatalist);
   refreshDatalist();
+  syncFoodWeightForm();
   renderDay();
 }
 
@@ -279,38 +286,159 @@ function refreshDatalist() {
   if (!root) return;
   $('#f-datalist', root).innerHTML = getPresets().map(p => `<option value="${esc(label(p))}"></option>`).join('');
 }
-function pickByLabel(v) { const p = getPresets().find(x => label(x) === v); if (p) applyPreset(p, false); }
+function pickByLabel(v) {
+  const p = getPresets().find(x => label(x) === v);
+  if (p) applyPreset(p, false);
+  else { base = null; syncFoodWeightForm(); }
+}
 
 function applyPreset(p, setName = true) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
   $('#f-qty', root).value = 1;
+  if (p.edibleFraction && p.gramsPerUnit > 0) {
+    $('#f-gross', root).value = p.gramsPerUnit;
+    $('#f-edible', root).value = Math.round(p.edibleFraction * 100);
+  }
   const set = (id, v) => { $('#' + id, root).value = typeof v === 'number' ? v : ''; };
   set('f-cal', p.calories); set('f-pro', p.protein); set('f-carb', p.carbs); set('f-fat', p.fat); set('f-sugar', p.sugar); set('f-sodium', p.sodium);
+  syncFoodWeightForm();
+}
+
+function foodLogQuantity(item) {
+  if (Number.isFinite(item.quantity) && item.quantity > 0) return item.quantity;
+  const legacy = String(item.name || '').match(/\s×\s*(\d+(?:\.\d+)?)$/);
+  return legacy ? Number(legacy[1]) : 1;
+}
+
+const foodLogName = name => String(name || '').replace(/\s×\s*\d+(?:\.\d+)?$/, '');
+const fmtAmount = value => String(Number(Number(value).toFixed(2)));
+const foodLogPortion = item => {
+  if (Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction)) {
+    const edibleGrams = Number.isFinite(item.edibleGrams) ? item.edibleGrams : item.weighedGrams * item.edibleFraction;
+    return `ชั่ง ${fmtAmount(item.weighedGrams)} g · ${fmtAmount(item.edibleFraction * 100)}% ≈ ${fmtAmount(edibleGrams)} g ที่กินได้`;
+  }
+  const quantity = foodLogQuantity(item);
+  return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
+};
+
+function unitNutritionFor(item, quantity = foodLogQuantity(item)) {
+  const perUnit = key => quantity > 0 ? num(item[key]) / quantity : num(item[key]);
+  if (item.unitNutrition && Number.isFinite(item.unitNutrition.calories)) return {
+    calories: item.unitNutrition.calories,
+    protein: item.unitNutrition.protein ?? perUnit('protein'), carbs: item.unitNutrition.carbs ?? perUnit('carbs'),
+    fat: item.unitNutrition.fat ?? perUnit('fat'),
+    sugar: item.unitNutrition.sugar ?? (item.sugar == null ? null : perUnit('sugar')),
+    sodium: item.unitNutrition.sodium ?? (item.sodium == null ? null : perUnit('sodium'))
+  };
+  return {
+    calories: perUnit('calories'), protein: perUnit('protein'), carbs: perUnit('carbs'), fat: perUnit('fat'),
+    sugar: item.sugar == null ? null : perUnit('sugar'), sodium: item.sodium == null ? null : perUnit('sodium')
+  };
+}
+
+function syncFoodWeightForm() {
+  if (!root) return;
+  const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
+  $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
+  $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
+  if (grossMode) updateEdibleEstimate();
+}
+
+function updateEdibleEstimate() {
+  if (!root || !base?.edibleFraction) return;
+  const gross = toNum($('#f-gross', root).value) || 0;
+  const percent = toNum($('#f-edible', root).value) || 0;
+  const approx = Math.round(gross * percent / 100);
+  const source = base.edibleFractionSource || 'สัดส่วนนี้เป็นค่าประมาณ ปรับได้ตามอาหารที่ชั่ง';
+  $('#f-edible-note', root).textContent = `${source} · คาดว่าส่วนที่กินได้ประมาณ ${approx} g`;
 }
 
 function saveFood() {
   const name = $('#f-name', root).value.trim();
-  const qty = numField(root, 'f-qty') ?? 1;
   const cal = numField(root, 'f-cal');
   if (!name || cal === null) return toast('กรุณากรอกชื่อเมนูและแคลอรี่', 'err');
+  const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
+  const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
+  const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
+  if (grossMode && (!weighedGrams || weighedGrams <= 0 || !ediblePercent || ediblePercent > 100)) return toast('กรุณาระบุน้ำหนักที่ชั่งและสัดส่วนที่กินได้ 1–100%', 'err');
+  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (numField(root, 'f-qty') ?? 1);
   if (qty <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
   const m = v => (v === null ? 0 : round1(v * qty));
+  const unitNutrition = {
+    calories: cal, protein: numField(root, 'f-pro') ?? 0, carbs: numField(root, 'f-carb') ?? 0,
+    fat: numField(root, 'f-fat') ?? 0,
+    sugar: numField(root, 'f-sugar'), sodium: numField(root, 'f-sodium')
+  };
   const rec = {
     date: $('#f-date', root).value,
     meal: $('#f-meal', root).value,
-    name: qty === 1 ? name : `${name} ×${qty}`,
-    calories: Math.round(cal * qty),
-    protein: m(numField(root, 'f-pro')), carbs: m(numField(root, 'f-carb')), fat: m(numField(root, 'f-fat')),
+    name: foodLogName(name), quantity: qty, unitNutrition,
+    calories: Math.round(unitNutrition.calories * qty),
+    protein: m(unitNutrition.protein), carbs: m(unitNutrition.carbs), fat: m(unitNutrition.fat),
     createdAt: new Date()
   };
-  const sugar = numField(root, 'f-sugar'), sodium = numField(root, 'f-sodium');
-  if (sugar !== null) rec.sugar = round1(sugar * qty);
-  if (sodium !== null) rec.sodium = Math.round(sodium * qty);
+  if (unitNutrition.sugar !== null) rec.sugar = round1(unitNutrition.sugar * qty);
+  if (unitNutrition.sodium !== null) rec.sodium = Math.round(unitNutrition.sodium * qty);
+  if (grossMode) {
+    rec.weighedGrams = weighedGrams; rec.edibleFraction = ediblePercent / 100;
+    rec.edibleGrams = weighedGrams * rec.edibleFraction; rec.edibleUnitGrams = base.gramsPerUnit;
+    rec.edibleFractionSource = base.edibleFractionSource || null;
+  }
   // ไม่ await: ตอนออฟไลน์ promise จะไม่จบจนกว่าจะซิงค์ แต่ข้อมูลถูกเก็บในเครื่องและแสดงทันที
   addDoc(userCol(state.uid, 'food_records'), rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   ['f-name', 'f-cal', 'f-pro', 'f-carb', 'f-fat', 'f-sugar', 'f-sodium'].forEach(id => { $('#' + id, root).value = ''; });
-  $('#f-qty', root).value = 1; base = null;
+  $('#f-qty', root).value = 1; $('#f-gross', root).value = ''; base = null; syncFoodWeightForm();
+}
+
+function editFoodQuantity(id) {
+  const item = items.find(row => row.id === id);
+  if (!item) return;
+  const isGross = Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction) && item.edibleUnitGrams > 0;
+  const currentQuantity = foodLogQuantity(item);
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
+    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : 'จำนวน (หน่วยเดิม)'}</label>
+    <input id="fl-amount" type="number" min="0.01" step="${isGross ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : currentQuantity}">
+    ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Math.round(item.edibleFraction * 100)}"><p id="fl-estimate" class="mt-2 text-xs text-slate-500"></p>` : '<p class="mt-2 text-xs text-slate-500">ใช้หน่วยเดิมของรายการ เช่น เมนูต่อ 100 g ถ้ากิน 70 g ให้ใส่ 0.7</p>'}
+    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="fl-save" class="btn btn-primary">บันทึกจำนวน</button></div>`);
+  const updateEstimate = () => {
+    if (!isGross) return;
+    const grams = toNum($('#fl-amount', m.el).value) || 0;
+    const percent = toNum($('#fl-edible', m.el).value) || 0;
+    $('#fl-estimate', m.el).textContent = `คำนวณส่วนที่กินได้ประมาณ ${fmtAmount(grams * percent / 100)} g`;
+  };
+  if (isGross) {
+    $('#fl-amount', m.el).addEventListener('input', updateEstimate);
+    $('#fl-edible', m.el).addEventListener('input', updateEstimate);
+    updateEstimate();
+  }
+  $('#fl-save', m.el).addEventListener('click', () => {
+    const amount = toNum($('#fl-amount', m.el).value);
+    const percent = isGross ? toNum($('#fl-edible', m.el).value) : null;
+    if (!amount || amount <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
+    if (isGross && (!percent || percent <= 0 || percent > 100)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100%', 'err');
+    const edibleFraction = isGross ? percent / 100 : null;
+    const quantity = isGross ? amount * edibleFraction / item.edibleUnitGrams : amount;
+    const unitNutrition = unitNutritionFor(item, currentQuantity);
+    const updates = {
+      name: foodLogName(item.name), quantity, unitNutrition,
+      calories: Math.round(unitNutrition.calories * quantity),
+      protein: round1(unitNutrition.protein * quantity), carbs: round1(unitNutrition.carbs * quantity), fat: round1(unitNutrition.fat * quantity),
+      updatedAt: new Date()
+    };
+    if (unitNutrition.sugar !== null) updates.sugar = round1(unitNutrition.sugar * quantity);
+    if (unitNutrition.sodium !== null) updates.sodium = Math.round(unitNutrition.sodium * quantity);
+    if (isGross) {
+      updates.weighedGrams = amount; updates.edibleFraction = edibleFraction;
+      updates.edibleGrams = amount * edibleFraction; updates.edibleUnitGrams = item.edibleUnitGrams;
+    }
+    const saving = updateDoc(userDoc(state.uid, 'food_records', id), updates);
+    m.close();
+    saving.then(() => toast('ปรับจำนวนและสารอาหารแล้ว'))
+      .catch(err => toast('แก้จำนวนไม่สำเร็จ: ' + err.message, 'err'));
+  });
 }
 
 function renderDay() {
@@ -325,10 +453,10 @@ function renderDay() {
     return `<tr class="${tone.header}"><th colspan="4" class="p-2.5 text-left">
       <div class="flex items-center justify-between gap-2"><span><i class="fa-solid ${tone.icon} mr-1.5"></i>${esc(meal)}</span><span class="text-xs font-medium">${rows.length} รายการ · ${Math.round(mealCalories)} kcal</span></div>
     </th></tr>` + rows.map(i => `
-      <tr class="${tone.row} hover:bg-white/80"><td class="p-3 font-medium text-slate-800">${esc(i.name)}</td>
+      <tr class="${tone.row} hover:bg-white/80"><td class="p-3 font-medium text-slate-800">${esc(foodLogName(i.name))}${foodLogPortion(i) ? `<span class="block text-xs font-normal text-slate-500">${esc(foodLogPortion(i))}</span>` : ''}</td>
       <td class="p-3 text-right font-bold text-slate-700">${esc(i.calories)}</td>
       <td class="p-3 text-right text-slate-600">${esc(i.protein)}g</td>
-      <td class="p-3 text-center"><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(i.name)}"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`).join('');
+      <td class="p-3 text-center"><div class="flex justify-center gap-2"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
   }).join('')
     : '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีรายการอาหารในวันนี้</td></tr>';
 
@@ -531,7 +659,8 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
       <div><label class="lbl">ยี่ห้อ</label><input id="e-brand" class="input" value="${esc(v.brand || '')}"></div>
       <div><label class="lbl">หน่วยบริโภค * (เช่น 1 ซอง, 100 กรัม)</label><input id="e-unit" class="input ${scan && !v.unit ? 'border-amber-400 bg-amber-50' : ''}" value="${esc(v.unit || '')}"></div>
       <div><label class="lbl">น้ำหนักต่อ 1 หน่วย (กรัม/มล.)</label><input id="e-grams" type="number" class="input" value="${v.gramsPerUnit ?? ''}"></div>
-      <div></div>
+      <div><label class="lbl">สัดส่วนที่กินได้ (%) (ไม่บังคับ)</label><input id="e-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Number.isFinite(v.edibleFraction) ? Math.round(v.edibleFraction * 100) : ''}" placeholder="เช่น 54"></div>
+      <p class="col-span-2 text-xs text-slate-500">ถ้าชั่งรวมเปลือกหรือซัง ให้ใส่สัดส่วนโดยประมาณของส่วนที่กินได้ ระบบจะให้ชั่งน้ำหนักรวมเพียงครั้งเดียว และใช้โภชนาการต่อหน่วยของส่วนที่กินได้</p>
       ${EDIT_FIELDS.map(([k, t]) => `<div><label class="lbl">${t}${k === 'calories' ? ' *' : ''}</label><input id="e-${k}" type="number" step="0.1" inputmode="decimal" class="input ${warn(k)}" value="${v[k] ?? ''}"></div>`).join('')}
     </div>
     <label class="flex items-center gap-2 mt-3 text-sm"><input id="e-fav" type="checkbox" ${v.favorite ? 'checked' : ''}> ⭐ เมนูโปรด</label>
@@ -550,8 +679,10 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   $('#e-save', m.el).addEventListener('click', () => {
     const name = g('name').value.trim(), unit = g('unit').value.trim(), cal = toNum(g('calories').value);
     if (!name || !unit || cal === null || cal < 0) return toast('กรุณากรอกชื่อ หน่วยบริโภค และแคลอรี่', 'err');
+    const ediblePercent = toNum(g('edible').value), gramsPerUnit = toNum(g('grams').value);
+    if (ediblePercent !== null && (ediblePercent <= 0 || ediblePercent > 100 || !gramsPerUnit || gramsPerUnit <= 0)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100% และต้องระบุน้ำหนักต่อหน่วยด้วย', 'err');
     if (scan && !$('#e-confirm', m.el).checked) return toast('กรุณาติ๊กยืนยันว่าตรวจสอบกับฉลากแล้ว', 'err');
-    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit: toNum(g('grams').value), favorite: g('fav').checked };
+    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, edibleFraction: ediblePercent === null ? null : ediblePercent / 100, favorite: g('fav').checked };
     EDIT_FIELDS.forEach(([k]) => { rec[k] = toNum(g(k).value); });
     const done = ref => { toast('บันทึกเมนูแล้ว'); if (onSaved) onSaved({ ...rec, id: ref?.id || id }); };
     if (id) { updateDoc(userDoc(state.uid, 'custom_foods', id), { ...rec, updatedAt: new Date() }).catch(e => toast(e.message, 'err')); done(); }
