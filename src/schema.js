@@ -8,9 +8,17 @@ const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new 
 
 export const SANITIZERS = {
   food_records: o => isDateStr(o.date) && str(o.name) ? {
-    date: o.date, meal: str(o.meal, 40), name: str(o.name),
+    date: o.date, meal: str(o.meal, 40), mealId: typeof o.mealId === 'string' && /^[\\w-]{1,40}$/.test(o.mealId) ? o.mealId : null, name: str(o.name),
     calories: num(o.calories) ?? 0, protein: num(o.protein) ?? 0, carbs: num(o.carbs) ?? 0, fat: num(o.fat) ?? 0,
     ...(num(o.sugar) !== null && { sugar: num(o.sugar) }), ...(num(o.sodium) !== null && { sodium: num(o.sodium) }),
+    ...(num(o.quantity) !== null && { quantity: num(o.quantity) }),
+    ...(o.unitNutrition && typeof o.unitNutrition === 'object' && { unitNutrition: Object.fromEntries(['calories','protein','carbs','fat','sugar','sodium'].filter(k => num(o.unitNutrition[k]) !== null).map(k => [k,num(o.unitNutrition[k])])) }),
+    ...(num(o.weighedGrams) !== null && { weighedGrams: num(o.weighedGrams) }),
+    ...(num(o.edibleFraction) !== null && o.edibleFraction <= 1 && { edibleFraction: o.edibleFraction }),
+    ...(num(o.edibleGrams) !== null && { edibleGrams: num(o.edibleGrams) }),
+    ...(num(o.edibleUnitGrams) !== null && { edibleUnitGrams: num(o.edibleUnitGrams) }),
+    ...(o.edibleFractionSource && { edibleFractionSource: str(o.edibleFractionSource, 300) }),
+    ...(isDateStr(o.copiedFrom) && { copiedFrom: o.copiedFrom }),
     createdAt: ts(o.createdAt || o.timestamp)
   } : null,
   period_records: o => isDateStr(o.start) && (o.end == null || isDateStr(o.end)) && (!o.end || o.end >= o.start) ? {
@@ -25,7 +33,7 @@ export const SANITIZERS = {
     mood: int(o.mood, 1, 5), stress: int(o.stress, 1, 5), note: str(o.note), updatedAt: ts(o.updatedAt)
   } : null,
   custom_foods: o => str(o.name) && str(o.unit, 60) && num(o.calories) !== null ? {
-    name: str(o.name), brand: str(o.brand, 80), unit: str(o.unit, 60), gramsPerUnit: num(o.gramsPerUnit), defaultQuantity:num(o.defaultQuantity), category:str(o.category,80),
+    name: str(o.name), brand: str(o.brand, 80), unit: str(o.unit, 60), gramsPerUnit: num(o.gramsPerUnit), defaultQuantity:num(o.defaultQuantity), category:str(o.category,80), edibleFraction: num(o.edibleFraction), edibleFractionSource: str(o.edibleFractionSource,300),
     calories: num(o.calories), protein: num(o.protein), carbs: num(o.carbs), fat: num(o.fat), sugar: num(o.sugar), sodium: num(o.sodium),
     ...(o.hiwpinto && typeof o.hiwpinto === 'object' && {
       hiwpinto: {
