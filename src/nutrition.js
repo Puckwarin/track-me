@@ -9,21 +9,51 @@ export const setGeminiKey = k => k ? localStorage.setItem(KEY_NAME, k.trim()) : 
 async function callGemini(parts, schema) {
   const key = getGeminiKey();
   if (!key) throw new Error('NO_KEY');
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-    method: 'POST',
-    // ส่ง key ใน header (ไม่ใส่ใน URL เพื่อไม่ให้ไปค้างใน log/ประวัติเบราว์เซอร์)
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0 }
-    })
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  const body = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0 }
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini ไม่ส่งผลลัพธ์กลับมา');
-  return JSON.parse(text.replace(/```json|```/g, '').trim());
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        // ส่ง key ใน header (ไม่ใส่ใน URL เพื่อไม่ให้ไปค้างใน log/ประวัติเบราว์เซอร์)
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body
+      });
+    } catch (cause) {
+      const err = new Error(cause.message || 'Network error');
+      err.networkError = true;
+      throw err;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = data?.error?.message || `HTTP ${res.status}`;
+      const err = new Error(message);
+      err.status = res.status;
+      err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
+      err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message) ||
+        (res.status === 429 && !/daily quota|quota exceeded/i.test(message));
+      if (err.retryable && attempt < 2) {
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 3000) : 700 * (attempt + 1);
+        await delay(wait);
+        continue;
+      }
+      throw err;
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('Gemini ไม่ส่งผลลัพธ์กลับมา');
+    return JSON.parse(text.replace(/```json|```/g, '').trim());
+  }
 }
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // ย่อรูปก่อนส่ง (เร็วกว่า ประหยัดโควตา) — ถ้าอ่านไฟล์ไม่ได้ (เช่น HEIC) ส่งไฟล์เดิม
 export async function imageToInlineData(file, maxDim = 1400) {
@@ -91,4 +121,12 @@ export async function readNutritionLabel(file) {
 
 export const explainGeminiError = e => e.message === 'NO_KEY'
   ? 'ยังไม่ได้ใส่ Gemini API Key — ไปที่แท็บ "ตั้งค่า" (ดูวิธีขอคีย์ฟรีใน docs/SETUP.md)'
-  : 'เรียก Gemini ไม่สำเร็จ: ' + e.message;
+  : e.status === 429
+    ? 'คำขอ Gemini ถึงขีดจำกัดการใช้งานชั่วคราว โปรดลองใหม่ภายหลัง'
+    : e.serverBusy
+      ? 'Gemini กำลังมีผู้ใช้หนาแน่น ลองอีกครั้งในอีกสักครู่ได้ค่ะ ข้อมูลยังไม่ถูกบันทึก'
+      : e.networkError
+        ? 'เชื่อมต่อ Gemini ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง'
+        : e.retryable
+          ? 'Gemini ยังตอบคำขอไม่ได้ชั่วคราว ลองอีกครั้งในอีกสักครู่ได้ค่ะ ข้อมูลยังไม่ถูกบันทึก'
+          : 'เรียก Gemini ไม่สำเร็จ: ' + e.message;

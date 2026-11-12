@@ -6,6 +6,13 @@ import { $, $$, esc, localDateStr, numField, round1, toast, openModal, toNum } f
 import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiError } from './nutrition.js';
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
+const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
+const MEAL_COLORS = {
+  'มื้อเช้า': { header: 'bg-amber-100 text-amber-900', row: 'bg-amber-50/60', icon: 'fa-sun' },
+  'มื้อกลางวัน': { header: 'bg-sky-100 text-sky-900', row: 'bg-sky-50/60', icon: 'fa-cloud-sun' },
+  'มื้อเย็น': { header: 'bg-violet-100 text-violet-900', row: 'bg-violet-50/60', icon: 'fa-moon' },
+  'ของว่าง/เครื่องดื่ม': { header: 'bg-pink-100 text-pink-900', row: 'bg-pink-50/60', icon: 'fa-mug-hot' }
+};
 const DEFAULT_PRESETS = [
   { name: 'อกไก่ต้ม', unit: '100 กรัม', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
   { name: 'ข้าวสวย', unit: '1 ทัพพี (100 กรัม)', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
@@ -93,7 +100,7 @@ export function mountFood(el) {
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> รายการอาหารของวัน</h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-lav-soft/50 text-slate-600"><tr><th class="p-3">มื้อ</th><th class="p-3">เมนู</th><th class="p-3 text-right">kcal</th><th class="p-3 text-right">โปรตีน</th><th class="p-3 text-center">ลบ</th></tr></thead>
+        <thead class="bg-lav-soft/50 text-slate-600"><tr><th class="p-3">เมนู</th><th class="p-3 text-right">kcal</th><th class="p-3 text-right">โปรตีน</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
       </table></div>
     </div>
@@ -309,13 +316,21 @@ function saveFood() {
 function renderDay() {
   if (!root) return;
   const body = $('#f-body', root);
-  body.innerHTML = items.length ? items.map(i => `
-    <tr class="hover:bg-lav-soft/30"><td class="p-3 text-xs font-semibold text-brand">${esc(i.meal)}</td>
-    <td class="p-3 font-medium text-slate-800">${esc(i.name)}</td>
-    <td class="p-3 text-right font-bold text-slate-700">${esc(i.calories)}</td>
-    <td class="p-3 text-right text-slate-600">${esc(i.protein)}g</td>
-    <td class="p-3 text-center"><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`).join('')
-    : '<tr><td colspan="5" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีรายการอาหารในวันนี้</td></tr>';
+  const meals = [...MEAL_ORDER, ...new Set(items.map(i => i.meal || 'ไม่ระบุมื้อ').filter(m => !MEAL_ORDER.includes(m)))];
+  body.innerHTML = items.length ? meals.map(meal => {
+    const rows = items.filter(i => (i.meal || 'ไม่ระบุมื้อ') === meal);
+    if (!rows.length) return '';
+    const tone = MEAL_COLORS[meal] || { header: 'bg-slate-100 text-slate-700', row: 'bg-slate-50/60', icon: 'fa-utensils' };
+    const mealCalories = rows.reduce((sum, i) => sum + num(i.calories), 0);
+    return `<tr class="${tone.header}"><th colspan="4" class="p-2.5 text-left">
+      <div class="flex items-center justify-between gap-2"><span><i class="fa-solid ${tone.icon} mr-1.5"></i>${esc(meal)}</span><span class="text-xs font-medium">${rows.length} รายการ · ${Math.round(mealCalories)} kcal</span></div>
+    </th></tr>` + rows.map(i => `
+      <tr class="${tone.row} hover:bg-white/80"><td class="p-3 font-medium text-slate-800">${esc(i.name)}</td>
+      <td class="p-3 text-right font-bold text-slate-700">${esc(i.calories)}</td>
+      <td class="p-3 text-right text-slate-600">${esc(i.protein)}g</td>
+      <td class="p-3 text-center"><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(i.name)}"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`).join('');
+  }).join('')
+    : '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีรายการอาหารในวันนี้</td></tr>';
 
   const sum = k => items.reduce((a, i) => a + num(i[k]), 0);
   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
@@ -349,7 +364,7 @@ function openOnlineSearch() {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ (ต่อ 100 กรัม)</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="flex gap-2"><input id="os-q" class="input" placeholder="เช่น ฝรั่ง, ข้าวสวย"><button id="os-go" class="btn btn-primary">ค้นหา</button></div>
-    <div id="os-res" class="mt-3 text-sm text-slate-500">ค่าที่ได้เป็นค่าโดยประมาณจาก Gemini</div>
+    <div id="os-res" class="mt-3 text-sm text-slate-500">ค่าที่ได้เป็นค่าโดยประมาณจาก Gemini · ถ้าบริการหนาแน่น ระบบจะลองซ้ำให้อัตโนมัติ</div>
     <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
       <label class="lbl">น้ำหนักที่กิน (กรัม)</label><input id="os-g" type="number" value="100" class="input">
       <p id="os-out" class="text-sm font-semibold text-blue-700"></p>
@@ -357,14 +372,23 @@ function openOnlineSearch() {
     </div>`);
   let cur = null;
   const upd = () => { const g = toNum($('#os-g', m.el).value) || 0; $('#os-out', m.el).textContent = `${Math.round((cur.calories || 0) * g / 100)} kcal`; };
-  $('#os-go', m.el).addEventListener('click', async () => {
+  const go = $('#os-go', m.el);
+  go.addEventListener('click', async () => {
+    if (go.disabled) return;
     const q = $('#os-q', m.el).value.trim(); if (!q) return;
+    go.disabled = true;
+    go.textContent = 'กำลังค้นหา…';
     $('#os-res', m.el).textContent = 'กำลังค้นหา...';
     try {
       cur = await lookupPer100g(q);
       $('#os-res', m.el).innerHTML = `<b>${esc(cur.name)}</b> ต่อ 100g: ${esc(cur.calories)} kcal · โปรตีน ${esc(cur.protein)} · คาร์บ ${esc(cur.carbs)} · ไขมัน ${esc(cur.fat)}`;
       $('#os-calc', m.el).classList.remove('hidden'); upd();
-    } catch (err) { $('#os-res', m.el).textContent = explainGeminiError(err); }
+    } catch (err) {
+      $('#os-res', m.el).innerHTML = `<p>${esc(explainGeminiError(err))}</p><button id="os-local" class="btn btn-soft mt-2">เลือกจากคลังอาหารของฉัน</button>`;
+      $('#os-local', m.el).addEventListener('click', () => { m.close(); openLibrary(p => applyPreset(p)); });
+    } finally {
+      if (m.el.isConnected) { go.disabled = false; go.textContent = 'ค้นหา'; }
+    }
   });
   $('#os-g', m.el).addEventListener('input', () => cur && upd());
   $('#os-import', m.el).addEventListener('click', () => {
