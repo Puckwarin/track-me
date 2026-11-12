@@ -154,6 +154,7 @@ function openHiwpintoCalculator(saved = null) {
     calories: meta.shopCalories ?? saved.calories, protein: meta.shopProtein ?? saved.protein,
     carbs: meta.shopCarbs ?? saved.carbs, fat: meta.shopFat ?? saved.fat
   } : {};
+  const baseRiceGrams = [80, 100, 120, 140, 180].includes(meta.baseRiceGrams) ? meta.baseRiceGrams : 100;
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คำนวณเมนู Hiwpinto / อาหารคลีน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-xs text-slate-600 mb-3">กรอกโภชนาการจากร้านครั้งเดียว แล้วปรับข้าวหรือกลับมาแก้ภายหลังได้ เมนูที่บันทึกจะติดหมวด <b>Hiwpinto box</b></p>
@@ -165,21 +166,22 @@ function openHiwpintoCalculator(saved = null) {
       </div>
       <label class="flex items-start gap-2 rounded-lg bg-slate-50 p-2 text-sm"><input id="hp-has-rice" type="checkbox" class="mt-1" ${saved ? (meta.includedRice ? 'checked' : '') : (detected.included ? 'checked' : '')}> ค่าจากร้านรวมข้าวอยู่แล้ว (ตรวจวงเล็บท้ายสุดของชื่อเมนู)</label>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="lbl">ชนิดข้าวตามวงเล็บท้ายสุด</label><select id="hp-rice-type" class="input"><option value="white">ข้าวขาว/ข้าวไรซ์</option><option value="brown">ข้าวกล้อง</option></select></div>
-        <div><label class="lbl">น้ำหนักข้าวเป้าหมาย</label><select id="hp-rice-g" class="input"><option value="140">140 กรัม</option><option value="180">180 กรัม</option></select></div>
+        <div><label class="lbl">ชนิดข้าวตามวงเล็บท้ายสุด</label><select id="hp-rice-type" class="input"><option value="white">ข้าวขาว</option><option value="brown">ข้าวไรซ์/ข้าวกล้อง</option></select></div>
+        <div><label class="lbl">ข้าวที่ต้องการคำนวณ</label><select id="hp-rice-g" class="input"><option value="180" ${saved ? (meta.riceGrams === 180 || !meta.riceGrams ? 'selected' : '') : 'selected'}>180 กรัม (มาตรฐาน)</option><option value="140" ${saved && meta.riceGrams === 140 ? 'selected' : ''}>140 กรัม</option></select></div>
       </div>
-      <div id="hp-side-wrap"><label class="lbl">สมมติฐานคาร์บจากกับข้าว (g) *</label><input id="hp-side-carb" type="number" min="0" max="100" step="0.5" class="input" value="${meta.sideCarbs ?? ''}" placeholder="ต้องใส่เอง ระบบไม่เหมารวมว่าเป็นคาร์บจากข้าวทั้งหมด"><p class="text-xs text-slate-500 mt-1">ระบุคาร์บโดยประมาณของกับข้าว/น้ำราด เพื่อประเมินข้าวเดิมจากคาร์บที่เหลือ หากไม่ทราบให้เว้นว่าง ระบบจะไม่เดาน้ำหนักข้าว</p></div>
+      <div id="hp-side-wrap"><div class="grid grid-cols-2 gap-3"><div><label class="lbl">สมมติฐานข้าวที่รวมอยู่ในค่าร้าน</label><select id="hp-base-g" class="input">${[80,100,120,140,180].map(g=>`<option value="${g}" ${Number(baseRiceGrams)===g?'selected':''}>${g} กรัม</option>`).join('')}</select></div><div><label class="lbl">คาร์บจากกับข้าว (ไม่บังคับ, g)</label><input id="hp-side-carb" type="number" min="0" max="100" step="0.5" class="input" value="${meta.sideCarbs ?? ''}" placeholder="ใส่เพื่อเช็กสมมติฐาน"></div></div><p class="text-xs text-slate-500 mt-1">เริ่มที่ข้าวเดิม 100 g ตามสมมติฐานของคุณ ระบบปรับจากน้ำหนักตั้งต้นนี้โดยตรง ไม่เดาน้ำหนักข้าวจากคาร์บรวม ช่องคาร์บกับข้าวใช้ตรวจสอบความสมเหตุสมผลเท่านั้น</p></div>
       <div id="hp-result" class="rounded-xl bg-slate-50 p-3 text-sm" aria-live="polite"></div>
       <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="hp-save" class="btn btn-primary" disabled>${saved ? 'บันทึกการปรับปรุง' : 'บันทึกเมนูไว้ใช้ซ้ำ'}</button></div>
     </div>`, { wide: true });
 
   const $m = s => $(s, m.el);
-  if (saved) { $m('#hp-rice-type').value = meta.riceProfile || detected.profile; $m('#hp-rice-g').value = String(meta.riceGrams || 140); }
+  if (saved) { $m('#hp-rice-type').value = meta.riceProfile || detected.profile; $m('#hp-base-g').value = String(baseRiceGrams); $m('#hp-rice-g').value = String(meta.riceGrams || 180); }
   else $m('#hp-rice-type').value = detected.profile;
 
   const calculate = () => {
     const included = $m('#hp-has-rice').checked;
     $m('#hp-side-wrap').classList.toggle('hidden', !included);
+    $m('#hp-base-g').disabled = !included;
     $m('#hp-rice-type').disabled = !included; $m('#hp-rice-g').disabled = !included;
     const read = k => toNum($m(`#hp-shop-${k}`).value);
     const shopC = read('carbs'), shopCal = read('calories'), sideC = toNum($m('#hp-side-carb').value);
@@ -196,13 +198,9 @@ function openHiwpintoCalculator(saved = null) {
       result.innerHTML = `<p class="font-semibold">ผลคำนวณ: ${Math.round(shopCal)} kcal · P ${round1(p)} · C ${round1(shopC)} · F ${round1(f)}</p><p class="text-amber-800 mt-1">ไม่ได้เลือกว่าค่าร้านรวมข้าว — จะเก็บค่าร้านตามเดิม ไม่บวกข้าวเพิ่ม</p><p class="mt-1">${esc(kcalWarn)}</p>`;
       save.disabled = false; return { calories: shopCal, protein:p, carbs:shopC, fat:f, originalRiceGrams:null, kcalWarn };
     }
-    if (sideC === null) return bad('ข้อมูลยังไม่พอ: ใส่สมมติฐานคาร์บจากกับข้าวก่อน ระบบจะไม่ใช้คาร์บรวมไปเดาน้ำหนักข้าว');
-    if (sideC < 0 || sideC > shopC) return bad('คาร์บจากกับข้าวต้องไม่ติดลบและไม่มากกว่าคาร์บรวมจากร้าน');
     const rice = RICE[$m('#hp-rice-type').value];
-    const riceCarbs = shopC - sideC;
-    const originalRiceGrams = riceCarbs / rice.carbs * 100;
-    if (riceCarbs <= 0 || originalRiceGrams < 40 || originalRiceGrams > 250) return bad(`คาร์บที่เหลือชี้ไปยังข้าวเดิมประมาณ ${round1(originalRiceGrams)} g ซึ่งอยู่นอกช่วงประเมิน 40–250 g — ตรวจคาร์บกับข้าวหรือข้อมูลร้านอีกครั้ง`);
-    const targetG = Number($m('#hp-rice-g').value), scale = (targetG-originalRiceGrams)/100;
+    const baseG = Number($m('#hp-base-g').value), targetG = Number($m('#hp-rice-g').value), scale = (targetG-baseG)/100;
+    const estimatedSideCarbs = shopC - baseG/100*rice.carbs;
     const out = {
       calories: shopCal + scale*rice.calories,
       protein: p + scale*rice.protein,
@@ -214,8 +212,16 @@ function openHiwpintoCalculator(saved = null) {
     const outMacroCal = 4*outP+4*outC+9*outF;
     const outGap = Math.abs(outMacroCal-outCal);
     const outWarn = outGap > Math.max(30,outCal*0.1) ? `ผลหลังปรับข้าว: kcal กับ P/C/F ยังต่างกัน ${round1(outGap)} kcal โปรดตรวจค่าจากร้าน` : `ผล kcal สัมพันธ์กับ P/C/F โดยประมาณ (${round1(outMacroCal)} kcal จากสูตร 4/4/9)`;
-    result.innerHTML = `<p class="font-semibold">ผลสำหรับข้าว ${targetG} g: ${outCal} kcal · P ${outP} g · C ${outC} g · F ${outF} g</p><p class="text-xs text-slate-600 mt-1">ประมาณข้าวเดิม ${round1(originalRiceGrams)} g จากคาร์บรวม − คาร์บกับข้าว ${round1(sideC)} g โดยใช้ค่าข้าว ${rice.carbs} g C / 100 g</p><p class="text-xs mt-1">ค่าร้าน: ${esc(kcalWarn)}</p><p class="text-xs ${outGap > Math.max(30,outCal*0.1) ? 'text-amber-800' : 'text-green-800'}">${esc(outWarn)}</p><p class="text-xs text-amber-800 mt-1">เป็นค่าประเมิน ข้าวเดิมคำนวณจากสมมติฐานคาร์บที่คุณใส่ และระบบหักข้าวเดิมก่อนแทนด้วยข้าวเป้าหมาย จึงไม่บวกข้าวซ้ำ</p>`;
-    save.disabled = false; return { ...out, originalRiceGrams:round1(originalRiceGrams), kcalWarn };
+    const sideWarning = estimatedSideCarbs < 0
+      ? `คาร์บรวมจากร้านต่ำกว่าคาร์บที่คาดในข้าว ${baseG} g (${round1(baseG/100*rice.carbs)} g) จึงควรลดสมมติฐานข้าวเดิมหรือตรวจค่าร้าน`
+      : sideC === null
+        ? `คาร์บกับข้าวที่เหลือจากสมมติฐานนี้ประมาณ ${round1(estimatedSideCarbs)} g แต่ยังไม่ได้ยืนยันแยกจากร้าน`
+        : Math.abs(sideC-estimatedSideCarbs)>5
+          ? `คาร์บกับข้าวที่ระบุ (${round1(sideC)} g) ต่างจากค่าที่คำนวณคร่าว ๆ (${round1(estimatedSideCarbs)} g) โปรดตรวจสมมติฐาน`
+          : `คาร์บกับข้าวที่ระบุใกล้เคียงกับค่าประมาณ (${round1(estimatedSideCarbs)} g)`;
+    const sideIsWarning = estimatedSideCarbs < 0 || (sideC !== null && Math.abs(sideC-estimatedSideCarbs)>5);
+    result.innerHTML = `<p class="font-semibold">ผลสำหรับข้าว ${targetG} g: ${outCal} kcal · P ${outP} g · C ${outC} g · F ${outF} g</p><p class="text-xs text-slate-600 mt-1">ปรับจากข้าวเดิมสมมติ ${baseG} g เป็น ${targetG} g โดยใช้ค่าข้าว ${rice.carbs} g C / 100 g; ข้าวเดิมถูกหักก่อนแทน จึงไม่บวกซ้ำ</p><p class="text-xs ${sideIsWarning || sideC===null ? 'text-amber-800' : 'text-green-800'} mt-1">${sideC===null ? '⚠️ ' : sideIsWarning ? '⚠️ ' : '✓ '}${esc(sideWarning)}</p><p class="text-xs mt-1">ค่าร้าน: ${esc(kcalWarn)}</p><p class="text-xs ${outGap > Math.max(30,outCal*0.1) ? 'text-amber-800' : 'text-green-800'}">${esc(outWarn)}</p><p class="text-xs text-amber-800 mt-1">น้ำหนักข้าวเดิมเป็นสมมติฐานที่ปรับได้ ไม่ได้อนุมานจากคาร์บรวมโดยอัตโนมัติ</p>`;
+    save.disabled = false; return { ...out, baseRiceGrams:baseG, estimatedSideCarbs:round1(estimatedSideCarbs), kcalWarn };
   };
   m.el.addEventListener('input', e => { if (e.target.id.startsWith('hp-')) calculate(); });
   m.el.addEventListener('change', e => { if (e.target.id.startsWith('hp-')) calculate(); });
@@ -247,7 +253,7 @@ function openHiwpintoCalculator(saved = null) {
       name, brand:'Hiwpinto box', unit:`1 กล่อง${suffix}`, gramsPerUnit:null,
       calories:Math.round(values.calories), protein:round1(values.protein), carbs:round1(values.carbs), fat:round1(values.fat),
       favorite:saved?.favorite === true,
-      hiwpinto:{ shopCalories:toNum($m('#hp-shop-calories').value), shopProtein:toNum($m('#hp-shop-protein').value), shopCarbs:toNum($m('#hp-shop-carbs').value), shopFat:toNum($m('#hp-shop-fat').value), sideCarbs:includedRice ? toNum($m('#hp-side-carb').value) : null, includedRice, riceProfile:$m('#hp-rice-type').value, riceGrams, originalRiceGrams:values.originalRiceGrams, kcalWarn:values.kcalWarn }
+      hiwpinto:{ shopCalories:toNum($m('#hp-shop-calories').value), shopProtein:toNum($m('#hp-shop-protein').value), shopCarbs:toNum($m('#hp-shop-carbs').value), shopFat:toNum($m('#hp-shop-fat').value), sideCarbs:includedRice ? toNum($m('#hp-side-carb').value) : null, includedRice, riceProfile:$m('#hp-rice-type').value, baseRiceGrams:values.baseRiceGrams ?? null, riceGrams, kcalWarn:values.kcalWarn }
     };
     if (saved?.id) updateDoc(userDoc(state.uid,'custom_foods',saved.id),{...rec,updatedAt:new Date()}).then(()=>toast('ปรับปรุงเมนูไว้ใช้ซ้ำแล้ว')).catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));
     else addDoc(userCol(state.uid,'custom_foods'),{...rec,createdAt:new Date()}).then(()=>toast('บันทึกเมนู Hiwpinto ไว้ใช้ซ้ำแล้ว')).catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));

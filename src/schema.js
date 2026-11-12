@@ -33,7 +33,8 @@ export const SANITIZERS = {
         shopCarbs: num(o.hiwpinto.shopCarbs), shopFat: num(o.hiwpinto.shopFat),
         sideCarbs: num(o.hiwpinto.sideCarbs), includedRice: o.hiwpinto.includedRice === true,
         riceProfile: o.hiwpinto.riceProfile === 'brown' ? 'brown' : 'white',
-        riceGrams: o.hiwpinto.riceGrams === 180 ? 180 : 140,
+        baseRiceGrams: num(o.hiwpinto.baseRiceGrams) ?? 100,
+        riceGrams: o.hiwpinto.riceGrams === 140 ? 140 : 180,
         originalRiceGrams: num(o.hiwpinto.originalRiceGrams), kcalWarn: str(o.hiwpinto.kcalWarn, 300)
       }
     }),
