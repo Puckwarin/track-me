@@ -76,4 +76,4 @@ export const COLLECTION_LABELS = {
   symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
 // symptom_records ใช้วันที่เป็น doc id
-export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : fallback;
+export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : col === 'settings' ? 'profile' : fallback;
