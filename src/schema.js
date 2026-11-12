@@ -12,6 +12,8 @@ export const SANITIZERS = {
     calories: num(o.calories) ?? 0, protein: num(o.protein) ?? 0, carbs: num(o.carbs) ?? 0, fat: num(o.fat) ?? 0,
     ...(num(o.sugar) !== null && { sugar: num(o.sugar) }), ...(num(o.sodium) !== null && { sodium: num(o.sodium) }),
     ...(num(o.quantity) !== null && { quantity: num(o.quantity) }),
+    ...(typeof o.portionUnit === 'string' && { portionUnit: str(o.portionUnit, 24) }),
+    ...(num(o.gramsPerUnit) !== null && { gramsPerUnit: num(o.gramsPerUnit) }),
     ...(o.unitNutrition && typeof o.unitNutrition === 'object' && { unitNutrition: Object.fromEntries(['calories','protein','carbs','fat','sugar','sodium'].filter(k => num(o.unitNutrition[k]) !== null).map(k => [k,num(o.unitNutrition[k])])) }),
     ...(num(o.weighedGrams) !== null && { weighedGrams: num(o.weighedGrams) }),
     ...(num(o.edibleFraction) !== null && o.edibleFraction <= 1 && { edibleFraction: o.edibleFraction }),
