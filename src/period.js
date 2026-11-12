@@ -2,7 +2,7 @@ import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, daysBetween, addDays, toast } from './util.js';
-import { mountSymptoms, selectDate } from './symptoms.js';
+import { selectDate } from './symptoms.js';
 
 let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
@@ -50,8 +50,6 @@ export function mountPeriod(el) {
       </div>
     </div>
 
-    <div id="p-symptoms" class="card space-y-4"></div>
-
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-pink-500"></i> ประวัติประจำเดือน</h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
@@ -78,7 +76,6 @@ export function mountPeriod(el) {
     }
     if (del && confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
   });
-  mountSymptoms($('#p-symptoms', root));
   render();
 }
 

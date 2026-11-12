@@ -16,6 +16,7 @@ body { background: var(--color-app-bg); }
 
 .card { background: #fff; border-radius: 1rem; border: 1px solid #ede9fe; box-shadow: 0 1px 2px rgb(109 91 208 / 0.06); padding: 1.25rem; }
 .input { width: 100%; border: 1px solid #d8d4ee; border-radius: 0.5rem; padding: 0.6rem 0.7rem; font-size: 0.875rem; background: #fff; outline: none; }
+select.input { appearance: none; -webkit-appearance: none; padding-right: 2.8rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .8rem center; background-size: 1rem; }
 .input:focus { border-color: #8b7ae0; box-shadow: 0 0 0 3px #ede9fe; }
 .lbl { display: block; font-size: 0.75rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; }
 .btn { display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 0.75rem; padding: 0.6rem 1.1rem; font-size: 0.875rem; font-weight: 500; transition: background .15s; cursor: pointer; }
@@ -32,6 +33,29 @@ body { background: var(--color-app-bg); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; padding: .35rem .7rem; border-radius: .6rem; font-weight: 500; cursor: pointer; }
 th { font-weight: 600; }
+
+html[data-theme="minimal"] {
+  --color-brand: #475569;
+  --color-brand-dark: #334155;
+  --color-lav-soft: #f1f5f9;
+  --color-pink-soft: #f1f5f9;
+  --color-sky-soft: #e2e8f0;
+  --color-app-bg: #f8fafc;
+}
+
+html[data-theme="dark"] { color-scheme: dark; --color-brand: #8b7ae0; --color-brand-dark: #7664d0; --color-lav-soft: #29263a; --color-pink-soft: #3a2535; --color-sky-soft: #202e42; --color-app-bg: #11131a; }
+html[data-theme="dark"] body { background: var(--color-app-bg); color: #e2e8f0; }
+html[data-theme="dark"] .card, html[data-theme="dark"] .bg-white { background-color: #1b1f29 !important; border-color: #343846 !important; }
+html[data-theme="dark"] .input { background-color: #151821; color: #e2e8f0; border-color: #3a4050; }
+html[data-theme="dark"] select.input option { background: #151821; color: #e2e8f0; }
+html[data-theme="dark"] .lbl, html[data-theme="dark"] .text-slate-800, html[data-theme="dark"] .text-slate-700, html[data-theme="dark"] .text-slate-600 { color: #e2e8f0 !important; }
+html[data-theme="dark"] .text-slate-500, html[data-theme="dark"] .text-slate-400 { color: #a5adbc !important; }
+html[data-theme="dark"] .bg-slate-50, html[data-theme="dark"] .bg-slate-100 { background-color: #242936 !important; }
+html[data-theme="dark"] .border-slate-100, html[data-theme="dark"] .border-slate-200 { border-color: #343846 !important; }
+html[data-theme="dark"] .divide-slate-100 > :not(:last-child) { border-color: #343846 !important; }
+html[data-theme="dark"] .hover\:bg-white\/80:hover { background-color: #242936 !important; }
+html[data-theme="dark"] select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23cbd5e1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+html[data-theme="dark"] .cal-day:hover { background: #29263a; }
 
 /* ปฏิทินประจำเดือน */
 .cal-day { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: .6rem; font-size: .8rem; position: relative; cursor: pointer; border: 1px solid transparent; }

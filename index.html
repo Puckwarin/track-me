@@ -22,6 +22,19 @@
     </div>
   </div>
 
+  <div id="app-lock" class="hidden fixed inset-0 z-[120] bg-app-bg flex items-center justify-center p-6">
+    <form id="lock-form" class="card max-w-sm w-full text-center space-y-4 !p-8">
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-lav-soft flex items-center justify-center text-3xl">🔒</div>
+      <h1 class="text-xl font-bold text-brand-dark">Track Me ถูกล็อกอยู่</h1>
+      <p class="text-sm text-slate-500">กรอก PIN 4 หลักเพื่อเปิดแอปบนอุปกรณ์นี้</p>
+      <input id="lock-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" class="input text-center !text-2xl tracking-[.6em]" aria-label="PIN 4 หลัก">
+      <p id="lock-error" class="text-xs text-rose-600"></p>
+      <button id="lock-submit" type="submit" class="btn btn-primary w-full justify-center">ปลดล็อก</button>
+      <button id="lock-reset" type="button" class="text-xs text-slate-500 underline">ลืม PIN? ยืนยันบัญชี Google เพื่อรีเซ็ต</button>
+      <button id="lock-signout" type="button" class="text-xs text-slate-500 underline">ออกจากระบบ Google</button>
+    </form>
+  </div>
+
   <div id="app-shell" class="hidden">
     <header class="bg-brand shadow-md sticky top-0 z-40">
       <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
@@ -48,12 +61,14 @@
     <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto pb-1">
       <button id="tabbtn-food"><i class="fa-solid fa-utensils"></i> อาหาร</button>
       <button id="tabbtn-period"><i class="fa-solid fa-droplet"></i> ประจำเดือน</button>
+      <button id="tabbtn-symptoms"><i class="fa-solid fa-notes-medical"></i> อาการ</button>
       <button id="tabbtn-body"><i class="fa-solid fa-weight-scale"></i> น้ำหนัก & สัดส่วน</button>
       <button id="tabbtn-report"><i class="fa-solid fa-file-medical"></i> รายงาน</button>
     </nav>
 
     <main id="tab-food" class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
     <main id="tab-period" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+    <main id="tab-symptoms" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
     <main id="tab-body" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
     <main id="tab-report" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
     <main id="tab-settings" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>

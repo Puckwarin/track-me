@@ -1,8 +1,8 @@
-import { addDoc, setDoc, updateDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
+import { addDoc, setDoc, updateDoc, deleteDoc, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { watch } from './sync.js';
-import { $, $$, esc, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
+import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiError } from './nutrition.js';
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
@@ -14,19 +14,37 @@ const MEAL_COLORS = {
   'ของว่าง/เครื่องดื่ม': { header: 'bg-pink-100 text-pink-900', row: 'bg-pink-50/60', icon: 'fa-mug-hot' }
 };
 const DEFAULT_PRESETS = [
-  { name: 'อกไก่ต้ม', unit: '100 กรัม', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { id: 'builtin-boiled-chicken', name: 'อกไก่ต้ม', unit: '100 กรัม', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
   { name: 'ข้าวสวย', unit: '1 ทัพพี (100 กรัม)', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
   { name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
   { name: 'ข้าวโพดหวานต้มทั้งฝัก (แกะเปลือกแล้ว)', unit: '100 กรัมเมล็ด', gramsPerUnit: 100, calories: 96, protein: 3.4, carbs: 21, fat: 1.5, edibleFraction: 0.54, edibleFractionSource: 'ตั้งต้นประมาณ 54% ตามอัตรา yield ของ USDA สำหรับข้าวโพดสดแกะเปลือก; ปรับได้ตามฝักจริง' },
   { name: 'ฝรั่ง', unit: '120 กรัม', calories: 82, protein: 3.1, carbs: 17.2, fat: 1.2 },
-  { name: 'อกไก่ย่าง', unit: '150 กรัม', calories: 220, protein: 45, carbs: 1, fat: 4 },
+  { id: 'builtin-grilled-chicken', name: 'อกไก่ย่าง', unit: '150 กรัม', calories: 220, protein: 45, carbs: 1, fat: 4 },
   { name: 'นมจืดพร่องมันเนย', unit: '250 มล.', calories: 120, protein: 8, carbs: 12, fat: 5 }
+];
+const FOOD_IMPORT_ROWS = [
+  ['Alpen Muesli', '40.0', 'g', '148', '4.4', '29.2', '2.2'],
+  ['Daily Me Granola (Dark Choc)', '35.0', 'g', '170', '4.0', '22.0', '7.0'],
+  ['Grainey Grain Bar Chocolate Banana', '1.0', 'piece(s)', '80', '0.0', '18.0', '0.0'],
+  ['Granola Crunchy Honey', '35.0', 'g', '150', '3.0', '28.0', '3.5'],
+  ['Granola Walt Choco', '35.0', 'g', '150', '4.0', '25.0', '4.0'],
+  ['Granovibes Granola (Choc)', '35.0', 'g', '160', '5.0', '24.0', '4.5'],
+  ['Granovibes Granola (Matcha)', '35.0', 'g', '150', '4.0', '26.0', '3.5'],
+  ['Granovibes Granola (Original)', '35.0', 'g', '160', '5.0', '23.0', '5.0'],
+  ['Misura Firrextra Wholemeal', '1.0', 'serving', '120', '4.0', '22.0', '2.0'],
+  ['Sourdough Bread', '100.0', 'g', '240', '10.5', '45.0', '1.5'],
+  ['Whole Wheat Biscuits', '2.0', 'piece(s)', '136', '5.0', '26.0', '1.0'],
+  ['Whole Wheat Bread (Cocoa)', '1.0', 'piece(s)', '80', '2.5', '13.0', '1.5'],
+  ['Whole Wheat Bread (Original)', '1.0', 'piece(s)', '75', '2.5', '13.0', '1.0'],
+  ['Younger Farm Protein Granola (Choc)', '40.0', 'g', '170', '9.0', '20.0', '6.0']
 ];
 
 const label = p => `${p.name}${p.brand ? ' · ' + p.brand : ''} (${p.unit})`;
+const HIDDEN_BUILTINS_KEY = 'trackme-hidden-builtins';
+const hiddenBuiltins = () => { try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_BUILTINS_KEY) || '[]')); } catch { return new Set(); } };
 export const getPresets = () => [
   ...state.customFoods.slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || a.name.localeCompare(b.name, 'th')).map(p => ({ ...p, custom: true })),
-  ...DEFAULT_PRESETS
+  ...DEFAULT_PRESETS.filter(p => !hiddenBuiltins().has(p.id))
 ];
 
 let root, items = [], base = null;   // base = ค่าต่อ 1 หน่วยของเมนูที่เลือกจากคลัง
@@ -78,6 +96,7 @@ export function mountFood(el) {
           <select id="f-meal" class="input">
             <option>มื้อเช้า</option><option>มื้อกลางวัน</option><option>มื้อเย็น</option><option>ของว่าง/เครื่องดื่ม</option>
           </select>
+          <button id="f-copy-meal" type="button" class="chip bg-lav-soft text-brand-dark mt-2"><i class="fa-regular fa-copy"></i> คัดลอกจากมื้อเดิม</button>
         </div>
         <div class="sm:col-span-2">
           <label class="lbl">ชื่อเมนู (พิมพ์ค้นหาจากคลังได้)</label>
@@ -122,6 +141,7 @@ export function mountFood(el) {
   $('#f-date', root).value = localDateStr();
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
+  $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
@@ -391,6 +411,36 @@ function saveFood() {
   $('#f-qty', root).value = 1; $('#f-gross', root).value = ''; base = null; syncFoodWeightForm();
 }
 
+async function copyRecentMeal() {
+  const date = $('#f-date', root).value, meal = $('#f-meal', root).value;
+  if (!date || !meal || !state.uid) return;
+  const button = $('#f-copy-meal', root);
+  button.disabled = true;
+  button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังหา…';
+  try {
+    let sourceDate = null, sourceItems = [];
+    for (let days = 1; days <= 30 && !sourceItems.length; days++) {
+      const candidate = addDays(date, -days);
+      const result = await getDocs(query(userCol(state.uid, 'food_records'), where('date', '==', candidate)));
+      sourceItems = result.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item.meal === meal);
+      if (sourceItems.length) sourceDate = candidate;
+    }
+    if (!sourceItems.length) return toast(`ไม่พบ${meal}ใน 30 วันก่อนหน้า`, 'err');
+    const modal = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คัดลอก${esc(meal)}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+      <p class="text-sm text-slate-600 mb-3">พบมื้อวันที่ <b>${esc(sourceDate)}</b> · ${sourceItems.length} รายการ</p>
+      <div class="space-y-2 mb-4">${sourceItems.map(item => `<div class="rounded-lg bg-lav-soft/40 px-3 py-2 text-sm"><b>${esc(item.name)}</b><span class="block text-xs text-slate-500">${esc(item.calories)} kcal · P ${esc(item.protein)} · C ${esc(item.carbs)} · F ${esc(item.fat)}</span></div>`).join('')}</div>
+      <p class="text-xs text-slate-500 mb-3">จะเพิ่มรายการใหม่ในวันที่ ${esc(date)} โดยไม่แก้ไขมื้อเดิม</p>
+      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="copy-meal-confirm" class="btn btn-primary">คัดลอกมื้อนี้</button></div>`, { wide: true });
+    $('#copy-meal-confirm', modal.el).addEventListener('click', async () => {
+      const batch = writeBatch(db), collectionRef = userCol(state.uid, 'food_records');
+      sourceItems.forEach(({ id, ...item }) => batch.set(doc(collectionRef), { ...item, date, meal, createdAt: new Date(), copiedFrom: sourceDate }));
+      try { await batch.commit(); modal.close(); toast(`คัดลอก ${sourceItems.length} รายการแล้ว`); }
+      catch (error) { toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'); }
+    });
+  } catch (error) { toast('ค้นหามื้อก่อนหน้าไม่สำเร็จ: ' + error.message, 'err'); }
+  finally { button.disabled = false; button.innerHTML = '<i class="fa-regular fa-copy"></i> คัดลอกจากมื้อเดิม'; }
+}
+
 function editFoodQuantity(id) {
   const item = items.find(row => row.id === id);
   if (!item) return;
@@ -554,7 +604,8 @@ async function onLabel(e) {
 export function openLibrary(onPick) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คลังอาหารของฉัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="flex gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button></div>
+    <div class="flex flex-col sm:flex-row gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
+    <button id="lib-restore-builtins" class="hidden chip bg-sky-soft text-blue-700 mb-2">คืนเมนูเริ่มต้นที่ซ่อนไว้</button>
     <div id="lib-bulk" class="flex flex-wrap items-center justify-between gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
       <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก (<span id="lib-selected-count">0</span>)</button>
@@ -566,6 +617,8 @@ export function openLibrary(onPick) {
     const q = $('#lib-q', m.el).value.toLowerCase();
     const presets = getPresets().filter(p => label(p).toLowerCase().includes(q));
     const custom = presets.filter(p => p.custom);
+    const hidden = hiddenBuiltins();
+    $('#lib-restore-builtins', m.el).classList.toggle('hidden', hidden.size === 0);
     const allVisibleSelected = custom.length > 0 && custom.every(p => selected.has(p.id));
     $('#lib-select-visible', m.el).checked = allVisibleSelected;
     $('#lib-select-visible', m.el).disabled = custom.length === 0;
@@ -578,12 +631,14 @@ export function openLibrary(onPick) {
         <p class="text-xs text-slate-500">${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
         </div><div class="flex flex-wrap gap-1 sm:shrink-0">
           <button data-pick="${i}" class="chip bg-ok-soft text-green-800">เลือก</button>
-          ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : ''}
+          ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : `<button data-hide-default="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ซ่อน</button>`}
         </div>
       </div>`).join('') || '<p class="text-sm text-slate-400 py-4 text-center">ไม่พบรายการ</p>';
   };
   $('#lib-q', m.el).addEventListener('input', render);
   $('#lib-add', m.el).addEventListener('click', () => openFoodEditor({}));
+  $('#lib-bulk-add', m.el).addEventListener('click', () => openBulkFoodImport(m));
+  $('#lib-restore-builtins', m.el).addEventListener('click', () => { localStorage.removeItem(HIDDEN_BUILTINS_KEY); refreshDatalist(); render(); });
   $('#lib-select-visible', m.el).addEventListener('change', e => {
     visibleCustom().forEach(p => e.target.checked ? selected.add(p.id) : selected.delete(p.id));
     render();
@@ -622,6 +677,10 @@ export function openLibrary(onPick) {
     const list = getPresets().filter(p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()));
     if (b.dataset.pick !== undefined) { onPick(list[+b.dataset.pick]); m.close(); }
     else if (b.dataset.hp) openHiwpintoCalculator(state.customFoods.find(f => f.id === b.dataset.hp));
+    else if (b.dataset.hideDefault) {
+      const hidden = hiddenBuiltins(); hidden.add(b.dataset.hideDefault);
+      localStorage.setItem(HIDDEN_BUILTINS_KEY, JSON.stringify([...hidden])); refreshDatalist(); render();
+    }
     else if (b.dataset.edit) openFoodEditor({ id: b.dataset.edit, prefill: state.customFoods.find(f => f.id === b.dataset.edit) });
     else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateDoc(userDoc(state.uid, 'custom_foods', f.id), { favorite: !f.favorite }); }
     else if (b.dataset.rm && confirm('ลบเมนูนี้ออกจากคลัง?')) {
@@ -638,6 +697,42 @@ export function openLibrary(onPick) {
     render();
   });
   render();
+}
+
+function openBulkFoodImport(parentModal) {
+  const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">เพิ่มอาหารหลายเมนู</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-xs text-slate-500 mb-3">รูปแบบต่อบรรทัด: ชื่อเมนู ⇥ จำนวน ⇥ หน่วย ⇥ kcal ⇥ P ⇥ C ⇥ F · ค่าที่ให้มาจะเป็นต่อหนึ่งหน่วย เช่น 40 g</p>
+    <textarea id="lib-import-data" class="input min-h-56 font-mono text-xs" spellcheck="false"></textarea>
+    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="lib-import-save" class="btn btn-primary">บันทึกเข้าคลัง</button></div>`, { wide: true });
+  $('#lib-import-data', m.el).value = FOOD_IMPORT_ROWS.map(row => row.join('\t')).join('\n');
+  $('#lib-import-save', m.el).addEventListener('click', async () => {
+    const lines = $('#lib-import-data', m.el).value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const parsed = lines.map((line, i) => {
+      const [name, amountText, unitText, calText, pText, cText, fText] = line.includes('\t') ? line.split('\t') : line.split('|').map(v => v.trim());
+      const amount = Number(amountText), calories = Number(calText), protein = Number(pText), carbs = Number(cText), fat = Number(fText);
+      if (!name || !unitText || !Number.isFinite(amount) || amount <= 0 || ![calories, protein, carbs, fat].every(value => Number.isFinite(value) && value >= 0)) return { error: `บรรทัด ${i + 1} มีข้อมูลไม่ครบหรือไม่ใช่ตัวเลขบวก` };
+      const gramsPerUnit = /^(g|gram|grams|กรัม)$/i.test(unitText) ? amount : null;
+      const unit = `${fmtAmount(amount)} ${unitText}`;
+      return { record: { name: name.trim(), unit, gramsPerUnit, calories, protein, carbs, fat, favorite: false, createdAt: new Date() } };
+    });
+    const invalid = parsed.find(item => item.error);
+    if (invalid) return toast(invalid.error, 'err');
+    const identity = item => `${item.name.trim().toLowerCase()}\u0000${item.unit.trim().toLowerCase()}`;
+    const existingNames = new Set(state.customFoods.map(identity));
+    const unique = [...new Map(parsed.map(item => [identity(item.record), item.record])).values()];
+    const records = unique.filter(item => !existingNames.has(identity(item)));
+    if (!records.length) return toast('เมนูเหล่านี้อยู่ในคลังแล้ว');
+    const saveButton = $('#lib-import-save', m.el); saveButton.disabled = true; saveButton.textContent = 'กำลังบันทึก…';
+    try {
+      const batch = writeBatch(db), collectionRef = userCol(state.uid, 'custom_foods');
+      records.forEach(record => batch.set(doc(collectionRef), record));
+      await batch.commit();
+      m.close(); parentModal.close(); toast(`เพิ่ม ${records.length} เมนูแล้ว${unique.length > records.length ? ` · ข้ามรายการซ้ำ ${unique.length - records.length} รายการ` : ''}`);
+    } catch (error) {
+      saveButton.disabled = false; saveButton.textContent = 'บันทึกเข้าคลัง';
+      toast('เพิ่มเมนูไม่สำเร็จ: ' + error.message, 'err');
+    }
+  });
 }
 
 const EDIT_FIELDS = [['calories', 'แคลอรี่ (kcal)'], ['protein', 'โปรตีน (g)'], ['carbs', 'คาร์โบไฮเดรต (g)'], ['fat', 'ไขมัน (g)'], ['sugar', 'น้ำตาล (g)'], ['sodium', 'โซเดียม (mg)']];

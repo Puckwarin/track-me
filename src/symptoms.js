@@ -16,7 +16,8 @@ let root;
 export function mountSymptoms(el) {
   root = el;
   root.innerHTML = `
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-notes-medical text-pink-500"></i> บันทึกอาการรายวัน</h3>
+    <div class="card space-y-4 lg:col-span-2">
+    <div><h3 class="font-bold text-slate-800"><i class="fa-solid fa-notes-medical text-pink-500"></i> บันทึกอาการรายวัน</h3><p class="text-xs text-slate-500 mt-1">บันทึกได้ทุกวัน ไม่ว่าจะมีประจำเดือนหรือไม่</p></div>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <div class="col-span-2 sm:col-span-3"><label class="lbl">วันที่ (แตะวันที่ในปฏิทินเพื่อเลือกก็ได้)</label>
         <input type="date" id="s-date" class="input" min="${addDays(localDateStr(), -399)}" max="${localDateStr()}"></div>
@@ -29,7 +30,8 @@ export function mountSymptoms(el) {
       <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
       <button id="s-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการ</button>
     </div>
-    <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>`;
+    <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
+    </div>`;
   $('#s-date', root).value = localDateStr();
   $('#s-date', root).addEventListener('change', loadForm);
   $('#s-save', root).addEventListener('click', save);
@@ -42,7 +44,8 @@ export function selectDate(d) {
   if (!root) return;
   $('#s-date', root).value = d;
   loadForm();
-  root.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.dispatchEvent(new Event('trackme:show-symptoms'));
+  setTimeout(() => root.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
 }
 
 const get = date => state.symptoms.find(s => s.id === date);

@@ -1,8 +1,25 @@
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, reauthenticateWithPopup, signOut } from 'firebase/auth';
 import { auth, provider } from './firebase.js';
 import { state, emit } from './state.js';
 import { $, toast } from './util.js';
 import { clearSummaryCache } from './summary.js';
+import { hasDevicePin, showDeviceLock, removeDevicePin } from './local-lock.js';
+
+let signedInUser = null;
+
+async function resetPinWithGoogle(user) {
+  await reauthenticateWithPopup(user, provider);
+  removeDevicePin(user.uid);
+  $('#app-lock').classList.add('hidden');
+  $('#app-shell').classList.remove('hidden');
+  emit('auth', user);
+}
+
+export function lockCurrentApp() {
+  if (!signedInUser || !hasDevicePin(signedInUser.uid)) return;
+  const user = signedInUser;
+  showDeviceLock(user.uid, () => { $('#app-shell').classList.remove('hidden'); emit('auth', user); }, signOutUser, () => resetPinWithGoogle(user));
+}
 
 export function initAuth() {
   $('#btn-google').addEventListener('click', async () => {
@@ -21,10 +38,25 @@ export function initAuth() {
   });
   // Firebase เก็บ session ในเครื่อง → เปิดแอปตอนออฟไลน์ก็ยังถือว่าล็อกอินอยู่
   onAuthStateChanged(auth, user => {
+    signedInUser = user;
     state.user = user;
     state.uid = user ? user.uid : null;
-    $('#login-screen').classList.toggle('hidden', !!user);
-    $('#app-shell').classList.toggle('hidden', !user);
+    if (!user) {
+      $('#app-lock').classList.add('hidden');
+      $('#login-screen').classList.remove('hidden');
+      $('#app-shell').classList.add('hidden');
+      emit('auth', null);
+      return;
+    }
+    $('#login-screen').classList.add('hidden');
+    if (hasDevicePin(user.uid)) {
+      const unlock = () => { $('#app-shell').classList.remove('hidden'); emit('auth', user); };
+      $('#app-shell').classList.add('hidden');
+      showDeviceLock(user.uid, unlock, signOutUser, () => resetPinWithGoogle(user));
+      return;
+    }
+    $('#app-lock').classList.add('hidden');
+    $('#app-shell').classList.remove('hidden');
     emit('auth', user);
   });
 }

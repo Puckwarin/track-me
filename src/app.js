@@ -21,7 +21,7 @@ import { initAuth } from './auth.js';
 import { TAB_ACTIVE, TAB_IDLE, TAB_BASE } from './theme.js';
 import { mountFood, watchDay } from './food.js';
 import { mountPeriod, render as renderPeriod, checkReminder } from './period.js';
-import { renderList as renderSymptomList } from './symptoms.js';
+import { mountSymptoms, renderList as renderSymptomList } from './symptoms.js';
 import { mountBody, render as renderBody } from './body.js';
 import { mountReport } from './reports.js';
 import { mountSettings, refreshAccount } from './settings.js';
@@ -29,7 +29,7 @@ import { renderSummary, copySummary } from './summary.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['food', 'period', 'body', 'report', 'settings'];
+const TABS = ['food', 'period', 'symptoms', 'body', 'report', 'settings'];
 export function showTab(name) {
   TABS.forEach(t => {
     $('#tab-' + t).classList.toggle('hidden', t !== name);
@@ -45,6 +45,7 @@ function mountAll() {
   mounted = true;
   mountFood($('#tab-food'));
   mountPeriod($('#tab-period'));
+  mountSymptoms($('#tab-symptoms'));
   mountBody($('#tab-body'));
   mountReport($('#tab-report'));
   mountSettings($('#tab-settings'));
@@ -77,4 +78,5 @@ on('auth', user => {
 TABS.forEach(t => { const b = $('#tabbtn-' + t); if (b) b.addEventListener('click', () => showTab(t)); });
 $('#btn-settings').addEventListener('click', () => showTab('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
+window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
 initAuth();
