@@ -41,7 +41,7 @@ async function callGemini(parts, schema) {
       const message = data?.error?.message || `HTTP ${res.status}`;
       const err = new Error(message);
       err.status = res.status;
-      err.quotaExceeded = /daily quota|quota exceeded|resource exhausted/i.test(message);
+      err.quotaExceeded = /quota|resource exhausted/i.test(message);
       err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
       err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message) ||
         (res.status === 429 && !err.quotaExceeded);
