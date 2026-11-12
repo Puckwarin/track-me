@@ -110,11 +110,12 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
   const src0 = localStorage.getItem(K_SRC);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 p-1"><i class="fa-solid fa-xmark"></i></button></div>
-    <select id="os-src" class="input">${Object.entries(SOURCES).map(([k, t]) => `<option value="${k}" ${k === (src0 || 'off') ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <select id="os-src" class="input"><option value="all" selected>ค้นหาทุกแหล่งที่เปิดใช้พร้อมกัน</option>${Object.entries(SOURCES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>
     <div class="flex gap-2 mt-2"><input id="os-q" class="input" placeholder="ชื่ออาหาร หรือเลขบาร์โค้ด" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button></div>
     <label class="chip bg-lav-soft text-brand-dark mt-2 inline-flex"><input id="os-bc" type="file" accept="image/*" capture="environment" class="hidden"><i class="fa-solid fa-barcode"></i> สแกนบาร์โค้ดจากรูป</label>
     <p id="os-hint" class="text-xs text-slate-500 mt-2"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
+    <div class="flex flex-wrap gap-2 mt-3 text-xs"><a id="os-google" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">ค้นหาต่อใน Google ↗</a><a id="os-chatgpt" href="https://chatgpt.com/" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">เปิด ChatGPT ↗</a><span class="self-center text-slate-400">เปิดแยกภายนอก ไม่มีการเรียก API แบบเสียเงิน</span></div>
     <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" inputmode="decimal" class="input">
@@ -122,11 +123,12 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
       <div class="flex flex-wrap gap-2"><button id="os-use" class="btn btn-primary">ใช้ในฟอร์มบันทึก</button><button id="os-lib" class="btn btn-soft">เก็บเข้าคลัง (ต่อ 100 g)</button></div>
     </div>`, { wide: true });
   const hints = {
+    all: 'ค้นพร้อมกันจาก Open Food Facts, USDA และ Gemini ที่ตั้งค่าไว้ · ถ้าแหล่งหนึ่งติดลิมิต/เชื่อมต่อไม่ได้ แหล่งอื่นยังแสดงผลได้ · Google และ ChatGPT เปิดแยกเป็นลิงก์',
     off: 'ค้นจากชื่อสินค้า/ยี่ห้อ หรือพิมพ์เลขบาร์โค้ด 8–14 หลัก · ข้อมูลมาจากผู้ใช้ทั่วโลก อาจไม่ครบหรือไม่ตรงทุกรายการ โปรดตรวจกับฉลาก',
     usda: 'ค้นจากชื่อภาษาอังกฤษ เช่น "chicken breast", "banana" · ค่าเป็นต่อ 100 g ของวัตถุดิบดิบ/ปรุงตามที่ระบุในชื่อ',
     gemini: 'ประมาณค่าต่อ 100 g จาก AI — เหมาะกับเมนูไทยที่ฐานข้อมูลไม่มี แต่เป็นค่าประมาณ'
   };
-  const hint = () => { $('#os-hint', m.el).textContent = hints[$('#os-src', m.el).value]; localStorage.setItem(K_SRC, $('#os-src', m.el).value); };
+  const hint = () => { $('#os-hint', m.el).textContent = hints[$('#os-src', m.el).value]; if($('#os-src',m.el).value!=='all')localStorage.setItem(K_SRC, $('#os-src', m.el).value); };
   hint();
   $('#os-src', m.el).addEventListener('change', hint);
 
@@ -135,25 +137,30 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     const g = toNum($('#os-g', m.el).value) || 0, k = g / 100, p = cur.per100;
     $('#os-out', m.el).textContent = `${Math.round(p.calories * k)} kcal · P ${round1((p.protein || 0) * k)} · C ${round1((p.carbs || 0) * k)} · F ${round1((p.fat || 0) * k)}`;
   };
-  const renderResults = () => {
-    $('#os-res', m.el).innerHTML = results.length ? results.map((r, i) => `
+  const renderResults = (errors=[]) => {
+    const warnings=errors.map(x=>`<p class="text-xs ${x.missing?'text-amber-700':'text-rose-600'} py-1"><b>${esc(x.label)}:</b> ${esc(x.message)}</p>`).join('');
+    $('#os-res', m.el).innerHTML = warnings + (results.length ? results.map((r, i) => `
       <button data-i="${i}" class="w-full text-left py-2 px-1 hover:bg-lav-soft/50 rounded-lg">
-        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''}</p>
+        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''} <span class="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">${esc(({off:'Open Food Facts',usda:'USDA',gemini:'Gemini'})[r.source]||r.source)}</span></p>
         <p class="text-xs text-slate-500">ต่อ 100 g: ${r.per100.calories} kcal · P ${r.per100.protein ?? '-'} · C ${r.per100.carbs ?? '-'} · F ${r.per100.fat ?? '-'}${r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
-      </button>`).join('') : '<p class="text-sm text-slate-400 py-2">ไม่พบผลลัพธ์ — ลองคำอื่น เปลี่ยนแหล่งข้อมูล หรือใช้ "ถ่ายรูปฉลาก"/กรอกเอง</p>';
+      </button>`).join('') : '<p class="text-sm text-slate-400 py-2">ไม่พบผลลัพธ์ — ลองคำอื่น เปลี่ยนแหล่งข้อมูล หรือใช้ "ถ่ายรูปฉลาก"/กรอกเอง</p>');
   };
   const run = async () => {
     const q = $('#os-q', m.el).value.trim(), src = $('#os-src', m.el).value;
     if (!q) return;
     $('#os-calc', m.el).classList.add('hidden');
     $('#os-res', m.el).innerHTML = '<p class="text-sm text-slate-500 py-2">กำลังค้นหา...</p>';
-    try {
-      results = src === 'off' ? (/^\d{8,14}$/.test(q) ? await barcodeOff(q) : await searchOff(q)) : src === 'usda' ? await searchUsda(q) : await searchGemini(q);
-      renderResults();
-    } catch (e) {
-      results = [];
-      $('#os-res', m.el).innerHTML = `<p class="text-sm text-rose-600 py-2">${esc(e.message === 'NO_KEY' ? explainGeminiError(e) : e.message)}</p>`;
-    }
+    $('#os-google',m.el).href=`https://www.google.com/search?q=${encodeURIComponent(q+' nutrition calories')}`;
+    $('#os-chatgpt',m.el).href=`https://chatgpt.com/?q=${encodeURIComponent(`Estimate nutrition per 100 g for ${q}; list calories, protein, carbs, fat.`)}`;
+    const sources=src==='all'?['off','usda','gemini']:[src];
+    const responses=await Promise.allSettled(sources.map(key=>key==='off'?( /^\d{8,14}$/.test(q)?barcodeOff(q):searchOff(q)):key==='usda'?searchUsda(q):searchGemini(q)));
+    results=[];const errors=[];
+    responses.forEach((response,i)=>{
+      const key=sources[i], label=key==='off'?'Open Food Facts':key==='usda'?'USDA':'Gemini';
+      if(response.status==='fulfilled')results.push(...response.value);
+      else {const e=response.reason, missing=(e?.message==='NO_KEY'||String(e?.message||'').includes('USDA API Key'));errors.push({label,message:e?.message==='NO_KEY'?explainGeminiError(e):e?.message||'ค้นหาไม่สำเร็จ',missing});}
+    });
+    renderResults(errors);
   };
   $('#os-go', m.el).addEventListener('click', run);
   $('#os-q', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
