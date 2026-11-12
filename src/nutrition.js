@@ -1,5 +1,6 @@
 // Gemini: ใช้ API key ของผู้ใช้เอง (เก็บในเครื่องนี้เท่านั้น ไม่ซิงค์ ไม่อยู่ในไฟล์สำรอง)
-const MODEL = 'gemini-2.5-flash';
+// Stable Gemini Flash model; gemini-2.5-flash is no longer available to new users.
+const MODEL = 'gemini-3.8-flash';
 const KEY_NAME = 'gemini_key';
 
 export const getGeminiKey = () => localStorage.getItem(KEY_NAME) || '';

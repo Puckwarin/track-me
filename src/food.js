@@ -1,5 +1,5 @@
-import { addDoc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { userCol, userDoc } from './firebase.js';
+import { addDoc, setDoc, updateDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
+import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { watch } from './sync.js';
 import { $, $$, esc, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
@@ -403,14 +403,28 @@ export function openLibrary(onPick) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คลังอาหารของฉัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="flex gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button></div>
+    <div id="lib-bulk" class="flex flex-wrap items-center justify-between gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
+      <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
+      <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก (<span id="lib-selected-count">0</span>)</button>
+    </div>
     <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
+  const selected = new Set();
+  const visibleCustom = () => getPresets().filter(p => p.custom && label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()));
   const render = () => {
     const q = $('#lib-q', m.el).value.toLowerCase();
-    $('#lib-list', m.el).innerHTML = getPresets().filter(p => label(p).toLowerCase().includes(q)).map((p, i) => `
-      <div class="py-2 flex flex-wrap items-center justify-between gap-2">
-        <div class="min-w-0"><p class="text-sm font-semibold text-slate-800 truncate">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
+    const presets = getPresets().filter(p => label(p).toLowerCase().includes(q));
+    const custom = presets.filter(p => p.custom);
+    const allVisibleSelected = custom.length > 0 && custom.every(p => selected.has(p.id));
+    $('#lib-select-visible', m.el).checked = allVisibleSelected;
+    $('#lib-select-visible', m.el).disabled = custom.length === 0;
+    $('#lib-visible-count', m.el).textContent = custom.length;
+    $('#lib-selected-count', m.el).textContent = selected.size;
+    $('#lib-delete-selected', m.el).disabled = selected.size === 0;
+    $('#lib-list', m.el).innerHTML = presets.map((p, i) => `
+      <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div class="min-w-0 flex items-start gap-2">${p.custom ? `<input type="checkbox" class="lib-select mt-1 shrink-0" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}<div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
         <p class="text-xs text-slate-500">${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
-        <div class="flex gap-1 shrink-0">
+        </div><div class="flex flex-wrap gap-1 sm:shrink-0">
           <button data-pick="${i}" class="chip bg-ok-soft text-green-800">เลือก</button>
           ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : ''}
         </div>
@@ -418,6 +432,39 @@ export function openLibrary(onPick) {
   };
   $('#lib-q', m.el).addEventListener('input', render);
   $('#lib-add', m.el).addEventListener('click', () => openFoodEditor({}));
+  $('#lib-select-visible', m.el).addEventListener('change', e => {
+    visibleCustom().forEach(p => e.target.checked ? selected.add(p.id) : selected.delete(p.id));
+    render();
+  });
+  $('#lib-delete-selected', m.el).addEventListener('click', async () => {
+    const foods = state.customFoods.filter(f => selected.has(f.id));
+    if (!foods.length) return;
+    const names = foods.slice(0, 5).map(f => `• ${f.name}`).join('\n');
+    const more = foods.length > 5 ? `\nและอีก ${foods.length - 5} เมนู` : '';
+    if (!confirm(`ลบเมนูที่เลือก ${foods.length} รายการออกจากคลังถาวร?\n\n${names}${more}`)) return;
+    let deleted = 0;
+    try {
+      for (let i = 0; i < foods.length; i += 450) {
+        const chunk = foods.slice(i, i + 450);
+        const batch = writeBatch(db);
+        chunk.forEach(f => batch.delete(userDoc(state.uid, 'custom_foods', f.id)));
+        await batch.commit();
+        chunk.forEach(f => selected.delete(f.id));
+        deleted += chunk.length;
+      }
+      toast(`ลบ ${foods.length} เมนูแล้ว`);
+      render();
+    } catch (err) {
+      render();
+      toast(deleted ? `ลบแล้ว ${deleted} จาก ${foods.length} เมนู ที่เหลือลบไม่สำเร็จ: ${err.message}` : 'ลบเมนูไม่สำเร็จ: ' + err.message, 'err');
+    }
+  });
+  m.el.addEventListener('change', e => {
+    const input = e.target.closest('[data-select]');
+    if (!input) return;
+    input.checked ? selected.add(input.dataset.select) : selected.delete(input.dataset.select);
+    render();
+  });
   m.el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const list = getPresets().filter(p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()));
@@ -425,9 +472,19 @@ export function openLibrary(onPick) {
     else if (b.dataset.hp) openHiwpintoCalculator(state.customFoods.find(f => f.id === b.dataset.hp));
     else if (b.dataset.edit) openFoodEditor({ id: b.dataset.edit, prefill: state.customFoods.find(f => f.id === b.dataset.edit) });
     else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateDoc(userDoc(state.uid, 'custom_foods', f.id), { favorite: !f.favorite }); }
-    else if (b.dataset.rm && confirm('ลบเมนูนี้ออกจากคลัง?')) deleteDoc(userDoc(state.uid, 'custom_foods', b.dataset.rm));
+    else if (b.dataset.rm && confirm('ลบเมนูนี้ออกจากคลัง?')) {
+      selected.delete(b.dataset.rm);
+      deleteDoc(userDoc(state.uid, 'custom_foods', b.dataset.rm))
+        .then(render)
+        .catch(err => toast('ลบเมนูไม่สำเร็จ: ' + err.message, 'err'));
+    }
   });
-  on('customFoods', () => m.el.isConnected && render());
+  on('customFoods', () => {
+    if (!m.el.isConnected) return;
+    const existing = new Set(state.customFoods.map(f => f.id));
+    selected.forEach(id => { if (!existing.has(id)) selected.delete(id); });
+    render();
+  });
   render();
 }
 
