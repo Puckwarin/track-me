@@ -80,7 +80,7 @@ export const SANITIZERS = {
     activity:['sedentary','light','moderate','active','very'].includes(o.activity)?o.activity:'light',
     adjust:typeof o.adjust==='number'&&Math.abs(o.adjust)<=1500?Math.round(o.adjust):0,
     kcalOverride:num(o.kcalOverride), proteinPerKg:num(o.proteinPerKg), fatPct:num(o.fatPct),
-    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30),pct:num(m.pct)??0})),
+    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30)})),
     updatedAt:ts(o.updatedAt)
   }),
 };

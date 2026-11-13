@@ -120,9 +120,20 @@ async function renderMonthly(){
   const workouts=state.workouts.filter(x=>x.date>=start&&x.date<=end),minutes=workouts.reduce((a,x)=>a+(x.durationMin||0),0);
   const symptoms=state.symptoms.filter(x=>x.date>=start&&x.date<=end&&Object.values(x.symptoms||{}).some(v=>v>0)).length,targets=getTargets();
   const stat=(label,value,sub='')=>`<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-500">${label}</p><p class="text-lg font-bold">${value}</p><p class="text-[11px] text-slate-500">${sub}</p></div>`;
+  const daysInMonth=Array.from({length:new Date(y,m,0).getDate()},(_,i)=>`${selectedMonth}-${String(i+1).padStart(2,'0')}`);
+  const byDay=Object.fromEntries(daysInMonth.map(d=>[d,{cal:0,p:0}]));
+  food.forEach(f=>{const x=byDay[f.date];if(x){x.cal+=num(f.calories);x.p+=num(f.protein);}});
+  const W=680,H=170,P=26,maxCal=Math.max(...daysInMonth.map(d=>byDay[d].cal),1),bw=(W-2*P)/daysInMonth.length;
+  const yPos=v=>H-P-v/maxCal*(H-2*P);
+  const bars=daysInMonth.map((d,i)=>{
+    const v=byDay[d].cal,x=P+i*bw,h=Math.max(H-P-yPos(v),0);
+    return `<rect x="${x}" y="${yPos(v)}" width="${Math.max(bw-1.5,1)}" height="${h}" rx="1.5" fill="${v?'#a78bfa':'#e2e8f0'}"><title>${d}: ${Math.round(v)} kcal</title></rect>`
+      +(i%5===0||i===daysInMonth.length-1?`<text x="${x}" y="${H-8}" font-size="9" text-anchor="middle" fill="#64748b">${i+1}</text>`:'');
+  }).join('');
+  const chart=`<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">${bars}</svg><p class="text-[11px] text-slate-400">แท่งกราฟ = แคลอรี่รวมต่อวัน (กดดูแต่ละแท่งเพื่อดูตัวเลข)</p>`;
   $('#wk-body',root).innerHTML=`<div class="card space-y-3 lg:col-span-2"><h3 class="font-bold">สรุปรายเดือน</h3><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
     ${stat('วันที่บันทึกอาหาร',`${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก',avgCal===null?'-':Math.round(avgCal)+' kcal',`เป้า ${targets.kcal} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก',avgP===null?'-':round1(avgP)+' g',`เป้า ${targets.protein} g`)}
     ${stat('น้ำหนัก',weights.length?round1(weights[weights.length-1].weight)+' กก.':'-',weights.length?`เปลี่ยนจากครั้งแรก ${round1(weights[weights.length-1].weight-weights[0].weight)} กก.`:'ไม่มีบันทึกเดือนนี้')}
     ${stat('ออกกำลังกาย',`${workouts.length} ครั้ง`,minutes?`${minutes} นาทีรวม`:'')}${stat('วันที่มีบันทึกอาการ',`${symptoms} วัน`)}
-  </div><p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
+  </div>${chart}<p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
 }

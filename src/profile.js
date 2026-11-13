@@ -12,7 +12,7 @@ export const ACTIVITY = [
   ['very', 'หนักมาก / งานใช้แรงทั้งวัน', 1.9]
 ];
 export const GOAL_PRESETS = [['-500', 'ลดน้ำหนัก (−500 kcal)'], ['-300', 'ลดน้ำหนักช้า ๆ (−300 kcal)'], ['0', 'คงน้ำหนัก'], ['300', 'เพิ่มน้ำหนัก/กล้ามเนื้อ (+300 kcal)']];
-export const DEFAULT_MEALS = [{ id: 'breakfast', name: 'มื้อเช้า', pct: 30 }, { id: 'lunch', name: 'มื้อกลางวัน', pct: 40 }, { id: 'dinner', name: 'มื้อเย็น', pct: 30 }];
+export const DEFAULT_MEALS = [{ id: 'breakfast', name: 'มื้อเช้า' }, { id: 'lunch', name: 'มื้อกลางวัน' }, { id: 'dinner', name: 'มื้อเย็น' }];
 // ขั้นต่ำของสารอาหารหลัก (ไม่ให้ตั้งต่ำกว่านี้)
 //  โปรตีน: RDA ผู้ใหญ่ 0.8 g/กก./วัน (ลดน้ำหนัก/ออกกำลังกายแนะนำ ~1.2–2.0)  ไขมัน: ช่วงที่แนะนำ 20–35% ของพลังงาน (WHO/DRI) — ขั้นต่ำ 20%
 export const PROTEIN_MIN = 0.8, PROTEIN_MAX = 3.0, FAT_MIN = 20, FAT_MAX = 40;
@@ -70,9 +70,9 @@ export function mountProfile(el) {
     <p class="text-xs text-slate-400">ค่าที่คำนวณเป็นค่าประมาณทั่วไป (สูตร Mifflin-St Jeor) ไม่ใช่คำแนะนำทางการแพทย์ — มีโรคประจำตัว ตั้งครรภ์ หรือต้องการลดน้ำหนักมาก ควรปรึกษาแพทย์/นักกำหนดอาหาร</p>
     <hr class="border-lav-soft">
     <h3 class="font-bold text-slate-800"><i class="fa-solid fa-utensils text-brand"></i> มื้ออาหารของฉัน</h3>
-    <p class="text-xs text-slate-500">เพิ่ม/ลด/เปลี่ยนชื่อมื้อได้ (เช่น มื้อสาย มื้อบ่าย) และกำหนดสัดส่วนพลังงานของแต่ละมื้อ — หน้าอาหารจะแสดงว่าแต่ละมื้อกินไปเท่าไรเทียบกับเป้า</p>
+    <p class="text-xs text-slate-500">เพิ่ม/ลด/เปลี่ยนชื่อมื้อได้ (เช่น มื้อสาย มื้อบ่าย) — หน้าอาหารจะแสดงกราฟพลังงานที่กินแต่ละมื้อเปรียบเทียบกันเอง</p>
     <div id="pf-meals" class="space-y-2"></div>
-    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มมื้อ</button><span id="pf-pct-sum"></span></div>
+    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มมื้อ</button></div>
     <div class="flex justify-end"><button id="pf-save" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกการตั้งค่า</button></div>`;
   root.addEventListener('input', e => { dirty = true; if (e.target.closest('#pf-meals')) readMeals(); preview(); });
   root.addEventListener('change', e => {
@@ -81,7 +81,7 @@ export function mountProfile(el) {
     if (e.target.id === 'pf-prot' || e.target.id === 'pf-fat') enforceMinimums(true);
     dirty = true; preview();
   });
-  $('#pf-add-meal', root).addEventListener('click', () => { readMeals(); meals.push({ id: 'm' + Date.now().toString(36), name: 'มื้อใหม่', pct: 0 }); dirty = true; renderMeals(); });
+  $('#pf-add-meal', root).addEventListener('click', () => { readMeals(); meals.push({ id: 'm' + Date.now().toString(36), name: 'มื้อใหม่' }); dirty = true; renderMeals(); });
   $('#pf-meals', root).addEventListener('click', e => {
     const b = e.target.closest('[data-rm]');
     if (!b) return;
@@ -110,7 +110,6 @@ function renderMeals() {
   $('#pf-meals', root).innerHTML = meals.map((m, i) => `
     <div class="flex items-center gap-2">
       <input data-k="name" data-i="${i}" class="input" value="${esc(m.name)}" maxlength="30" aria-label="ชื่อมื้อ">
-      <div class="flex items-center gap-1 shrink-0"><input data-k="pct" data-i="${i}" type="number" inputmode="numeric" min="0" max="100" class="input !w-20 text-right" value="${m.pct}" aria-label="เปอร์เซ็นต์พลังงาน"><span class="text-xs text-slate-500">%</span></div>
       <button data-rm="${i}" class="text-rose-400 hover:text-rose-600 p-2" aria-label="ลบมื้อ"><i class="fa-solid fa-trash-can text-xs"></i></button>
     </div>`).join('');
   preview();
@@ -118,7 +117,7 @@ function renderMeals() {
 function readMeals() {
   $('#pf-meals', root).querySelectorAll('input[data-k]').forEach(inp => {
     const m = meals[+inp.dataset.i]; if (!m) return;
-    m[inp.dataset.k] = inp.dataset.k === 'pct' ? (toNum(inp.value) ?? 0) : inp.value;
+    m[inp.dataset.k] = inp.value;
   });
 }
 
@@ -149,8 +148,6 @@ function preview() {
   const p = draft(), live = bodyLatest(state.body).weight;
   $('#pf-wnote', root).textContent = live ? `ใช้น้ำหนักล่าสุดจากแท็บน้ำหนักเป็นหลัก (${live.v} กก.)` : 'ยังไม่มีน้ำหนักในแท็บน้ำหนัก จึงใช้ค่านี้';
   const c = calcBody(p), box = $('#pf-result', root);
-  const sum = meals.reduce((a, m) => a + (m.pct || 0), 0);
-  $('#pf-pct-sum', root).innerHTML = `<span class="${sum === 100 ? 'text-green-700' : 'text-amber-700'}">รวม ${sum}%${sum === 100 ? ' ✓' : ' (ควรรวม 100%)'}</span>`;
   if (!c) { box.innerHTML = '<span class="text-slate-500">กรอกเพศ ปีเกิด ส่วนสูง และน้ำหนัก เพื่อคำนวณ BMI / BMR / TDEE (ตอนนี้ใช้ค่าเริ่มต้น 2,000 kcal)</span>'; return; }
   const t = getTargets({ ...p });
   const w = c.w, adj = p.adjust || 0, lo = adj < 0 ? 1.2 : 0.8, hi = adj > 0 ? 2.2 : 2.0;
@@ -167,7 +164,7 @@ function save() {
   if (!enforceMinimums(true)) return;
   const p = draft();
   if (!meals.every(m => String(m.name).trim())) return toast('ตั้งชื่อมื้อให้ครบ', 'err');
-  const rec = { ...p, meals: meals.map(m => ({ id: m.id, name: String(m.name).trim(), pct: m.pct || 0 })), updatedAt: new Date() };
+  const rec = { ...p, meals: meals.map(m => ({ id: m.id, name: String(m.name).trim() })), updatedAt: new Date() };
   for (const k of Object.keys(rec)) if (rec[k] === null || rec[k] === undefined) delete rec[k];
   setDoc(userDoc(state.uid, 'settings', 'profile'), rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   dirty = false;
