@@ -14,10 +14,13 @@ export function mountWeekly(el) {
   root = el;
   root.innerHTML = `
   <div class="lg:col-span-3 space-y-6">
-    <div class="card flex items-center justify-between gap-3">
-      <button id="wk-prev" class="btn btn-ghost !px-3" aria-label="สัปดาห์ก่อน"><i class="fa-solid fa-chevron-left"></i></button>
-      <div class="text-center"><h2 class="font-bold text-slate-800"><i class="fa-solid fa-chart-line text-brand"></i> สรุปรายสัปดาห์</h2><p id="wk-range" class="text-sm text-slate-500"></p></div>
-      <button id="wk-next" class="btn btn-ghost !px-3" aria-label="สัปดาห์ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+    <div class="card space-y-3">
+      <div class="flex justify-center gap-2"><button id="sum-week" class="chip">รายสัปดาห์</button><button id="sum-month" class="chip">รายเดือน</button></div>
+      <div class="flex items-center justify-between gap-3">
+        <button id="wk-prev" class="btn btn-ghost !px-3" aria-label="ช่วงก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+        <div class="text-center"><h2 id="wk-title" class="font-bold text-slate-800"><i class="fa-solid fa-chart-line text-brand"></i> สรุปสุขภาพ</h2><p id="wk-range" class="text-sm text-slate-500"></p></div>
+        <button id="wk-next" class="btn btn-ghost !px-3" aria-label="ช่วงถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
     </div>
     <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
   </div>`;
