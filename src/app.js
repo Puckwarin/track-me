@@ -32,17 +32,22 @@ import { mountLab, render as renderLab } from './lab.js';
 import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
+import { mountReminders, renderReminders } from './reminders.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['food', 'workout', 'weekly', 'lab', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
+const TABS = ['food', 'workout', 'weekly', 'lab', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'notifications', 'settings'];
+const HEALTH_TABS = ['weekly', 'lab', 'period', 'symptoms', 'body', 'report'];
+const CARE_TABS = ['care', 'inventory'];
 export function showTab(name) {
-  TABS.forEach(t => {
-    $('#tab-' + t).classList.toggle('hidden', t !== name);
-    const b = $('#tabbtn-' + t);
-    if (b) b.className = `${TAB_BASE} ${t === name ? TAB_ACTIVE : TAB_IDLE}`;
-  });
-  if (name === 'weekly') renderWeekly();   // อาหารเปลี่ยนจากแท็บอื่นได้ จึงคำนวณใหม่ทุกครั้งที่เปิด
+  TABS.forEach(t => { const panel=$('#tab-'+t); if(panel)panel.classList.toggle('hidden',t!==name); });
+  const health=HEALTH_TABS.includes(name), care=CARE_TABS.includes(name);
+  const activeGroup=health?'health':care?'caretools':name;
+  ['food','workout','health','caretools','notifications'].forEach(t=>{const b=$('#tabbtn-'+t);if(b)b.className=`${TAB_BASE} ${t===activeGroup?TAB_ACTIVE:TAB_IDLE}`;});
+  $('#health-subtab').classList.toggle('hidden',!health); $('#care-subtab').classList.toggle('hidden',!care);
+  if(health)$('#health-subtab').value=name; if(care)$('#care-subtab').value=name;
+  if (name === 'weekly') renderWeekly();
+  if (name === 'notifications') renderReminders();
   try { localStorage.setItem('active_tab', name); } catch (e) {}
 }
 
@@ -61,17 +66,18 @@ function mountAll() {
   mountBody($('#tab-body'));
   mountReport($('#tab-report'));
   mountSettings($('#tab-settings'));
+  mountReminders($('#tab-notifications'));
 }
 
 function startData() {
   const uid = state.uid;
   state.loaded = { period: false, body: false };
-  watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderSummary(); refreshProfile(); emit('profile'); });
+  watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   watchCare(uid);
   watchInventory(uid);
-  watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); });
+  watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
   watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
@@ -94,8 +100,13 @@ on('auth', user => {
   renderSyncStatus();
 });
 
-TABS.forEach(t => { const b = $('#tabbtn-' + t); if (b) b.addEventListener('click', () => showTab(t)); });
+['food','workout','notifications'].forEach(t => { const b=$('#tabbtn-'+t); if(b)b.addEventListener('click',()=>showTab(t)); });
+$('#tabbtn-health').addEventListener('click',()=>showTab($('#health-subtab').value||'weekly'));
+$('#health-subtab').addEventListener('change',e=>showTab(e.target.value));
+$('#tabbtn-caretools').addEventListener('click',()=>showTab($('#care-subtab').value||'care'));
+$('#care-subtab').addEventListener('change',e=>showTab(e.target.value));
 $('#btn-settings').addEventListener('click', () => showTab('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
+window.addEventListener('trackme:data-change',renderReminders);
 initAuth();
