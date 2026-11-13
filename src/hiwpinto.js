@@ -1,4 +1,4 @@
-import { addDoc } from 'firebase/firestore';
+import { addDoc, getDocs } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { openModal, toast, esc } from './util.js';
@@ -69,7 +69,8 @@ export function openHiwpintoSync() {
     let parsed;try{parsed=parseHiwpintoExport(JSON.parse(m.el.querySelector('#hp-paste').value));}catch(e){return toast(e.message||'อ่านข้อมูลไม่สำเร็จ','err');}
     const {start,end,entries}=parsed, out=m.el.querySelector('#hp-preview');
     if(!entries.length){out.innerHTML=`<p class="text-amber-800">ไม่พบเมนูที่มีโภชนาการในสัปดาห์ถัดไป (${start}–${end}). ตรวจว่าเลือกบิลสัปดาห์ถัดไปก่อนรัน helper</p>`;return;}
-    const existing=new Set((state.customFoods||[]).map(f=>cleanHiwpintoName(f.name).toLocaleLowerCase('th')));
+    let library=state.customFoods||[];try{library=(await getDocs(userCol(state.uid,'custom_foods'))).docs.map(d=>d.data());}catch(err){return toast('อ่านคลังอาหารเพื่อตรวจชื่อซ้ำไม่ได้: '+err.message,'err');}
+    const existing=new Set(library.map(f=>cleanHiwpintoName(f.name).toLocaleLowerCase('th')));
     const unique=[],dups=[];
     for(const x of entries){const key=x.name.toLocaleLowerCase('th');if(existing.has(key)){dups.push(x.name);continue;}existing.add(key);unique.push(x);}
     out.innerHTML=`<p class="font-semibold">ช่วง ${start}–${end}: พบ ${entries.length} เมนู · ใหม่ ${unique.length} · ซ้ำข้าม ${dups.length}</p><div class="max-h-64 overflow-auto space-y-2 mt-2">${unique.map(x=>`<div class="rounded-lg bg-lav-soft/50 p-2"><b>${esc(x.name)}</b><div>${x.calories} kcal · P ${x.protein} · C ${x.carbs} · F ${x.fat}</div><div class="text-amber-700 text-xs">${esc(x.warning||'ค่าพลังงานและสารอาหารจากร้าน')}</div></div>`).join('')||'<p>ไม่มีรายการใหม่</p>'}${dups.length?`<p class="text-xs text-slate-500">ข้ามรายการชื่อซ้ำ: ${dups.map(esc).join(', ')}</p>`:''}</div><button id="hp-confirm-save" class="btn btn-primary mt-3" ${unique.length?'':'disabled'}>เพิ่ม ${unique.length} รายการเข้าคลังอาหาร</button>`;
