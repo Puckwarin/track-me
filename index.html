@@ -58,17 +58,18 @@
       </div>
     </section>
 
-    <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto pb-1">
+    <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto pb-1 items-center">
       <button id="tabbtn-food"><i class="fa-solid fa-utensils"></i> อาหาร</button>
       <button id="tabbtn-workout"><i class="fa-solid fa-dumbbell"></i> ออกกำลังกาย</button>
-      <button id="tabbtn-weekly"><i class="fa-solid fa-chart-line"></i> สรุปสัปดาห์</button>
-      <button id="tabbtn-lab"><i class="fa-solid fa-vial"></i> ผลตรวจ</button>
-      <button id="tabbtn-period"><i class="fa-solid fa-droplet"></i> ประจำเดือน</button>
-      <button id="tabbtn-symptoms"><i class="fa-solid fa-notes-medical"></i> อาการ & ผิว</button>
-      <button id="tabbtn-care"><i class="fa-solid fa-paw"></i> สัตว์เลี้ยง</button>
-      <button id="tabbtn-inventory"><i class="fa-solid fa-boxes-stacked"></i> ของใช้ & สต๊อก</button>
-      <button id="tabbtn-body"><i class="fa-solid fa-weight-scale"></i> น้ำหนัก & สัดส่วน</button>
-      <button id="tabbtn-report"><i class="fa-solid fa-file-medical"></i> รายงาน</button>
+      <button id="tabbtn-health"><i class="fa-solid fa-heart-pulse"></i> สุขภาพ</button>
+      <select id="health-subtab" class="input !w-auto !py-2" aria-label="เลือกหน้าสุขภาพ">
+        <option value="weekly">สรุปสัปดาห์ / เดือน</option><option value="lab">ผลตรวจ</option><option value="period">ประจำเดือน</option><option value="symptoms">อาการ & ผิว</option><option value="body">น้ำหนัก & สัดส่วน</option><option value="report">รายงาน</option>
+      </select>
+      <button id="tabbtn-caretools"><i class="fa-solid fa-paw"></i> ดูแล</button>
+      <select id="care-subtab" class="input !w-auto !py-2" aria-label="เลือกหน้าดูแล">
+        <option value="care">สัตว์เลี้ยง</option><option value="inventory">ของใช้ & สต๊อก</option>
+      </select>
+      <button id="tabbtn-notifications"><i class="fa-regular fa-bell"></i> แจ้งเตือน</button>
     </nav>
 
     <main id="tab-food" class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
@@ -81,6 +82,8 @@
     <main id="tab-inventory" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"></main>
     <main id="tab-body" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
     <main id="tab-report" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+    <main id="tab-notifications" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+    
     <main id="tab-settings" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
   </div>
 

@@ -56,16 +56,24 @@ export function guessFoodCategory(name = '') {
   if (/ขนม|bar|snack|ช็อกโกแลต|choc/.test(n)) return 'ขนม/ของว่าง';
   return 'อื่น ๆ';
 }
+const gramsInUnit = unit => {
+  const matches = [...String(unit || '').matchAll(/(\d+(?:\.\d+)?)\s*(?:g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)(?![a-z])/gi)];
+  return matches.length ? Number(matches[matches.length - 1][1]) : null;
+};
 const normalizedStoredPreset = p => {
   const row = FOOD_IMPORT_ROWS.find(r => r[0].toLowerCase() === String(p.name).toLowerCase());
-  if (!row || p.defaultQuantity) return p;
-  const amount = Number(row[1]), unit = row[2];
-  // Old bulk imports stored nutrition per package and encoded the package size in `unit`.
-  if (String(p.unit).toLowerCase() !== `${amount} ${unit}`.toLowerCase()) return p;
-  const by = /^(g|gram|grams|กรัม)$/i.test(unit) ? amount : 1;
-  return { ...p, unit: /^(g|gram|grams|กรัม)$/i.test(unit) ? 'g' : unit, gramsPerUnit: by === amount ? 1 : p.gramsPerUnit,
-    calories: p.calories / by, protein: p.protein / by, carbs: p.carbs / by, fat: p.fat / by,
-    defaultQuantity: amount, category: p.category || guessFoodCategory(p.name), _normalizedImport: true };
+  if (row && !p.defaultQuantity) {
+    const amount = Number(row[1]), unit = row[2];
+    if (String(p.unit).toLowerCase() === (String(amount) + ' ' + unit).toLowerCase()) {
+      const by = /^(g|gram|grams|กรัม)$/i.test(unit) ? amount : 1;
+      return { ...p, unit: /^(g|gram|grams|กรัม)$/i.test(unit) ? 'g' : unit, gramsPerUnit: by === amount ? 1 : p.gramsPerUnit,
+        calories: p.calories / by, protein: p.protein / by, carbs: p.carbs / by, fat: p.fat / by,
+        defaultQuantity: amount, category: p.category || guessFoodCategory(p.name), _normalizedImport: true };
+    }
+  }
+  // Older custom foods may store the portion weight in the unit text but lack gramsPerUnit.
+  const parsed = gramsInUnit(p.unit);
+  return p.gramsPerUnit > 0 || !parsed ? p : { ...p, gramsPerUnit: parsed };
 };
 export const getPresets = () => [
   ...state.customFoods.map(normalizedStoredPreset).map(p => ({ ...p, category: p.category || (p.hiwpinto ? 'อาหารคลีน/Hiwpinto' : guessFoodCategory(p.name)), custom: true })).sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || a.name.localeCompare(b.name, 'th')),
@@ -374,7 +382,7 @@ function pickByLabel(v) {
 function applyPreset(p, setName = true) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  qtyMode = isWeightUnit(p.unit) ? 'grams' : 'unit';
+  qtyMode = canWeigh() ? 'grams' : 'unit';
   $('#f-qty', root).value = canWeigh() && qtyMode === 'grams' ? round1(p.gramsPerUnit * (p.defaultQuantity ?? 1)) : (p.defaultQuantity ?? 1);
   if (p.edibleFraction && p.gramsPerUnit > 0) {
     $('#f-gross', root).value = p.gramsPerUnit;
@@ -421,7 +429,8 @@ const foodLogPortion = item => {
   }
   const quantity = foodLogQuantity(item);
   if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
-  if (item.gramsPerUnit > 0) return isWeightUnit(item.portionUnit) ? `${fmtAmount(quantity * item.gramsPerUnit)} g` : `${fmtAmount(quantity * item.gramsPerUnit)} g · ×${fmtAmount(quantity)} ${item.portionUnit || 'หน่วย'}`;
+  const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
+  if (inferredGrams > 0) return `${fmtAmount(quantity * inferredGrams)} g`;
   return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
 };
 
@@ -571,7 +580,8 @@ function editFoodQuantity(id) {
   const isGross = Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction) && item.edibleUnitGrams > 0;
   const isGrams = item.portionUnit === 'g' && item.gramsPerUnit === 1;
   const currentQuantity = foodLogQuantity(item);
-  const unitG = !isGross && !isGrams && item.gramsPerUnit > 0 ? item.gramsPerUnit : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
+  const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
+  const unitG = !isGross && !isGrams && inferredGrams > 0 ? inferredGrams : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
@@ -768,8 +778,8 @@ export function openLibrary(onPick) {
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
       <span>เลือกแล้ว <b id="lib-selected-count">0</b></span>
       <select id="lib-bulk-category" class="input !w-auto min-w-40 !py-2 text-xs"><option value="">เลือกหมวดหมู่ใหม่</option>${categoryNames.map(c=>`<option>${esc(c)}</option>`).join('')}</select>
-      <button id="lib-change-category" class="btn btn-soft !px-3 !py-2 text-xs" disabled>เปลี่ยนหมวดหมู่ที่เลือก</button>
-      <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก</button>
+      <button id="lib-change-category" class="chip bg-sky-soft text-blue-700 !px-3 !py-2 text-xs" disabled>แก้ไขหมวดหมู่</button>
+      <button id="lib-delete-selected" class="chip bg-pink-soft text-rose-600 !px-3 !py-2 text-xs" disabled>ลบรายการที่เลือก</button>
     </div>
     <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
   const selected = new Set();
