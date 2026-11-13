@@ -6,7 +6,7 @@ import { getTargets } from './profile.js';
 import { TYPES } from './workout.js';
 import { sortBodyDesc } from './body.js';
 
-let root, weekStart = mondayOf(localDateStr()), seq = 0;
+let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
 function mondayOf(ds) { const d = parseLocal(ds); return addDays(ds, -((d.getDay() + 6) % 7)); }
 const num = v => (typeof v === 'number' ? v : 0);
 
@@ -21,8 +21,9 @@ export function mountWeekly(el) {
     </div>
     <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
   </div>`;
-  $('#wk-prev', root).addEventListener('click', () => { weekStart = addDays(weekStart, -7); renderWeekly(); });
-  $('#wk-next', root).addEventListener('click', () => { weekStart = addDays(weekStart, 7); renderWeekly(); });
+  $('#wk-prev', root).addEventListener('click', () => { if(summaryMode==='monthly'){selectedMonth=shiftMonth(selectedMonth,-1);renderWeekly();} else {weekStart = addDays(weekStart, -7); renderWeekly();} });
+  $('#wk-next', root).addEventListener('click', () => { if(summaryMode==='monthly'){selectedMonth=shiftMonth(selectedMonth,1);renderWeekly();} else {weekStart = addDays(weekStart, 7); renderWeekly();} });
+  $('#sum-week',root).onclick=()=>{summaryMode='weekly';renderWeekly();}; $('#sum-month',root).onclick=()=>{summaryMode='monthly';renderWeekly();};
   renderWeekly();
 }
 
@@ -30,6 +31,9 @@ const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {
   if (!root || !state.uid) return;
+  $('#sum-week',root).className = `chip ${summaryMode==='weekly'?'bg-brand text-white':'bg-lav-soft text-brand-dark'}`; $('#sum-month',root).className = `chip ${summaryMode==='monthly'?'bg-brand text-white':'bg-lav-soft text-brand-dark'}`;
+  $('#wk-prev',root).setAttribute('aria-label',summaryMode==='monthly'?'เดือนก่อน':'สัปดาห์ก่อน'); $('#wk-next',root).setAttribute('aria-label',summaryMode==='monthly'?'เดือนถัดไป':'สัปดาห์ถัดไป');
+  if(summaryMode==='monthly') return renderMonthly();
   const my = ++seq, end = addDays(weekStart, 6), days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   $('#wk-range', root).textContent = `${fmtDate(weekStart)} – ${fmtDate(end)}${weekStart === mondayOf(localDateStr()) ? ' (สัปดาห์นี้)' : ''}`;
   $('#wk-next', root).disabled = weekStart >= mondayOf(localDateStr());
@@ -99,4 +103,23 @@ export async function renderWeekly() {
     </div>
     <div class="card lg:col-span-3"><h3 class="font-bold text-slate-800 mb-2">💡 ข้อสังเกต</h3>${tips.length ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-500">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้ 🎉</p>'}
       <p class="text-[11px] text-slate-400 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
+}
+
+function shiftMonth(ym,delta){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1+delta,1).toISOString().slice(0,7);}
+async function renderMonthly(){
+  const my=++seq,[y,m]=selectedMonth.split('-').map(Number),start=selectedMonth+'-01',end=new Date(y,m,0).toISOString().slice(0,10),today=localDateStr();
+  $('#wk-range',root).textContent=new Date(y,m-1,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+  $('#wk-next',root).disabled=selectedMonth>=today.slice(0,7);
+  let food=[];try{food=(await getDocs(query(userCol(state.uid,'food_records'),where('date','>=',start),where('date','<=',end)))).docs.map(d=>d.data());}catch{}
+  if(my!==seq)return;
+  const loggedDays=new Set(food.map(x=>x.date)),avgCal=loggedDays.size?food.reduce((a,x)=>a+num(x.calories),0)/loggedDays.size:null,avgP=loggedDays.size?food.reduce((a,x)=>a+num(x.protein),0)/loggedDays.size:null;
+  const weights=state.body.filter(x=>x.date>=start&&x.date<=end&&typeof x.weight==='number').sort((a,b)=>a.date.localeCompare(b.date));
+  const workouts=state.workouts.filter(x=>x.date>=start&&x.date<=end),minutes=workouts.reduce((a,x)=>a+(x.durationMin||0),0);
+  const symptoms=state.symptoms.filter(x=>x.date>=start&&x.date<=end&&Object.values(x.symptoms||{}).some(v=>v>0)).length,targets=getTargets();
+  const stat=(label,value,sub='')=>`<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-500">${label}</p><p class="text-lg font-bold">${value}</p><p class="text-[11px] text-slate-500">${sub}</p></div>`;
+  $('#wk-body',root).innerHTML=`<div class="card space-y-3 lg:col-span-2"><h3 class="font-bold">สรุปรายเดือน</h3><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+    ${stat('วันที่บันทึกอาหาร',`${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก',avgCal===null?'-':Math.round(avgCal)+' kcal',`เป้า ${targets.kcal} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก',avgP===null?'-':round1(avgP)+' g',`เป้า ${targets.protein} g`)}
+    ${stat('น้ำหนัก',weights.length?round1(weights[weights.length-1].weight)+' กก.':'-',weights.length?`เปลี่ยนจากครั้งแรก ${round1(weights[weights.length-1].weight-weights[0].weight)} กก.`:'ไม่มีบันทึกเดือนนี้')}
+    ${stat('ออกกำลังกาย',`${workouts.length} ครั้ง`,minutes?`${minutes} นาทีรวม`:'')}${stat('วันที่มีบันทึกอาการ',`${symptoms} วัน`)}
+  </div><p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
 }
