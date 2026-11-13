@@ -1,5 +1,5 @@
 import { $, toast } from './util.js';
-import { getGeminiKey, setGeminiKey } from './nutrition.js';
+import { getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, getOpenRouterKey, setOpenRouterKey } from './nutrition.js';
 import { getUsdaKey, setUsdaKey } from './foodsearch.js';
 import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
@@ -48,12 +48,17 @@ export function mountSettings(el) {
     <div class="card space-y-4 lg:col-span-2" id="st-api-keys">
       <header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-brand"></i> คีย์เชื่อมต่อ (ตัวเลือก)</h3><p class="text-xs text-slate-500 mt-1">จัดคีย์ที่นี่เป็นหมวดเดียวกัน · เก็บเฉพาะเบราว์เซอร์อุปกรณ์นี้ ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p></header>
       <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลากและประมาณโภชนาการ · ตั้งค่าได้ใน Google AI Studio · ใช้โควตาฟรีเมื่อมีให้บริการ</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button></section>
+      <section class="rounded-xl border border-orange-100 bg-orange-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">Groq Vision (สำรอง)</h4><p class="text-xs text-slate-500">สลับมาใช้เมื่อ Gemini ใช้ไม่ได้/โควตาเต็ม · ฟรีตาม rate limit และเงื่อนไขปัจจุบันของผู้ให้บริการ</p><input type="password" id="st-groq" class="input" placeholder="Groq API Key" autocomplete="off"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button></section>
+      <section class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">OpenRouter (สำรอง)</h4><p class="text-xs text-slate-500">ใช้โมเดลฟรีที่รองรับภาพผ่าน openrouter/free; ฟรีมี rate limit และรายชื่อโมเดลเปลี่ยนได้ ไม่มีการเติมเงินอัตโนมัติ</p><input type="password" id="st-openrouter" class="input" placeholder="OpenRouter API Key" autocomplete="off"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button></section>
+      <p class="text-xs text-amber-700">คีย์เก็บในเบราว์เซอร์นี้เท่านั้น แต่คำขอภาพ/ข้อความจะส่งตรงไปยังผู้ให้บริการที่เลือกตามลำดับ Gemini → Groq → OpenRouter เมื่อแหล่งก่อนหน้าล้มเหลว กรุณาตรวจนโยบายข้อมูลและโควตาของแต่ละรายก่อนใช้รูปส่วนตัว</p>
       <section class="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-database text-sky-500"></i> USDA FoodData Central</h4><p class="text-xs text-slate-500">ใช้ค้นหาวัตถุดิบ · ขอ API key ฟรีที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input" placeholder="USDA API Key" autocomplete="off"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button></section>
       <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
     </div>
   </div>`;
   $('#st-key', el).value = getGeminiKey();
-  $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); toast('บันทึกคีย์แล้ว'); });
+  $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); toast('บันทึกคีย์ Gemini แล้ว'); });
+  $('#st-groq',el).value=getGroqKey(); $('#st-groq-save',el).addEventListener('click',()=>{setGroqKey($('#st-groq',el).value);toast('บันทึกคีย์ Groq แล้ว');});
+  $('#st-openrouter',el).value=getOpenRouterKey(); $('#st-openrouter-save',el).addEventListener('click',()=>{setOpenRouterKey($('#st-openrouter',el).value);toast('บันทึกคีย์ OpenRouter แล้ว');});
   $('#st-out', el).addEventListener('click', signOutUser);
   $('#st-usda', el).value = getUsdaKey();
   $('#st-usda-save', el).addEventListener('click', () => { setUsdaKey($('#st-usda', el).value); toast('บันทึกคีย์ USDA แล้ว'); });

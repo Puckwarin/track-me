@@ -1,5 +1,6 @@
 import { $, esc, toNum, round1, openModal, toast } from './util.js';
 import { lookupPer100g, getGeminiKey, explainGeminiError } from './nutrition.js';
+import { state } from './state.js';
 
 // แหล่งข้อมูลโภชนาการ (ทุกแหล่งใช้ฟรี ไม่ต้องผูกบัตร)
 //  off    = Open Food Facts: สินค้าบรรจุภัณฑ์ทั่วโลกรวมของไทย + ค้นด้วยบาร์โค้ด (ไม่ต้องใช้คีย์, จำกัด ~10 ครั้ง/นาที)
@@ -114,7 +115,7 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
   const src0 = localStorage.getItem(K_SRC);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 p-1"><i class="fa-solid fa-xmark"></i></button></div>
-    <select id="os-src" class="input"><option value="all" selected>ค้นหาทุกแหล่งที่เปิดใช้พร้อมกัน</option>${Object.entries(SOURCES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>
+    <select id="os-src" class="input"><option value="all" selected>คลังของฉัน → USDA → Open Food Facts</option>${Object.entries(SOURCES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>
     <div class="flex gap-2 mt-2"><input id="os-q" class="input" placeholder="ชื่ออาหาร หรือเลขบาร์โค้ด" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button></div>
     <label class="chip bg-lav-soft text-brand-dark mt-2 inline-flex"><input id="os-bc" type="file" accept="image/*" capture="environment" class="hidden"><i class="fa-solid fa-barcode"></i> สแกนบาร์โค้ดจากรูป</label>
     <p id="os-hint" class="text-xs text-slate-500 mt-2"></p>
@@ -127,7 +128,7 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
       <div class="flex flex-wrap gap-2"><button id="os-use" class="btn btn-primary">ใช้ในฟอร์มบันทึก</button><button id="os-lib" class="btn btn-soft">เก็บเข้าคลัง (ต่อ 100 g)</button></div>
     </div>`, { wide: true });
   const hints = {
-    all: 'ค้นพร้อมกันจาก Open Food Facts, USDA และ Gemini ที่ตั้งค่าไว้ · ถ้าแหล่งหนึ่งติดลิมิต/เชื่อมต่อไม่ได้ แหล่งอื่นยังแสดงผลได้ · Google และ ChatGPT เปิดแยกเป็นลิงก์',
+    all: 'ค้นคลังอาหารในเครื่องก่อน แล้วค้น USDA และ Open Food Facts · AI ไม่ถูกเรียกในการค้นหาปกติเพื่อประหยัดโควตา · ถ้าแหล่งหนึ่งติดลิมิต แหล่งอื่นยังแสดงผลได้',
     off: 'ค้นจากชื่อสินค้า/ยี่ห้อ หรือพิมพ์เลขบาร์โค้ด 8–14 หลัก · ข้อมูลมาจากผู้ใช้ทั่วโลก อาจไม่ครบหรือไม่ตรงทุกรายการ โปรดตรวจกับฉลาก',
     usda: 'ค้นจากชื่อภาษาอังกฤษ เช่น "chicken breast", "banana" · ค่าเป็นต่อ 100 g ของวัตถุดิบดิบ/ปรุงตามที่ระบุในชื่อ',
     gemini: 'ประมาณค่าต่อ 100 g จาก AI — เหมาะกับเมนูไทยที่ฐานข้อมูลไม่มี แต่เป็นค่าประมาณ'
@@ -145,7 +146,7 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     const warnings=errors.map(x=>`<p class="text-xs ${x.missing?'text-amber-700':'text-rose-600'} py-1"><b>${esc(x.label)}:</b> ${esc(x.message)}</p>`).join('');
     $('#os-res', m.el).innerHTML = warnings + (results.length ? results.map((r, i) => `
       <button data-i="${i}" class="w-full text-left py-2 px-1 hover:bg-lav-soft/50 rounded-lg">
-        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''} <span class="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">${esc(({off:'Open Food Facts',usda:'USDA',gemini:'Gemini'})[r.source]||r.source)}</span></p>
+        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''} <span class="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">${esc(({local:'คลังอาหารของฉัน',off:'Open Food Facts',usda:'USDA',gemini:'Gemini'})[r.source]||r.source)}</span></p>
         <p class="text-xs text-slate-500">ต่อ 100 g: ${r.per100.calories} kcal · P ${r.per100.protein ?? '-'} · C ${r.per100.carbs ?? '-'} · F ${r.per100.fat ?? '-'}${r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
       </button>`).join('') : '<p class="text-sm text-slate-400 py-2">ไม่พบผลลัพธ์ — ลองคำอื่น เปลี่ยนแหล่งข้อมูล หรือใช้ "ถ่ายรูปฉลาก"/กรอกเอง</p>');
   };
@@ -157,9 +158,10 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     $('#os-off',m.el).href='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process';
     $('#os-google',m.el).href=`https://www.google.com/search?q=${encodeURIComponent(q+' nutrition calories')}`;
     $('#os-chatgpt',m.el).href=`https://chatgpt.com/?q=${encodeURIComponent(`Estimate nutrition per 100 g for ${q}; list calories, protein, carbs, fat.`)}`;
-    const sources=src==='all'?['off','usda','gemini']:[src];
+    const sources=src==='all'?['usda','off']:[src==='gemini'?'gemini':src];
+    const local=src==='all'?(state.customFoods||[]).filter(x=>x.gramsPerUnit>0&&x.name.toLowerCase().includes(q.toLowerCase())).slice(0,8).map(x=>({source:'local',name:x.name,brand:x.brand||'',per100:{calories:Math.round((x.calories||0)*100/x.gramsPerUnit),protein:r1((x.protein||0)*100/x.gramsPerUnit),carbs:r1((x.carbs||0)*100/x.gramsPerUnit),fat:r1((x.fat||0)*100/x.gramsPerUnit),sugar:null,sodium:null},servingGrams:x.gramsPerUnit,servingText:x.unit||''})):[];
     const responses=await Promise.allSettled(sources.map(key=>key==='off'?( /^\d{8,14}$/.test(q)?barcodeOff(q):searchOff(q)):key==='usda'?searchUsda(q):searchGemini(q)));
-    results=[];const errors=[];
+    results=[...local];const errors=[];
     responses.forEach((response,i)=>{
       const key=sources[i], label=key==='off'?'Open Food Facts':key==='usda'?'USDA':'Gemini';
       if(response.status==='fulfilled')results.push(...response.value);
