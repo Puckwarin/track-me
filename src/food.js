@@ -778,8 +778,8 @@ export function openLibrary(onPick) {
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
       <span>เลือกแล้ว <b id="lib-selected-count">0</b></span>
       <select id="lib-bulk-category" class="input !w-auto min-w-40 !py-2 text-xs"><option value="">เลือกหมวดหมู่ใหม่</option>${categoryNames.map(c=>`<option>${esc(c)}</option>`).join('')}</select>
-      <button id="lib-change-category" class="btn btn-soft !px-3 !py-2 text-xs" disabled>เปลี่ยนหมวดหมู่ที่เลือก</button>
-      <button id="lib-delete-selected" class="btn btn-pink !px-3 !py-2 text-xs" disabled>ลบที่เลือก</button>
+      <button id="lib-change-category" class="chip bg-sky-soft text-blue-700 !px-3 !py-2 text-xs" disabled>แก้ไขหมวดหมู่</button>
+      <button id="lib-delete-selected" class="chip bg-pink-soft text-rose-600 !px-3 !py-2 text-xs" disabled>ลบรายการที่เลือก</button>
     </div>
     <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
   const selected = new Set();
