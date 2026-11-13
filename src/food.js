@@ -5,6 +5,7 @@ import { watch } from './sync.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiError } from './nutrition.js';
 import { openFoodSearch } from './foodsearch.js';
+import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
@@ -108,6 +109,7 @@ export function mountFood(el) {
         <div class="flex flex-wrap gap-2">
           <button id="f-online" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
           <button id="f-hiwpinto" class="chip bg-amber-100 text-amber-900"><i class="fa-solid fa-calculator"></i> คำนวณ Hiwpinto / อาหารคลีน</button>
+          <button id="f-hiwpinto-sync" class="chip bg-emerald-100 text-emerald-800"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Data Hiwpinto</button>
           <button id="f-library" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-book-bookmark"></i> คลังอาหารของฉัน</button>
         </div>
       </div>
@@ -186,6 +188,7 @@ export function mountFood(el) {
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
+  window.addEventListener('trackme:ai-fallback', e => toast('โควตา/การเชื่อมต่อของ AI หลักใช้ไม่ได้ จึงสลับไปใช้ '+e.detail.provider));
   $('#f-online', root).addEventListener('click', () => openFoodSearch({
     onUse: food => {
       const fields = { 'f-name':food.name, 'f-cal':food.calories, 'f-pro':food.protein, 'f-carb':food.carbs, 'f-fat':food.fat, 'f-sugar':food.sugar, 'f-sodium':food.sodium };
@@ -196,6 +199,7 @@ export function mountFood(el) {
   }));
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
   $('#f-hiwpinto', root).addEventListener('click', () => openHiwpintoCalculator());
+  $('#f-hiwpinto-sync', root).addEventListener('click', () => openHiwpintoSync());
   $('#f-photo', root).addEventListener('change', onPhoto);
   $('#f-label', root).addEventListener('change', onLabel);
   $('#f-body', root).addEventListener('click', e => {

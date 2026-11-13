@@ -2,6 +2,8 @@ import { addDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { bodyLatest } from './body.js';
+import { findExerciseImage } from './exerciseMedia.js';
+import { runActiveWorkout } from './workoutActive.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal } from './util.js';
 
 export const TYPES = {
@@ -47,7 +49,7 @@ export function mountWorkout(el) {
       <div id="w-sections" class="space-y-5"></div>
       <div><label class="lbl">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, เพิ่มน้ำหนักได้"></div>
       <div class="flex flex-wrap justify-end gap-2">
-        <button id="w-tpl-save" class="btn btn-soft"><i class="fa-solid fa-bookmark"></i> บันทึกเป็นเทมเพลต</button>
+        <button id="w-active" class="btn btn-soft"><i class="fa-solid fa-play"></i> เริ่มตามแผน</button><button id="w-tpl-save" class="btn btn-soft"><i class="fa-solid fa-bookmark"></i> บันทึกเป็นเทมเพลต</button>
         <button id="w-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกการออกกำลังกาย</button>
       </div>
       <datalist id="w-names"></datalist>
@@ -62,7 +64,8 @@ export function mountWorkout(el) {
   $('#w-sections', root).addEventListener('input', onInput);
   $('#w-sections', root).addEventListener('change', onInput);
   $('#w-sections', root).addEventListener('click', e => {
-    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]');
+    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), media=e.target.closest('[data-media]');
+    if(media){const [sec,i]=media.dataset.media.split(':');const row=draft[sec]?.[+i];if(!row?.name.trim())return toast('ใส่ชื่อท่าก่อนค้นหารูป','err');media.disabled=true;findExerciseImage(row.name).then(hit=>{if(!hit)return toast('ไม่พบภาพท่าที่ตรงกัน — วาง URL รูป/GIF เองได้');row.imageUrl=hit.url;renderSections();toast('เพิ่มรูปตัวอย่างจาก Free Exercise DB แล้ว');}).catch(err=>toast(err.message,'err')).finally(()=>{media.disabled=false;});return;}
     if (add) { draft[add.dataset.add].push(blankRow()); renderSections(); }
     if (rm) { const [sec, i] = rm.dataset.rm.split(':'); draft[sec].splice(+i, 1); renderSections(); }
   });
@@ -71,6 +74,7 @@ export function mountWorkout(el) {
   $('#w-last', root).addEventListener('click', useLast);
   $('#w-clear', root).addEventListener('click', () => { draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections(); });
   $('#w-save', root).addEventListener('click', save);
+  $('#w-active',root).addEventListener('click',startActiveWorkout);
   ['w-dur', 'w-int', 'w-type'].forEach(id => $('#' + id, root).addEventListener('input', burnPreview));
   burnPreview();
   $('#w-tpl-save', root).addEventListener('click', saveTemplate);
@@ -110,7 +114,7 @@ function onInput(e) {
   const t = e.target, sec = t.dataset.sec; if (!sec) return;
   const row = draft[sec][+t.dataset.i]; if (!row) return;
   const k = t.dataset.k;
-  if (k === 'name' || k === 'note' || k === 'repUnit') row[k] = t.value;
+  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl') row[k] = t.value;
   else if (k === 'perSide') row.perSide = t.checked;
   else row[k] = toNum(t.value);
   if (k === 'name' && e.type === 'change') { const h = t.closest('[data-row]')?.querySelector('[data-hint]'); if (h) h.textContent = lastHint(t.value); }
@@ -142,7 +146,7 @@ function renderSections() {
             <label class="flex items-center gap-1"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" ${r.perSide ? 'checked' : ''}> น้ำหนักข้างละ (ต่อข้าง)</label>
             <select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input !w-auto !py-1"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select>
           </div>
-          <input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="โน้ตท่า เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
+          <div><input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input" placeholder="URL รูป/GIF (ไม่บังคับ)" value="${esc(r.imageUrl || "")}"><button data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700">ค้นหารูปฟรี</button></div>${r.imageUrl ? `<img src="${esc(r.imageUrl)}" alt="ตัวอย่าง ${esc(r.name)}" loading="lazy" class="max-h-36 rounded-lg object-contain bg-white">` : ""}<input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="โน้ตท่า เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
         </div>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีท่า</p>'}
       <button data-add="${k}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มท่า</button>
@@ -150,8 +154,22 @@ function renderSections() {
 }
 
 const clean = () => Object.fromEntries(Object.entries(draft).map(([k, rows]) => [k, rows.filter(r => r.name.trim()).map(r => ({
-  name: r.name.trim().slice(0, 80), weightKg: r.weightKg, perSide: !!r.perSide, sets: Math.max(1, Math.round(r.sets || 1)), reps: r.reps, repUnit: r.repUnit || 'reps', note: (r.note || '').trim().slice(0, 120)
+  name: r.name.trim().slice(0, 80), imageUrl: (r.imageUrl||'').trim().slice(0,1000), weightKg: r.weightKg, perSide: !!r.perSide, sets: Math.max(1, Math.round(r.sets || 1)), reps: r.reps, repUnit: r.repUnit || 'reps', note: (r.note || '').trim().slice(0, 120)
 }))]));
+
+async function startActiveWorkout(){
+  const sections=clean(), rows=SECTIONS.flatMap(([section,sectionLabel])=>(sections[section]||[]).map(r=>({...r,section,sectionLabel})));
+  if(!rows.length)return toast('เพิ่มท่าอย่างน้อย 1 ท่าก่อนเริ่ม','err');
+  const type=$('#w-type',root).value,intensity=$('#w-int',root).value;
+  try{
+    await runActiveWorkout(rows,async(performedSets,actualMinutes)=>{
+      const duration=toNum($('#w-dur',root).value)||actualMinutes,volumeKg=performedSets.reduce((sum,x)=>sum+(x.weightKg||0)*(x.reps||0),0);
+      await addDoc(userCol(state.uid,'workout_records'),{date:$('#w-date',root).value,type,typeLabel:TYPES[type],durationMin:duration,intensity,estKcal:estimateBurn(type,intensity,duration,currentWeightKg()),sections,performedSets,completedSetCount:performedSets.length,volumeKg,note:$('#w-note',root).value.trim(),createdAt:new Date()});
+      toast('บันทึกแล้ว · '+performedSets.length+' เซต · '+Math.round(volumeKg)+' kg รวม');
+      draft=emptyDraft();$('#w-note',root).value='';$('#w-dur',root).value='';renderSections();render();
+    });
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message,'err');}
+}
 
 function save() {
   const sections = clean(), count = Object.values(sections).reduce((a, r) => a + r.length, 0);
@@ -193,7 +211,7 @@ export function render() {
   const rows = state.workouts.slice().sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 12);
   $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
     const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<p class="text-xs font-semibold text-slate-500 mt-1">${t}</p>` + w.sections[k].map(r => `<p class="text-xs">• ${esc(r.name)} — ${esc(rowText(r))}${r.note ? ` <span class="text-slate-400">(${esc(r.note)})</span>` : ''}</p>`).join('') : '')).join('');
-    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}</summary>
+    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}</summary>
       <div class="mt-1">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1 text-slate-500">โน้ต: ${esc(w.note)}</p>` : ''}
       <div class="flex gap-2 mt-2"><button data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button><button data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button></div></div></details>`;
   }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึก</p>';
