@@ -59,16 +59,20 @@ const OFF_FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_qua
 async function searchOff(q) {
   offRateOk();
   const enc = encodeURIComponent(q);
-  let list = [];
+  // Start with Open Food Facts' plain-text search. The v2 structured endpoint does not support free-text search.
+  let firstError = null;
   try {
     const d = await getJson(`https://search.openfoodfacts.org/search?q=${enc}&page_size=12&fields=${OFF_FIELDS}`);
-    list = d.hits || d.products || [];
-  } catch (e) { /* ลองช่องทางสำรองด้านล่าง */ }
-  if (!list.length) {
+    const hits = (d.hits || d.products || []).map(fromOff).filter(Boolean);
+    if (hits.length) return hits;
+  } catch (e) { firstError = e; }
+  try {
     const d = await getJson(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${enc}&search_simple=1&action=process&json=1&page_size=15&fields=${OFF_FIELDS}`);
-    list = d.products || [];
+    return (d.products || []).map(fromOff).filter(Boolean);
+  } catch (e) {
+    // Keep the actual connection error visible so users know that retrying a different source is needed.
+    throw firstError || e;
   }
-  return list.map(fromOff).filter(Boolean);
 }
 async function barcodeOff(code) {
   offRateOk();
