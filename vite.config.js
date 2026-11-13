@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const BASE = '/';
+const BASE = process.env.GITHUB_ACTIONS ? '/track-me/' : '/';
 
 export default defineConfig({
   base: BASE,
