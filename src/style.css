@@ -318,3 +318,6 @@ html[data-theme="dark"] .bell-badge { border-color: var(--color-app-bg); }
   .report-section { break-inside: avoid; }
   @page { margin: 14mm; }
 }
+
+/* Keep programmatic tab/section jumps visible below the sticky brand header. */
+.page { scroll-margin-top: calc(5rem + env(safe-area-inset-top)); }
