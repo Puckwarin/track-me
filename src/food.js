@@ -57,7 +57,7 @@ export function guessFoodCategory(name = '') {
   return 'อื่น ๆ';
 }
 const gramsInUnit = unit => {
-  const matches = [...String(unit || '').matchAll(/(\\d+(?:\\.\\d+)?)\\s*(?:g|gram|grams|กรัม|ml|มล\\.?|มิลลิลิตร)(?![a-z])/gi)];
+  const matches = [...String(unit || '').matchAll(/(\d+(?:\.\d+)?)\s*(?:g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)(?![a-z])/gi)];
   return matches.length ? Number(matches[matches.length - 1][1]) : null;
 };
 const normalizedStoredPreset = p => {
