@@ -1,16 +1,17 @@
-// ธีมของแอป (pastel = Cozy pastel โทนครีมอุ่น เป็นค่าเริ่มต้น)
+// ธีมของแอป (cozy = ครีมอุ่นเป็นค่าเริ่มต้น, pastel = พาสเทลละมุน, dark = Dark mode)
 export const THEMES = {
-  pastel: 'พาสเทลอบอุ่น (Cozy)',
-  minimal: 'มินิมอล',
-  dark: 'มืด'
+  cozy: 'Cozy',
+  pastel: 'Pastel',
+  dark: 'Dark mode'
 };
 
 export function applyTheme(theme) {
-  const selected = Object.hasOwn(THEMES, theme) ? theme : 'pastel';
+  const normalized = theme === 'minimal' ? 'cozy' : theme;
+  const selected = Object.hasOwn(THEMES, normalized) ? normalized : 'cozy';
   document.documentElement.dataset.theme = selected;
   localStorage.setItem('trackme-theme', selected);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = selected === 'dark' ? '#1c1916' : '#FAF7F2';
+  if (meta) meta.content = selected === 'dark' ? '#1c1916' : selected === 'pastel' ? '#FCF6FB' : '#FAF7F2';
 }
 
-try { applyTheme(localStorage.getItem('trackme-theme') || 'pastel'); } catch {}
+try { applyTheme(localStorage.getItem('trackme-theme') || 'cozy'); } catch {}

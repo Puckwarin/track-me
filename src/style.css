@@ -153,10 +153,10 @@ input.input::-webkit-datetime-edit { padding: 0; }
 
 /* ---------- เมนูย่อย (ชิปเลื่อนแนวนอน) ---------- */
 .page { margin-top: 1rem; }
-.subnav { margin-top: .75rem; }
+.subnav { position: sticky; top: calc(3.6rem + env(safe-area-inset-top)); z-index: 35; margin-top: .5rem; padding-block: .25rem; background: color-mix(in srgb, var(--color-app-bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .subnav-row { display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; padding: .15rem .1rem .35rem; scroll-snap-type: x proximity; }
 .subnav-row::-webkit-scrollbar { display: none; }
-.sub-chip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; padding: .55rem .95rem; border-radius: 9999px; font-size: .82rem; font-weight: 500; background: #fff; color: #6F6259; border: 1px solid #F0E7DD; scroll-snap-align: center; transition: background .15s; }
+.sub-chip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; padding: .55rem .95rem; border-radius: 9999px; font-size: .82rem; font-weight: 500; background: #fff; color: #6F6259; border: 1px solid #F0E7DD; scroll-snap-align: center; transition: background .15s; cursor: pointer; }
 .sub-chip.is-active { background: var(--c-bg); color: var(--c-fg); border-color: var(--c-ring); font-weight: 600; box-shadow: 0 2px 8px -4px var(--c-ring); }
 
 /* ---------- แถบเมนูด้านล่าง + ปุ่ม + ---------- */
@@ -215,28 +215,44 @@ html[data-page="food"] .card h2 i, html[data-page="food"] .card h3 i { color: va
 html[data-page="workout"] .card h2 i, html[data-page="workout"] .card h3 i { color: var(--workout-fg); }
 html[data-page="period"] .card h2 i, html[data-page="period"] .card h3 i { color: var(--period-fg); }
 html[data-page="symptoms"] .card h2 i, html[data-page="symptoms"] .card h3 i { color: var(--symptoms-fg); }
-html[data-page="lab"] .card h2 i, html[data-page="lab"] .card h3 i { color: var(--lab-fg); }
+html[data-page="remind"] .card h2 i, html[data-page="remind"] .card h3 i { color: var(--lab-fg); }
 html[data-page="body"] .card h2 i, html[data-page="body"] .card h3 i { color: var(--body-fg); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-html[data-theme="minimal"] {
-  --color-brand: #8b5e3c;
-  --color-brand-dark: #70482e;
-  --color-lav-soft: #efe4d8;
-  --color-pink-soft: #f3e5df;
-  --color-sky-soft: #e6e9e3;
-  --color-app-bg: #faf6f1;
+html[data-theme="pastel"] {
+  --color-app-bg: #FCF6FB;
+  --color-ink: #4A3D4D;
+  --color-brand: #C87FA8;
+  --color-brand-dark: #AD638E;
+  --color-lav-soft: #F3E6F6;
+  --color-pink-soft: #FCE5EE;
+  --color-sky-soft: #E5F3FB;
+  --color-ok-soft: #E3F6EC;
+  --food-bg: #FFE9DC; --food-fg: #B8643E; --food-ring: #F9D2BC;
+  --workout-bg: #DFF6E9; --workout-fg: #3B7C59; --workout-ring: #BEE8D1;
+  --period-bg: #FFE3EC; --period-fg: #B85073; --period-ring: #F8C4D6;
+  --symptoms-bg: #EFE5FC; --symptoms-fg: #7553A6; --symptoms-ring: #DCC8F7;
+  --lab-bg: #E2F1FC; --lab-fg: #3F739C; --lab-ring: #C3DFF7;
+  --body-bg: #FFF3D4; --body-fg: #967022; --body-ring: #F7E2AA;
+  --care-bg: #FBEBD9; --care-fg: #92603C; --care-ring: #F1D3B2;
+  --inventory-bg: #E7F3DC; --inventory-fg: #587840; --inventory-ring: #CDE3BA;
+  --neutral-bg: #F3ECF5; --neutral-fg: #5C4E63; --neutral-ring: #E5D7EA;
 }
-html[data-theme="minimal"] .card { border-color: #e8d9ca; box-shadow: 0 1px 2px rgb(91 60 38 / 0.07); }
-html[data-theme="minimal"] .btn-soft { color: #68452f; }
-html[data-theme="minimal"] .input:focus { border-color: #a47755; box-shadow: 0 0 0 3px #efe4d8; }
-html[data-theme="minimal"] body { color: #46372e; }
-html[data-theme="minimal"] .text-brand, html[data-theme="minimal"] .text-blue-700, html[data-theme="minimal"] .text-green-800 { color: #70482e !important; }
-html[data-theme="minimal"] .bg-amber-50, html[data-theme="minimal"] .bg-amber-100 { background-color: #f3e8dc !important; }
-html[data-theme="minimal"] .bg-sky-100, html[data-theme="minimal"] .bg-violet-100, html[data-theme="minimal"] .bg-pink-100 { background-color: #efe4d8 !important; }
+html[data-theme="pastel"] .card { background: #FFFFFF; border-color: #F2E4F1; box-shadow: 0 2px 10px -4px rgb(173 99 142 / 0.12); }
+html[data-theme="pastel"] .app-header { border-color: #F2E4F1; }
+html[data-theme="pastel"] .bottom-nav-inner { background: rgb(255 255 255 / .95); border-color: #F2E4F1; }
+html[data-theme="pastel"] .nav-plus { background: linear-gradient(145deg, #DDA0C4, #C87FA8); box-shadow: 0 10px 22px -6px rgb(200 127 168 / .55), 0 0 0 5px var(--color-app-bg); }
+html[data-theme="pastel"] .btn-soft { color: #8B4C72; }
+html[data-theme="pastel"] .input { border-color: #EAD8EA; background: #FFFCFE; }
+html[data-theme="pastel"] .input:focus { border-color: #D79BC0; box-shadow: 0 0 0 4px #F7E8F3; }
+html[data-theme="pastel"] .progress > span { background: linear-gradient(90deg, #F3B6D2, #A8C8F0); }
+html[data-theme="pastel"] .cozy-hero { background: linear-gradient(180deg, #fff 55%, #FBF0F8); }
+html[data-theme="pastel"] .food-today { background: linear-gradient(160deg, #fff 50%, #FFE9DC); }
+html[data-theme="pastel"] .icon-btn, html[data-theme="pastel"] .sync-pill, html[data-theme="pastel"] .sub-chip { border-color: #F0DFEE; }
+
 
 html[data-theme="dark"] { color-scheme: dark; --color-brand: #8b7ae0; --color-brand-dark: #7664d0; --color-lav-soft: #29263a; --color-pink-soft: #3a2535; --color-sky-soft: #202e42; --color-app-bg: #11131a; }
 html[data-theme="dark"] body { background: var(--color-app-bg); color: #e2e8f0; }

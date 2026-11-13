@@ -108,7 +108,6 @@ export function mountFood(el) {
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-circle-plus text-brand"></i> บันทึกมื้ออาหาร</h2>
         <div class="flex flex-wrap gap-2">
           <button id="f-online" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
-          <button id="f-hiwpinto" class="chip bg-amber-100 text-amber-900"><i class="fa-solid fa-calculator"></i> คำนวณ Hiwpinto / อาหารคลีน</button>
           <button id="f-hiwpinto-sync" class="chip bg-emerald-100 text-emerald-800"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Data Hiwpinto</button>
           <button id="f-library" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-book-bookmark"></i> คลังอาหารของฉัน</button>
         </div>
@@ -127,6 +126,10 @@ export function mountFood(el) {
           <span class="block text-sm font-semibold text-slate-700">ถ่ายรูปหรือเลือกภาพฉลากโภชนาการ</span>
           <span class="block text-xs text-slate-500">ถ่ายใหม่หรือเลือกรูปจากคลัง → ตรวจสอบ → บันทึกเมนู</span>
         </label>
+      </div>
+      <div id="f-photo-lib-bar" class="hidden rounded-xl bg-sky-soft/50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span id="f-photo-lib-text" class="text-slate-700 font-medium"></span>
+        <button id="f-photo-lib-btn" type="button" class="chip bg-white text-brand-dark border border-lav-soft"><i class="fa-solid fa-bookmark"></i> บันทึกลงคลังอาหาร</button>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -151,7 +154,7 @@ export function mountFood(el) {
         <div id="f-sugar-wrap" class="hidden"><label class="lbl">น้ำตาล (g)</label><input id="f-sugar" type="number" inputmode="decimal" class="input"></div>
         <div id="f-sodium-wrap" class="hidden"><label class="lbl">โซเดียม (mg)</label><input id="f-sodium" type="number" inputmode="decimal" class="input"></div>
       </div>
-      <div class="flex justify-end gap-2"><button id="f-clear" type="button" class="btn btn-ghost">เคลียร์ค่า</button><button id="f-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกรายการ</button></div>
+      <div class="flex flex-wrap justify-end gap-2"><button id="f-clear" type="button" class="btn btn-ghost">เคลียร์ค่า</button><button id="f-save-lib" type="button" class="btn btn-soft"><i class="fa-solid fa-bookmark"></i> บันทึกลงคลัง</button><button id="f-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกรายการ</button></div>
     </div>
 
     <div class="card space-y-3">
@@ -195,10 +198,11 @@ export function mountFood(el) {
       Object.entries(fields).forEach(([id,v]) => { const el=$('#'+id,root); if(el) el.value=v ?? ''; });
       const qty=$('#f-qty',root); if(qty) qty.value=1;
     },
-    onSaveLibrary: food => addDoc(userCol(state.uid,'custom_foods'), { name:food.name, brand:food.brand||'', unit:food.unit||'100 กรัม', gramsPerUnit:food.gramsPerUnit??100, category:guessFoodCategory(food.name), calories:food.calories, protein:food.protein, carbs:food.carbs, fat:food.fat, sugar:food.sugar, sodium:food.sodium, favorite:false, createdAt:new Date() }).catch(e=>toast('บันทึกเข้าคลังไม่สำเร็จ: '+e.message,'err'))
+    onSaveLibrary: food => addDoc(userCol(state.uid,'custom_foods'), { name:food.name, brand:food.brand||'', unit:food.unit||'100 กรัม', gramsPerUnit:food.gramsPerUnit??100, category:guessFoodCategory(food.name), calories:food.calories, protein:food.protein, carbs:food.carbs, fat:food.fat, sugar:food.sugar, sodium:food.sodium, favorite:false, createdAt:new Date() }).then(()=>toast('บันทึกเข้าคลังอาหารแล้ว')).catch(e=>toast('บันทึกเข้าคลังไม่สำเร็จ: '+e.message,'err'))
   }));
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
-  $('#f-hiwpinto', root).addEventListener('click', () => openHiwpintoCalculator());
+  $('#f-save-lib', root).addEventListener('click', saveCurrentToLibrary);
+  $('#f-photo-lib-btn', root).addEventListener('click', saveCurrentToLibrary);
   $('#f-hiwpinto-sync', root).addEventListener('click', () => openHiwpintoSync());
   $('#f-photo', root).addEventListener('change', onPhoto);
   $('#f-label', root).addEventListener('change', onLabel);
@@ -416,6 +420,7 @@ function clearFoodForm() {
   ['f-name','f-cal','f-pro','f-carb','f-fat','f-gross','f-edible'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
   ['f-sugar','f-sodium'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
   $('#f-sugar-wrap',root).classList.add('hidden'); $('#f-sodium-wrap',root).classList.add('hidden');
+  $('#f-photo-lib-bar', root)?.classList.add('hidden');
   $('#f-qty',root).value=1;
   base=null; qtyMode='auto';
   syncFoodWeightForm();
@@ -699,6 +704,29 @@ function renderDay() {
 }
 
 // ---------- Gemini: photo / online search ----------
+function saveCurrentToLibrary() {
+  const name = foodLogName($('#f-name', root).value.trim());
+  const calories = numField(root, 'f-cal');
+  if (!name || calories === null) return toast('กรอกชื่อเมนูและแคลอรี่ก่อนบันทึกลงคลัง', 'err');
+  openFoodEditor({
+    prefill: {
+      name,
+      unit: base?.unit || '1 จาน',
+      gramsPerUnit: base?.gramsPerUnit ?? null,
+      calories,
+      protein: numField(root, 'f-pro'),
+      carbs: numField(root, 'f-carb'),
+      fat: numField(root, 'f-fat'),
+      sugar: numField(root, 'f-sugar'),
+      sodium: numField(root, 'f-sodium')
+    },
+    onSaved: food => {
+      $('#f-photo-lib-bar', root)?.classList.add('hidden');
+      applyPreset(food);
+    }
+  });
+}
+
 async function onPhoto(e) {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -709,7 +737,13 @@ async function onPhoto(e) {
     $('#f-name', root).value = r.name || '';
     $('#f-qty', root).value = 1;
     [['f-cal', r.calories], ['f-pro', r.protein], ['f-carb', r.carbs], ['f-fat', r.fat]].forEach(([id, v]) => { $('#' + id, root).value = v ?? ''; });
-    toast('วิเคราะห์สำเร็จ — ตรวจสอบค่าแล้วกดบันทึก (เป็นค่าประมาณ)');
+    updateFoodPreview();
+    const bar = $('#f-photo-lib-bar', root);
+    if (bar) {
+      $('#f-photo-lib-text', root).textContent = `ประเมิน: ${r.name || 'เมนูอาหาร'} (~${r.calories ?? 0} kcal)`;
+      bar.classList.remove('hidden');
+    }
+    toast('วิเคราะห์สำเร็จ — ตรวจสอบค่าแล้วกดบันทึก หรือเก็บลงคลังได้');
   } catch (err) { toast(explainGeminiError(err), 'err'); }
 }
 

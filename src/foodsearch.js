@@ -83,6 +83,13 @@ async function barcodeOff(code) {
 }
 
 // ---- USDA FoodData Central ----
+export async function testUsdaConnection() {
+  const key = getUsdaKey();
+  if (!key) throw new Error('ยังไม่ได้ใส่ USDA API Key');
+  const u = new URLSearchParams({ api_key: key, query: 'apple', pageSize: '1' });
+  const d = await getJson('https://api.nal.usda.gov/fdc/v1/foods/search?' + u, 12000);
+  return { ok: true, totalHits: d.totalHits ?? 0 };
+}
 async function searchUsda(q) {
   const key = getUsdaKey();
   if (!key) throw new Error('ยังไม่ได้ใส่ USDA API Key — ไปที่ ตั้งค่า (ขอฟรีที่ fdc.nal.usda.gov/api-key-signup)');
@@ -125,7 +132,11 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" inputmode="decimal" class="input">
       <p id="os-out" class="text-sm font-semibold text-blue-700"></p>
-      <div class="flex flex-wrap gap-2"><button id="os-use" class="btn btn-primary">ใช้ในฟอร์มบันทึก</button><button id="os-lib" class="btn btn-soft">เก็บเข้าคลัง (ต่อ 100 g)</button></div>
+      <div class="flex flex-wrap gap-2">
+        <button id="os-use" class="btn btn-primary">ใช้ในฟอร์มบันทึก</button>
+        <button id="os-both" class="btn btn-sky">ใช้ + เก็บเข้าคลัง</button>
+        <button id="os-lib" class="btn btn-soft">เก็บเข้าคลัง (ต่อ 100 g)</button>
+      </div>
     </div>`, { wide: true });
   const hints = {
     all: 'ค้นคลังอาหารในเครื่องก่อน แล้วค้น USDA และ Open Food Facts · AI ไม่ถูกเรียกในการค้นหาปกติเพื่อประหยัดโควตา · ถ้าแหล่งหนึ่งติดลิมิต แหล่งอื่นยังแสดงผลได้',
@@ -184,14 +195,15 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     $('#os-calc', m.el).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
   $('#os-g', m.el).addEventListener('input', () => cur && upd());
-  $('#os-use', m.el).addEventListener('click', () => {
+  const useCur = () => {
     const g = toNum($('#os-g', m.el).value) || 100, k = g / 100, p = cur.per100;
     onUse({ name: `${cur.name}${cur.brand ? ' · ' + cur.brand : ''} (${g}g)`, calories: Math.round(p.calories * k), protein: round1((p.protein || 0) * k), carbs: round1((p.carbs || 0) * k), fat: round1((p.fat || 0) * k), sugar: p.sugar !== null ? round1(p.sugar * k) : null, sodium: p.sodium !== null ? Math.round(p.sodium * k) : null });
-    m.close();
-  });
-  $('#os-lib', m.el).addEventListener('click', () => {
+  };
+  const libCur = () => {
     const p = cur.per100;
     onSaveLibrary({ name: cur.name, brand: cur.brand, unit: '100 กรัม', gramsPerUnit: 100, calories: p.calories, protein: p.protein, carbs: p.carbs, fat: p.fat, sugar: p.sugar, sodium: p.sodium });
-    m.close();
-  });
+  };
+  $('#os-use', m.el).addEventListener('click', () => { useCur(); m.close(); });
+  $('#os-lib', m.el).addEventListener('click', () => { libCur(); m.close(); });
+  $('#os-both', m.el).addEventListener('click', () => { useCur(); libCur(); m.close(); });
 }

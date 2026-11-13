@@ -1,6 +1,6 @@
 import { setDoc, deleteDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
-import { state, emit } from './state.js';
+import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, toast } from './util.js';
 
 export const SYMPTOMS = [
@@ -12,18 +12,28 @@ export const MOODS = ['', '😣 แย่มาก', '🙁 แย่', '😐 ป
 export const STRESS = ['', 'ต่ำมาก', 'ต่ำ', 'ปานกลาง', 'สูง', 'สูงมาก'];
 
 const SEVERITY_ICONS = ['✨', '🌱', '🌼', '🆘'];
-function choiceControl(id, options, icons = [], values=options.map((_,i)=>String(i))) {
-  return `<select id="${id}" class="hidden" aria-hidden="true" tabindex="-1">${options.map((text,i)=>`<option value="${values[i]}">${text}</option>`).join('')}</select><div class="flex flex-wrap gap-1.5 mt-1" role="group" aria-label="${id}">${options.map((text,i)=>`<button type="button" data-choice-for="${id}" data-value="${values[i]}" aria-pressed="${i===0}" class="rounded-full border border-pink-100 bg-white px-2.5 py-1.5 text-xs text-slate-600 hover:bg-pink-50 aria-pressed:bg-pink-100 aria-pressed:border-pink-300 aria-pressed:text-rose-800">${icons[i] ? `${icons[i]} ` : ''}${text || 'ไม่ระบุ'}</button>`).join('')}</div>`;
+
+function choiceRow(label, id, options, icons = [], values = options.map((_, i) => String(i)), colsClass = 'grid-cols-4') {
+  return `<div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 border-b border-slate-100 last:border-b-0">
+    <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">${esc(label)}</label>
+    <div class="flex-1 min-w-0">
+      <select id="${id}" class="hidden" aria-hidden="true" tabindex="-1">${options.map((text, i) => `<option value="${values[i]}">${text}</option>`).join('')}</select>
+      <div class="grid ${colsClass} gap-1.5" role="group" aria-label="${esc(label)}">
+        ${options.map((text, i) => `<button type="button" data-choice-for="${id}" data-value="${values[i]}" aria-pressed="${i === 0}" class="rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-600 text-center transition hover:bg-pink-50 aria-pressed:bg-pink-100 aria-pressed:border-pink-300 aria-pressed:text-rose-800">${icons[i] ? `<span class="mr-0.5">${icons[i]}</span>` : ''}${text || 'ไม่ระบุ'}</button>`).join('')}
+      </div>
+    </div>
+  </div>`;
 }
+
 function syncChoices() {
-  if(!root)return;
-  root.querySelectorAll('[data-choice-for]').forEach(button=>{
-    const select=$('#'+button.dataset.choiceFor,root);
-    const active=select && button.dataset.value===select.value;
-    button.setAttribute('aria-pressed',String(Boolean(active)));
-    button.classList.toggle('bg-pink-100',Boolean(active));
-    button.classList.toggle('border-pink-300',Boolean(active));
-    button.classList.toggle('text-rose-800',Boolean(active));
+  if (!root) return;
+  root.querySelectorAll('[data-choice-for]').forEach(button => {
+    const select = $('#' + button.dataset.choiceFor, root);
+    const active = select && button.dataset.value === select.value;
+    button.setAttribute('aria-pressed', String(Boolean(active)));
+    button.classList.toggle('bg-pink-100', Boolean(active));
+    button.classList.toggle('border-pink-300', Boolean(active));
+    button.classList.toggle('text-rose-800', Boolean(active));
   });
 }
 
@@ -33,31 +43,61 @@ export function mountSymptoms(el) {
   root = el;
   root.innerHTML = `
     <div class="card space-y-4 lg:col-span-2">
-    <div><h3 class="font-bold text-slate-800"><i class="fa-solid fa-notes-medical text-pink-500"></i> บันทึกอาการรายวัน</h3><p class="text-xs text-slate-500 mt-1">บันทึกได้ทุกวัน ไม่ว่าจะมีประจำเดือนหรือไม่</p></div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <div class="col-span-2 sm:col-span-3"><label class="lbl">วันที่ (แตะวันที่ในปฏิทินเพื่อเลือกก็ได้)</label>
-        <input type="date" id="s-date" class="input" min="${addDays(localDateStr(), -399)}" max="${localDateStr()}"></div>
-      ${SYMPTOMS.map(([k, t]) => `<div><label class="lbl">${t}</label>${choiceControl('s-'+k,SEVERITY,SEVERITY_ICONS)}</div>`).join('')}
-      <div><label class="lbl">อารมณ์</label>${choiceControl('s-mood',['ไม่ระบุ',...MOODS.slice(1)],['💭','😣','🙁','😐','🙂','😊'],['','1','2','3','4','5'])}</div>
-      <div><label class="lbl">ระดับความเครียด</label>${choiceControl('s-stress',['ไม่ระบุ',...STRESS.slice(1)],['💭','🍃','🌿','🌼','🌧️','🌪️'],['','1','2','3','4','5'])}</div>
-      <div class="col-span-2 sm:col-span-3"><label class="lbl">หมายเหตุเพิ่มเติม</label><input id="s-note" class="input" placeholder="เช่น กินยาแก้ปวด, นอนน้อย"></div>
+      <div>
+        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-notes-medical text-pink-500"></i> บันทึกอาการรายวัน</h3>
+        <p class="text-xs text-slate-500 mt-1">บันทึกได้ทุกวัน ไม่ว่าจะมีประจำเดือนหรือไม่</p>
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">วันที่</label>
+        <div class="flex-1 min-w-0">
+          <input type="date" id="s-date" class="input" min="${addDays(localDateStr(), -399)}" max="${localDateStr()}">
+          <p class="text-[11px] text-slate-400 mt-1">แตะวันที่ในปฏิทินหน้าประจำเดือนเพื่อเลือกก็ได้</p>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
+        ${SYMPTOMS.map(([k, t]) => choiceRow(t, 's-' + k, SEVERITY, SEVERITY_ICONS)).join('')}
+        ${choiceRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['💭', '😣', '🙁', '😐', '🙂', '😊'], ['', '1', '2', '3', '4', '5'], 'grid-cols-3 sm:grid-cols-6')}
+        ${choiceRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['💭', '🍃', '🌿', '🌼', '🌧️', '🌪️'], ['', '1', '2', '3', '4', '5'], 'grid-cols-3 sm:grid-cols-6')}
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">หมายเหตุ</label>
+        <input id="s-note" class="input flex-1" placeholder="เช่น กินยาแก้ปวด, นอนน้อย">
+      </div>
+      <div class="flex justify-end gap-2">
+        <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
+        <button id="s-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการ</button>
+      </div>
+      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
     </div>
-    <div class="flex justify-end gap-2">
-      <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
-      <button id="s-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการ</button>
-    </div>
-    <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
-    </div>
-    <section class="card space-y-4 lg:col-span-2"><header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-face-smile text-rose-500"></i> บันทึกผิวรายวัน</h3><p class="text-xs text-slate-500">รวมกับบันทึกอาการรายวัน เลือกวันเดียวกันเพื่อจดอาการและผลลัพธ์ต่อผิว</p></header>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${SKIN_FIELDS.map(([k,t])=>`<div><label class="lbl">${t}</label>${choiceControl('skin-'+k,SEVERITY,SEVERITY_ICONS)}</div>`).join('')}</div>
-      <textarea id="skin-result" class="input" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
-      <div class="flex justify-end gap-2"><button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button><button id="skin-save" class="btn btn-pink">บันทึกอาการผิว</button></div>
+
+    <section class="card space-y-4 lg:col-span-2">
+      <header>
+        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-face-smile text-rose-500"></i> บันทึกผิวรายวัน</h3>
+        <p class="text-xs text-slate-500">รวมกับบันทึกอาการรายวัน เลือกวันเดียวกันเพื่อจดอาการและผลลัพธ์ต่อผิว</p>
+      </header>
+      <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
+        ${SKIN_FIELDS.map(([k, t]) => choiceRow(t, 'skin-' + k, SEVERITY, SEVERITY_ICONS)).join('')}
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700 sm:pt-2">ผลลัพธ์ต่อผิว</label>
+        <textarea id="skin-result" class="input flex-1" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
+        <button id="skin-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการผิว</button>
+      </div>
       <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="space-y-1 text-sm"></div></div>
     </section>`;
+
   $('#s-date', root).value = localDateStr();
-  root.addEventListener('click',e=>{const b=e.target.closest('[data-choice-for]');if(!b)return;const select=$('#'+b.dataset.choiceFor,root);select.value=b.dataset.value;syncChoices();});
+  root.addEventListener('click', e => {
+    const b = e.target.closest('[data-choice-for]');
+    if (!b) return;
+    const select = $('#' + b.dataset.choiceFor, root);
+    select.value = b.dataset.value;
+    syncChoices();
+  });
   $('#s-date', root).addEventListener('change', loadForm);
-  $('#s-date', root).addEventListener('change', loadSkinForm);
   $('#s-save', root).addEventListener('click', save);
   $('#s-del', root).addEventListener('click', del);
   $('#skin-save', root).addEventListener('click', saveSkin);
@@ -76,7 +116,7 @@ export function selectDate(d) {
 }
 
 const get = date => state.symptoms.find(s => s.id === date);
-const SKIN_FIELDS = [['rash','ผื่น'],['itch','คัน'],['burning','แสบ'],['redness','แดง'],['peeling','ลอก'],['dryness','แห้ง']];
+const SKIN_FIELDS = [['rash', 'ผื่น'], ['itch', 'คัน'], ['burning', 'แสบ'], ['redness', 'แดง'], ['peeling', 'ลอก'], ['dryness', 'แห้ง']];
 const getSkin = date => state.skinRecords?.find(s => s.id === date);
 
 export function loadForm() {
@@ -114,10 +154,10 @@ export function renderList() {
 
 export function renderSkinList() {
   if (!root) return;
-  const rows = (state.skinRecords || []).slice().sort((a,b)=>b.id.localeCompare(a.id)).slice(0,10);
+  const rows = (state.skinRecords || []).slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
   $('#skin-list', root).innerHTML = rows.length ? rows.map(r => {
-    const signs = SKIN_FIELDS.filter(([k])=>r.symptoms?.[k]>0).map(([k,t])=>`${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2 rounded-lg border border-rose-100 hover:bg-rose-50"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs||'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result||'')}</span></button>`;
+    const signs = SKIN_FIELDS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
+    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2 rounded-lg border border-rose-100 hover:bg-rose-50"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
   }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึกผิว</p>';
   loadSkinForm();
 }
@@ -142,11 +182,11 @@ function del() {
 function saveSkin() {
   const date = $('#s-date', root).value;
   if (!date) return toast('กรุณาเลือกวันที่', 'err');
-  const symptoms = Object.fromEntries(SKIN_FIELDS.map(([k])=>[k,+$('#skin-'+k,root).value]));
-  setDoc(userDoc(state.uid,'skin_records',date),{date,symptoms,result:$('#skin-result',root).value.trim(),updatedAt:new Date()})
-    .then(()=>toast('บันทึกอาการผิวแล้ว')).catch(e=>toast('บันทึกอาการผิวไม่สำเร็จ: '+e.message,'err'));
+  const symptoms = Object.fromEntries(SKIN_FIELDS.map(([k]) => [k, +$('#skin-' + k, root).value]));
+  setDoc(userDoc(state.uid, 'skin_records', date), { date, symptoms, result: $('#skin-result', root).value.trim(), updatedAt: new Date() })
+    .then(() => toast('บันทึกอาการผิวแล้ว')).catch(e => toast('บันทึกอาการผิวไม่สำเร็จ: ' + e.message, 'err'));
 }
 function delSkin() {
-  const date=$('#s-date',root).value;
-  if(confirm('ลบบันทึกผิวของวันนี้?')) deleteDoc(userDoc(state.uid,'skin_records',date)).catch(e=>toast(e.message,'err'));
+  const date = $('#s-date', root).value;
+  if (confirm('ลบบันทึกผิวของวันนี้?')) deleteDoc(userDoc(state.uid, 'skin_records', date)).catch(e => toast(e.message, 'err'));
 }

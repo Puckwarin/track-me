@@ -17,7 +17,9 @@ export function mountBody(el) {
         <div><label class="lbl">รอบอก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-bust" class="input"></div>
         <div><label class="lbl">รอบเอว (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-waist" class="input"></div>
         <div><label class="lbl">รอบสะโพก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-hip" class="input"></div>
-        <div><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
+        <div><label class="lbl">รอบแขน (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-arm" class="input"></div>
+        <div><label class="lbl">รอบขา (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-thigh" class="input"></div>
+        <div class="sm:col-span-2"><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
       </div>
       <p class="text-xs text-slate-400">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
       <div class="flex justify-end"><button id="b-save" class="btn btn-sky"><i class="fa-solid fa-plus"></i> บันทึก</button></div>
@@ -25,7 +27,7 @@ export function mountBody(el) {
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-blue-500"></i> ประวัติ</h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-center">ลบ</th></tr></thead>
+        <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="b-body" class="divide-y divide-slate-100"></tbody></table></div>
     </div>
   </div>
@@ -43,7 +45,7 @@ export const sortBodyDesc = items => items.slice().sort((a, b) => (b.date || '')
 
 export function bodyLatest(items) {
   const desc = sortBodyDesc(items), out = {};
-  ['weight', 'bust', 'waist', 'hip'].forEach(k => { const f = desc.find(i => typeof i[k] === 'number'); if (f) out[k] = { v: f[k], d: f.date }; });
+  ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'].forEach(k => { const f = desc.find(i => typeof i[k] === 'number'); if (f) out[k] = { v: f[k], d: f.date }; });
   return out;
 }
 
@@ -78,18 +80,18 @@ export function render() {
       if (d) delta = ` <span class="text-xs ${d > 0 ? 'text-rose-500' : 'text-green-600'}">${d > 0 ? '+' : ''}${d}</span>`;
     }
     return `<tr class="hover:bg-sky-soft/30"><td class="p-3 font-medium">${esc(fmtDate(r.date))}${r.note ? `<div class="text-xs text-slate-400 font-normal">${esc(r.note)}</div>` : ''}</td>
-      <td class="p-3 text-right">${cell(r.weight)}${delta}</td><td class="p-3 text-right text-slate-600">${cell(r.bust)}</td><td class="p-3 text-right text-slate-600">${cell(r.waist)}</td><td class="p-3 text-right text-slate-600">${cell(r.hip)}</td>
+      <td class="p-3 text-right">${cell(r.weight)}${delta}</td><td class="p-3 text-right text-slate-600">${cell(r.bust)}</td><td class="p-3 text-right text-slate-600">${cell(r.waist)}</td><td class="p-3 text-right text-slate-600">${cell(r.hip)}</td><td class="p-3 text-right text-slate-600">${cell(r.arm)}</td><td class="p-3 text-right text-slate-600">${cell(r.thigh)}</td>
       <td class="p-3 text-center"><button data-del="${esc(r.id)}" class="text-rose-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`;
-  }).join('') : '<tr><td colspan="6" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูล</td></tr>';
+  }).join('') : '<tr><td colspan="8" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูล</td></tr>';
   $('#b-chart', root).innerHTML = weightChartSvg(state.body);
 }
 
 function save() {
   const date = $('#b-date', root).value;
-  const rec = { weight: numField(root, 'b-weight'), bust: numField(root, 'b-bust'), waist: numField(root, 'b-waist'), hip: numField(root, 'b-hip') };
+  const rec = { weight: numField(root, 'b-weight'), bust: numField(root, 'b-bust'), waist: numField(root, 'b-waist'), hip: numField(root, 'b-hip'), arm: numField(root, 'b-arm'), thigh: numField(root, 'b-thigh') };
   if (!date) return toast('กรุณาเลือกวันที่', 'err');
   if (Object.values(rec).every(v => v === null)) return toast('กรุณากรอกอย่างน้อย 1 ค่า', 'err');
   for (const [k, v] of Object.entries(rec)) if (v !== null && (v <= 0 || v > 400)) return toast('ค่าไม่สมเหตุสมผล: ' + k, 'err');
   addDoc(userCol(state.uid, 'body_records'), { date, ...rec, note: $('#b-note', root).value.trim(), createdAt: new Date() }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
-  ['b-weight', 'b-bust', 'b-waist', 'b-hip', 'b-note'].forEach(id => { $('#' + id, root).value = ''; });
+  ['b-weight', 'b-bust', 'b-waist', 'b-hip', 'b-arm', 'b-thigh', 'b-note'].forEach(id => { $('#' + id, root).value = ''; });
 }

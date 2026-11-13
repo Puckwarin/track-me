@@ -30,7 +30,8 @@ import { mountBody, render as renderBody } from './body.js';
 import { mountReport } from './reports.js';
 import { mountWorkout, render as renderWorkout } from './workout.js';
 import { mountWeekly, renderWeekly } from './weekly.js';
-import { mountLab, render as renderLab } from './lab.js';
+import { render as renderLab } from './lab.js';
+import { mountRemind, renderRemind } from './remindLog.js';
 import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
@@ -38,7 +39,7 @@ import { mountReminders, renderReminders, collectReminders } from './reminders.j
 
 registerSW({ immediate: true });
 
-const TABS = ['home', 'food', 'workout', 'weekly', 'lab', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'notifications', 'settings'];
+const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
 
 function renderSubnav(group, name) {
@@ -66,9 +67,14 @@ export function showTab(name) {
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
 }
 
-// เปิดหน้าแล้วเลื่อนไปที่ฟอร์มบันทึก (ใช้กับปุ่ม + และการ์ดในหน้า Home)
+// เปิดกลุ่มเมนูจากแถบนำทางหลัก (จำหน้าย่อยล่าสุดของกลุ่ม)
+function goToGroup(group) {
+  const target = GROUPS[group] ? (lastSub[group] || GROUPS[group][0]) : group;
+  goTo(target);
+}
+
+// เปิดหน้าแท็บเจาะจงแล้วเลื่อนไปที่ฟอร์มบันทึก (ไม่เขียนทับด้วย lastSub ของกลุ่ม)
 function goTo(name, focusId) {
-  if (GROUPS[name]) name = lastSub[name] || GROUPS[name][0];
   showTab(name);
   if (!focusId) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   requestAnimationFrame(() => {
@@ -82,8 +88,7 @@ function goTo(name, focusId) {
 }
 
 function updateBell() {
-  const today = localDateStr();
-  const n = collectReminders().filter(r => r.date <= addDays(today, 7)).length;
+  const n = collectReminders().length;
   const badge = $('#bell-badge');
   badge.textContent = n > 9 ? '9+' : String(n);
   badge.classList.toggle('hidden', !n);
@@ -112,10 +117,10 @@ function mountAll() {
   mountFood($('#tab-food'));
   mountWorkout($('#tab-workout'));
   mountWeekly($('#tab-weekly'));
-  mountLab($('#tab-lab'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
   mountCare($('#tab-care'));
+  mountRemind($('#tab-remind'));
   mountInventory($('#tab-inventory'));
   mountBody($('#tab-body'));
   mountReport($('#tab-report'));
@@ -165,7 +170,7 @@ on('auth', user => {
   renderSyncStatus();
 });
 
-document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goTo(b.dataset.nav)));
+document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goToGroup(b.dataset.nav)));
 $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) goTo(b.dataset.sub); });
 $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
@@ -180,6 +185,6 @@ $('#quick-sheet').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
-window.addEventListener('trackme:data-change', () => { renderReminders(); renderHome(); });
+window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); });
 window.addEventListener('trackme:reminders', updateBell);
 initAuth();

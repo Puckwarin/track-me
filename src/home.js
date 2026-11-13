@@ -58,7 +58,9 @@ export function renderHome() {
   const macro = (label, v, goal) => `<div class="macro"><span>${label}</span><b>${round1(v)}<small>/${goal ?? '-'}g</small></b></div>`;
 
   // ออกกำลังกายวันนี้
-  const wk = (state.workouts || []).filter(w => w.date === today);
+  const wkAll = (state.workouts || []).filter(w => w.date === today);
+  const wk = wkAll.filter(w => w.status !== 'planned');
+  const wkPlanned = wkAll.filter(w => w.status === 'planned');
   const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0), burn = wk.reduce((a, w) => a + (w.estKcal || 0), 0);
 
   const p = periodStats(state.period || []);
@@ -71,7 +73,7 @@ export function renderHome() {
   const sym = (state.symptoms || []).find(r => (r.date || r.id) === today);
   const symCount = sym ? Object.values(sym.symptoms || {}).filter(v => +v > 0).length : 0;
 
-  const reminders = collectReminders().filter(r => r.date <= today || daysBetween(today, r.date) <= 7).slice(0, 3);
+  const reminders = collectReminders().slice(0, 3);
 
   const tile = (cat, emoji, title, main, sub, goTo, focus = '') => `<button data-go="${goTo}" data-focus="${focus}" class="tile ${cat}">
       <span class="tile-head"><span class="emoji-bubble emoji-sm">${emoji}</span><span>${title}</span></span>
@@ -98,7 +100,7 @@ export function renderHome() {
     </button>
 
     <div class="grid grid-cols-2 gap-3">
-      ${tile('cat-workout', '🏃‍♀️', 'ออกกำลังกาย', wk.length ? `${mins} นาที` : 'ยังไม่ได้ขยับ', wk.length ? `${wk.length} ครั้ง${burn ? ` · ~${burn} kcal` : ''}` : 'แตะเพื่อบันทึก', 'workout', 'w-type')}
+      ${tile('cat-workout', '🏃‍♀️', 'ออกกำลังกาย', wk.length ? `${mins} นาที` : (wkPlanned.length ? `มีแผน ${wkPlanned.length} รายการ` : 'ยังไม่ได้ขยับ'), wk.length ? `${wk.length} ครั้ง${burn ? ` · ~${burn} kcal` : ''}` : (wkPlanned.length ? 'แตะเพื่อดู/ทำตามแผน' : 'แตะเพื่อบันทึก'), 'workout', 'w-type')}
       ${tile('cat-period', '🌸', 'ประจำเดือน', pMain, pSub, 'period')}
       ${tile('cat-body', '⚖️', 'น้ำหนักล่าสุด', b.weight ? `${b.weight.v} กก.` : 'ยังไม่มีข้อมูล', b.weight ? `${esc(fmtDate(b.weight.d))}${diff ? ` · ${diff > 0 ? '+' : ''}${diff}` : ''}` : 'แตะเพื่อบันทึก', 'body', 'b-weight')}
       ${tile('cat-symptoms', '🌿', 'อาการวันนี้', sym ? (sym.mood ? esc(MOODS[sym.mood]) : symCount ? `${symCount} อาการ` : 'สบายดี') : 'ยังไม่ได้บันทึก', sym ? (symCount ? `${symCount} อาการที่บันทึก` : 'บันทึกแล้ว') : 'แตะเพื่อบันทึก', 'symptoms')}

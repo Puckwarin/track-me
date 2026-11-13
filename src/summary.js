@@ -35,8 +35,8 @@ export function renderSummary() {
     c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', empty, '');
   }
   const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : '');
-  const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
-  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วนล่าสุด (ซม.)', (b.bust || b.waist || b.hip) ? `<span class="text-sm">${m}</span>` : empty, '');
+  const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip'], ['แขน', 'arm'], ['ขา', 'thigh']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
+  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วนล่าสุด (ซม.)', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-sm">${m}</span>` : empty, '');
   $('#summary-grid').innerHTML = c1 + c2 + c3 + c4;
   renderSyncStatus();
 }
@@ -52,7 +52,7 @@ export function copySummary() {
     if (p.avgDur) L.push(`มาเฉลี่ย: ${p.avgDur} วัน`);
   }
   if (b.weight) L.push(`น้ำหนักล่าสุด: ${b.weight.v} กก. (${fmtDate(b.weight.d)})`);
-  const m = [['อก', b.bust], ['เอว', b.waist], ['สะโพก', b.hip]].filter(x => x[1]).map(x => `${x[0]} ${x[1].v}`);
+  const m = [['อก', b.bust], ['เอว', b.waist], ['สะโพก', b.hip], ['แขน', b.arm], ['ขา', b.thigh]].filter(x => x[1]).map(x => `${x[0]} ${x[1].v}`);
   if (m.length) L.push(`สัดส่วน: ${m.join(' / ')} ซม.`);
   L.push(syncLineText());
   const text = L.join('\n');

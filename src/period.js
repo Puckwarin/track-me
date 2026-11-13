@@ -6,6 +6,39 @@ import { selectDate } from './symptoms.js';
 
 let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
+export const REMIND_OPTIONS = [
+  [-1, 'ปิดแจ้งเตือน'],
+  [0, 'วันครบกำหนด'],
+  [1, 'ล่วงหน้า 1 วัน'],
+  [2, 'ล่วงหน้า 2 วัน'],
+  [3, 'ล่วงหน้า 3 วัน'],
+  [7, 'ล่วงหน้า 1 วีค (7 วัน)'],
+  [14, 'ล่วงหน้า 2 วีค (14 วัน)'],
+  [30, 'ล่วงหน้า 1 เดือน'],
+  [60, 'ล่วงหน้า 2 เดือน']
+];
+export const remindLabel = d => REMIND_OPTIONS.find(x => x[0] === Number(d))?.[1] || `ล่วงหน้า ${d} วัน`;
+
+export function getPeriodRemindDays() {
+  const v2 = localStorage.getItem('period_remind_days');
+  if (v2 !== null) {
+    const n = Number(v2);
+    return Number.isFinite(n) ? n : -1;
+  }
+  const legacy = localStorage.getItem('remind_days');
+  if (legacy === '1' || legacy === '2' || legacy === '3') return Number(legacy);
+  return -1;
+}
+
+export function setPeriodRemindDays(val) {
+  const n = Number(val);
+  const safe = Number.isFinite(n) ? n : -1;
+  localStorage.setItem('period_remind_days', String(safe));
+  localStorage.setItem('remind_days', safe > 0 ? String(safe) : '0');
+  localStorage.removeItem('reminder_dismissed');
+  window.dispatchEvent(new Event('trackme:reminders'));
+}
+
 export function periodStats(items) {
   const asc = items.filter(i => i.start).slice().sort((a, b) => a.start.localeCompare(b.start));
   if (!asc.length) return null;
@@ -152,16 +185,20 @@ export function checkReminder() {
   const banner = $('#reminder-banner');
   if (!banner) return;
   banner.classList.add('hidden');
-  const days = +localStorage.getItem('remind_days') || 0;
+  const days = getPeriodRemindDays();
   const s = periodStats(state.period);
-  if (!days || !s?.next) return;
+  if (days < 0 || !s?.next) return;
   const until = daysBetween(localDateStr(), s.next);
-  if (until < 0 || until > days) return;
-  const text = until === 0 ? 'วันนี้ประจำเดือนน่าจะมา (ค่าประมาณ)' : `ประจำเดือนน่าจะมาในอีก ${until} วัน (~${fmtDate(s.next)}) · ค่าประมาณ`;
+  if (until < -7 || until > days) return;
+  const text = until === 0 ? 'วันนี้ประจำเดือนน่าจะมา (ค่าประมาณ)' : until < 0 ? `เลยวันคาดการณ์ประจำเดือนมา ${-until} วัน (~${fmtDate(s.next)})` : `ประจำเดือนน่าจะมาในอีก ${until} วัน (~${fmtDate(s.next)}) · ค่าประมาณ`;
   if (localStorage.getItem('reminder_dismissed') !== s.next) {
     banner.innerHTML = `<div class="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-3 text-sm"><span>🔔 ${esc(text)}</span><button id="rem-x" class="text-pink-700 underline text-xs">ปิด</button></div>`;
     banner.classList.remove('hidden');
-    $('#rem-x', banner).addEventListener('click', () => { localStorage.setItem('reminder_dismissed', s.next); banner.classList.add('hidden'); });
+    $('#rem-x', banner).addEventListener('click', () => {
+      localStorage.setItem('reminder_dismissed', s.next);
+      banner.classList.add('hidden');
+      window.dispatchEvent(new Event('trackme:reminders'));
+    });
   }
   if ('Notification' in window && Notification.permission === 'granted' && localStorage.getItem('reminder_notified') !== s.next) {
     localStorage.setItem('reminder_notified', s.next);

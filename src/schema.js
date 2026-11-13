@@ -26,8 +26,8 @@ export const SANITIZERS = {
   period_records: o => isDateStr(o.start) && (o.end == null || isDateStr(o.end)) && (!o.end || o.end >= o.start) ? {
     start: o.start, end: o.end || null, flow: str(o.flow, 20), note: str(o.note), createdAt: ts(o.createdAt || o.timestamp)
   } : null,
-  body_records: o => isDateStr(o.date) && ['weight', 'bust', 'waist', 'hip'].some(k => num(o[k]) !== null) ? {
-    date: o.date, weight: num(o.weight), bust: num(o.bust), waist: num(o.waist), hip: num(o.hip), note: str(o.note), createdAt: ts(o.createdAt || o.timestamp)
+  body_records: o => isDateStr(o.date) && ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'].some(k => num(o[k]) !== null) ? {
+    date: o.date, weight: num(o.weight), bust: num(o.bust), waist: num(o.waist), hip: num(o.hip), arm: num(o.arm), thigh: num(o.thigh), note: str(o.note), createdAt: ts(o.createdAt || o.timestamp)
   } : null,
   symptom_records: o => isDateStr(o.date) ? {
     date: o.date,
@@ -57,19 +57,32 @@ export const SANITIZERS = {
   skin_records: o => isDateStr(o.date) ? { date:o.date, symptoms:Object.fromEntries(['rash','itch','burning','redness','peeling','dryness'].map(k=>[k,int(o.symptoms?.[k],0,3)??0])), result:str(o.result,2000), updatedAt:ts(o.updatedAt) } : null,
   ingredient_blacklist: o => ({ ingredients:str(o.ingredients,5000), updatedAt:ts(o.updatedAt) }),
   pet_profiles: o => str(o.name) && num(o.weightKg) !== null ? { name:str(o.name), kind:str(o.kind,120), birthDate:isDateStr(o.birthDate)?o.birthDate:null, weightKg:num(o.weightKg), weightHistory:Array.isArray(o.weightHistory)?o.weightHistory.filter(x=>isDateStr(x?.date)&&num(x?.weightKg)!==null).slice(-365).map(x=>({date:x.date,weightKg:num(x.weightKg)})):[], lifeStage:['neutered','intact','inactive','puppy-young','puppy-old'].includes(o.lifeStage)?o.lifeStage:'neutered', createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
-  pet_care_records: o => str(o.type,80) && isDateStr(o.date) ? { petId:str(o.petId,80), type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
+  pet_care_records: o => str(o.type,80) && isDateStr(o.date) ? {
+    petId:str(o.petId,80), category:str(o.category,60)||'สัตว์เลี้ยง', type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null,
+    repeatMonths:int(o.repeatMonths,0,120), intervalDays:int(o.intervalDays,0,3650), remindDays:int(o.remindDays,-1,365),
+    done:o.done===true, ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}), note:str(o.note,2000), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
+  } : null,
   pet_food_records: o => str(o.name) && num(o.grams)!==null && isDateStr(o.date) ? { petId:str(o.petId,80), date:o.date, name:str(o.name), grams:num(o.grams), kcalPer100:num(o.kcalPer100), allergy:['yes','no','unknown'].includes(o.allergy)?o.allergy:'unknown', note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
-  tracked_products: o => str(o.name) && str(o.unit,80) ? { name:str(o.name), category:str(o.category,100), quantity:num(o.quantity), unit:str(o.unit,80), lowAt:num(o.lowAt), expiryDate:isDateStr(o.expiryDate)?o.expiryDate:null, openedDate:isDateStr(o.openedDate)?o.openedDate:null, paoMonths:int(o.paoMonths,1,120), paoExpiry:isDateStr(o.paoExpiry)?o.paoExpiry:null, ingredients:str(o.ingredients,3000), pros:str(o.pros,2000), cons:str(o.cons,2000), createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
-  replacement_records: o => str(o.name) && isDateStr(o.date) ? { name:str(o.name), date:o.date, intervalDays:int(o.intervalDays,1,3650), nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
+  tracked_products: o => str(o.name) && str(o.unit,80) ? {
+    name:str(o.name), category:str(o.category,100), quantity:num(o.quantity), unit:str(o.unit,80), lowAt:num(o.lowAt),
+    expiryDate:isDateStr(o.expiryDate)?o.expiryDate:null, openedDate:isDateStr(o.openedDate)?o.openedDate:null, paoMonths:int(o.paoMonths,1,120), paoExpiry:isDateStr(o.paoExpiry)?o.paoExpiry:null,
+    remindDays:int(o.remindDays,-1,365), ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}), ...(o.lowDismissed===true&&{lowDismissed:true}),
+    ingredients:str(o.ingredients,3000), pros:str(o.pros,2000), cons:str(o.cons,2000), createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt)
+  } : null,
+  replacement_records: o => str(o.name) && isDateStr(o.date) ? {
+    name:str(o.name), category:str(o.category,60)||'เปลี่ยนของ', date:o.date, repeatMonths:int(o.repeatMonths,0,120), intervalDays:int(o.intervalDays,0,3650),
+    nextDate:isDateStr(o.nextDate)?o.nextDate:null, remindDays:int(o.remindDays,-1,365), done:o.done===true, ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}),
+    note:str(o.note,2000), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
+  } : null,
 
   lab_records: o => isDateStr(o.date) && str(o.name,80) && num(o.value) !== null ? {
     date:o.date, name:str(o.name,80), value:num(o.value), unit:str(o.unit,20), refLow:num(o.refLow), refHigh:num(o.refHigh), note:str(o.note,200), createdAt:ts(o.createdAt)
   } : null,
   workout_records: o => isDateStr(o.date) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
-    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin), intensity:['light','moderate','vigorous'].includes(o.intensity)?o.intensity:null, estKcal:num(o.estKcal),
+    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), status:o.status==='planned'?'planned':'done', durationMin:num(o.durationMin), intensity:['light','moderate','vigorous'].includes(o.intensity)?o.intensity:null, estKcal:num(o.estKcal),
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),imageUrl:str(r.imageUrl,1000),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
     performedSets:Array.isArray(o.performedSets)?o.performedSets.slice(0,300).filter(x=>x&&str(x.name,80)).map(x=>({name:str(x.name,80),section:['warmup','main','cooldown'].includes(x.section)?x.section:'main',set:int(x.set,1,99),weightKg:num(x.weightKg),reps:num(x.reps),completed:x.completed===true})):[], completedSetCount:int(o.completedSetCount,0,300), volumeKg:num(o.volumeKg),
-    note:str(o.note,300), createdAt:ts(o.createdAt)
+    note:str(o.note,300), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,
   workout_templates: o => str(o.name,60) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
     name:str(o.name,60), type:o.type,

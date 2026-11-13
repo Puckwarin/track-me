@@ -5,7 +5,7 @@ export const CATEGORIES = [
   { key: 'workout', tab: 'workout', cat: 'cat-workout', emoji: '🏃‍♀️', label: 'ออกกำลังกาย', focus: 'w-type' },
   { key: 'period', tab: 'period', cat: 'cat-period', emoji: '🌸', label: 'ประจำเดือน', focus: 'p-start' },
   { key: 'symptoms', tab: 'symptoms', cat: 'cat-symptoms', emoji: '🌿', label: 'อาการ & ผิว', focus: 's-date' },
-  { key: 'lab', tab: 'lab', cat: 'cat-lab', emoji: '🧪', label: 'ผลตรวจ', focus: 'lb-name' },
+  { key: 'remind', tab: 'remind', cat: 'cat-lab', emoji: '📌', label: 'บันทึกเตือน', focus: 'rm-title' },
   { key: 'body', tab: 'body', cat: 'cat-body', emoji: '⚖️', label: 'น้ำหนัก', focus: 'b-weight' },
   { key: 'care', tab: 'care', cat: 'cat-care', emoji: '🐾', label: 'สัตว์เลี้ยง', focus: 'pet-name' },
   { key: 'inventory', tab: 'inventory', cat: 'cat-inventory', emoji: '🧺', label: 'ของใช้', focus: 'inv-name' }
@@ -16,8 +16,8 @@ export const catOf = tab => CATEGORIES.find(c => c.tab === tab);
 export const GROUPS = {
   home: ['home'],
   food: ['food'],
-  health: ['weekly', 'workout', 'period', 'symptoms', 'lab', 'body', 'report'],
-  care: ['care', 'inventory'],
+  health: ['weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
+  care: ['care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
@@ -25,10 +25,10 @@ export const SUBTABS = {
   workout: { emoji: '🏃‍♀️', label: 'ออกกำลังกาย', cat: 'cat-workout' },
   period: { emoji: '🌸', label: 'ประจำเดือน', cat: 'cat-period' },
   symptoms: { emoji: '🌿', label: 'อาการ & ผิว', cat: 'cat-symptoms' },
-  lab: { emoji: '🧪', label: 'ผลตรวจ', cat: 'cat-lab' },
   body: { emoji: '⚖️', label: 'น้ำหนัก & สัดส่วน', cat: 'cat-body' },
   report: { emoji: '📄', label: 'รายงาน', cat: 'cat-neutral' },
-  care: { emoji: '🐾', label: 'สัตว์เลี้ยง', cat: 'cat-care' },
+  care: { emoji: '🐾', label: 'สัตว์เลี้ยง & ผลตรวจ', cat: 'cat-care' },
+  remind: { emoji: '📌', label: 'บันทึกเตือน', cat: 'cat-lab' },
   inventory: { emoji: '🧺', label: 'ของใช้ & สต๊อก', cat: 'cat-inventory' },
   notifications: { emoji: '🔔', label: 'แจ้งเตือน', cat: 'cat-body' },
   settings: { emoji: '⚙️', label: 'ตั้งค่า', cat: 'cat-neutral' }

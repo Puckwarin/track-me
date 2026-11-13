@@ -68,7 +68,7 @@ export async function renderWeekly() {
   const wDelta = wAvg !== null && pAvg !== null ? round1(wAvg - pAvg) : null;
 
   // ออกกำลังกาย
-  const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end);
+  const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end && w.status !== 'planned');
   const mins = ws.reduce((a, w) => a + (w.durationMin || 0), 0), burn = ws.reduce((a, w) => a + (w.estKcal || 0), 0);
   const types = {}; ws.forEach(w => { types[w.type] = (types[w.type] || 0) + 1; });
   const sx = state.symptoms.filter(s => s.date >= weekStart && s.date <= end && Object.values(s.symptoms || {}).some(v => v > 0)).length;
@@ -117,7 +117,7 @@ async function renderMonthly(){
   if(my!==seq)return;
   const loggedDays=new Set(food.map(x=>x.date)),avgCal=loggedDays.size?food.reduce((a,x)=>a+num(x.calories),0)/loggedDays.size:null,avgP=loggedDays.size?food.reduce((a,x)=>a+num(x.protein),0)/loggedDays.size:null;
   const weights=state.body.filter(x=>x.date>=start&&x.date<=end&&typeof x.weight==='number').sort((a,b)=>a.date.localeCompare(b.date));
-  const workouts=state.workouts.filter(x=>x.date>=start&&x.date<=end),minutes=workouts.reduce((a,x)=>a+(x.durationMin||0),0);
+  const workouts=state.workouts.filter(x=>x.date>=start&&x.date<=end&&x.status!=='planned'),minutes=workouts.reduce((a,x)=>a+(x.durationMin||0),0);
   const symptoms=state.symptoms.filter(x=>x.date>=start&&x.date<=end&&Object.values(x.symptoms||{}).some(v=>v>0)).length,targets=getTargets();
   const stat=(label,value,sub='')=>`<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-500">${label}</p><p class="text-lg font-bold">${value}</p><p class="text-[11px] text-slate-500">${sub}</p></div>`;
   const daysInMonth=Array.from({length:new Date(y,m,0).getDate()},(_,i)=>`${selectedMonth}-${String(i+1).padStart(2,'0')}`);

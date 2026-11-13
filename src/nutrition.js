@@ -1,11 +1,9 @@
 // โมเดล Gemini ที่ลองใช้งานตามลำดับ (แต่ละโมเดลมีโควตาแยกกัน)
 const GEMINI_MODELS = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
 const KEY_NAME = 'gemini_key';
-const GROQ_KEY='groq_key', OPENROUTER_KEY='openrouter_key';
-export const getGroqKey=()=>localStorage.getItem(GROQ_KEY)||'';
-export const setGroqKey=k=>k?localStorage.setItem(GROQ_KEY,k.trim()):localStorage.removeItem(GROQ_KEY);
-export const getOpenRouterKey=()=>localStorage.getItem(OPENROUTER_KEY)||'';
-export const setOpenRouterKey=k=>k?localStorage.setItem(OPENROUTER_KEY,k.trim()):localStorage.removeItem(OPENROUTER_KEY);
+const GROQ_KEY = 'groq_key';
+export const getGroqKey = () => localStorage.getItem(GROQ_KEY) || '';
+export const setGroqKey = k => k ? localStorage.setItem(GROQ_KEY, k.trim()) : localStorage.removeItem(GROQ_KEY);
 
 export const getGeminiKey = () => localStorage.getItem(KEY_NAME) || '';
 export const setGeminiKey = k => k ? localStorage.setItem(KEY_NAME, k.trim()) : localStorage.removeItem(KEY_NAME);
@@ -123,29 +121,74 @@ async function callGeminiProvider(parts, schema) {
   throw err;
 }
 
+const GROQ_VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'];
+const GROQ_TEXT_MODELS = ['llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct'];
 
-async function callOpenAICompatible(provider, parts, schema) {
-  const groq=provider==='groq', key=groq?getGroqKey():getOpenRouterKey();
-  const model=groq?'qwen/qwen3.8-27b':'openrouter/free';
-  const endpoint=groq?'https://api.groq.com/openai/v1/chat/completions':'https://openrouter.ai/api/v1/chat/completions';
-  const messages=parts.map(p=>p.inline_data
-    ? {type:'image_url',image_url:{url:'data:'+p.inline_data.mime_type+';base64,'+p.inline_data.data}}
-    : {type:'text',text:p.text||''});
-  const schemaHint=Object.entries(schema?.properties||{}).map(([k,v])=>k+': '+(v.type==='NUMBER'?'number or null':v.type==='STRING'?'string':'value')).join(', ');
-  const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...(groq?{}:{'HTTP-Referer':window.location.origin,'X-Title':'Track Me'})},
-    body:JSON.stringify({model,messages:[{role:'user',content:[{type:'text',text:'Return only valid JSON with these fields: '+schemaHint},...messages]}],response_format:{type:'json_object'},temperature:0}),signal:AbortSignal.timeout(25000)});
-  const data=await res.json().catch(()=>({}));
-  if(!res.ok){const e=new Error(data?.error?.message||provider+' HTTP '+res.status);e.status=res.status;e.quotaExceeded=[402,429].includes(res.status)||/quota|rate.?limit/i.test(e.message);e.retryable=e.quotaExceeded||res.status>=500;throw e;}
-  const content=data?.choices?.[0]?.message?.content;
-  if(!content)throw new Error(provider+' ไม่ส่งผลลัพธ์กลับมา');
-  return JSON.parse(String(content).split(String.fromCharCode(96).repeat(3)).join('').trim());
+function schemaSummary(schema) {
+  if (!schema?.properties) return 'JSON object';
+  return Object.entries(schema.properties).map(([k, v]) => {
+    if (v.type === 'ARRAY') return `${k}: array of objects (${Object.keys(v.items?.properties || {}).join(', ')})`;
+    return `${k}: ${v.type === 'NUMBER' ? 'number or null' : v.type === 'STRING' ? 'string or null' : 'value'}`;
+  }).join(', ');
 }
-async function callAI(parts,schema){
-  const providers=[['Gemini',getGeminiKey(),()=>callGeminiProvider(parts,schema)],['Groq',getGroqKey(),()=>callOpenAICompatible('groq',parts,schema)],['OpenRouter',getOpenRouterKey(),()=>callOpenAICompatible('openrouter',parts,schema)]].filter(x=>x[1]);
-  if(!providers.length)throw new Error('NO_KEY');
-  const errors=[];
-  for(let i=0;i<providers.length;i++){const [name,,run]=providers[i];try{const result=await run();if(i>0)window.dispatchEvent(new CustomEvent('trackme:ai-fallback',{detail:{provider:name,failed:errors.length}}));return result;}catch(e){if(providers.length===1)throw e;errors.push(name+': '+(e.message||'error'));}}
-  const err=new Error('AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — '+errors.join(' · '));err.fallbackErrors=errors;err.quotaExceeded=errors.some(x=>/429|quota|limit/i.test(x));throw err;
+
+async function callGroq(parts, schema) {
+  const key = getGroqKey();
+  if (!key) throw new Error('NO_KEY');
+  const hasImage = parts.some(p => p.inline_data);
+  const models = hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  const messages = parts.map(p => p.inline_data
+    ? { type: 'image_url', image_url: { url: 'data:' + p.inline_data.mime_type + ';base64,' + p.inline_data.data } }
+    : { type: 'text', text: p.text || '' });
+  const schemaHint = schemaSummary(schema);
+  let lastErr = null;
+  for (const model of models) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'Return only valid JSON with these fields: ' + schemaHint }, ...messages] }],
+        response_format: { type: 'json_object' },
+        temperature: 0
+      }),
+      signal: AbortSignal.timeout(25000)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Groq ไม่ส่งผลลัพธ์กลับมา');
+      return JSON.parse(String(content).split(String.fromCharCode(96).repeat(3)).join('').replace(/^json\s*/i, '').trim());
+    }
+    const e = new Error(data?.error?.message || 'Groq HTTP ' + res.status);
+    e.status = res.status;
+    e.invalidKey = res.status === 401 || res.status === 403;
+    e.quotaExceeded = [402, 429].includes(res.status) || /quota|rate.?limit/i.test(e.message);
+    lastErr = e;
+    if (e.invalidKey) throw e;
+  }
+  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+}
+
+async function callAI(parts, schema) {
+  const providers = [['Gemini', getGeminiKey(), () => callGeminiProvider(parts, schema)], ['Groq', getGroqKey(), () => callGroq(parts, schema)]].filter(x => x[1]);
+  if (!providers.length) throw new Error('NO_KEY');
+  const errors = [];
+  for (let i = 0; i < providers.length; i++) {
+    const [name, , run] = providers[i];
+    try {
+      const result = await run();
+      if (i > 0) window.dispatchEvent(new CustomEvent('trackme:ai-fallback', { detail: { provider: name, failed: errors.length } }));
+      return result;
+    } catch (e) {
+      if (providers.length === 1) throw e;
+      errors.push(name + ': ' + (e.message || 'error'));
+    }
+  }
+  const err = new Error('AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — ' + errors.join(' · '));
+  err.fallbackErrors = errors;
+  err.quotaExceeded = errors.some(x => /429|quota|limit/i.test(x));
+  throw err;
 }
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -232,6 +275,64 @@ export async function estimateStockFromPhoto(file) {
   });
 }
 
+// อ่านข้อมูลจากซองอาหารสัตว์เลี้ยง (ไม่เก็บไฟล์ภาพ)
+export async function readPetFoodLabel(file) {
+  const img = await imageToInlineData(file, 1600);
+  const res = await callAI([
+    { text: 'นี่คือรูปซองอาหาร/ขนมสัตว์เลี้ยง อ่านชื่อสินค้า ยี่ห้อ และค่าพลังงาน (kcal/100g หรือ kcal/kg หรือ kcal/ถ้วย) รวมถึงโปรตีน/ไขมัน/เยื่อใย/ความชื้น (% Guaranteed Analysis) เฉพาะที่เห็นชัดในรูป ห้ามเดาตัวเลขที่อ่านไม่ชัด ตอบเป็น JSON ตาม schema' },
+    { inline_data: img }
+  ], {
+    type: 'OBJECT',
+    properties: {
+      name: { type: 'STRING', nullable: true },
+      brand: { type: 'STRING', nullable: true },
+      kcalPer100g: N,
+      kcalPerKg: N,
+      proteinPct: N,
+      fatPct: N,
+      fiberPct: N,
+      moisturePct: N,
+      notes: { type: 'STRING', nullable: true }
+    },
+    required: ['name', 'kcalPer100g', 'kcalPerKg']
+  });
+  if (res && res.kcalPer100g == null && typeof res.kcalPerKg === 'number' && Number.isFinite(res.kcalPerKg)) {
+    res.kcalPer100g = Math.round(res.kcalPerKg / 10);
+  }
+  return res;
+}
+
+// อ่านใบผลตรวจเลือด/ผลแล็บ (คนหรือสัตว์เลี้ยง) จากรูปภาพ ห้ามเดาค่าที่อ่านไม่ออก
+export async function readLabReportFromPhoto(file) {
+  const img = await imageToInlineData(file, 1800);
+  return callAI([
+    { text: 'นี่คือภาพใบผลตรวจเลือดหรือผลแล็บ (คนหรือสัตว์เลี้ยง) ให้อ่านทุกรายการที่มองเห็นชัดเจน ได้แก่ วันที่ตรวจ (รูปแบบ YYYY-MM-DD คริสต์ศักราช ถ้าเป็น พ.ศ. ให้ลบ 543), ชื่อคลินิก/โรงพยาบาล, และรายการค่าตรวจ (ชื่อรายการ เช่น BUN, Creatinine, ALT, WBC, RBC, HGB, HCT, PLT, Glucose ฯลฯ, ค่าที่วัดได้เป็นตัวเลข, หน่วย, ค่าอ้างอิงต่ำสุด-สูงสุด) อ่านเฉพาะที่พิมพ์จริง ห้ามเดาหรือแต่งตัวเลขเอง ตอบเป็น JSON ตาม schema' },
+    { inline_data: img }
+  ], {
+    type: 'OBJECT',
+    properties: {
+      date: { type: 'STRING', nullable: true },
+      labName: { type: 'STRING', nullable: true },
+      items: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            name: S,
+            value: N,
+            unit: { type: 'STRING', nullable: true },
+            refLow: N,
+            refHigh: N,
+            note: { type: 'STRING', nullable: true }
+          },
+          required: ['name', 'value']
+        }
+      }
+    },
+    required: ['items']
+  });
+}
+
 export async function testGeminiConnection() {
   const key = getGeminiKey();
   if (!key) throw new Error('NO_KEY');
@@ -255,14 +356,47 @@ export async function testGeminiConnection() {
   throw err;
 }
 
+export async function testGroqConnection() {
+  const key = getGroqKey();
+  if (!key) throw new Error('NO_KEY');
+  const mRes = await fetch('https://api.groq.com/openai/v1/models', {
+    headers: { Authorization: 'Bearer ' + key },
+    signal: AbortSignal.timeout(10000)
+  });
+  const mData = await mRes.json().catch(() => ({}));
+  if (!mRes.ok) {
+    const msg = mData?.error?.message || `HTTP ${mRes.status}`;
+    const err = new Error(msg);
+    err.invalidKey = mRes.status === 401 || mRes.status === 403;
+    err.quotaExceeded = mRes.status === 429;
+    throw err;
+  }
+  const ids = (mData.data || []).map(x => x.id);
+  const picked = GROQ_VISION_MODELS.find(id => ids.includes(id)) || GROQ_TEXT_MODELS.find(id => ids.includes(id)) || ids.find(id => !/whisper|tts|guard/i.test(id));
+  if (!picked) return { ok: true, model: 'API Key ถูกต้อง' };
+  const cRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+    body: JSON.stringify({ model: picked, messages: [{ role: 'user', content: 'Reply with JSON {"ok":true}' }], response_format: { type: 'json_object' }, max_tokens: 20, temperature: 0 }),
+    signal: AbortSignal.timeout(12000)
+  });
+  const cData = await cRes.json().catch(() => ({}));
+  if (!cRes.ok) {
+    const err = new Error(cData?.error?.message || `HTTP ${cRes.status}`);
+    err.quotaExceeded = cRes.status === 429;
+    throw err;
+  }
+  return { ok: true, model: picked };
+}
+
 export const explainGeminiError = e => e.message === 'NO_KEY'
-  ? 'ยังไม่ได้ใส่คีย์ AI — ตั้งค่า Gemini, Groq หรือ OpenRouter ในหน้า Settings'
+  ? 'ยังไม่ได้ใส่คีย์ AI — ตั้งค่า Gemini หรือ Groq ในหน้า Settings'
   : e.invalidKey
-    ? 'คีย์ Gemini ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน (ตรวจคีย์ใน ตั้งค่า หรือเปิดใช้ Generative Language API): ' + e.message
+    ? 'คีย์ AI ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน (ตรวจคีย์ใน ตั้งค่า): ' + e.message
     : e.fallbackErrors
       ? e.message
       : e.quotaExceeded
-        ? 'โควตา Gemini เต็มหรือถูกจำกัดในโมเดลที่ลองใช้ (' + e.message + ')'
+        ? 'โควตา AI เต็มหรือถูกจำกัดชั่วคราว (' + e.message + ')'
         : e.timeoutError
           ? 'AI ใช้เวลานานเกินกำหนด ลองอีกครั้งหรือใช้คลังอาหาร'
           : e.networkError

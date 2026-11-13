@@ -88,7 +88,7 @@ async function generate() {
   }
   if (inc('body')) {
     const desc = sortBodyDesc(d.body), c = v => (typeof v === 'number' ? v : '-');
-    h += sec('น้ำหนักและสัดส่วน', (desc.length ? `<div class="max-w-md">${weightChartSvg(d.body)}</div>` + tbl(['วันที่', 'น้ำหนัก (กก.)', 'อก', 'เอว', 'สะโพก (ซม.)'], desc.map(r => [esc(fmtDate(r.date)), c(r.weight), c(r.bust), c(r.waist), c(r.hip)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>'));
+    h += sec('น้ำหนักและสัดส่วน', (desc.length ? `<div class="max-w-md">${weightChartSvg(d.body)}</div>` + tbl(['วันที่', 'น้ำหนัก (กก.)', 'อก', 'เอว', 'สะโพก', 'แขน', 'ขา (ซม.)'], desc.map(r => [esc(fmtDate(r.date)), c(r.weight), c(r.bust), c(r.waist), c(r.hip), c(r.arm), c(r.thigh)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>'));
   }
   if (inc('food')) {
     const by = {};
@@ -98,7 +98,7 @@ async function generate() {
       tbl(['วันที่', 'รายการ', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน'], days.map(k => [esc(fmtDate(k)), by[k].n, Math.round(by[k].cal), round1(by[k].p), round1(by[k].c), round1(by[k].f)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('workout')) {
-    const ws = d.workouts.slice().sort((a, b) => a.date.localeCompare(b.date)), by = {};
+    const ws = d.workouts.filter(w => w.status !== 'planned').slice().sort((a, b) => a.date.localeCompare(b.date)), by = {};
     ws.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
     const rowT = r => `${esc(r.name)} — ${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
     h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2">${ws.length} ครั้ง · ${Object.entries(by).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
@@ -121,9 +121,9 @@ async function csv() {
   const rows = {
     period: [['เริ่ม', 'สิ้นสุด', 'ปริมาณ', 'หมายเหตุ'], ...d.period.map(p => [p.start, p.end || '', p.flow || '', p.note || ''])],
     symptoms: [['วันที่', ...SYMPTOMS.map(s => s[1]), 'อารมณ์(1-5)', 'เครียด(1-5)', 'หมายเหตุ'], ...d.symptoms.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, ...SYMPTOMS.map(([k]) => r.symptoms?.[k] ?? 0), r.mood ?? '', r.stress ?? '', r.note || ''])],
-    body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.note || ''])],
+    body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'แขน(ซม.)', 'ขา(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.arm ?? '', r.thigh ?? '', r.note || ''])],
     lab: [['วันที่', 'รายการ', 'ผล', 'หน่วย', 'อ้างอิงต่ำสุด', 'อ้างอิงสูงสุด', 'หมายเหตุ'], ...state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.date.localeCompare(b.date)).map(l => [l.date, l.name, l.value, l.unit || '', l.refLow ?? '', l.refHigh ?? '', l.note || ''])],
-    workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
+    workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.filter(w => w.status !== 'planned').sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
     food: [['วันที่', 'มื้อ', 'เมนู', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน', 'น้ำตาล', 'โซเดียม(mg)'], ...d.food.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.meal, r.name, r.calories, r.protein, r.carbs, r.fat, r.sugar ?? '', r.sodium ?? ''])]
   }[kind];
   downloadFile(`trackme-${kind}-${d.from}_${d.to}.csv`, toCsv(rows), 'text/csv');
