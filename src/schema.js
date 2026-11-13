@@ -62,8 +62,11 @@ export const SANITIZERS = {
   tracked_products: o => str(o.name) && str(o.unit,80) ? { name:str(o.name), category:str(o.category,100), quantity:num(o.quantity), unit:str(o.unit,80), lowAt:num(o.lowAt), expiryDate:isDateStr(o.expiryDate)?o.expiryDate:null, openedDate:isDateStr(o.openedDate)?o.openedDate:null, paoMonths:int(o.paoMonths,1,120), paoExpiry:isDateStr(o.paoExpiry)?o.paoExpiry:null, ingredients:str(o.ingredients,3000), pros:str(o.pros,2000), cons:str(o.cons,2000), createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
   replacement_records: o => str(o.name) && isDateStr(o.date) ? { name:str(o.name), date:o.date, intervalDays:int(o.intervalDays,1,3650), nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
 
+  lab_records: o => isDateStr(o.date) && str(o.name,80) && num(o.value) !== null ? {
+    date:o.date, name:str(o.name,80), value:num(o.value), unit:str(o.unit,20), refLow:num(o.refLow), refHigh:num(o.refHigh), note:str(o.note,200), createdAt:ts(o.createdAt)
+  } : null,
   workout_records: o => isDateStr(o.date) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
-    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin),
+    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin), intensity:['light','moderate','vigorous'].includes(o.intensity)?o.intensity:null, estKcal:num(o.estKcal),
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
     note:str(o.note,300), createdAt:ts(o.createdAt)
   } : null,
@@ -83,7 +86,7 @@ export const SANITIZERS = {
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
 // symptom_records ใช้วันที่เป็น doc id
 export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : col === 'settings' ? 'profile' : fallback;

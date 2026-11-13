@@ -8,6 +8,7 @@ export const state = {
   symptoms: [],
   workouts: [],
   templates: [],
+  labs: [],
   profile: null,
   skinRecords: [],
   skincareProducts: [],

@@ -1,6 +1,7 @@
 import { addDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
+import { bodyLatest } from './body.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal } from './util.js';
 
 export const TYPES = {
@@ -9,6 +10,16 @@ export const TYPES = {
 };
 export const SECTIONS = [['warmup', 'วอร์มอัพ (Warm-up)', 'fa-fire'], ['main', 'ท่าหลัก (Main workout)', 'fa-dumbbell'], ['cooldown', 'คูลดาวน์ (Cool-down)', 'fa-snowflake']];
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
+// ค่า MET (Compendium of Physical Activities, ปัดเป็นช่วงโดยประมาณ) ตามประเภทและความหนัก
+const MET = { walk: [2.8, 3.5, 5.0], upper: [3.0, 3.5, 6.0], lower: [3.0, 3.5, 6.0], full: [3.5, 4.3, 6.0], pilates: [2.5, 3.0, 4.0], stretch: [2.0, 2.3, 3.0], other: [3.0, 4.0, 6.0] };
+export const INTENSITY = [['light', 'เบา'], ['moderate', 'ปานกลาง'], ['vigorous', 'หนัก']];
+export const currentWeightKg = () => bodyLatest(state.body).weight?.v ?? state.profile?.weightKg ?? null;
+// พลังงานที่เผาผลาญ "เพิ่มจากตอนพัก" = (MET − 1) × น้ำหนัก(กก.) × ชั่วโมง  (ไม่นับ BMR ซ้ำกับ TDEE) — ค่าจริงคลาดเคลื่อนได้ ±25%
+export function estimateBurn(type, intensity, minutes, weightKg) {
+  if (!minutes || !weightKg) return null;
+  const idx = Math.max(0, INTENSITY.findIndex(i => i[0] === intensity));
+  return Math.round(((MET[type] || MET.other)[idx < 0 ? 1 : idx] - 1) * weightKg * minutes / 60);
+}
 export const repLabel = u => (u === 'sec' ? 'วินาที' : u === 'min' ? 'นาที' : 'ครั้ง');
 
 let root, draft = emptyDraft();
@@ -25,8 +36,10 @@ export function mountWorkout(el) {
         <div><label class="lbl">วันที่</label><input type="date" id="w-date" class="input"></div>
         <div><label class="lbl">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
         <div><label class="lbl">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
+        <div><label class="lbl">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
         <div><label class="lbl">เริ่มจาก</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
       </div>
+      <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
       <div class="flex flex-wrap gap-2">
         <button id="w-last" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-clock-rotate-left"></i> ใช้แผนล่าสุดของประเภทนี้</button>
         <button id="w-clear" class="chip bg-slate-100 text-slate-600"><i class="fa-solid fa-eraser"></i> ล้างฟอร์ม</button>
@@ -58,6 +71,8 @@ export function mountWorkout(el) {
   $('#w-last', root).addEventListener('click', useLast);
   $('#w-clear', root).addEventListener('click', () => { draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections(); });
   $('#w-save', root).addEventListener('click', save);
+  ['w-dur', 'w-int', 'w-type'].forEach(id => $('#' + id, root).addEventListener('input', burnPreview));
+  burnPreview();
   $('#w-tpl-save', root).addEventListener('click', saveTemplate);
   $('#w-history', root).addEventListener('click', e => {
     const del = e.target.closest('[data-del]'), again = e.target.closest('[data-again]');
@@ -71,6 +86,11 @@ export function mountWorkout(el) {
   renderSections(); render();
 }
 
+function burnPreview() {
+  const el = $('#w-burn', root), kcal = estimateBurn($('#w-type', root).value, $('#w-int', root).value, toNum($('#w-dur', root).value), currentWeightKg());
+  el.textContent = kcal ? `🔥 เผาผลาญเพิ่มประมาณ ${kcal} kcal (ค่าประมาณ ±25% คิดจากน้ำหนัก ${currentWeightKg()} กก.)`
+    : (!currentWeightKg() ? 'ใส่น้ำหนักในแท็บน้ำหนัก (หรือ ตั้งค่า) เพื่อประมาณแคลอรี่ที่เผาผลาญ' : 'ใส่ระยะเวลารวมเพื่อประมาณแคลอรี่ที่เผาผลาญ');
+}
 function loadSections(sec, type) {
   draft = { warmup: [], main: [], cooldown: [] };
   for (const k of Object.keys(draft)) draft[k] = (sec?.[k] || []).map(r => ({ ...blankRow(), ...r }));
@@ -139,10 +159,10 @@ function save() {
   if (!count && !dur) return toast('เพิ่มท่าอย่างน้อย 1 ท่า หรือใส่ระยะเวลา (เช่น เดิน 30 นาที)', 'err');
   const type = $('#w-type', root).value;
   addDoc(userCol(state.uid, 'workout_records'), {
-    date: $('#w-date', root).value, type, typeLabel: TYPES[type], durationMin: dur, sections, note: $('#w-note', root).value.trim(), createdAt: new Date()
+    date: $('#w-date', root).value, type, typeLabel: TYPES[type], durationMin: dur, intensity: $('#w-int', root).value, estKcal: estimateBurn(type, $('#w-int', root).value, dur, currentWeightKg()), sections, note: $('#w-note', root).value.trim(), createdAt: new Date()
   }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   toast('บันทึกการออกกำลังกายแล้ว 💪');
-  draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections();
+  draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections(); burnPreview();
 }
 
 function saveTemplate() {
@@ -167,13 +187,13 @@ export function render() {
 
   const since = addDays(localDateStr(), -6), wk = state.workouts.filter(w => w.date >= since);
   const by = {}; wk.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
-  const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0);
-  $('#w-week', root).innerHTML = wk.length ? `<p><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-500">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายใน 7 วันนี้</p>';
+  const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0), burn = wk.reduce((a, w) => a + (w.estKcal || 0), 0);
+  $('#w-week', root).innerHTML = wk.length ? `<p><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}${burn ? ` · เผาผลาญประมาณ ${burn} kcal` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-500">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายใน 7 วันนี้</p>';
 
   const rows = state.workouts.slice().sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 12);
   $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
     const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<p class="text-xs font-semibold text-slate-500 mt-1">${t}</p>` + w.sections[k].map(r => `<p class="text-xs">• ${esc(r.name)} — ${esc(rowText(r))}${r.note ? ` <span class="text-slate-400">(${esc(r.note)})</span>` : ''}</p>`).join('') : '')).join('');
-    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}</summary>
+    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}</summary>
       <div class="mt-1">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1 text-slate-500">โน้ต: ${esc(w.note)}</p>` : ''}
       <div class="flex gap-2 mt-2"><button data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button><button data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button></div></div></details>`;
   }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึก</p>';

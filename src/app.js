@@ -27,19 +27,22 @@ import { mountInventory, watchInventory } from './inventory.js';
 import { mountBody, render as renderBody } from './body.js';
 import { mountReport } from './reports.js';
 import { mountWorkout, render as renderWorkout } from './workout.js';
+import { mountWeekly, renderWeekly } from './weekly.js';
+import { mountLab, render as renderLab } from './lab.js';
 import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['food', 'workout', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
+const TABS = ['food', 'workout', 'weekly', 'lab', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
 export function showTab(name) {
   TABS.forEach(t => {
     $('#tab-' + t).classList.toggle('hidden', t !== name);
     const b = $('#tabbtn-' + t);
     if (b) b.className = `${TAB_BASE} ${t === name ? TAB_ACTIVE : TAB_IDLE}`;
   });
+  if (name === 'weekly') renderWeekly();   // อาหารเปลี่ยนจากแท็บอื่นได้ จึงคำนวณใหม่ทุกครั้งที่เปิด
   try { localStorage.setItem('active_tab', name); } catch (e) {}
 }
 
@@ -49,6 +52,8 @@ function mountAll() {
   mounted = true;
   mountFood($('#tab-food'));
   mountWorkout($('#tab-workout'));
+  mountWeekly($('#tab-weekly'));
+  mountLab($('#tab-lab'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
   mountCare($('#tab-care'));
@@ -68,7 +73,8 @@ function startData() {
   watchInventory(uid);
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); });
+  watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
   watch('settings', userCol(uid, 'settings'), list => { state.profile = list.find(x => x.id === 'profile') || null; refreshProfile(); emit('profile'); });
   watchDay();
@@ -76,7 +82,7 @@ function startData() {
 
 on('auth', user => {
   stopAll();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.workouts = []; state.templates = []; state.profile = null;
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null;
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();

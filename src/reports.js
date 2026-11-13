@@ -8,6 +8,7 @@ import { sortBodyDesc, weightChartSvg } from './body.js';
 import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
 import { syncLineText } from './sync.js';
 import { TYPES, SECTIONS, repLabel } from './workout.js';
+import { labFlag, refText } from './lab.js';
 
 let root, data = null;
 
@@ -28,11 +29,12 @@ export function mountReport(el) {
         <label><input type="checkbox" id="r-inc-body" checked> น้ำหนัก/สัดส่วน</label>
         <label><input type="checkbox" id="r-inc-food" checked> อาหาร/สารอาหาร</label>
         <label><input type="checkbox" id="r-inc-workout" checked> ออกกำลังกาย</label>
+        <label><input type="checkbox" id="r-inc-lab" checked> ผลตรวจ</label>
       </div>
       <div class="flex flex-wrap gap-2">
         <button id="r-gen" class="btn btn-primary"><i class="fa-solid fa-file-lines"></i> สร้างรายงาน</button>
         <button id="r-print" class="btn btn-soft" disabled><i class="fa-solid fa-print"></i> พิมพ์ / บันทึกเป็น PDF</button>
-        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option></select>
+        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
         <button id="r-csv" class="btn btn-ghost"><i class="fa-solid fa-file-csv"></i> ดาวน์โหลด CSV</button>
       </div>
       <p class="text-xs text-slate-400">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
@@ -103,6 +105,11 @@ async function generate() {
       tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '-',
         SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '-'])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
   }
+  if (inc('lab')) {
+    const labs = state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.name.localeCompare(b.name, 'th') || a.date.localeCompare(b.date));
+    const FL = { low: 'ต่ำกว่าเกณฑ์', high: 'สูงกว่าเกณฑ์', ok: 'ในเกณฑ์' };
+    h += sec('ผลตรวจทางห้องปฏิบัติการ', labs.length ? tbl(['วันที่', 'รายการ', 'ผล', 'ค่าอ้างอิง', 'เทียบเกณฑ์'], labs.map(l => [esc(fmtDate(l.date)), esc(l.name), `<b>${esc(l.value)}</b> ${esc(l.unit)}`, esc(refText(l)), esc(FL[labFlag(l)] || '-')])) + '<p class="text-xs text-slate-400 mt-1">ค่าอ้างอิงตามที่ผู้ใช้กรอกจากใบผลตรวจ — ให้แพทย์เป็นผู้แปลผล</p>' : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+  }
   h += `<p class="text-xs text-slate-400 mt-6">ข้อมูลนี้ผู้ใช้บันทึกเอง ค่าคาดการณ์เป็นการประมาณ ไม่ใช่การวินิจฉัยทางการแพทย์</p>`;
   $('#report-preview', root).innerHTML = h;
   $('#r-print', root).disabled = false;
@@ -115,6 +122,7 @@ async function csv() {
     period: [['เริ่ม', 'สิ้นสุด', 'ปริมาณ', 'หมายเหตุ'], ...d.period.map(p => [p.start, p.end || '', p.flow || '', p.note || ''])],
     symptoms: [['วันที่', ...SYMPTOMS.map(s => s[1]), 'อารมณ์(1-5)', 'เครียด(1-5)', 'หมายเหตุ'], ...d.symptoms.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, ...SYMPTOMS.map(([k]) => r.symptoms?.[k] ?? 0), r.mood ?? '', r.stress ?? '', r.note || ''])],
     body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.note || ''])],
+    lab: [['วันที่', 'รายการ', 'ผล', 'หน่วย', 'อ้างอิงต่ำสุด', 'อ้างอิงสูงสุด', 'หมายเหตุ'], ...state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.date.localeCompare(b.date)).map(l => [l.date, l.name, l.value, l.unit || '', l.refLow ?? '', l.refHigh ?? '', l.note || ''])],
     workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
     food: [['วันที่', 'มื้อ', 'เมนู', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน', 'น้ำตาล', 'โซเดียม(mg)'], ...d.food.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.meal, r.name, r.calories, r.protein, r.carbs, r.fat, r.sugar ?? '', r.sodium ?? ''])]
   }[kind];

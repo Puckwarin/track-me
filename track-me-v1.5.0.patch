@@ -1,0 +1,864 @@
+From b4cb24dcd2f8b8f4d729806c46800c518cd1fb35 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 13 Nov 2026 00:30:14 +0000
+Subject: [PATCH] v1.5.0: gram-based food entry, protein/fat minimums, workout
+ calorie estimate, weekly summary, lab results, restore per-meal energy +
+ planning
+
+---
+ docs/SETUP.md             |   7 +++
+ firestore.rules           |   2 +-
+ firestore.rules.migration |   2 +-
+ index.html                |   4 ++
+ package.json              |   2 +-
+ src/app.js                |  12 +++--
+ src/firebase.js           |   2 +-
+ src/food.js               |  90 +++++++++++++++++++++++++--------
+ src/lab.js                |  92 ++++++++++++++++++++++++++++++++++
+ src/profile.js            |  38 +++++++++++---
+ src/reports.js            |  10 +++-
+ src/schema.js             |   7 ++-
+ src/state.js              |   1 +
+ src/weekly.js             | 102 ++++++++++++++++++++++++++++++++++++++
+ src/workout.js            |  30 +++++++++--
+ 15 files changed, 359 insertions(+), 42 deletions(-)
+ create mode 100644 src/lab.js
+ create mode 100644 src/weekly.js
+
+diff --git a/docs/SETUP.md b/docs/SETUP.md
+index 6645bfa..6eadaed 100644
+--- a/docs/SETUP.md
++++ b/docs/SETUP.md
+@@ -126,3 +126,10 @@ Firebase Console → **Firestore Database → Rules** → คัดลอก **`
+ 
+ ### E) ถ้ามือถือยังแสดงผลเพี้ยน
+ ล้างแคช/ปิดแอปแล้วเปิดใหม่ให้ได้เวอร์ชันล่าสุด (แอปอัปเดตตัวเองตอนเปิดครั้งถัดไป) ถ้ายังเห็นอาการเดิม แจ้งรุ่นเครื่อง + เบราว์เซอร์ + ภาพหน้าจอ
++
++---
++
++## อัปเดต v1.5 — ต้องทำหลังได้โค้ดชุดนี้
++1. **Publish `firestore.rules` ใหม่** (เพิ่ม collection `lab_records` สำหรับผลตรวจ) — Firebase Console → Firestore Database → Rules → วางทับ → Publish ถ้าไม่ทำ แท็บ "ผลตรวจ" จะบันทึกไม่ได้ (`permission-denied`)
++2. เมื่อใส่ปริมาณอาหาร: ถ้าเมนูมีน้ำหนักต่อหน่วยอยู่แล้ว (เช่น "ข้าวสวย 100 g") ช่องจะเป็น **กรัม** อัตโนมัติ — กรอก 55 ได้เลย และสลับเป็น "จำนวนหน่วย" ได้ที่ตัวเลือกเหนือช่อง
++3. ค่าแคลอรี่ที่เผาผลาญจากการออกกำลังกายเป็นค่าประมาณ (สูตร MET) ต้องมีน้ำหนักในแท็บน้ำหนักหรือในตั้งค่าและใส่ระยะเวลา
+diff --git a/firestore.rules b/firestore.rules
+index c71c622..1a00821 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -8,7 +8,7 @@ service cloud.firestore {
+       return request.auth != null && request.auth.uid == uid;
+     }
+     function knownCollection(c) {
+-      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings'];
++      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings', 'lab_records'];
+     }
+     match /users/{uid}/{collection}/{recordId} {
+       allow read, delete: if isOwner(uid) && knownCollection(collection);
+diff --git a/firestore.rules.migration b/firestore.rules.migration
+index a5bd7a9..6d80412 100644
+--- a/firestore.rules.migration
++++ b/firestore.rules.migration
+@@ -10,7 +10,7 @@ service cloud.firestore {
+       return request.auth != null && request.auth.uid == uid;
+     }
+     function knownCollection(c) {
+-      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings'];
++      return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings', 'lab_records'];
+     }
+ 
+     match /users/{uid}/{collection}/{recordId} {
+diff --git a/index.html b/index.html
+index 0b8895f..c557bfc 100644
+--- a/index.html
++++ b/index.html
+@@ -61,6 +61,8 @@
+     <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto pb-1">
+       <button id="tabbtn-food"><i class="fa-solid fa-utensils"></i> อาหาร</button>
+       <button id="tabbtn-workout"><i class="fa-solid fa-dumbbell"></i> ออกกำลังกาย</button>
++      <button id="tabbtn-weekly"><i class="fa-solid fa-chart-line"></i> สรุปสัปดาห์</button>
++      <button id="tabbtn-lab"><i class="fa-solid fa-vial"></i> ผลตรวจ</button>
+       <button id="tabbtn-period"><i class="fa-solid fa-droplet"></i> ประจำเดือน</button>
+       <button id="tabbtn-symptoms"><i class="fa-solid fa-notes-medical"></i> อาการ & ผิว</button>
+       <button id="tabbtn-care"><i class="fa-solid fa-paw"></i> สัตว์เลี้ยง</button>
+@@ -71,6 +73,8 @@
+ 
+     <main id="tab-food" class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+     <main id="tab-workout" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
++    <main id="tab-weekly" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
++    <main id="tab-lab" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+     <main id="tab-period" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+     <main id="tab-symptoms" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+     <main id="tab-care" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"></main>
+diff --git a/package.json b/package.json
+index 8e829af..ea523d2 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "track-me",
+-  "version": "1.4.0",
++  "version": "1.5.0",
+   "private": true,
+   "type": "module",
+   "scripts": {
+diff --git a/src/app.js b/src/app.js
+index 5e857bd..df6592d 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -27,19 +27,22 @@ import { mountInventory, watchInventory } from './inventory.js';
+ import { mountBody, render as renderBody } from './body.js';
+ import { mountReport } from './reports.js';
+ import { mountWorkout, render as renderWorkout } from './workout.js';
++import { mountWeekly, renderWeekly } from './weekly.js';
++import { mountLab, render as renderLab } from './lab.js';
+ import { refreshProfile } from './profile.js';
+ import { mountSettings, refreshAccount } from './settings.js';
+ import { renderSummary, copySummary } from './summary.js';
+ 
+ registerSW({ immediate: true });
+ 
+-const TABS = ['food', 'workout', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
++const TABS = ['food', 'workout', 'weekly', 'lab', 'period', 'symptoms', 'care', 'inventory', 'body', 'report', 'settings'];
+ export function showTab(name) {
+   TABS.forEach(t => {
+     $('#tab-' + t).classList.toggle('hidden', t !== name);
+     const b = $('#tabbtn-' + t);
+     if (b) b.className = `${TAB_BASE} ${t === name ? TAB_ACTIVE : TAB_IDLE}`;
+   });
++  if (name === 'weekly') renderWeekly();   // อาหารเปลี่ยนจากแท็บอื่นได้ จึงคำนวณใหม่ทุกครั้งที่เปิด
+   try { localStorage.setItem('active_tab', name); } catch (e) {}
+ }
+ 
+@@ -49,6 +52,8 @@ function mountAll() {
+   mounted = true;
+   mountFood($('#tab-food'));
+   mountWorkout($('#tab-workout'));
++  mountWeekly($('#tab-weekly'));
++  mountLab($('#tab-lab'));
+   mountPeriod($('#tab-period'));
+   mountSymptoms($('#tab-symptoms'));
+   mountCare($('#tab-care'));
+@@ -68,7 +73,8 @@ function startData() {
+   watchInventory(uid);
+   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); });
+   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
+-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); });
++  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); });
++  watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
+   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
+   watch('settings', userCol(uid, 'settings'), list => { state.profile = list.find(x => x.id === 'profile') || null; refreshProfile(); emit('profile'); });
+   watchDay();
+@@ -76,7 +82,7 @@ function startData() {
+ 
+ on('auth', user => {
+   stopAll();
+-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.workouts = []; state.templates = []; state.profile = null;
++  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null;
+   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
+   if (user) {
+     mountAll();
+diff --git a/src/firebase.js b/src/firebase.js
+index 38bf695..fe7e7ec 100644
+--- a/src/firebase.js
++++ b/src/firebase.js
+@@ -27,7 +27,7 @@ export const db = (() => {
+   }
+ })();
+ 
+-export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings'];
++export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings', 'lab_records'];
+ 
+ export const userCol = (uid, name) => collection(db, 'users', uid, name);
+ export const userDoc = (uid, name, id) => doc(db, 'users', uid, name, id);
+diff --git a/src/food.js b/src/food.js
+index 125e423..620494d 100644
+--- a/src/food.js
++++ b/src/food.js
+@@ -79,15 +79,18 @@ export function mountFood(el) {
+   root = el;
+   root.innerHTML = `
+   <div class="lg:col-span-2 space-y-6">
+-    <div class="card flex flex-col sm:flex-row justify-between items-center gap-4">
+-      <div class="flex items-center gap-3">
+-        <label for="f-date" class="font-semibold text-slate-700"><i class="fa-regular fa-calendar-days text-brand"></i> วันที่:</label>
+-        <input type="date" id="f-date" class="input !w-auto">
++    <div class="card space-y-3">
++      <div class="flex flex-wrap items-center gap-2">
++        <button data-day="-1" class="chip bg-slate-100 text-slate-700">เมื่อวาน</button>
++        <button data-day="0" class="chip bg-lav-soft text-brand-dark">วันนี้</button>
++        <button data-day="1" class="chip bg-sky-soft text-blue-700">พรุ่งนี้ (วางแผน)</button>
++        <input type="date" id="f-date" class="input !w-auto ml-auto" aria-label="เลือกวันที่">
+       </div>
+-      <div class="bg-lav-soft px-4 py-2 rounded-xl text-center">
+-        <span class="block text-xs text-brand font-medium">แคลอรี่รวมวันนี้</span>
+-        <span id="f-total" class="text-lg font-bold text-brand-dark">0 / ${GOALS.cal.toLocaleString()}</span>
++      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-2">
++        <div><span id="f-daylabel" class="block text-xs text-brand font-medium">แคลอรี่รวมวันนี้</span><span id="f-total" class="text-lg font-bold text-brand-dark">0 / 2,000</span></div>
++        <span id="f-remain" class="text-xs text-slate-600 text-right"></span>
+       </div>
++      <p id="f-burn" class="hidden text-xs text-slate-500"></p>
+     </div>
+ 
+     <div class="card space-y-4">
+@@ -128,7 +131,7 @@ export function mountFood(el) {
+         </div>
+       </div>
+       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+-        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
++        <div id="f-qty-wrap"><select id="f-qmode" class="input mb-1 hidden" aria-label="วิธีใส่ปริมาณ"><option value="grams">ใส่เป็น น้ำหนัก (กรัม)</option><option value="unit">ใส่เป็น จำนวนหน่วย</option></select><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
+         <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
+         <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"></div>
+         <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
+@@ -151,6 +154,11 @@ export function mountFood(el) {
+   </div>
+ 
+   <div class="space-y-6">
++    <div class="card space-y-3">
++      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-clock text-brand"></i> พลังงานแต่ละมื้อ</h3>
++      <div id="f-meals" class="space-y-3"></div>
++      <p id="f-meals-note" class="text-[11px] text-slate-400"></p>
++    </div>
+     <div class="card space-y-4">
+       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-pie text-brand"></i> สรุปสารอาหารประจำวัน</h3>
+       <div id="f-stats" class="space-y-3"></div>
+@@ -166,6 +174,13 @@ export function mountFood(el) {
+   $('#f-date', root).addEventListener('change', watchDay);
+   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
+   $('#f-qty', root).addEventListener('input', updateFoodPreview);
++  $$('[data-day]', root).forEach(b => b.addEventListener('click', () => { $('#f-date', root).value = addDays(localDateStr(), +b.dataset.day); watchDay(); }));
++  $('#f-meals', root).addEventListener('click', e => { const b = e.target.closest('[data-meal]'); if (b) { $('#f-meal', root).value = b.dataset.meal; $('#f-name', root).focus(); $('#f-name', root).scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
++  $('#f-qmode', root).addEventListener('change', e => {
++    const cur = numField(root, 'f-qty');
++    if (cur !== null && canWeigh()) $('#f-qty', root).value = e.target.value === 'grams' ? round1(cur * base.gramsPerUnit) : Math.round(cur / base.gramsPerUnit * 100) / 100;
++    qtyMode = e.target.value; syncFoodWeightForm();
++  });
+   ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
+   $('#f-clear', root).addEventListener('click', clearFoodForm);
+   $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
+@@ -359,7 +374,8 @@ function pickByLabel(v) {
+ function applyPreset(p, setName = true) {
+   base = p;
+   if (setName) $('#f-name', root).value = label(p);
+-  $('#f-qty', root).value = p.defaultQuantity ?? 1;
++  qtyMode = isWeightUnit(p.unit) ? 'grams' : 'unit';
++  $('#f-qty', root).value = canWeigh() && qtyMode === 'grams' ? round1(p.gramsPerUnit * (p.defaultQuantity ?? 1)) : (p.defaultQuantity ?? 1);
+   if (p.edibleFraction && p.gramsPerUnit > 0) {
+     $('#f-gross', root).value = p.gramsPerUnit;
+     $('#f-edible', root).value = Math.round(p.edibleFraction * 100);
+@@ -372,20 +388,20 @@ function applyPreset(p, setName = true) {
+ 
+ function updateFoodPreview() {
+   if (!root) return;
+-  const qty = toNum($('#f-qty', root).value) || 0;
++  const qty = formQty() || 0;
+   const calories = (toNum($('#f-cal', root).value) || 0) * qty;
+   const protein = (toNum($('#f-pro', root).value) || 0) * qty;
+   const carbs = (toNum($('#f-carb', root).value) || 0) * qty;
+   const fat = (toNum($('#f-fat', root).value) || 0) * qty;
+   const unit = base?.unit === 'g' ? 'g' : 'หน่วย';
+-  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}${unit === 'g' ? ` · ${fmtAmount(qty)} g` : ''}`;
++  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}${unit === 'g' ? ` · ${fmtAmount(qty)} g` : weighMode() ? ` · ${fmtAmount(qty * base.gramsPerUnit)} g` : ''}`;
+ }
+ 
+ function clearFoodForm() {
+   if (!root) return;
+   ['f-name','f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium','f-gross','f-edible'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
+   $('#f-qty',root).value=1;
+-  base=null;
++  base=null; qtyMode='unit';
+   syncFoodWeightForm();
+   updateFoodPreview();
+ }
+@@ -405,6 +421,7 @@ const foodLogPortion = item => {
+   }
+   const quantity = foodLogQuantity(item);
+   if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
++  if (item.gramsPerUnit > 0) return isWeightUnit(item.portionUnit) ? `${fmtAmount(quantity * item.gramsPerUnit)} g` : `${fmtAmount(quantity * item.gramsPerUnit)} g · ×${fmtAmount(quantity)} ${item.portionUnit || 'หน่วย'}`;
+   return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
+ };
+ 
+@@ -423,13 +440,24 @@ function unitNutritionFor(item, quantity = foodLogQuantity(item)) {
+   };
+ }
+ 
++// อาหารที่รู้น้ำหนักต่อหน่วย (เช่น "100 g", "1 ลูก = 80 g") → ใส่เป็นกรัมที่กินจริงได้ เช่น 55 g แทนการกรอก 0.55
++let qtyMode = 'unit';
++const isWeightUnit = u => /^\s*\d+(\.\d+)?\s*(g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)\s*$/i.test(u || '');
++const canWeigh = () => Boolean(base && base.gramsPerUnit > 0 && !base.edibleFraction && !(base.unit === 'g' && base.gramsPerUnit === 1));
++const weighMode = () => canWeigh() && qtyMode === 'grams';
++// จำนวนหน่วยจริงที่จะบันทึก (แปลงจากกรัมถ้าอยู่โหมดน้ำหนัก)
++const formQty = () => { const raw = numField(root, 'f-qty'); return weighMode() && raw !== null ? raw / base.gramsPerUnit : raw; };
++
+ function syncFoodWeightForm() {
+   if (!root) return;
+   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
+   const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
+   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
+-  $('#f-qty-label', root).textContent = gramMode ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วย)';
+-  $('#f-qty', root).step = gramMode ? '1' : '0.01';
++  const modeSel = $('#f-qmode', root), wm = weighMode();
++  modeSel.classList.toggle('hidden', !canWeigh());
++  if (canWeigh()) modeSel.value = qtyMode;
++  $('#f-qty-label', root).textContent = gramMode || wm ? 'น้ำหนักที่กิน (กรัม)' : 'จำนวน (หน่วย)';
++  $('#f-qty', root).step = gramMode || wm ? '1' : '0.01';
+   $('#f-preview', root).textContent = gramMode ? 'สารอาหารในคลังคิดต่อ 1 กรัม · ยอดรวมปรับตามน้ำหนักที่กรอก' : '';
+   $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
+   if (grossMode) updateEdibleEstimate();
+@@ -453,7 +481,7 @@ function saveFood() {
+   const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
+   const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
+   if (grossMode && (!weighedGrams || weighedGrams <= 0 || !ediblePercent || ediblePercent > 100)) return toast('กรุณาระบุน้ำหนักที่ชั่งและสัดส่วนที่กินได้ 1–100%', 'err');
+-  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (numField(root, 'f-qty') ?? 1);
++  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (formQty() ?? 1);
+   if (qty <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
+   const m = v => (v === null ? 0 : round1(v * qty));
+   const unitNutrition = {
+@@ -543,20 +571,21 @@ function editFoodQuantity(id) {
+   const isGross = Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction) && item.edibleUnitGrams > 0;
+   const isGrams = item.portionUnit === 'g' && item.gramsPerUnit === 1;
+   const currentQuantity = foodLogQuantity(item);
++  const unitG = !isGross && !isGrams && item.gramsPerUnit > 0 ? item.gramsPerUnit : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
+   const m = openModal(`
+     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
+-    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วยเดิม)'}</label>
+-    <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : currentQuantity}">
++    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams || unitG > 1 ? (unitG > 1 ? 'น้ำหนักที่กิน (กรัม)' : 'ปริมาณ (กรัม)') : 'จำนวน (หน่วยเดิม)'}</label>
++    <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams||unitG > 1 ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : unitG > 1 ? round1(currentQuantity * unitG) : currentQuantity}">
+     ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Math.round(item.edibleFraction * 100)}">` : ''}
+     <p id="fl-estimate" class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
+     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="fl-save" class="btn btn-primary">บันทึกจำนวน</button></div>`);
+   const updateEstimate = () => {
+     const grams = toNum($('#fl-amount', m.el).value) || 0;
+     const percent = isGross ? (toNum($('#fl-edible', m.el).value) || 0) : null;
+-    const quantity = isGross ? grams * percent / 100 / item.edibleUnitGrams : grams;
++    const quantity = isGross ? grams * percent / 100 / item.edibleUnitGrams : grams / unitG;
+     const nutrition=unitNutritionFor(item,currentQuantity);
+-    const amountText=isGross ? `กินได้ประมาณ ${fmtAmount(grams*percent/100)} g · ` : isGrams ? `${fmtAmount(grams)} g · ` : '';
++    const amountText=isGross ? `กินได้ประมาณ ${fmtAmount(grams*percent/100)} g · ` : isGrams || unitG > 1 ? `${fmtAmount(grams)} g · ` : '';
+     $('#fl-estimate', m.el).textContent = `${amountText}${Math.round(nutrition.calories*quantity)} kcal · P ${round1(nutrition.protein*quantity)} · C ${round1(nutrition.carbs*quantity)} · F ${round1(nutrition.fat*quantity)}`;
+   };
+   $('#fl-amount', m.el).addEventListener('input', updateEstimate);
+@@ -568,7 +597,7 @@ function editFoodQuantity(id) {
+     if (!amount || amount <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
+     if (isGross && (!percent || percent <= 0 || percent > 100)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100%', 'err');
+     const edibleFraction = isGross ? percent / 100 : null;
+-    const quantity = isGross ? amount * edibleFraction / item.edibleUnitGrams : amount;
++    const quantity = isGross ? amount * edibleFraction / item.edibleUnitGrams : amount / unitG;
+     const unitNutrition = unitNutritionFor(item, currentQuantity);
+     const updates = {
+       name: foodLogName(item.name), quantity, unitNutrition,
+@@ -612,6 +641,27 @@ function renderDay() {
+   const sum = k => items.reduce((a, i) => a + num(i[k]), 0);
+   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
+   $('#f-total', root).textContent = `${Math.round(t.cal)} / ${targets.kcal.toLocaleString()}`;
++  const today = localDateStr(), date = $('#f-date', root).value, future = date > today;
++  $$('[data-day]', root).forEach(b => { const on_ = addDays(today, +b.dataset.day) === date; b.classList.toggle('ring-2', on_); b.classList.toggle('ring-brand', on_); });
++  $('#f-daylabel', root).textContent = future ? 'แคลอรี่ที่วางแผนไว้' : date === today ? 'แคลอรี่รวมวันนี้' : 'แคลอรี่รวมของวันที่เลือก';
++  const left = targets.kcal - t.cal;
++  $('#f-remain', root).innerHTML = left >= 0 ? `เหลืออีก <b>${Math.round(left)}</b> kcal` : `<span class="text-amber-700">เกินเป้า <b>${Math.round(-left)}</b> kcal</span>`;
++  // พลังงานแยกตามมื้อ เทียบกับสัดส่วนที่ตั้งไว้ในหน้า ตั้งค่า
++  const mealList = getMeals(), pctSum = mealList.reduce((a, m) => a + (m.pct || 0), 0) || 100;
++  const eatenBy = name => items.filter(i => (i.meal || '') === name).reduce((a, i) => a + num(i.calories), 0);
++  const known = new Set(mealList.map(m => m.name));
++  const otherKcal = items.filter(i => !known.has(i.meal || '')).reduce((a, i) => a + num(i.calories), 0);
++  $('#f-meals', root).innerHTML = mealList.map(m => {
++    const target = Math.round(targets.kcal * (m.pct || 0) / pctSum), eaten = Math.round(eatenBy(m.name)), over = target > 0 && eaten > target;
++    return `<div><div class="flex justify-between items-center text-xs font-semibold mb-1"><span>${esc(m.name)} <span class="text-slate-400 font-normal">(${m.pct || 0}%)</span></span><span class="${over ? 'text-amber-700' : ''}">${eaten} / ${target} kcal</span></div>
++      <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="${over ? 'bg-amber-400' : 'bg-violet-400'} h-full transition-all" style="width:${target ? Math.min(eaten / target * 100, 100) : 0}%"></div></div>
++      <div class="flex justify-between text-[11px] text-slate-500 mt-0.5"><span>${over ? `เกิน ${eaten - target} kcal` : `เหลือ ${target - eaten} kcal`}</span><button data-meal="${esc(m.name)}" class="text-brand underline">+ เพิ่มในมื้อนี้</button></div></div>`;
++  }).join('') + (otherKcal ? `<p class="text-xs text-slate-500">มื้ออื่น ๆ ที่ไม่อยู่ในรายการ: ${Math.round(otherKcal)} kcal</p>` : '');
++  $('#f-meals-note', root).textContent = targets.source === 'default' ? 'ตอนนี้ใช้เป้าเริ่มต้น 2,000 kcal — ตั้งค่าข้อมูลร่างกายในหน้า ตั้งค่า เพื่อคำนวณ TDEE' : (future ? 'วางแผนล่วงหน้า: เพิ่มรายการในวันพรุ่งนี้แล้วดูว่าแต่ละมื้อเหลือพลังงานเท่าไร' : 'เป้าหมายคำนวณจาก TDEE ในหน้า ตั้งค่า');
++  const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
++  const burnEl = $('#f-burn', root);
++  burnEl.classList.toggle('hidden', !burned);
++  if (burned) burnEl.textContent = `🏃 ออกกำลังกายวันนี้เผาผลาญเพิ่มประมาณ ${burned} kcal (ค่าประมาณ — ยังไม่ได้บวกเข้าเป้าอัตโนมัติ)`;
+   const bar = (name, v, goal, color, unit = 'g') => `
+     <div><div class="flex justify-between text-xs font-semibold mb-1"><span>${name}</span><span>${round1(v)} / ${goal}${unit}</span></div>
+     <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="${color} h-full transition-all" style="width:${Math.min(v / goal * 100, 100)}%"></div></div></div>`;
+diff --git a/src/lab.js b/src/lab.js
+new file mode 100644
+index 0000000..49c7593
+--- /dev/null
++++ b/src/lab.js
+@@ -0,0 +1,92 @@
++import { addDoc, deleteDoc } from 'firebase/firestore';
++import { userCol, userDoc } from './firebase.js';
++import { state } from './state.js';
++import { $, esc, fmtDate, localDateStr, toNum, toast } from './util.js';
++
++// ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/เพศ/อายุ ให้แก้ตามที่พิมพ์ในใบผลตรวจเสมอ
++export const LAB_PRESETS = [
++  ['น้ำตาลในเลือดหลังอดอาหาร (FBS)', 'mg/dL', 70, 99], ['HbA1c', '%', 4, 5.6], ['คอเลสเตอรอลรวม (Total Cholesterol)', 'mg/dL', null, 199],
++  ['LDL', 'mg/dL', null, 129], ['HDL', 'mg/dL', 40, null], ['ไตรกลีเซอไรด์ (Triglycerides)', 'mg/dL', null, 149],
++  ['ฮีโมโกลบิน (Hb)', 'g/dL', 12, 16], ['ฮีมาโตคริต (Hct)', '%', 36, 46], ['เฟอริติน (Ferritin)', 'ng/mL', 15, 150],
++  ['TSH', 'mIU/L', 0.4, 4], ['ครีเอตินีน (Creatinine)', 'mg/dL', 0.5, 1.1], ['กรดยูริก (Uric acid)', 'mg/dL', 2.4, 6],
++  ['ALT (SGPT)', 'U/L', null, 40], ['AST (SGOT)', 'U/L', null, 40], ['วิตามินดี (25-OH Vit D)', 'ng/mL', 30, 100], ['วิตามินบี 12', 'pg/mL', 200, 900]
++];
++const key = n => String(n || '').trim().toLowerCase();
++export function labFlag(r) {
++  if (typeof r.value !== 'number') return null;
++  if (typeof r.refLow === 'number' && r.value < r.refLow) return 'low';
++  if (typeof r.refHigh === 'number' && r.value > r.refHigh) return 'high';
++  return (typeof r.refLow === 'number' || typeof r.refHigh === 'number') ? 'ok' : null;
++}
++const FLAG = { low: ['ต่ำกว่าเกณฑ์', 'bg-sky-100 text-sky-800'], high: ['สูงกว่าเกณฑ์', 'bg-rose-100 text-rose-700'], ok: ['ในเกณฑ์', 'bg-green-100 text-green-800'] };
++export const refText = r => (typeof r.refLow === 'number' && typeof r.refHigh === 'number' ? `${r.refLow}–${r.refHigh}` : typeof r.refHigh === 'number' ? `< ${r.refHigh}` : typeof r.refLow === 'number' ? `> ${r.refLow}` : '-') + (r.unit ? ' ' + r.unit : '');
++
++let root;
++export function mountLab(el) {
++  root = el;
++  root.innerHTML = `
++  <div class="lg:col-span-1 space-y-6">
++    <div class="card space-y-3">
++      <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-vial text-brand"></i> บันทึกผลตรวจ</h2>
++      <div><label class="lbl">วันที่ตรวจ</label><input id="lb-date" type="date" class="input"></div>
++      <div><label class="lbl">รายการตรวจ (เลือกจากรายการหรือพิมพ์เอง)</label><input id="lb-name" list="lb-names" class="input" placeholder="เช่น HbA1c"><datalist id="lb-names">${LAB_PRESETS.map(p => `<option value="${esc(p[0])}">`).join('')}</datalist></div>
++      <div class="grid grid-cols-2 gap-3">
++        <div><label class="lbl">ผลที่ได้</label><input id="lb-value" type="number" step="any" inputmode="decimal" class="input"></div>
++        <div><label class="lbl">หน่วย</label><input id="lb-unit" class="input" placeholder="mg/dL"></div>
++        <div><label class="lbl">ค่าอ้างอิง ต่ำสุด</label><input id="lb-low" type="number" step="any" inputmode="decimal" class="input"></div>
++        <div><label class="lbl">ค่าอ้างอิง สูงสุด</label><input id="lb-high" type="number" step="any" inputmode="decimal" class="input"></div>
++      </div>
++      <div><label class="lbl">โรงพยาบาล/แล็บ · หมายเหตุ</label><input id="lb-note" class="input" placeholder="ไม่บังคับ"></div>
++      <p class="text-[11px] text-slate-500">ค่าอ้างอิงที่เติมให้เป็นค่าทั่วไปเท่านั้น — ให้แก้ตามใบผลตรวจของคุณ (แต่ละแล็บ เพศ และอายุต่างกัน) ผลที่ขึ้นว่าสูง/ต่ำเป็นเพียงการเทียบตัวเลข ไม่ใช่การวินิจฉัย ควรให้แพทย์แปลผล</p>
++      <button id="lb-save" class="btn btn-primary w-full justify-center"><i class="fa-solid fa-plus"></i> บันทึกผล</button>
++    </div>
++  </div>
++  <div class="lg:col-span-2 space-y-4"><div class="flex gap-2"><input id="lb-search" class="input" placeholder="🔍 ค้นหารายการ"></div><div id="lb-list" class="space-y-3"></div></div>`;
++  $('#lb-date', root).value = localDateStr();
++  $('#lb-name', root).addEventListener('input', e => {
++    const p = LAB_PRESETS.find(x => x[0] === e.target.value); if (!p) return;
++    const last = [...state.labs].filter(r => key(r.name) === key(p[0])).sort((a, b) => b.date.localeCompare(a.date))[0];   // ถ้าเคยกรอกแล้ว ใช้ค่าอ้างอิงจากใบผลครั้งก่อน
++    $('#lb-unit', root).value = last?.unit ?? p[1]; $('#lb-low', root).value = (last ? last.refLow : p[2]) ?? ''; $('#lb-high', root).value = (last ? last.refHigh : p[3]) ?? '';
++  });
++  $('#lb-save', root).addEventListener('click', save);
++  $('#lb-search', root).addEventListener('input', render);
++  $('#lb-list', root).addEventListener('click', e => {
++    const d = e.target.closest('[data-del]');
++    if (d && confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
++  });
++  render();
++}
++
++function save() {
++  const name = $('#lb-name', root).value.trim(), value = toNum($('#lb-value', root).value), date = $('#lb-date', root).value;
++  if (!name || value === null || !date) return toast('กรอกวันที่ รายการตรวจ และผลที่ได้', 'err');
++  const low = toNum($('#lb-low', root).value), high = toNum($('#lb-high', root).value);
++  if (low !== null && high !== null && low > high) return toast('ค่าอ้างอิงต่ำสุดต้องไม่มากกว่าสูงสุด', 'err');
++  addDoc(userCol(state.uid, 'lab_records'), { date, name: name.slice(0, 80), value, unit: $('#lb-unit', root).value.trim().slice(0, 20), refLow: low, refHigh: high, note: $('#lb-note', root).value.trim().slice(0, 200), createdAt: new Date() })
++    .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
++  ['lb-name', 'lb-value', 'lb-unit', 'lb-low', 'lb-high'].forEach(id => { $('#' + id, root).value = ''; });
++  toast('บันทึกผลตรวจแล้ว');
++}
++
++function spark(rows) {
++  if (rows.length < 2) return '';
++  const W = 120, H = 32, vs = rows.map(r => r.value), min = Math.min(...vs), max = Math.max(...vs), rng = max - min || 1;
++  const pts = rows.map((r, i) => `${(i / (rows.length - 1) * (W - 6) + 3).toFixed(1)},${(H - 4 - (r.value - min) / rng * (H - 8)).toFixed(1)}`).join(' ');
++  return `<svg viewBox="0 0 ${W} ${H}" class="w-28 h-8"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2"/></svg>`;
++}
++
++export function render() {
++  if (!root) return;
++  const q = key($('#lb-search', root).value), groups = new Map();
++  state.labs.forEach(r => { const k = key(r.name); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
++  const cards = [...groups.values()].map(rows => rows.sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)))
++    .filter(rows => !q || key(rows[0].name).includes(q)).sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
++  $('#lb-list', root).innerHTML = cards.length ? cards.map(rows => {
++    const last = rows[rows.length - 1], f = labFlag(last), prev = rows[rows.length - 2];
++    const arrow = prev ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : '';
++    return `<details class="card !p-3"><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
++      <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
++      <div class="flex items-center gap-3">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-400">${arrow}</span></p>${f ? `<span class="chip !cursor-default ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
++      <div class="mt-3 divide-y divide-slate-100 text-sm">${rows.slice().reverse().map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-400">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="text-rose-400 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
++  }).join('') : '<p class="text-sm text-slate-400">ยังไม่มีผลตรวจ — บันทึกผลแรกทางด้านซ้าย</p>';
++}
+diff --git a/src/profile.js b/src/profile.js
+index 3c1d781..eb22057 100644
+--- a/src/profile.js
++++ b/src/profile.js
+@@ -13,6 +13,11 @@ export const ACTIVITY = [
+ ];
+ export const GOAL_PRESETS = [['-500', 'ลดน้ำหนัก (−500 kcal)'], ['-300', 'ลดน้ำหนักช้า ๆ (−300 kcal)'], ['0', 'คงน้ำหนัก'], ['300', 'เพิ่มน้ำหนัก/กล้ามเนื้อ (+300 kcal)']];
+ export const DEFAULT_MEALS = [{ id: 'breakfast', name: 'มื้อเช้า', pct: 30 }, { id: 'lunch', name: 'มื้อกลางวัน', pct: 40 }, { id: 'dinner', name: 'มื้อเย็น', pct: 30 }];
++// ขั้นต่ำของสารอาหารหลัก (ไม่ให้ตั้งต่ำกว่านี้)
++//  โปรตีน: RDA ผู้ใหญ่ 0.8 g/กก./วัน (ลดน้ำหนัก/ออกกำลังกายแนะนำ ~1.2–2.0)  ไขมัน: ช่วงที่แนะนำ 20–35% ของพลังงาน (WHO/DRI) — ขั้นต่ำ 20%
++export const PROTEIN_MIN = 0.8, PROTEIN_MAX = 3.0, FAT_MIN = 20, FAT_MAX = 40;
++export const defaultProtein = adjust => (adjust < 0 ? 1.6 : adjust > 0 ? 1.8 : 1.2);
++const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+ const FALLBACK = { kcal: 2000, protein: 100, carbs: 200, fat: 60 };
+ 
+ export const getMeals = () => (state.profile?.meals?.length ? state.profile.meals : DEFAULT_MEALS);
+@@ -36,8 +41,8 @@ export function getTargets(p = state.profile) {
+   const c = calcBody(p);
+   if (!p || !c) return { ...FALLBACK, source: 'default' };
+   const kcal = Math.round(p.kcalOverride || c.tdee + (p.adjust || 0));
+-  const protein = Math.round((p.proteinPerKg ?? 1.4) * c.w);
+-  const fat = Math.round(kcal * ((p.fatPct ?? 25) / 100) / 9);
++  const protein = Math.round(clamp(p.proteinPerKg ?? defaultProtein(p.adjust || 0), PROTEIN_MIN, PROTEIN_MAX) * c.w);
++  const fat = Math.round(kcal * clamp(p.fatPct ?? 25, FAT_MIN, FAT_MAX) / 100 / 9);
+   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+   return { kcal, protein, carbs, fat, source: 'profile' };
+ }
+@@ -57,8 +62,9 @@ export function mountProfile(el) {
+       <div class="col-span-2"><label class="lbl">เป้าหมาย</label><select id="pf-goal" class="input">${GOAL_PRESETS.map(g => `<option value="${g[0]}">${g[1]}</option>`).join('')}<option value="custom">กำหนดส่วนต่างเอง</option></select></div>
+       <div><label class="lbl">ส่วนต่างจาก TDEE (kcal/วัน)</label><input id="pf-adj" type="number" inputmode="numeric" class="input"></div>
+       <div><label class="lbl">หรือตั้งแคลอรี่เป้าหมายเอง</label><input id="pf-kcal" type="number" inputmode="numeric" placeholder="เว้นว่าง = คำนวณให้" class="input"></div>
+-      <div><label class="lbl">โปรตีน (g ต่อ กก.)</label><input id="pf-prot" type="number" step="0.1" inputmode="decimal" class="input"></div>
+-      <div><label class="lbl">ไขมัน (% ของพลังงาน)</label><input id="pf-fat" type="number" inputmode="numeric" class="input"></div>
++      <div><label class="lbl">โปรตีน (g ต่อ กก.) · ขั้นต่ำ ${PROTEIN_MIN}</label><input id="pf-prot" type="number" step="0.1" min="${PROTEIN_MIN}" max="${PROTEIN_MAX}" inputmode="decimal" class="input"></div>
++      <div><label class="lbl">ไขมัน (% ของพลังงาน) · ขั้นต่ำ ${FAT_MIN}</label><input id="pf-fat" type="number" min="${FAT_MIN}" max="${FAT_MAX}" inputmode="numeric" class="input"></div>
++      <p id="pf-macro-hint" class="col-span-2 text-[11px] text-slate-500"></p>
+     </div>
+     <div id="pf-result" class="rounded-xl bg-lav-soft/50 p-3 text-sm space-y-1"></div>
+     <p class="text-xs text-slate-400">ค่าที่คำนวณเป็นค่าประมาณทั่วไป (สูตร Mifflin-St Jeor) ไม่ใช่คำแนะนำทางการแพทย์ — มีโรคประจำตัว ตั้งครรภ์ หรือต้องการลดน้ำหนักมาก ควรปรึกษาแพทย์/นักกำหนดอาหาร</p>
+@@ -72,6 +78,7 @@ export function mountProfile(el) {
+   root.addEventListener('change', e => {
+     if (e.target.id === 'pf-goal') { const v = e.target.value; if (v !== 'custom') $('#pf-adj', root).value = v; }
+     if (e.target.id === 'pf-adj') $('#pf-goal', root).value = GOAL_PRESETS.some(g => g[0] === e.target.value) ? e.target.value : 'custom';
++    if (e.target.id === 'pf-prot' || e.target.id === 'pf-fat') enforceMinimums(true);
+     dirty = true; preview();
+   });
+   $('#pf-add-meal', root).addEventListener('click', () => { readMeals(); meals.push({ id: 'm' + Date.now().toString(36), name: 'มื้อใหม่', pct: 0 }); dirty = true; renderMeals(); });
+@@ -90,7 +97,7 @@ function fill() {
+   const p = state.profile || {};
+   const set = (id, v) => { $('#' + id, root).value = v ?? ''; };
+   set('pf-sex', p.sex || 'female'); set('pf-birth', p.birthYear); set('pf-height', p.heightCm); set('pf-weight', p.weightKg);
+-  set('pf-act', p.activity || 'light'); set('pf-adj', p.adjust ?? -300); set('pf-kcal', p.kcalOverride); set('pf-prot', p.proteinPerKg ?? 1.4); set('pf-fat', p.fatPct ?? 25);
++  set('pf-act', p.activity || 'light'); set('pf-adj', p.adjust ?? -300); set('pf-kcal', p.kcalOverride); set('pf-prot', p.proteinPerKg ?? defaultProtein(p.adjust ?? -300)); set('pf-fat', p.fatPct ?? 25);
+   $('#pf-goal', root).value = GOAL_PRESETS.some(g => g[0] === String(p.adjust ?? -300)) ? String(p.adjust ?? -300) : 'custom';
+   meals = getMeals().map(m => ({ ...m }));
+   renderMeals();
+@@ -115,12 +122,25 @@ function readMeals() {
+   });
+ }
+ 
++// ถ้ากรอกต่ำกว่าขั้นต่ำ/สูงเกินไป ให้ปรับกลับเป็นขั้นต่ำทันทีและแจ้งเตือน
++function enforceMinimums(notify) {
++  let fixed = [];
++  const pr = $('#pf-prot', root), ft = $('#pf-fat', root);
++  const v1 = toNum(pr.value), v2 = toNum(ft.value);
++  if (v1 !== null && v1 < PROTEIN_MIN) { pr.value = PROTEIN_MIN; fixed.push(`โปรตีนต่ำกว่าขั้นต่ำ ${PROTEIN_MIN} g/กก.`); }
++  if (v1 !== null && v1 > PROTEIN_MAX) { pr.value = PROTEIN_MAX; fixed.push(`โปรตีนสูงสุด ${PROTEIN_MAX} g/กก.`); }
++  if (v2 !== null && v2 < FAT_MIN) { ft.value = FAT_MIN; fixed.push(`ไขมันต่ำกว่าขั้นต่ำ ${FAT_MIN}% ของพลังงาน`); }
++  if (v2 !== null && v2 > FAT_MAX) { ft.value = FAT_MAX; fixed.push(`ไขมันสูงสุด ${FAT_MAX}%`); }
++  if (fixed.length && notify) toast('ปรับเป็นค่าที่ปลอดภัย: ' + fixed.join(' · '), 'err');
++  return fixed.length === 0;
++}
++
+ function draft() {
+   const g = id => $('#' + id, root).value;
+   return {
+     sex: g('pf-sex'), birthYear: toNum(g('pf-birth')), heightCm: toNum(g('pf-height')), weightKg: toNum(g('pf-weight')),
+     activity: g('pf-act'), adjust: toNum(g('pf-adj')) ?? 0, kcalOverride: toNum(g('pf-kcal')),
+-    proteinPerKg: toNum(g('pf-prot')) ?? 1.4, fatPct: toNum(g('pf-fat')) ?? 25
++    proteinPerKg: toNum(g('pf-prot')) ?? defaultProtein(toNum(g('pf-adj')) ?? 0), fatPct: toNum(g('pf-fat')) ?? 25
+   };
+ }
+ 
+@@ -133,7 +153,10 @@ function preview() {
+   $('#pf-pct-sum', root).innerHTML = `<span class="${sum === 100 ? 'text-green-700' : 'text-amber-700'}">รวม ${sum}%${sum === 100 ? ' ✓' : ' (ควรรวม 100%)'}</span>`;
+   if (!c) { box.innerHTML = '<span class="text-slate-500">กรอกเพศ ปีเกิด ส่วนสูง และน้ำหนัก เพื่อคำนวณ BMI / BMR / TDEE (ตอนนี้ใช้ค่าเริ่มต้น 2,000 kcal)</span>'; return; }
+   const t = getTargets({ ...p });
+-  const warn = t.kcal < 1200 ? '<p class="text-xs text-rose-600">⚠️ เป้าหมายต่ำกว่า 1,200 kcal/วัน ซึ่งต่ำมากสำหรับคนส่วนใหญ่ — ควรปรึกษาแพทย์หรือนักกำหนดอาหารก่อน</p>' : '';
++  const w = c.w, adj = p.adjust || 0, lo = adj < 0 ? 1.2 : 0.8, hi = adj > 0 ? 2.2 : 2.0;
++  $('#pf-macro-hint', root).innerHTML = `ขั้นต่ำโปรตีน <b>${Math.ceil(PROTEIN_MIN * w)} g</b>/วัน · แนะนำ ${Math.round(lo * w)}–${Math.round(hi * w)} g (${lo}–${hi} g/กก. ${adj < 0 ? 'ช่วงลดน้ำหนักต้องการโปรตีนสูงขึ้นเพื่อรักษากล้ามเนื้อ' : 'ถ้าออกกำลังกายแบบเวทแนะนำ 1.6+'}) · ไขมันขั้นต่ำ ${FAT_MIN}% ≈ <b>${Math.round(t.kcal * FAT_MIN / 100 / 9)} g</b>`;
++  const lowKcal = t.kcal < c.bmr ? '<p class="text-xs text-amber-700">⚠️ เป้าหมายต่ำกว่า BMR (' + Math.round(c.bmr) + ' kcal) — ร่างกายไม่ได้ใช้พลังงานน้อยกว่านี้แม้นอนอยู่เฉย ๆ ควรปรับให้สูงขึ้น</p>' : '';
++  const warn = lowKcal + (t.kcal < 1200 ? '<p class="text-xs text-rose-600">⚠️ เป้าหมายต่ำกว่า 1,200 kcal/วัน ซึ่งต่ำมากสำหรับคนส่วนใหญ่ — ควรปรึกษาแพทย์หรือนักกำหนดอาหารก่อน</p>' : '');
+   box.innerHTML = `<p><b>BMI ${round1(c.bmi)}</b> · ${bmiLabel(c.bmi)} <span class="text-[11px] text-slate-400">(เกณฑ์เอเชีย: 18.5–22.9 สมส่วน)</span></p>
+     <p>BMR ${Math.round(c.bmr)} kcal · <b>TDEE ${Math.round(c.tdee)} kcal</b>/วัน</p>
+     <p class="font-semibold text-brand-dark">เป้าหมายต่อวัน: ${t.kcal.toLocaleString()} kcal · โปรตีน ${t.protein} g · คาร์บ ${t.carbs} g · ไขมัน ${t.fat} g</p>${warn}`;
+@@ -141,6 +164,7 @@ function preview() {
+ 
+ function save() {
+   readMeals();
++  if (!enforceMinimums(true)) return;
+   const p = draft();
+   if (!meals.every(m => String(m.name).trim())) return toast('ตั้งชื่อมื้อให้ครบ', 'err');
+   const rec = { ...p, meals: meals.map(m => ({ id: m.id, name: String(m.name).trim(), pct: m.pct || 0 })), updatedAt: new Date() };
+diff --git a/src/reports.js b/src/reports.js
+index 7c96637..e6a0aa1 100644
+--- a/src/reports.js
++++ b/src/reports.js
+@@ -8,6 +8,7 @@ import { sortBodyDesc, weightChartSvg } from './body.js';
+ import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
+ import { syncLineText } from './sync.js';
+ import { TYPES, SECTIONS, repLabel } from './workout.js';
++import { labFlag, refText } from './lab.js';
+ 
+ let root, data = null;
+ 
+@@ -28,11 +29,12 @@ export function mountReport(el) {
+         <label><input type="checkbox" id="r-inc-body" checked> น้ำหนัก/สัดส่วน</label>
+         <label><input type="checkbox" id="r-inc-food" checked> อาหาร/สารอาหาร</label>
+         <label><input type="checkbox" id="r-inc-workout" checked> ออกกำลังกาย</label>
++        <label><input type="checkbox" id="r-inc-lab" checked> ผลตรวจ</label>
+       </div>
+       <div class="flex flex-wrap gap-2">
+         <button id="r-gen" class="btn btn-primary"><i class="fa-solid fa-file-lines"></i> สร้างรายงาน</button>
+         <button id="r-print" class="btn btn-soft" disabled><i class="fa-solid fa-print"></i> พิมพ์ / บันทึกเป็น PDF</button>
+-        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option></select>
++        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
+         <button id="r-csv" class="btn btn-ghost"><i class="fa-solid fa-file-csv"></i> ดาวน์โหลด CSV</button>
+       </div>
+       <p class="text-xs text-slate-400">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
+@@ -103,6 +105,11 @@ async function generate() {
+       tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '-',
+         SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '-'])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+   }
++  if (inc('lab')) {
++    const labs = state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.name.localeCompare(b.name, 'th') || a.date.localeCompare(b.date));
++    const FL = { low: 'ต่ำกว่าเกณฑ์', high: 'สูงกว่าเกณฑ์', ok: 'ในเกณฑ์' };
++    h += sec('ผลตรวจทางห้องปฏิบัติการ', labs.length ? tbl(['วันที่', 'รายการ', 'ผล', 'ค่าอ้างอิง', 'เทียบเกณฑ์'], labs.map(l => [esc(fmtDate(l.date)), esc(l.name), `<b>${esc(l.value)}</b> ${esc(l.unit)}`, esc(refText(l)), esc(FL[labFlag(l)] || '-')])) + '<p class="text-xs text-slate-400 mt-1">ค่าอ้างอิงตามที่ผู้ใช้กรอกจากใบผลตรวจ — ให้แพทย์เป็นผู้แปลผล</p>' : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
++  }
+   h += `<p class="text-xs text-slate-400 mt-6">ข้อมูลนี้ผู้ใช้บันทึกเอง ค่าคาดการณ์เป็นการประมาณ ไม่ใช่การวินิจฉัยทางการแพทย์</p>`;
+   $('#report-preview', root).innerHTML = h;
+   $('#r-print', root).disabled = false;
+@@ -115,6 +122,7 @@ async function csv() {
+     period: [['เริ่ม', 'สิ้นสุด', 'ปริมาณ', 'หมายเหตุ'], ...d.period.map(p => [p.start, p.end || '', p.flow || '', p.note || ''])],
+     symptoms: [['วันที่', ...SYMPTOMS.map(s => s[1]), 'อารมณ์(1-5)', 'เครียด(1-5)', 'หมายเหตุ'], ...d.symptoms.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, ...SYMPTOMS.map(([k]) => r.symptoms?.[k] ?? 0), r.mood ?? '', r.stress ?? '', r.note || ''])],
+     body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.note || ''])],
++    lab: [['วันที่', 'รายการ', 'ผล', 'หน่วย', 'อ้างอิงต่ำสุด', 'อ้างอิงสูงสุด', 'หมายเหตุ'], ...state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.date.localeCompare(b.date)).map(l => [l.date, l.name, l.value, l.unit || '', l.refLow ?? '', l.refHigh ?? '', l.note || ''])],
+     workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
+     food: [['วันที่', 'มื้อ', 'เมนู', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน', 'น้ำตาล', 'โซเดียม(mg)'], ...d.food.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.meal, r.name, r.calories, r.protein, r.carbs, r.fat, r.sugar ?? '', r.sodium ?? ''])]
+   }[kind];
+diff --git a/src/schema.js b/src/schema.js
+index 501bd71..6a2a56d 100644
+--- a/src/schema.js
++++ b/src/schema.js
+@@ -62,8 +62,11 @@ export const SANITIZERS = {
+   tracked_products: o => str(o.name) && str(o.unit,80) ? { name:str(o.name), category:str(o.category,100), quantity:num(o.quantity), unit:str(o.unit,80), lowAt:num(o.lowAt), expiryDate:isDateStr(o.expiryDate)?o.expiryDate:null, openedDate:isDateStr(o.openedDate)?o.openedDate:null, paoMonths:int(o.paoMonths,1,120), paoExpiry:isDateStr(o.paoExpiry)?o.paoExpiry:null, ingredients:str(o.ingredients,3000), pros:str(o.pros,2000), cons:str(o.cons,2000), createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
+   replacement_records: o => str(o.name) && isDateStr(o.date) ? { name:str(o.name), date:o.date, intervalDays:int(o.intervalDays,1,3650), nextDate:isDateStr(o.nextDate)?o.nextDate:null, note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
+ 
++  lab_records: o => isDateStr(o.date) && str(o.name,80) && num(o.value) !== null ? {
++    date:o.date, name:str(o.name,80), value:num(o.value), unit:str(o.unit,20), refLow:num(o.refLow), refHigh:num(o.refHigh), note:str(o.note,200), createdAt:ts(o.createdAt)
++  } : null,
+   workout_records: o => isDateStr(o.date) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
+-    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin),
++    date:o.date, type:o.type, typeLabel:str(o.typeLabel,40), durationMin:num(o.durationMin), intensity:['light','moderate','vigorous'].includes(o.intensity)?o.intensity:null, estKcal:num(o.estKcal),
+     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
+     note:str(o.note,300), createdAt:ts(o.createdAt)
+   } : null,
+@@ -83,7 +86,7 @@ export const SANITIZERS = {
+ };
+ export const COLLECTION_LABELS = {
+   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
+-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
++  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+ };
+ // symptom_records ใช้วันที่เป็น doc id
+ export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : col === 'settings' ? 'profile' : fallback;
+diff --git a/src/state.js b/src/state.js
+index 49b0a4c..817e5a2 100644
+--- a/src/state.js
++++ b/src/state.js
+@@ -8,6 +8,7 @@ export const state = {
+   symptoms: [],
+   workouts: [],
+   templates: [],
++  labs: [],
+   profile: null,
+   skinRecords: [],
+   skincareProducts: [],
+diff --git a/src/weekly.js b/src/weekly.js
+new file mode 100644
+index 0000000..4471654
+--- /dev/null
++++ b/src/weekly.js
+@@ -0,0 +1,102 @@
++import { getDocs, query, where } from 'firebase/firestore';
++import { userCol } from './firebase.js';
++import { state } from './state.js';
++import { $, esc, fmtDate, localDateStr, parseLocal, addDays, daysBetween, round1 } from './util.js';
++import { getTargets } from './profile.js';
++import { TYPES } from './workout.js';
++import { sortBodyDesc } from './body.js';
++
++let root, weekStart = mondayOf(localDateStr()), seq = 0;
++function mondayOf(ds) { const d = parseLocal(ds); return addDays(ds, -((d.getDay() + 6) % 7)); }
++const num = v => (typeof v === 'number' ? v : 0);
++
++export function mountWeekly(el) {
++  root = el;
++  root.innerHTML = `
++  <div class="lg:col-span-3 space-y-6">
++    <div class="card flex items-center justify-between gap-3">
++      <button id="wk-prev" class="btn btn-ghost !px-3" aria-label="สัปดาห์ก่อน"><i class="fa-solid fa-chevron-left"></i></button>
++      <div class="text-center"><h2 class="font-bold text-slate-800"><i class="fa-solid fa-chart-line text-brand"></i> สรุปรายสัปดาห์</h2><p id="wk-range" class="text-sm text-slate-500"></p></div>
++      <button id="wk-next" class="btn btn-ghost !px-3" aria-label="สัปดาห์ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
++    </div>
++    <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
++  </div>`;
++  $('#wk-prev', root).addEventListener('click', () => { weekStart = addDays(weekStart, -7); renderWeekly(); });
++  $('#wk-next', root).addEventListener('click', () => { weekStart = addDays(weekStart, 7); renderWeekly(); });
++  renderWeekly();
++}
++
++const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
++
++export async function renderWeekly() {
++  if (!root || !state.uid) return;
++  const my = ++seq, end = addDays(weekStart, 6), days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
++  $('#wk-range', root).textContent = `${fmtDate(weekStart)} – ${fmtDate(end)}${weekStart === mondayOf(localDateStr()) ? ' (สัปดาห์นี้)' : ''}`;
++  $('#wk-next', root).disabled = weekStart >= mondayOf(localDateStr());
++  let food = [];
++  try { food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', weekStart), where('date', '<=', end)))).docs.map(d => d.data()); } catch (e) { /* ออฟไลน์/สิทธิ์: แสดงเฉพาะส่วนอื่น */ }
++  if (my !== seq) return;   // มีการกดเปลี่ยนสัปดาห์ซ้อน
++
++  const T = getTargets(), today = localDateStr();
++  const byDay = Object.fromEntries(days.map(d => [d, { cal: 0, p: 0, n: 0 }]));
++  food.forEach(f => { const x = byDay[f.date]; if (x) { x.cal += num(f.calories); x.p += num(f.protein); x.n++; } });
++  const logged = days.filter(d => byDay[d].n > 0 && d <= today);
++  const avgCal = avg(logged.map(d => byDay[d].cal)), avgP = avg(logged.map(d => byDay[d].p));
++  const over = logged.filter(d => byDay[d].cal > T.kcal * 1.1).length, under = logged.filter(d => byDay[d].cal < T.kcal * 0.8).length;
++
++  // กราฟแท่งพลังงานรายวัน
++  const W = 320, H = 150, P = 22, max = Math.max(T.kcal * 1.3, ...days.map(d => byDay[d].cal), 1), bw = (W - 2 * P) / 7;
++  const y = v => H - P - v / max * (H - 2 * P);
++  const bars = days.map((d, i) => {
++    const v = byDay[d].cal, x = P + i * bw + 4, h = H - P - y(v), c = v > T.kcal * 1.1 ? '#fbbf24' : '#a78bfa';
++    return `<rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#e2e8f0'}"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
++      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#64748b">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>`;
++  }).join('');
++  const chart = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#ec4899" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#ec4899">เป้า ${T.kcal}</text></svg>`;
++
++  // น้ำหนัก: เทียบค่าเฉลี่ยสัปดาห์นี้กับสัปดาห์ก่อน
++  const wOf = (a, b) => state.body.filter(r => typeof r.weight === 'number' && r.date >= a && r.date <= b).sort((p, q) => p.date.localeCompare(q.date));
++  const wk = wOf(weekStart, end), prev = wOf(addDays(weekStart, -7), addDays(weekStart, -1));
++  const wAvg = avg(wk.map(r => r.weight)), pAvg = avg(prev.map(r => r.weight));
++  const wDelta = wAvg !== null && pAvg !== null ? round1(wAvg - pAvg) : null;
++
++  // ออกกำลังกาย
++  const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end);
++  const mins = ws.reduce((a, w) => a + (w.durationMin || 0), 0), burn = ws.reduce((a, w) => a + (w.estKcal || 0), 0);
++  const types = {}; ws.forEach(w => { types[w.type] = (types[w.type] || 0) + 1; });
++  const sx = state.symptoms.filter(s => s.date >= weekStart && s.date <= end && Object.values(s.symptoms || {}).some(v => v > 0)).length;
++
++  const tips = [];
++  if (!logged.length) tips.push('สัปดาห์นี้ยังไม่มีบันทึกอาหาร');
++  else {
++    if (logged.length < 5 && end < today) tips.push(`บันทึกอาหารแค่ ${logged.length}/7 วัน — ยิ่งบันทึกครบ สรุปยิ่งแม่น`);
++    if (avgP !== null && avgP < T.protein * 0.8) tips.push(`โปรตีนเฉลี่ย ${Math.round(avgP)} g ต่ำกว่าเป้า ${T.protein} g`);
++    if (over >= 3) tips.push(`เกินเป้าแคลอรี่ ${over} วัน — ลองวางแผนมื้อล่วงหน้า`);
++    if (under >= 3) tips.push(`ต่ำกว่าเป้ามาก ${under} วัน — กินน้อยเกินไปต่อเนื่องอาจเหนื่อยง่าย`);
++  }
++  if (ws.length === 0 && end < today) tips.push('สัปดาห์นี้ไม่ได้ออกกำลังกายตามที่บันทึก');
++  if (ws.length >= 3) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก 💪`);
++  if (wDelta !== null && Math.abs(wDelta) >= 1) tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. จากสัปดาห์ก่อน (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
++
++  const stat = (label, val, sub = '') => `<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-500">${label}</p><p class="text-lg font-bold text-slate-800">${val}</p><p class="text-[11px] text-slate-500">${sub}</p></div>`;
++  $('#wk-body', root).innerHTML = `
++    <div class="card space-y-3 lg:col-span-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-utensils text-brand"></i> อาหาร</h3>
++      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
++        ${stat('บันทึกอาหาร', `${logged.length}/7 วัน`)}
++        ${stat('พลังงานเฉลี่ย/วัน', avgCal === null ? '-' : Math.round(avgCal).toLocaleString() + ' kcal', `เป้า ${T.kcal.toLocaleString()}`)}
++        ${stat('โปรตีนเฉลี่ย/วัน', avgP === null ? '-' : Math.round(avgP) + ' g', `เป้า ${T.protein} g`)}
++        ${stat('เกิน / ต่ำกว่าเป้า', `${over} / ${under} วัน`, 'เกิน >110% · ต่ำ <80%')}
++      </div>${chart}</div>
++    <div class="space-y-6">
++      <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนัก</h3>
++        ${wAvg === null ? '<p class="text-xs text-slate-400">ไม่มีการชั่งน้ำหนักในสัปดาห์นี้</p>' : `<p class="text-lg font-bold">${round1(wAvg)} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${wk.length} ครั้ง)</span></p>
++        <p class="text-xs text-slate-600">${wk.length > 1 ? `ต้นสัปดาห์ ${wk[0].weight} → ปลาย ${wk[wk.length - 1].weight} กก.` : ''}</p>
++        <p class="text-xs ${wDelta === null ? 'text-slate-400' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}</div>
++      <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-dumbbell text-brand"></i> ออกกำลังกาย</h3>
++        <p class="text-lg font-bold">${ws.length} ครั้ง <span class="text-xs font-normal text-slate-500">${mins ? `· ${mins} นาที` : ''}${burn ? ` · เผาผลาญ ~${burn} kcal` : ''}</span></p>
++        ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
++        ${sx ? `<p class="text-xs text-slate-500 pt-1">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
++    </div>
++    <div class="card lg:col-span-3"><h3 class="font-bold text-slate-800 mb-2">💡 ข้อสังเกต</h3>${tips.length ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-500">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้ 🎉</p>'}
++      <p class="text-[11px] text-slate-400 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
++}
+diff --git a/src/workout.js b/src/workout.js
+index 1117750..198868f 100644
+--- a/src/workout.js
++++ b/src/workout.js
+@@ -1,6 +1,7 @@
+ import { addDoc, deleteDoc } from 'firebase/firestore';
+ import { userCol, userDoc } from './firebase.js';
+ import { state } from './state.js';
++import { bodyLatest } from './body.js';
+ import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal } from './util.js';
+ 
+ export const TYPES = {
+@@ -9,6 +10,16 @@ export const TYPES = {
+ };
+ export const SECTIONS = [['warmup', 'วอร์มอัพ (Warm-up)', 'fa-fire'], ['main', 'ท่าหลัก (Main workout)', 'fa-dumbbell'], ['cooldown', 'คูลดาวน์ (Cool-down)', 'fa-snowflake']];
+ const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
++// ค่า MET (Compendium of Physical Activities, ปัดเป็นช่วงโดยประมาณ) ตามประเภทและความหนัก
++const MET = { walk: [2.8, 3.5, 5.0], upper: [3.0, 3.5, 6.0], lower: [3.0, 3.5, 6.0], full: [3.5, 4.3, 6.0], pilates: [2.5, 3.0, 4.0], stretch: [2.0, 2.3, 3.0], other: [3.0, 4.0, 6.0] };
++export const INTENSITY = [['light', 'เบา'], ['moderate', 'ปานกลาง'], ['vigorous', 'หนัก']];
++export const currentWeightKg = () => bodyLatest(state.body).weight?.v ?? state.profile?.weightKg ?? null;
++// พลังงานที่เผาผลาญ "เพิ่มจากตอนพัก" = (MET − 1) × น้ำหนัก(กก.) × ชั่วโมง  (ไม่นับ BMR ซ้ำกับ TDEE) — ค่าจริงคลาดเคลื่อนได้ ±25%
++export function estimateBurn(type, intensity, minutes, weightKg) {
++  if (!minutes || !weightKg) return null;
++  const idx = Math.max(0, INTENSITY.findIndex(i => i[0] === intensity));
++  return Math.round(((MET[type] || MET.other)[idx < 0 ? 1 : idx] - 1) * weightKg * minutes / 60);
++}
+ export const repLabel = u => (u === 'sec' ? 'วินาที' : u === 'min' ? 'นาที' : 'ครั้ง');
+ 
+ let root, draft = emptyDraft();
+@@ -25,8 +36,10 @@ export function mountWorkout(el) {
+         <div><label class="lbl">วันที่</label><input type="date" id="w-date" class="input"></div>
+         <div><label class="lbl">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
+         <div><label class="lbl">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
++        <div><label class="lbl">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
+         <div><label class="lbl">เริ่มจาก</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
+       </div>
++      <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
+       <div class="flex flex-wrap gap-2">
+         <button id="w-last" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-clock-rotate-left"></i> ใช้แผนล่าสุดของประเภทนี้</button>
+         <button id="w-clear" class="chip bg-slate-100 text-slate-600"><i class="fa-solid fa-eraser"></i> ล้างฟอร์ม</button>
+@@ -58,6 +71,8 @@ export function mountWorkout(el) {
+   $('#w-last', root).addEventListener('click', useLast);
+   $('#w-clear', root).addEventListener('click', () => { draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections(); });
+   $('#w-save', root).addEventListener('click', save);
++  ['w-dur', 'w-int', 'w-type'].forEach(id => $('#' + id, root).addEventListener('input', burnPreview));
++  burnPreview();
+   $('#w-tpl-save', root).addEventListener('click', saveTemplate);
+   $('#w-history', root).addEventListener('click', e => {
+     const del = e.target.closest('[data-del]'), again = e.target.closest('[data-again]');
+@@ -71,6 +86,11 @@ export function mountWorkout(el) {
+   renderSections(); render();
+ }
+ 
++function burnPreview() {
++  const el = $('#w-burn', root), kcal = estimateBurn($('#w-type', root).value, $('#w-int', root).value, toNum($('#w-dur', root).value), currentWeightKg());
++  el.textContent = kcal ? `🔥 เผาผลาญเพิ่มประมาณ ${kcal} kcal (ค่าประมาณ ±25% คิดจากน้ำหนัก ${currentWeightKg()} กก.)`
++    : (!currentWeightKg() ? 'ใส่น้ำหนักในแท็บน้ำหนัก (หรือ ตั้งค่า) เพื่อประมาณแคลอรี่ที่เผาผลาญ' : 'ใส่ระยะเวลารวมเพื่อประมาณแคลอรี่ที่เผาผลาญ');
++}
+ function loadSections(sec, type) {
+   draft = { warmup: [], main: [], cooldown: [] };
+   for (const k of Object.keys(draft)) draft[k] = (sec?.[k] || []).map(r => ({ ...blankRow(), ...r }));
+@@ -139,10 +159,10 @@ function save() {
+   if (!count && !dur) return toast('เพิ่มท่าอย่างน้อย 1 ท่า หรือใส่ระยะเวลา (เช่น เดิน 30 นาที)', 'err');
+   const type = $('#w-type', root).value;
+   addDoc(userCol(state.uid, 'workout_records'), {
+-    date: $('#w-date', root).value, type, typeLabel: TYPES[type], durationMin: dur, sections, note: $('#w-note', root).value.trim(), createdAt: new Date()
++    date: $('#w-date', root).value, type, typeLabel: TYPES[type], durationMin: dur, intensity: $('#w-int', root).value, estKcal: estimateBurn(type, $('#w-int', root).value, dur, currentWeightKg()), sections, note: $('#w-note', root).value.trim(), createdAt: new Date()
+   }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
+   toast('บันทึกการออกกำลังกายแล้ว 💪');
+-  draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections();
++  draft = emptyDraft(); $('#w-note', root).value = ''; $('#w-dur', root).value = ''; renderSections(); burnPreview();
+ }
+ 
+ function saveTemplate() {
+@@ -167,13 +187,13 @@ export function render() {
+ 
+   const since = addDays(localDateStr(), -6), wk = state.workouts.filter(w => w.date >= since);
+   const by = {}; wk.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
+-  const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0);
+-  $('#w-week', root).innerHTML = wk.length ? `<p><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-500">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายใน 7 วันนี้</p>';
++  const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0), burn = wk.reduce((a, w) => a + (w.estKcal || 0), 0);
++  $('#w-week', root).innerHTML = wk.length ? `<p><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}${burn ? ` · เผาผลาญประมาณ ${burn} kcal` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-500">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายใน 7 วันนี้</p>';
+ 
+   const rows = state.workouts.slice().sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 12);
+   $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
+     const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<p class="text-xs font-semibold text-slate-500 mt-1">${t}</p>` + w.sections[k].map(r => `<p class="text-xs">• ${esc(r.name)} — ${esc(rowText(r))}${r.note ? ` <span class="text-slate-400">(${esc(r.note)})</span>` : ''}</p>`).join('') : '')).join('');
+-    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}</summary>
++    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm"><b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}</summary>
+       <div class="mt-1">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1 text-slate-500">โน้ต: ${esc(w.note)}</p>` : ''}
+       <div class="flex gap-2 mt-2"><button data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button><button data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button></div></div></details>`;
+   }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึก</p>';
+-- 
+2.43.0
+
