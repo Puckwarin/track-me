@@ -119,7 +119,7 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     <label class="chip bg-lav-soft text-brand-dark mt-2 inline-flex"><input id="os-bc" type="file" accept="image/*" capture="environment" class="hidden"><i class="fa-solid fa-barcode"></i> สแกนบาร์โค้ดจากรูป</label>
     <p id="os-hint" class="text-xs text-slate-500 mt-2"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
-    <div class="flex flex-wrap gap-2 mt-3 text-xs"><a id="os-google" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">ค้นหาต่อใน Google ↗</a><a id="os-chatgpt" href="https://chatgpt.com/" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">เปิด ChatGPT ↗</a><span class="self-center text-slate-400">เปิดแยกภายนอก ไม่มีการเรียก API แบบเสียเงิน</span></div>
+    <div class="flex flex-wrap gap-2 mt-3 text-xs"><a id="os-off" class="chip bg-green-100 text-green-800" target="_blank" rel="noopener noreferrer">ค้นหาใน Open Food Facts ↗</a><a id="os-google" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">ค้นหาต่อใน Google ↗</a><a id="os-chatgpt" href="https://chatgpt.com/" class="chip bg-slate-100 text-slate-700" target="_blank" rel="noopener noreferrer">เปิด ChatGPT ↗</a><span class="self-center text-slate-400">เปิดแยกภายนอก ไม่มีการเรียก API แบบเสียเงิน</span></div>
     <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" inputmode="decimal" class="input">
@@ -154,6 +154,7 @@ export function openFoodSearch({ onUse, onSaveLibrary }) {
     if (!q) return;
     $('#os-calc', m.el).classList.add('hidden');
     $('#os-res', m.el).innerHTML = '<p class="text-sm text-slate-500 py-2">กำลังค้นหา...</p>';
+    $('#os-off',m.el).href='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process';
     $('#os-google',m.el).href=`https://www.google.com/search?q=${encodeURIComponent(q+' nutrition calories')}`;
     $('#os-chatgpt',m.el).href=`https://chatgpt.com/?q=${encodeURIComponent(`Estimate nutrition per 100 g for ${q}; list calories, protein, carbs, fat.`)}`;
     const sources=src==='all'?['off','usda','gemini']:[src];
