@@ -797,7 +797,7 @@ export function openLibrary(onPick) {
       <button id="lib-change-category" class="chip bg-sky-soft text-blue-700 !px-3 !py-2 text-xs" disabled>แก้ไขหมวดหมู่</button>
       <button id="lib-delete-selected" class="chip bg-pink-soft text-rose-600 !px-3 !py-2 text-xs" disabled>ลบรายการที่เลือก</button>
     </div>
-    <div id="lib-list" class="divide-y divide-slate-100"></div>`, { wide: true });
+    <div id="lib-list" class="divide-y divide-slate-100 md:grid md:grid-cols-2 md:divide-y-0 md:gap-x-5"></div>`, { wide: true });
   const selected = new Set();
   const matches = p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()) && (!$('#lib-category', m.el).value || (p.category || guessFoodCategory(p.name)) === $('#lib-category', m.el).value);
   const visibleCustom = () => getPresets().filter(p => p.custom && matches(p));
@@ -815,7 +815,7 @@ export function openLibrary(onPick) {
     $('#lib-delete-selected', m.el).disabled = selected.size === 0;
     $('#lib-change-category', m.el).disabled = selected.size === 0 || !$('#lib-bulk-category', m.el).value;
     $('#lib-list', m.el).innerHTML = presets.map((p, i) => `
-      <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 md:border-b md:border-slate-100 md:py-4">
         <div class="min-w-0 flex items-start gap-2">${p.custom ? `<input type="checkbox" class="lib-select mt-1 shrink-0" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}<div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
         <p class="text-xs text-slate-500"><span class="inline-block rounded-full bg-slate-100 px-2 py-0.5 mr-1">${esc(p.category || guessFoodCategory(p.name))}</span>${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
         </div><div class="flex flex-wrap gap-1 sm:shrink-0">

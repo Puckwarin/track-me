@@ -26,7 +26,7 @@ export const repLabel = u => (u === 'sec' ? 'วินาที' : u === 'min' ?
 
 let root, draft = emptyDraft();
 function emptyDraft() { return { warmup: [], main: [], cooldown: [] }; }
-const blankRow = () => ({ name: '', weightKg: null, perSide: false, sets: 1, reps: null, repUnit: 'reps', note: '' });
+const blankRow = () => ({ name: '', imageUrl: '', weightKg: null, perSide: false, sets: 1, reps: null, repUnit: 'reps', note: '' });
 
 export function mountWorkout(el) {
   root = el;
@@ -146,7 +146,7 @@ function renderSections() {
             <label class="flex items-center gap-1"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" ${r.perSide ? 'checked' : ''}> น้ำหนักข้างละ (ต่อข้าง)</label>
             <select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input !w-auto !py-1"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select>
           </div>
-          <div><input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input" placeholder="URL รูป/GIF (ไม่บังคับ)" value="${esc(r.imageUrl || "")}"><button data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700">ค้นหารูปฟรี</button></div>${r.imageUrl ? `<img src="${esc(r.imageUrl)}" alt="ตัวอย่าง ${esc(r.name)}" loading="lazy" class="max-h-36 rounded-lg object-contain bg-white">` : ""}<input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="โน้ตท่า เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
+          <div class="space-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-3 md:space-y-0"><input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input" placeholder="URL รูป/GIF (ไม่บังคับ)" value="${esc(r.imageUrl || "")}"><button data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 md:whitespace-nowrap">ค้นหารูปที่ตรงกับท่า</button></div>${r.imageUrl ? `<img src="${esc(r.imageUrl)}" alt="ตัวอย่าง ${esc(r.name)}" loading="lazy" class="max-h-36 rounded-lg object-contain bg-white md:max-h-48">` : '<p class="text-xs text-slate-400">ภาพตัวอย่างจะแสดงเมื่อเพิ่ม URL หรือพบภาพที่ตรงกับชื่อท่า</p>'}<input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="โน้ตท่า เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
         </div>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีท่า</p>'}
       <button data-add="${k}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มท่า</button>
