@@ -21,7 +21,7 @@ export function renderSummary() {
   }
   current = s;
 
-  const card = (icon, title, main, sub) => `<div class="bg-lav-soft/50 border border-lav-soft rounded-xl p-3">
+  const card = (icon, title, main, sub) => `<div class="bg-slate-50 border border-slate-100 rounded-2xl p-3">
     <div class="text-xs text-slate-500 mb-1"><i class="${icon}"></i> ${title}</div><div class="text-base font-bold text-slate-800">${main}</div><div class="text-xs text-slate-500 mt-0.5">${sub}</div></div>`;
   const empty = '<span class="text-slate-400 font-normal text-sm">ยังไม่มีข้อมูล</span>';
   const p = s?.period, b = s?.body || {};

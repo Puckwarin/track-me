@@ -37,7 +37,7 @@ export function toCsv(rows) { return '\ufeff' + rows.map(r => r.map(csvCell).joi
 
 export function toast(msg, kind = 'ok') {
   const el = document.createElement('div');
-  el.className = `fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-xl text-sm shadow-lg ${kind === 'err' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white'}`;
+  el.className = `toast fixed left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-full text-sm shadow-lg max-w-[90vw] text-center ${kind === 'err' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white'}`;
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3200);
@@ -46,8 +46,8 @@ export function toast(msg, kind = 'ok') {
 // Modal เล็ก ๆ ใช้ซ้ำได้
 export function openModal(innerHtml, { wide = false } = {}) {
   const el = document.createElement('div');
-  el.className = 'fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4';
-  el.innerHTML = `<div class="bg-white rounded-2xl w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto p-6 shadow-xl">${innerHtml}</div>`;
+  el.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4';
+  el.innerHTML = `<div class="modal-box bg-white w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} overflow-y-auto p-6" role="dialog" aria-modal="true">${innerHtml}</div>`;
   document.body.appendChild(el);
   const close = () => el.remove();
   el.addEventListener('mousedown', e => { if (e.target === el) close(); });

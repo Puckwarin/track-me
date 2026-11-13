@@ -1,10 +1,6 @@
-// Shared tab colors.
-export const TAB_ACTIVE = 'bg-brand text-white border-brand';
-export const TAB_IDLE = 'bg-white text-slate-600 border-lav-soft hover:bg-lav-soft/60';
-export const TAB_BASE = 'px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap';
-
+// ธีมของแอป (pastel = Cozy pastel โทนครีมอุ่น เป็นค่าเริ่มต้น)
 export const THEMES = {
-  pastel: 'พาสเทล',
+  pastel: 'พาสเทลอบอุ่น (Cozy)',
   minimal: 'มินิมอล',
   dark: 'มืด'
 };
@@ -13,6 +9,8 @@ export function applyTheme(theme) {
   const selected = Object.hasOwn(THEMES, theme) ? theme : 'pastel';
   document.documentElement.dataset.theme = selected;
   localStorage.setItem('trackme-theme', selected);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = selected === 'dark' ? '#1c1916' : '#FAF7F2';
 }
 
 try { applyTheme(localStorage.getItem('trackme-theme') || 'pastel'); } catch {}

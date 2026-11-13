@@ -2,89 +2,111 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#7c3aed">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF7F2">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Track Me">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="%BASE_URL%icon-192.png">
   <title>Track Me — อาหาร ประจำเดือน น้ำหนัก</title>
 </head>
-<body class="text-slate-800 min-h-screen pb-12 font-sans">
+<body class="text-slate-800 min-h-screen font-sans">
 
   <!-- Login -->
   <div id="login-screen" class="min-h-screen flex items-center justify-center p-6">
-    <div class="card max-w-sm w-full text-center space-y-4 !p-8">
-      <div class="w-16 h-16 mx-auto rounded-2xl bg-lav-soft flex items-center justify-center text-3xl">💜</div>
-      <h1 class="text-2xl font-bold text-brand-dark">Track Me</h1>
-      <p class="text-sm text-slate-500">ติดตามอาหาร ประจำเดือน และน้ำหนักในที่เดียว<br>ข้อมูลเป็นของคุณคนเดียว ผูกกับบัญชี Google</p>
-      <button id="btn-google" class="btn btn-primary w-full justify-center"><b>G</b> เข้าสู่ระบบด้วย Google</button>
+    <div class="card cozy-hero max-w-sm w-full text-center space-y-5 !p-8">
+      <div class="logo-bubble mx-auto">💗</div>
+      <div class="space-y-1">
+        <h1 class="text-2xl font-bold text-slate-800">Track Me</h1>
+        <p class="text-sm text-slate-500">ดูแลตัวเองแบบสบาย ๆ ในที่เดียว</p>
+      </div>
+      <div class="flex justify-center gap-2 text-xl" aria-hidden="true"><span class="emoji-bubble cat-food">🍙</span><span class="emoji-bubble cat-workout">🏃‍♀️</span><span class="emoji-bubble cat-period">🌸</span><span class="emoji-bubble cat-body">⚖️</span><span class="emoji-bubble cat-care">🐾</span></div>
+      <p class="text-xs text-slate-500">อาหาร ออกกำลังกาย ประจำเดือน น้ำหนัก และสัตว์เลี้ยง<br>ข้อมูลเป็นของคุณคนเดียว ผูกกับบัญชี Google</p>
+      <button id="btn-google" class="btn btn-primary w-full justify-center !py-3"><b>G</b> เข้าสู่ระบบด้วย Google</button>
       <p id="login-error" class="text-xs text-rose-600"></p>
       <p class="text-xs text-slate-400">ล็อกอินครั้งแรกต้องออนไลน์ หลังจากนั้นใช้งานออฟไลน์ได้</p>
     </div>
   </div>
 
   <div id="app-lock" class="hidden fixed inset-0 z-[120] bg-app-bg flex items-center justify-center p-6">
-    <form id="lock-form" class="card max-w-sm w-full text-center space-y-4 !p-8">
-      <div class="w-16 h-16 mx-auto rounded-2xl bg-lav-soft flex items-center justify-center text-3xl">🔒</div>
-      <h1 class="text-xl font-bold text-brand-dark">Track Me ถูกล็อกอยู่</h1>
+    <form id="lock-form" class="card cozy-hero max-w-sm w-full text-center space-y-4 !p-8">
+      <div class="logo-bubble mx-auto">🔒</div>
+      <h1 class="text-xl font-bold text-slate-800">Track Me ถูกล็อกอยู่</h1>
       <p class="text-sm text-slate-500">กรอก PIN 4 หลักเพื่อเปิดแอปบนอุปกรณ์นี้</p>
       <input id="lock-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" class="input text-center !text-2xl tracking-[.6em]" aria-label="PIN 4 หลัก">
       <p id="lock-error" class="text-xs text-rose-600"></p>
-      <button id="lock-submit" type="submit" class="btn btn-primary w-full justify-center">ปลดล็อก</button>
+      <button id="lock-submit" type="submit" class="btn btn-primary w-full justify-center !py-3">ปลดล็อก</button>
       <button id="lock-reset" type="button" class="text-xs text-slate-500 underline">ลืม PIN? ยืนยันบัญชี Google เพื่อรีเซ็ต</button>
       <button id="lock-signout" type="button" class="text-xs text-slate-500 underline">ออกจากระบบ Google</button>
     </form>
   </div>
 
   <div id="app-shell" class="hidden">
-    <header class="bg-brand shadow-md sticky top-0 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-        <h1 class="text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-heart-pulse"></i> Track Me</h1>
-        <div class="flex items-center gap-3">
-          <span class="text-xs bg-white/15 text-white px-2.5 py-1 rounded-full flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="sync-dot"></span><span id="sync-text">กำลังเชื่อมต่อ...</span></span>
-          <button id="btn-settings" class="bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5"><i class="fa-solid fa-gear"></i> <span class="hidden sm:inline">ตั้งค่า</span></button>
+    <header class="app-header sticky top-0 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-2.5 flex justify-between items-center gap-2">
+        <button id="btn-logo" class="flex items-center gap-2 min-w-0" aria-label="ไปหน้าหลัก">
+          <span class="logo-bubble logo-sm">💗</span>
+          <span class="text-lg font-bold text-slate-800 truncate">Track Me</span>
+        </button>
+        <div class="flex items-center gap-1.5">
+          <span class="sync-pill" title="สถานะการซิงค์"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="sync-dot"></span><span id="sync-text">กำลังเชื่อมต่อ...</span></span>
+          <button id="btn-bell" class="icon-btn relative" aria-label="แจ้งเตือน"><i class="fa-regular fa-bell"></i><span id="bell-badge" class="bell-badge hidden"></span></button>
+          <button id="btn-settings" class="icon-btn" aria-label="ตั้งค่า"><i class="fa-solid fa-gear"></i></button>
         </div>
       </div>
     </header>
-    <div id="reminder-banner" class="hidden bg-pink-soft text-pink-800 border-b border-pink-200"></div>
+    <div id="reminder-banner" class="hidden bg-pink-soft text-pink-800"></div>
 
-    <section id="summary-section" class="max-w-6xl mx-auto px-4 mt-6">
-      <div class="card !border-pink-soft">
-        <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-          <h2 class="text-base font-bold text-slate-800"><i class="fa-solid fa-user-doctor text-pink-500"></i> สรุปสุขภาพล่าสุด (เปิดดูตอนพบแพทย์)</h2>
-          <button id="btn-copy-summary" class="chip bg-pink-soft text-pink-700"><i class="fa-regular fa-copy"></i> คัดลอกสรุป</button>
+    <nav id="subnav" class="subnav hidden max-w-6xl mx-auto px-4" aria-label="หน้าย่อย"></nav>
+
+    <main id="tab-home" class="page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+      <div id="home-today" class="lg:col-span-2 space-y-4"></div>
+      <section id="summary-section" class="space-y-4">
+        <div class="card">
+          <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+            <h2 class="text-base font-bold text-slate-800"><span class="emoji-bubble emoji-sm cat-lab">🩺</span> สรุปสุขภาพ (เปิดดูตอนพบแพทย์)</h2>
+            <button id="btn-copy-summary" class="chip bg-slate-100 text-slate-700"><i class="fa-regular fa-copy"></i> คัดลอกสรุป</button>
+          </div>
+          <div id="summary-grid" class="grid grid-cols-2 gap-3"></div>
+          <p id="sum-sync" class="text-xs text-slate-500 mt-3"></p>
         </div>
-        <div id="summary-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
-        <p id="sum-sync" class="text-xs text-slate-500 mt-3"></p>
-      </div>
-    </section>
+      </section>
+    </main>
+    <main id="tab-food" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-workout" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-weekly" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-lab" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-period" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-symptoms" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-care" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6"></main>
+    <main id="tab-inventory" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6"></main>
+    <main id="tab-body" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-report" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-notifications" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
+    <main id="tab-settings" class="hidden page max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"></main>
 
-    <nav class="max-w-6xl mx-auto px-4 mt-4 flex gap-2 overflow-x-auto pb-1 items-center">
-      <button id="tabbtn-food"><i class="fa-solid fa-utensils"></i> อาหาร</button>
-      <button id="tabbtn-workout"><i class="fa-solid fa-dumbbell"></i> ออกกำลังกาย</button>
-      <button id="tabbtn-health"><i class="fa-solid fa-heart-pulse"></i> สุขภาพ</button>
-      <select id="health-subtab" class="input !w-auto !py-2" aria-label="เลือกหน้าสุขภาพ">
-        <option value="weekly">สรุปสัปดาห์ / เดือน</option><option value="lab">ผลตรวจ</option><option value="period">ประจำเดือน</option><option value="symptoms">อาการ & ผิว</option><option value="body">น้ำหนัก & สัดส่วน</option><option value="report">รายงาน</option>
-      </select>
-      <button id="tabbtn-caretools"><i class="fa-solid fa-paw"></i> ดูแล</button>
-      <select id="care-subtab" class="input !w-auto !py-2" aria-label="เลือกหน้าดูแล">
-        <option value="care">สัตว์เลี้ยง</option><option value="inventory">ของใช้ & สต๊อก</option>
-      </select>
-      <button id="tabbtn-notifications"><i class="fa-regular fa-bell"></i> แจ้งเตือน</button>
+    <!-- แถบเมนูด้านล่าง -->
+    <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">
+      <div class="bottom-nav-inner">
+        <button data-nav="home" class="nav-item"><i class="fa-solid fa-house"></i><span>หน้าหลัก</span></button>
+        <button data-nav="food" class="nav-item"><i class="fa-solid fa-bowl-food"></i><span>อาหาร</span></button>
+        <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog"><i class="fa-solid fa-plus"></i></button>
+        <button data-nav="health" class="nav-item"><i class="fa-solid fa-heart-pulse"></i><span>สุขภาพ</span></button>
+        <button data-nav="care" class="nav-item"><i class="fa-solid fa-paw"></i><span>ดูแล</span></button>
+      </div>
     </nav>
 
-    <main id="tab-food" class="max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-workout" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-weekly" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-lab" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-period" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-symptoms" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-care" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"></main>
-    <main id="tab-inventory" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"></main>
-    <main id="tab-body" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-report" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    <main id="tab-notifications" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
-    
-    <main id="tab-settings" class="hidden max-w-6xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></main>
+    <!-- แผ่นเลือกหมวดเพื่อบันทึกด่วน -->
+    <div id="quick-sheet" class="sheet-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="quick-title">
+      <div class="sheet-panel">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="flex items-center justify-between mb-4">
+          <h2 id="quick-title" class="text-lg font-bold text-slate-800">วันนี้อยากบันทึกอะไรดี?</h2>
+          <button id="quick-close" class="icon-btn" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="quick-grid" class="grid grid-cols-4 gap-3"></div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/app.js"></script>
