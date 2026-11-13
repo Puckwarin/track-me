@@ -27,7 +27,7 @@ export const db = (() => {
   }
 })();
 
-export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings'];
+export const COLLECTIONS = ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'settings', 'lab_records'];
 
 export const userCol = (uid, name) => collection(db, 'users', uid, name);
 export const userDoc = (uid, name, id) => doc(db, 'users', uid, name, id);

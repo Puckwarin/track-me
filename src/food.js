@@ -79,15 +79,18 @@ export function mountFood(el) {
   root = el;
   root.innerHTML = `
   <div class="lg:col-span-2 space-y-6">
-    <div class="card flex flex-col sm:flex-row justify-between items-center gap-4">
-      <div class="flex items-center gap-3">
-        <label for="f-date" class="font-semibold text-slate-700"><i class="fa-regular fa-calendar-days text-brand"></i> วันที่:</label>
-        <input type="date" id="f-date" class="input !w-auto">
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button data-day="-1" class="chip bg-slate-100 text-slate-700">เมื่อวาน</button>
+        <button data-day="0" class="chip bg-lav-soft text-brand-dark">วันนี้</button>
+        <button data-day="1" class="chip bg-sky-soft text-blue-700">พรุ่งนี้ (วางแผน)</button>
+        <input type="date" id="f-date" class="input !w-auto ml-auto" aria-label="เลือกวันที่">
       </div>
-      <div class="bg-lav-soft px-4 py-2 rounded-xl text-center">
-        <span class="block text-xs text-brand font-medium">แคลอรี่รวมวันนี้</span>
-        <span id="f-total" class="text-lg font-bold text-brand-dark">0 / ${GOALS.cal.toLocaleString()}</span>
+      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-2">
+        <div><span id="f-daylabel" class="block text-xs text-brand font-medium">แคลอรี่รวมวันนี้</span><span id="f-total" class="text-lg font-bold text-brand-dark">0 / 2,000</span></div>
+        <span id="f-remain" class="text-xs text-slate-600 text-right"></span>
       </div>
+      <p id="f-burn" class="hidden text-xs text-slate-500"></p>
     </div>
 
     <div class="card space-y-4">
@@ -128,7 +131,7 @@ export function mountFood(el) {
         </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
+        <div id="f-qty-wrap"><select id="f-qmode" class="input mb-1 hidden" aria-label="วิธีใส่ปริมาณ"><option value="grams">ใส่เป็น น้ำหนัก (กรัม)</option><option value="unit">ใส่เป็น จำนวนหน่วย</option></select><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
         <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
         <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
@@ -151,6 +154,11 @@ export function mountFood(el) {
   </div>
 
   <div class="space-y-6">
+    <div class="card space-y-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-clock text-brand"></i> พลังงานแต่ละมื้อ</h3>
+      <div id="f-meals" class="space-y-3"></div>
+      <p id="f-meals-note" class="text-[11px] text-slate-400"></p>
+    </div>
     <div class="card space-y-4">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-pie text-brand"></i> สรุปสารอาหารประจำวัน</h3>
       <div id="f-stats" class="space-y-3"></div>
@@ -166,6 +174,13 @@ export function mountFood(el) {
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
   $('#f-qty', root).addEventListener('input', updateFoodPreview);
+  $$('[data-day]', root).forEach(b => b.addEventListener('click', () => { $('#f-date', root).value = addDays(localDateStr(), +b.dataset.day); watchDay(); }));
+  $('#f-meals', root).addEventListener('click', e => { const b = e.target.closest('[data-meal]'); if (b) { $('#f-meal', root).value = b.dataset.meal; $('#f-name', root).focus(); $('#f-name', root).scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
+  $('#f-qmode', root).addEventListener('change', e => {
+    const cur = numField(root, 'f-qty');
+    if (cur !== null && canWeigh()) $('#f-qty', root).value = e.target.value === 'grams' ? round1(cur * base.gramsPerUnit) : Math.round(cur / base.gramsPerUnit * 100) / 100;
+    qtyMode = e.target.value; syncFoodWeightForm();
+  });
   ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
   $('#f-clear', root).addEventListener('click', clearFoodForm);
   $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
@@ -359,7 +374,8 @@ function pickByLabel(v) {
 function applyPreset(p, setName = true) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  $('#f-qty', root).value = p.defaultQuantity ?? 1;
+  qtyMode = isWeightUnit(p.unit) ? 'grams' : 'unit';
+  $('#f-qty', root).value = canWeigh() && qtyMode === 'grams' ? round1(p.gramsPerUnit * (p.defaultQuantity ?? 1)) : (p.defaultQuantity ?? 1);
   if (p.edibleFraction && p.gramsPerUnit > 0) {
     $('#f-gross', root).value = p.gramsPerUnit;
     $('#f-edible', root).value = Math.round(p.edibleFraction * 100);
@@ -372,20 +388,20 @@ function applyPreset(p, setName = true) {
 
 function updateFoodPreview() {
   if (!root) return;
-  const qty = toNum($('#f-qty', root).value) || 0;
+  const qty = formQty() || 0;
   const calories = (toNum($('#f-cal', root).value) || 0) * qty;
   const protein = (toNum($('#f-pro', root).value) || 0) * qty;
   const carbs = (toNum($('#f-carb', root).value) || 0) * qty;
   const fat = (toNum($('#f-fat', root).value) || 0) * qty;
   const unit = base?.unit === 'g' ? 'g' : 'หน่วย';
-  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}${unit === 'g' ? ` · ${fmtAmount(qty)} g` : ''}`;
+  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}${unit === 'g' ? ` · ${fmtAmount(qty)} g` : weighMode() ? ` · ${fmtAmount(qty * base.gramsPerUnit)} g` : ''}`;
 }
 
 function clearFoodForm() {
   if (!root) return;
   ['f-name','f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium','f-gross','f-edible'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
   $('#f-qty',root).value=1;
-  base=null;
+  base=null; qtyMode='unit';
   syncFoodWeightForm();
   updateFoodPreview();
 }
@@ -405,6 +421,7 @@ const foodLogPortion = item => {
   }
   const quantity = foodLogQuantity(item);
   if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
+  if (item.gramsPerUnit > 0) return isWeightUnit(item.portionUnit) ? `${fmtAmount(quantity * item.gramsPerUnit)} g` : `${fmtAmount(quantity * item.gramsPerUnit)} g · ×${fmtAmount(quantity)} ${item.portionUnit || 'หน่วย'}`;
   return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
 };
 
@@ -423,13 +440,24 @@ function unitNutritionFor(item, quantity = foodLogQuantity(item)) {
   };
 }
 
+// อาหารที่รู้น้ำหนักต่อหน่วย (เช่น "100 g", "1 ลูก = 80 g") → ใส่เป็นกรัมที่กินจริงได้ เช่น 55 g แทนการกรอก 0.55
+let qtyMode = 'unit';
+const isWeightUnit = u => /^\s*\d+(\.\d+)?\s*(g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)\s*$/i.test(u || '');
+const canWeigh = () => Boolean(base && base.gramsPerUnit > 0 && !base.edibleFraction && !(base.unit === 'g' && base.gramsPerUnit === 1));
+const weighMode = () => canWeigh() && qtyMode === 'grams';
+// จำนวนหน่วยจริงที่จะบันทึก (แปลงจากกรัมถ้าอยู่โหมดน้ำหนัก)
+const formQty = () => { const raw = numField(root, 'f-qty'); return weighMode() && raw !== null ? raw / base.gramsPerUnit : raw; };
+
 function syncFoodWeightForm() {
   if (!root) return;
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
-  $('#f-qty-label', root).textContent = gramMode ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วย)';
-  $('#f-qty', root).step = gramMode ? '1' : '0.01';
+  const modeSel = $('#f-qmode', root), wm = weighMode();
+  modeSel.classList.toggle('hidden', !canWeigh());
+  if (canWeigh()) modeSel.value = qtyMode;
+  $('#f-qty-label', root).textContent = gramMode || wm ? 'น้ำหนักที่กิน (กรัม)' : 'จำนวน (หน่วย)';
+  $('#f-qty', root).step = gramMode || wm ? '1' : '0.01';
   $('#f-preview', root).textContent = gramMode ? 'สารอาหารในคลังคิดต่อ 1 กรัม · ยอดรวมปรับตามน้ำหนักที่กรอก' : '';
   $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
   if (grossMode) updateEdibleEstimate();
@@ -453,7 +481,7 @@ function saveFood() {
   const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
   const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
   if (grossMode && (!weighedGrams || weighedGrams <= 0 || !ediblePercent || ediblePercent > 100)) return toast('กรุณาระบุน้ำหนักที่ชั่งและสัดส่วนที่กินได้ 1–100%', 'err');
-  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (numField(root, 'f-qty') ?? 1);
+  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (formQty() ?? 1);
   if (qty <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
   const m = v => (v === null ? 0 : round1(v * qty));
   const unitNutrition = {
@@ -543,20 +571,21 @@ function editFoodQuantity(id) {
   const isGross = Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction) && item.edibleUnitGrams > 0;
   const isGrams = item.portionUnit === 'g' && item.gramsPerUnit === 1;
   const currentQuantity = foodLogQuantity(item);
+  const unitG = !isGross && !isGrams && item.gramsPerUnit > 0 ? item.gramsPerUnit : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
-    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams ? 'ปริมาณ (กรัม)' : 'จำนวน (หน่วยเดิม)'}</label>
-    <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : currentQuantity}">
+    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams || unitG > 1 ? (unitG > 1 ? 'น้ำหนักที่กิน (กรัม)' : 'ปริมาณ (กรัม)') : 'จำนวน (หน่วยเดิม)'}</label>
+    <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams||unitG > 1 ? '1' : '0.01'}" inputmode="decimal" class="input" value="${isGross ? item.weighedGrams : unitG > 1 ? round1(currentQuantity * unitG) : currentQuantity}">
     ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Math.round(item.edibleFraction * 100)}">` : ''}
     <p id="fl-estimate" class="mt-2 text-sm text-slate-600" aria-live="polite"></p>
     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="fl-save" class="btn btn-primary">บันทึกจำนวน</button></div>`);
   const updateEstimate = () => {
     const grams = toNum($('#fl-amount', m.el).value) || 0;
     const percent = isGross ? (toNum($('#fl-edible', m.el).value) || 0) : null;
-    const quantity = isGross ? grams * percent / 100 / item.edibleUnitGrams : grams;
+    const quantity = isGross ? grams * percent / 100 / item.edibleUnitGrams : grams / unitG;
     const nutrition=unitNutritionFor(item,currentQuantity);
-    const amountText=isGross ? `กินได้ประมาณ ${fmtAmount(grams*percent/100)} g · ` : isGrams ? `${fmtAmount(grams)} g · ` : '';
+    const amountText=isGross ? `กินได้ประมาณ ${fmtAmount(grams*percent/100)} g · ` : isGrams || unitG > 1 ? `${fmtAmount(grams)} g · ` : '';
     $('#fl-estimate', m.el).textContent = `${amountText}${Math.round(nutrition.calories*quantity)} kcal · P ${round1(nutrition.protein*quantity)} · C ${round1(nutrition.carbs*quantity)} · F ${round1(nutrition.fat*quantity)}`;
   };
   $('#fl-amount', m.el).addEventListener('input', updateEstimate);
@@ -568,7 +597,7 @@ function editFoodQuantity(id) {
     if (!amount || amount <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
     if (isGross && (!percent || percent <= 0 || percent > 100)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100%', 'err');
     const edibleFraction = isGross ? percent / 100 : null;
-    const quantity = isGross ? amount * edibleFraction / item.edibleUnitGrams : amount;
+    const quantity = isGross ? amount * edibleFraction / item.edibleUnitGrams : amount / unitG;
     const unitNutrition = unitNutritionFor(item, currentQuantity);
     const updates = {
       name: foodLogName(item.name), quantity, unitNutrition,
@@ -612,6 +641,27 @@ function renderDay() {
   const sum = k => items.reduce((a, i) => a + num(i[k]), 0);
   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
   $('#f-total', root).textContent = `${Math.round(t.cal)} / ${targets.kcal.toLocaleString()}`;
+  const today = localDateStr(), date = $('#f-date', root).value, future = date > today;
+  $$('[data-day]', root).forEach(b => { const on_ = addDays(today, +b.dataset.day) === date; b.classList.toggle('ring-2', on_); b.classList.toggle('ring-brand', on_); });
+  $('#f-daylabel', root).textContent = future ? 'แคลอรี่ที่วางแผนไว้' : date === today ? 'แคลอรี่รวมวันนี้' : 'แคลอรี่รวมของวันที่เลือก';
+  const left = targets.kcal - t.cal;
+  $('#f-remain', root).innerHTML = left >= 0 ? `เหลืออีก <b>${Math.round(left)}</b> kcal` : `<span class="text-amber-700">เกินเป้า <b>${Math.round(-left)}</b> kcal</span>`;
+  // พลังงานแยกตามมื้อ เทียบกับสัดส่วนที่ตั้งไว้ในหน้า ตั้งค่า
+  const mealList = getMeals(), pctSum = mealList.reduce((a, m) => a + (m.pct || 0), 0) || 100;
+  const eatenBy = name => items.filter(i => (i.meal || '') === name).reduce((a, i) => a + num(i.calories), 0);
+  const known = new Set(mealList.map(m => m.name));
+  const otherKcal = items.filter(i => !known.has(i.meal || '')).reduce((a, i) => a + num(i.calories), 0);
+  $('#f-meals', root).innerHTML = mealList.map(m => {
+    const target = Math.round(targets.kcal * (m.pct || 0) / pctSum), eaten = Math.round(eatenBy(m.name)), over = target > 0 && eaten > target;
+    return `<div><div class="flex justify-between items-center text-xs font-semibold mb-1"><span>${esc(m.name)} <span class="text-slate-400 font-normal">(${m.pct || 0}%)</span></span><span class="${over ? 'text-amber-700' : ''}">${eaten} / ${target} kcal</span></div>
+      <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="${over ? 'bg-amber-400' : 'bg-violet-400'} h-full transition-all" style="width:${target ? Math.min(eaten / target * 100, 100) : 0}%"></div></div>
+      <div class="flex justify-between text-[11px] text-slate-500 mt-0.5"><span>${over ? `เกิน ${eaten - target} kcal` : `เหลือ ${target - eaten} kcal`}</span><button data-meal="${esc(m.name)}" class="text-brand underline">+ เพิ่มในมื้อนี้</button></div></div>`;
+  }).join('') + (otherKcal ? `<p class="text-xs text-slate-500">มื้ออื่น ๆ ที่ไม่อยู่ในรายการ: ${Math.round(otherKcal)} kcal</p>` : '');
+  $('#f-meals-note', root).textContent = targets.source === 'default' ? 'ตอนนี้ใช้เป้าเริ่มต้น 2,000 kcal — ตั้งค่าข้อมูลร่างกายในหน้า ตั้งค่า เพื่อคำนวณ TDEE' : (future ? 'วางแผนล่วงหน้า: เพิ่มรายการในวันพรุ่งนี้แล้วดูว่าแต่ละมื้อเหลือพลังงานเท่าไร' : 'เป้าหมายคำนวณจาก TDEE ในหน้า ตั้งค่า');
+  const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
+  const burnEl = $('#f-burn', root);
+  burnEl.classList.toggle('hidden', !burned);
+  if (burned) burnEl.textContent = `🏃 ออกกำลังกายวันนี้เผาผลาญเพิ่มประมาณ ${burned} kcal (ค่าประมาณ — ยังไม่ได้บวกเข้าเป้าอัตโนมัติ)`;
   const bar = (name, v, goal, color, unit = 'g') => `
     <div><div class="flex justify-between text-xs font-semibold mb-1"><span>${name}</span><span>${round1(v)} / ${goal}${unit}</span></div>
     <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="${color} h-full transition-all" style="width:${Math.min(v / goal * 100, 100)}%"></div></div></div>`;

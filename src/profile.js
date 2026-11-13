@@ -13,6 +13,11 @@ export const ACTIVITY = [
 ];
 export const GOAL_PRESETS = [['-500', 'ลดน้ำหนัก (−500 kcal)'], ['-300', 'ลดน้ำหนักช้า ๆ (−300 kcal)'], ['0', 'คงน้ำหนัก'], ['300', 'เพิ่มน้ำหนัก/กล้ามเนื้อ (+300 kcal)']];
 export const DEFAULT_MEALS = [{ id: 'breakfast', name: 'มื้อเช้า', pct: 30 }, { id: 'lunch', name: 'มื้อกลางวัน', pct: 40 }, { id: 'dinner', name: 'มื้อเย็น', pct: 30 }];
+// ขั้นต่ำของสารอาหารหลัก (ไม่ให้ตั้งต่ำกว่านี้)
+//  โปรตีน: RDA ผู้ใหญ่ 0.8 g/กก./วัน (ลดน้ำหนัก/ออกกำลังกายแนะนำ ~1.2–2.0)  ไขมัน: ช่วงที่แนะนำ 20–35% ของพลังงาน (WHO/DRI) — ขั้นต่ำ 20%
+export const PROTEIN_MIN = 0.8, PROTEIN_MAX = 3.0, FAT_MIN = 20, FAT_MAX = 40;
+export const defaultProtein = adjust => (adjust < 0 ? 1.6 : adjust > 0 ? 1.8 : 1.2);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const FALLBACK = { kcal: 2000, protein: 100, carbs: 200, fat: 60 };
 
 export const getMeals = () => (state.profile?.meals?.length ? state.profile.meals : DEFAULT_MEALS);
@@ -36,8 +41,8 @@ export function getTargets(p = state.profile) {
   const c = calcBody(p);
   if (!p || !c) return { ...FALLBACK, source: 'default' };
   const kcal = Math.round(p.kcalOverride || c.tdee + (p.adjust || 0));
-  const protein = Math.round((p.proteinPerKg ?? 1.4) * c.w);
-  const fat = Math.round(kcal * ((p.fatPct ?? 25) / 100) / 9);
+  const protein = Math.round(clamp(p.proteinPerKg ?? defaultProtein(p.adjust || 0), PROTEIN_MIN, PROTEIN_MAX) * c.w);
+  const fat = Math.round(kcal * clamp(p.fatPct ?? 25, FAT_MIN, FAT_MAX) / 100 / 9);
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   return { kcal, protein, carbs, fat, source: 'profile' };
 }
@@ -57,8 +62,9 @@ export function mountProfile(el) {
       <div class="col-span-2"><label class="lbl">เป้าหมาย</label><select id="pf-goal" class="input">${GOAL_PRESETS.map(g => `<option value="${g[0]}">${g[1]}</option>`).join('')}<option value="custom">กำหนดส่วนต่างเอง</option></select></div>
       <div><label class="lbl">ส่วนต่างจาก TDEE (kcal/วัน)</label><input id="pf-adj" type="number" inputmode="numeric" class="input"></div>
       <div><label class="lbl">หรือตั้งแคลอรี่เป้าหมายเอง</label><input id="pf-kcal" type="number" inputmode="numeric" placeholder="เว้นว่าง = คำนวณให้" class="input"></div>
-      <div><label class="lbl">โปรตีน (g ต่อ กก.)</label><input id="pf-prot" type="number" step="0.1" inputmode="decimal" class="input"></div>
-      <div><label class="lbl">ไขมัน (% ของพลังงาน)</label><input id="pf-fat" type="number" inputmode="numeric" class="input"></div>
+      <div><label class="lbl">โปรตีน (g ต่อ กก.) · ขั้นต่ำ ${PROTEIN_MIN}</label><input id="pf-prot" type="number" step="0.1" min="${PROTEIN_MIN}" max="${PROTEIN_MAX}" inputmode="decimal" class="input"></div>
+      <div><label class="lbl">ไขมัน (% ของพลังงาน) · ขั้นต่ำ ${FAT_MIN}</label><input id="pf-fat" type="number" min="${FAT_MIN}" max="${FAT_MAX}" inputmode="numeric" class="input"></div>
+      <p id="pf-macro-hint" class="col-span-2 text-[11px] text-slate-500"></p>
     </div>
     <div id="pf-result" class="rounded-xl bg-lav-soft/50 p-3 text-sm space-y-1"></div>
     <p class="text-xs text-slate-400">ค่าที่คำนวณเป็นค่าประมาณทั่วไป (สูตร Mifflin-St Jeor) ไม่ใช่คำแนะนำทางการแพทย์ — มีโรคประจำตัว ตั้งครรภ์ หรือต้องการลดน้ำหนักมาก ควรปรึกษาแพทย์/นักกำหนดอาหาร</p>
@@ -72,6 +78,7 @@ export function mountProfile(el) {
   root.addEventListener('change', e => {
     if (e.target.id === 'pf-goal') { const v = e.target.value; if (v !== 'custom') $('#pf-adj', root).value = v; }
     if (e.target.id === 'pf-adj') $('#pf-goal', root).value = GOAL_PRESETS.some(g => g[0] === e.target.value) ? e.target.value : 'custom';
+    if (e.target.id === 'pf-prot' || e.target.id === 'pf-fat') enforceMinimums(true);
     dirty = true; preview();
   });
   $('#pf-add-meal', root).addEventListener('click', () => { readMeals(); meals.push({ id: 'm' + Date.now().toString(36), name: 'มื้อใหม่', pct: 0 }); dirty = true; renderMeals(); });
@@ -90,7 +97,7 @@ function fill() {
   const p = state.profile || {};
   const set = (id, v) => { $('#' + id, root).value = v ?? ''; };
   set('pf-sex', p.sex || 'female'); set('pf-birth', p.birthYear); set('pf-height', p.heightCm); set('pf-weight', p.weightKg);
-  set('pf-act', p.activity || 'light'); set('pf-adj', p.adjust ?? -300); set('pf-kcal', p.kcalOverride); set('pf-prot', p.proteinPerKg ?? 1.4); set('pf-fat', p.fatPct ?? 25);
+  set('pf-act', p.activity || 'light'); set('pf-adj', p.adjust ?? -300); set('pf-kcal', p.kcalOverride); set('pf-prot', p.proteinPerKg ?? defaultProtein(p.adjust ?? -300)); set('pf-fat', p.fatPct ?? 25);
   $('#pf-goal', root).value = GOAL_PRESETS.some(g => g[0] === String(p.adjust ?? -300)) ? String(p.adjust ?? -300) : 'custom';
   meals = getMeals().map(m => ({ ...m }));
   renderMeals();
@@ -115,12 +122,25 @@ function readMeals() {
   });
 }
 
+// ถ้ากรอกต่ำกว่าขั้นต่ำ/สูงเกินไป ให้ปรับกลับเป็นขั้นต่ำทันทีและแจ้งเตือน
+function enforceMinimums(notify) {
+  let fixed = [];
+  const pr = $('#pf-prot', root), ft = $('#pf-fat', root);
+  const v1 = toNum(pr.value), v2 = toNum(ft.value);
+  if (v1 !== null && v1 < PROTEIN_MIN) { pr.value = PROTEIN_MIN; fixed.push(`โปรตีนต่ำกว่าขั้นต่ำ ${PROTEIN_MIN} g/กก.`); }
+  if (v1 !== null && v1 > PROTEIN_MAX) { pr.value = PROTEIN_MAX; fixed.push(`โปรตีนสูงสุด ${PROTEIN_MAX} g/กก.`); }
+  if (v2 !== null && v2 < FAT_MIN) { ft.value = FAT_MIN; fixed.push(`ไขมันต่ำกว่าขั้นต่ำ ${FAT_MIN}% ของพลังงาน`); }
+  if (v2 !== null && v2 > FAT_MAX) { ft.value = FAT_MAX; fixed.push(`ไขมันสูงสุด ${FAT_MAX}%`); }
+  if (fixed.length && notify) toast('ปรับเป็นค่าที่ปลอดภัย: ' + fixed.join(' · '), 'err');
+  return fixed.length === 0;
+}
+
 function draft() {
   const g = id => $('#' + id, root).value;
   return {
     sex: g('pf-sex'), birthYear: toNum(g('pf-birth')), heightCm: toNum(g('pf-height')), weightKg: toNum(g('pf-weight')),
     activity: g('pf-act'), adjust: toNum(g('pf-adj')) ?? 0, kcalOverride: toNum(g('pf-kcal')),
-    proteinPerKg: toNum(g('pf-prot')) ?? 1.4, fatPct: toNum(g('pf-fat')) ?? 25
+    proteinPerKg: toNum(g('pf-prot')) ?? defaultProtein(toNum(g('pf-adj')) ?? 0), fatPct: toNum(g('pf-fat')) ?? 25
   };
 }
 
@@ -133,7 +153,10 @@ function preview() {
   $('#pf-pct-sum', root).innerHTML = `<span class="${sum === 100 ? 'text-green-700' : 'text-amber-700'}">รวม ${sum}%${sum === 100 ? ' ✓' : ' (ควรรวม 100%)'}</span>`;
   if (!c) { box.innerHTML = '<span class="text-slate-500">กรอกเพศ ปีเกิด ส่วนสูง และน้ำหนัก เพื่อคำนวณ BMI / BMR / TDEE (ตอนนี้ใช้ค่าเริ่มต้น 2,000 kcal)</span>'; return; }
   const t = getTargets({ ...p });
-  const warn = t.kcal < 1200 ? '<p class="text-xs text-rose-600">⚠️ เป้าหมายต่ำกว่า 1,200 kcal/วัน ซึ่งต่ำมากสำหรับคนส่วนใหญ่ — ควรปรึกษาแพทย์หรือนักกำหนดอาหารก่อน</p>' : '';
+  const w = c.w, adj = p.adjust || 0, lo = adj < 0 ? 1.2 : 0.8, hi = adj > 0 ? 2.2 : 2.0;
+  $('#pf-macro-hint', root).innerHTML = `ขั้นต่ำโปรตีน <b>${Math.ceil(PROTEIN_MIN * w)} g</b>/วัน · แนะนำ ${Math.round(lo * w)}–${Math.round(hi * w)} g (${lo}–${hi} g/กก. ${adj < 0 ? 'ช่วงลดน้ำหนักต้องการโปรตีนสูงขึ้นเพื่อรักษากล้ามเนื้อ' : 'ถ้าออกกำลังกายแบบเวทแนะนำ 1.6+'}) · ไขมันขั้นต่ำ ${FAT_MIN}% ≈ <b>${Math.round(t.kcal * FAT_MIN / 100 / 9)} g</b>`;
+  const lowKcal = t.kcal < c.bmr ? '<p class="text-xs text-amber-700">⚠️ เป้าหมายต่ำกว่า BMR (' + Math.round(c.bmr) + ' kcal) — ร่างกายไม่ได้ใช้พลังงานน้อยกว่านี้แม้นอนอยู่เฉย ๆ ควรปรับให้สูงขึ้น</p>' : '';
+  const warn = lowKcal + (t.kcal < 1200 ? '<p class="text-xs text-rose-600">⚠️ เป้าหมายต่ำกว่า 1,200 kcal/วัน ซึ่งต่ำมากสำหรับคนส่วนใหญ่ — ควรปรึกษาแพทย์หรือนักกำหนดอาหารก่อน</p>' : '');
   box.innerHTML = `<p><b>BMI ${round1(c.bmi)}</b> · ${bmiLabel(c.bmi)} <span class="text-[11px] text-slate-400">(เกณฑ์เอเชีย: 18.5–22.9 สมส่วน)</span></p>
     <p>BMR ${Math.round(c.bmr)} kcal · <b>TDEE ${Math.round(c.tdee)} kcal</b>/วัน</p>
     <p class="font-semibold text-brand-dark">เป้าหมายต่อวัน: ${t.kcal.toLocaleString()} kcal · โปรตีน ${t.protein} g · คาร์บ ${t.carbs} g · ไขมัน ${t.fat} g</p>${warn}`;
@@ -141,6 +164,7 @@ function preview() {
 
 function save() {
   readMeals();
+  if (!enforceMinimums(true)) return;
   const p = draft();
   if (!meals.every(m => String(m.name).trim())) return toast('ตั้งชื่อมื้อให้ครบ', 'err');
   const rec = { ...p, meals: meals.map(m => ({ id: m.id, name: String(m.name).trim(), pct: m.pct || 0 })), updatedAt: new Date() };
