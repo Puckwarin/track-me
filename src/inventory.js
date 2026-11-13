@@ -35,7 +35,7 @@ export function mountInventory(el) {
 
 export function watchInventory(uid) {
   for (const [key,col] of [['trackedProducts','tracked_products'],['replacements','replacement_records'],['skincareProducts','skincare_products'],['ingredientBlacklist','ingredient_blacklist']])
-    watch(`inventory:${col}`,userCol(uid,col),rows=>{state[key]=rows;render();});
+    watch(`inventory:${col}`,userCol(uid,col),rows=>{state[key]=rows;render();window.dispatchEvent(new Event('trackme:data-change'));});
 }
 
 function listProducts(){
