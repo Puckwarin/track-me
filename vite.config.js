@@ -2,11 +2,15 @@ import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// เว็บอยู่ที่ https://<user>.github.io/track-me/ จึงต้องตั้ง base เป็นชื่อ repo
-const BASE = '/track-me/';
+const BASE = '/';
 
 export default defineConfig({
   base: BASE,
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: true
+  },
   plugins: [
     tailwindcss(),
     VitePWA({

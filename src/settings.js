@@ -1,5 +1,5 @@
 import { $, toast } from './util.js';
-import { getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, getOpenRouterKey, setOpenRouterKey } from './nutrition.js';
+import { getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, getOpenRouterKey, setOpenRouterKey, testGeminiConnection, explainGeminiError } from './nutrition.js';
 import { getUsdaKey, setUsdaKey } from './foodsearch.js';
 import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
@@ -47,7 +47,7 @@ export function mountSettings(el) {
     <div class="card space-y-3 lg:col-span-2" id="st-migrate"></div>
     <div class="card space-y-4 lg:col-span-2" id="st-api-keys">
       <header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-brand"></i> คีย์เชื่อมต่อ (ตัวเลือก)</h3><p class="text-xs text-slate-500 mt-1">จัดคีย์ที่นี่เป็นหมวดเดียวกัน · เก็บเฉพาะเบราว์เซอร์อุปกรณ์นี้ ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p></header>
-      <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลากและประมาณโภชนาการ · ตั้งค่าได้ใน Google AI Studio · ใช้โควตาฟรีเมื่อมีให้บริการ</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button></section>
+      <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลากและประมาณโภชนาการ · ตั้งค่าได้ใน Google AI Studio · ใช้โควตาฟรีเมื่อมีให้บริการ</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
       <section class="rounded-xl border border-orange-100 bg-orange-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">Groq Vision (สำรอง)</h4><p class="text-xs text-slate-500">สลับมาใช้เมื่อ Gemini ใช้ไม่ได้/โควตาเต็ม · ฟรีตาม rate limit และเงื่อนไขปัจจุบันของผู้ให้บริการ</p><input type="password" id="st-groq" class="input" placeholder="Groq API Key" autocomplete="off"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button></section>
       <section class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">OpenRouter (สำรอง)</h4><p class="text-xs text-slate-500">ใช้โมเดลฟรีที่รองรับภาพผ่าน openrouter/free; ฟรีมี rate limit และรายชื่อโมเดลเปลี่ยนได้ ไม่มีการเติมเงินอัตโนมัติ</p><input type="password" id="st-openrouter" class="input" placeholder="OpenRouter API Key" autocomplete="off"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button></section>
       <p class="text-xs text-amber-700">คีย์เก็บในเบราว์เซอร์นี้เท่านั้น แต่คำขอภาพ/ข้อความจะส่งตรงไปยังผู้ให้บริการที่เลือกตามลำดับ Gemini → Groq → OpenRouter เมื่อแหล่งก่อนหน้าล้มเหลว กรุณาตรวจนโยบายข้อมูลและโควตาของแต่ละรายก่อนใช้รูปส่วนตัว</p>
@@ -56,7 +56,21 @@ export function mountSettings(el) {
     </div>
   </div>`;
   $('#st-key', el).value = getGeminiKey();
-  $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); toast('บันทึกคีย์ Gemini แล้ว'); });
+  $('#st-key-save', el).addEventListener('click', () => { setGeminiKey($('#st-key', el).value); $('#st-key-status', el).textContent = ''; toast('บันทึกคีย์ Gemini แล้ว'); });
+  $('#st-key-test', el).addEventListener('click', async () => {
+    const val = $('#st-key', el).value.trim();
+    if (val) setGeminiKey(val);
+    const st = $('#st-key-status', el), btn = $('#st-key-test', el);
+    btn.disabled = true; st.className = 'text-xs text-slate-500'; st.textContent = 'กำลังทดสอบโมเดล Gemini...';
+    try {
+      const res = await testGeminiConnection();
+      st.className = 'text-xs text-green-700';
+      st.textContent = `เชื่อมต่อสำเร็จ (ใช้โมเดล ${res.model})`;
+    } catch (e) {
+      st.className = 'text-xs text-rose-600';
+      st.textContent = explainGeminiError(e);
+    } finally { btn.disabled = false; }
+  });
   $('#st-groq',el).value=getGroqKey(); $('#st-groq-save',el).addEventListener('click',()=>{setGroqKey($('#st-groq',el).value);toast('บันทึกคีย์ Groq แล้ว');});
   $('#st-openrouter',el).value=getOpenRouterKey(); $('#st-openrouter-save',el).addEventListener('click',()=>{setOpenRouterKey($('#st-openrouter',el).value);toast('บันทึกคีย์ OpenRouter แล้ว');});
   $('#st-out', el).addEventListener('click', signOutUser);

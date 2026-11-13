@@ -2,14 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
-// ค่า config ของ Firebase Web เป็นข้อมูลสาธารณะโดยออกแบบ — ความปลอดภัยอยู่ที่ Authentication + Firestore Rules
+// ค่า config ของ Firebase Web อ่านจาก environment variables (VITE_FIREBASE_*)
 const firebaseConfig = {
-  apiKey: 'AIzaSyAZoQyNdJLVj2MRlJ-M32FR1c9VTiFGdmM',
-  authDomain: 'trackme-2829.firebaseapp.com',
-  projectId: 'trackme-2829',
-  storageBucket: 'trackme-2829.firebasestorage.app',
-  messagingSenderId: '1001237166672',
-  appId: '1:1001237166672:web:214382f55c26f7bc572f55'
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-project.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'demo-project.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '000000000000',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:000000000000:web:0000000000000000000000'
 };
 
 export const app = initializeApp(firebaseConfig);

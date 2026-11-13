@@ -1,6 +1,5 @@
-// Gemini: ใช้ API key ของผู้ใช้เอง (เก็บในเครื่องนี้เท่านั้น ไม่ซิงค์ ไม่อยู่ในไฟล์สำรอง)
-// Stable Gemini Flash model; gemini-2.5-flash is no longer available to new users.
-const MODEL = 'gemini-3.8-flash';
+// โมเดล Gemini ที่ลองใช้งานตามลำดับ (แต่ละโมเดลมีโควตาแยกกัน)
+const GEMINI_MODELS = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
 const KEY_NAME = 'gemini_key';
 const GROQ_KEY='groq_key', OPENROUTER_KEY='openrouter_key';
 export const getGroqKey=()=>localStorage.getItem(GROQ_KEY)||'';
@@ -11,13 +10,33 @@ export const setOpenRouterKey=k=>k?localStorage.setItem(OPENROUTER_KEY,k.trim())
 export const getGeminiKey = () => localStorage.getItem(KEY_NAME) || '';
 export const setGeminiKey = k => k ? localStorage.setItem(KEY_NAME, k.trim()) : localStorage.removeItem(KEY_NAME);
 
-async function callGeminiProvider(parts, schema) {
-  const key = getGeminiKey();
-  if (!key) throw new Error('NO_KEY');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+async function discoverFallbackGeminiModels(key) {
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+      headers: { 'x-goog-api-key': key },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return [];
+    const data = await res.json().catch(() => ({}));
+    return (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(id => id && !GEMINI_MODELS.includes(id) &&
+        /(flash|lite|hydrogen)/i.test(id) &&
+        !/tts|live|image|audio|embedding|transcribe|thinking|1\.5|2\.0|exp/i.test(id))
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+async function requestGeminiModel(model, key, parts, schema) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const generationConfig = { responseMimeType: 'application/json' };
+  if (schema) generationConfig.responseSchema = schema;
   const body = JSON.stringify({
     contents: [{ parts }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0 }
+    generationConfig
   });
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -46,10 +65,12 @@ async function callGeminiProvider(parts, schema) {
       const message = data?.error?.message || `HTTP ${res.status}`;
       const err = new Error(message);
       err.status = res.status;
-      err.quotaExceeded = /quota|resource exhausted/i.test(message);
+      err.invalidKey = (res.status === 400 && /api.?key|invalid/i.test(message)) || res.status === 403;
+      err.modelNotFound = res.status === 404;
+      err.quotaExceeded = res.status === 429 || /quota|resource.?exhausted/i.test(message);
       err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
       err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message) ||
-        (res.status === 429 && !err.quotaExceeded);
+        (res.status === 429 && !/quota|resource.?exhausted|limit:\s*0/i.test(message));
       if (err.retryable && attempt < 1) {
         const retryAfter = Number(res.headers.get('retry-after'));
         const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 1200) : 400;
@@ -65,6 +86,43 @@ async function callGeminiProvider(parts, schema) {
   }
 }
 
+async function callGeminiProvider(parts, schema) {
+  const key = getGeminiKey();
+  if (!key) throw new Error('NO_KEY');
+
+  const tried = [];
+  const tryModels = async (models) => {
+    for (const model of models) {
+      try {
+        const result = await requestGeminiModel(model, key, parts, schema);
+        return { model, result };
+      } catch (e) {
+        if (e.invalidKey || e.timeoutError || e.networkError) throw e;
+        tried.push({ model, error: e });
+        if (!e.modelNotFound && !e.quotaExceeded && !e.serverBusy && e.status !== 400) throw e;
+      }
+    }
+    return null;
+  };
+
+  const primary = await tryModels(GEMINI_MODELS);
+  if (primary) return primary.result;
+
+  const extraModels = await discoverFallbackGeminiModels(key);
+  if (extraModels.length) {
+    const fallback = await tryModels(extraModels);
+    if (fallback) return fallback.result;
+  }
+
+  const last = tried[tried.length - 1]?.error;
+  const summary = tried.map(x => `${x.model}: ${x.error.status || ''} ${x.error.message}`).join(' | ');
+  const err = new Error(summary || last?.message || 'Gemini ไม่พร้อมใช้งาน');
+  err.quotaExceeded = tried.length > 0 && tried.every(x => x.error.quotaExceeded);
+  err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
+  err.status = last?.status;
+  throw err;
+}
+
 
 async function callOpenAICompatible(provider, parts, schema) {
   const groq=provider==='groq', key=groq?getGroqKey():getOpenRouterKey();
@@ -74,7 +132,7 @@ async function callOpenAICompatible(provider, parts, schema) {
     ? {type:'image_url',image_url:{url:'data:'+p.inline_data.mime_type+';base64,'+p.inline_data.data}}
     : {type:'text',text:p.text||''});
   const schemaHint=Object.entries(schema?.properties||{}).map(([k,v])=>k+': '+(v.type==='NUMBER'?'number or null':v.type==='STRING'?'string':'value')).join(', ');
-  const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...(groq?{}:{'HTTP-Referer':'https://puckwarin.github.io/track-me/','X-Title':'Track Me'})},
+  const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...(groq?{}:{'HTTP-Referer':window.location.origin,'X-Title':'Track Me'})},
     body:JSON.stringify({model,messages:[{role:'user',content:[{type:'text',text:'Return only valid JSON with these fields: '+schemaHint},...messages]}],response_format:{type:'json_object'},temperature:0}),signal:AbortSignal.timeout(25000)});
   const data=await res.json().catch(()=>({}));
   if(!res.ok){const e=new Error(data?.error?.message||provider+' HTTP '+res.status);e.status=res.status;e.quotaExceeded=[402,429].includes(res.status)||/quota|rate.?limit/i.test(e.message);e.retryable=e.quotaExceeded||res.status>=500;throw e;}
@@ -86,7 +144,7 @@ async function callAI(parts,schema){
   const providers=[['Gemini',getGeminiKey(),()=>callGeminiProvider(parts,schema)],['Groq',getGroqKey(),()=>callOpenAICompatible('groq',parts,schema)],['OpenRouter',getOpenRouterKey(),()=>callOpenAICompatible('openrouter',parts,schema)]].filter(x=>x[1]);
   if(!providers.length)throw new Error('NO_KEY');
   const errors=[];
-  for(let i=0;i<providers.length;i++){const [name,,run]=providers[i];try{const result=await run();if(i>0)window.dispatchEvent(new CustomEvent('trackme:ai-fallback',{detail:{provider:name,failed:errors.length}}));return result;}catch(e){errors.push(name+': '+(e.message||'error'));}}
+  for(let i=0;i<providers.length;i++){const [name,,run]=providers[i];try{const result=await run();if(i>0)window.dispatchEvent(new CustomEvent('trackme:ai-fallback',{detail:{provider:name,failed:errors.length}}));return result;}catch(e){if(providers.length===1)throw e;errors.push(name+': '+(e.message||'error'));}}
   const err=new Error('AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — '+errors.join(' · '));err.fallbackErrors=errors;err.quotaExceeded=errors.some(x=>/429|quota|limit/i.test(x));throw err;
 }
 
@@ -174,14 +232,39 @@ export async function estimateStockFromPhoto(file) {
   });
 }
 
+export async function testGeminiConnection() {
+  const key = getGeminiKey();
+  if (!key) throw new Error('NO_KEY');
+  const models = [...GEMINI_MODELS, ...(await discoverFallbackGeminiModels(key))];
+  const details = [];
+  for (const model of models) {
+    try {
+      await requestGeminiModel(model, key, [{ text: 'Reply with JSON: {"ok":true}' }], {
+        type: 'OBJECT',
+        properties: { ok: { type: 'BOOLEAN' } },
+        required: ['ok']
+      });
+      return { ok: true, model, details };
+    } catch (e) {
+      if (e.invalidKey || e.timeoutError || e.networkError) throw e;
+      details.push(`${model}: ${e.status ? `HTTP ${e.status} ` : ''}${e.message}`);
+    }
+  }
+  const err = new Error(details.join(' · ') || 'ไม่พบโมเดล Gemini ที่ใช้งานได้');
+  err.quotaExceeded = details.some(x => /429|quota|resource.?exhausted/i.test(x));
+  throw err;
+}
+
 export const explainGeminiError = e => e.message === 'NO_KEY'
   ? 'ยังไม่ได้ใส่คีย์ AI — ตั้งค่า Gemini, Groq หรือ OpenRouter ในหน้า Settings'
-  : e.fallbackErrors
-    ? 'AI ทุกแหล่งที่ตั้งค่าไว้ขัดข้อง/เต็มโควตา: ' + e.message
-    : e.quotaExceeded
-      ? 'โควตา AI เต็มหรือถูกจำกัดชั่วคราว — ระบบลองแหล่งสำรองที่ตั้งค่าไว้แล้ว'
-      : e.timeoutError
-        ? 'AI ใช้เวลานานเกินกำหนด ลองอีกครั้งหรือใช้คลังอาหาร'
-        : e.networkError
-          ? 'เชื่อมต่อ AI ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต'
-          : 'เรียก AI ไม่สำเร็จ: ' + e.message;
+  : e.invalidKey
+    ? 'คีย์ Gemini ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน (ตรวจคีย์ใน ตั้งค่า หรือเปิดใช้ Generative Language API): ' + e.message
+    : e.fallbackErrors
+      ? e.message
+      : e.quotaExceeded
+        ? 'โควตา Gemini เต็มหรือถูกจำกัดในโมเดลที่ลองใช้ (' + e.message + ')'
+        : e.timeoutError
+          ? 'AI ใช้เวลานานเกินกำหนด ลองอีกครั้งหรือใช้คลังอาหาร'
+          : e.networkError
+            ? 'เชื่อมต่อ AI ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต'
+            : 'เรียก AI ไม่สำเร็จ: ' + e.message;

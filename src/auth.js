@@ -31,6 +31,7 @@ export function initAuth() {
         'auth/unauthorized-domain': 'โดเมนนี้ยังไม่ได้เพิ่มใน Firebase → Authentication → Settings → Authorized domains (ดู docs/SETUP.md)',
         'auth/operation-not-allowed': 'ยังไม่ได้เปิด Google Sign-in ใน Firebase Console (ดู docs/SETUP.md)',
         'auth/network-request-failed': 'ไม่มีอินเทอร์เน็ต — ล็อกอินครั้งแรกต้องออนไลน์',
+        'auth/invalid-api-key': 'ยังไม่ได้ตั้งค่า Firebase API Key ใน .env',
         'auth/popup-closed-by-user': ''
       }[e.code];
       $('#login-error').textContent = msg ?? 'ล็อกอินไม่สำเร็จ: ' + (e.code || e.message);
