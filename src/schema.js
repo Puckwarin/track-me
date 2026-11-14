@@ -5,6 +5,17 @@ const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
 const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 100000 ? v : null);
 const int = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
 const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new Date() : d; };
+const sanitizeReminderRule = r => ({
+  kind: ['once', 'interval', 'monthly', 'yearly', 'nth_weekday', 'last_weekday', 'same_as', 'weekly_except_linked'].includes(r.kind) ? r.kind : 'once',
+  ...(Number.isInteger(r.weekday) && r.weekday >= 0 && r.weekday <= 6 && { weekday: r.weekday }),
+  ...(Number.isInteger(r.nth) && r.nth >= 1 && r.nth <= 5 && { nth: r.nth }),
+  ...(Number.isInteger(r.intervalDays) && r.intervalDays > 0 && { intervalDays: r.intervalDays }),
+  ...(Number.isInteger(r.repeatMonths) && r.repeatMonths > 0 && { repeatMonths: r.repeatMonths }),
+  ...(str(r.linkedId, 80) && { linkedId: str(r.linkedId, 80) }),
+  ...(str(r.linkedCol, 40) && { linkedCol: str(r.linkedCol, 40) }),
+  ...(str(r.linkedQuery, 120) && { linkedQuery: str(r.linkedQuery, 120) }),
+  ...(str(r.summary, 160) && { summary: str(r.summary, 160) })
+});
 
 export const SANITIZERS = {
   food_records: o => isDateStr(o.date) && str(o.name) ? {
@@ -61,6 +72,8 @@ export const SANITIZERS = {
     petId:str(o.petId,80), category:str(o.category,60)||'สัตว์เลี้ยง', type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null,
     ...(typeof o.dueTime === 'string' && /^\d{2}:\d{2}$/.test(o.dueTime) && { dueTime: o.dueTime }),
     repeatMonths:int(o.repeatMonths,0,120), intervalDays:int(o.intervalDays,0,3650), remindDays:int(o.remindDays,-1,365),
+    ...(str(o.rawText, 300) && { rawText: str(o.rawText, 300) }),
+    ...(o.rule && typeof o.rule === 'object' && { rule: sanitizeReminderRule(o.rule) }),
     done:o.done===true, ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}), note:str(o.note,2000), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,
   pet_food_records: o => str(o.name) && num(o.grams)!==null && isDateStr(o.date) ? { petId:str(o.petId,80), date:o.date, name:str(o.name), grams:num(o.grams), kcalPer100:num(o.kcalPer100), allergy:['yes','no','unknown'].includes(o.allergy)?o.allergy:'unknown', note:str(o.note,2000), createdAt:ts(o.createdAt) } : null,
@@ -74,7 +87,10 @@ export const SANITIZERS = {
     name:str(o.name), category:str(o.category,60)||'เปลี่ยนของ', date:o.date, repeatMonths:int(o.repeatMonths,0,120), intervalDays:int(o.intervalDays,0,3650),
     nextDate:isDateStr(o.nextDate)?o.nextDate:null,
     ...(typeof o.dueTime === 'string' && /^\d{2}:\d{2}$/.test(o.dueTime) && { dueTime: o.dueTime }),
-    remindDays:int(o.remindDays,-1,365), done:o.done===true, ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}),
+    remindDays:int(o.remindDays,-1,365),
+    ...(str(o.rawText, 300) && { rawText: str(o.rawText, 300) }),
+    ...(o.rule && typeof o.rule === 'object' && { rule: sanitizeReminderRule(o.rule) }),
+    done:o.done===true, ...(isDateStr(o.dismissedFor)&&{dismissedFor:o.dismissedFor}),
     note:str(o.note,2000), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,
 
@@ -100,9 +116,11 @@ export const SANITIZERS = {
           id: /^[\w-]{1,40}$/.test(r.id || '') ? r.id : 'r' + Math.random().toString(36).slice(2, 9),
           title: str(r.title, 80),
           days: (Array.isArray(r.days) ? r.days : []).filter(d => Number.isInteger(d) && d >= 0 && d <= 6),
+          ...( ['every', 'A', 'B'].includes(r.weekPattern) && r.weekPattern !== 'every' && { weekPattern: r.weekPattern }),
           ...(str(r.time, 10) && { time: str(r.time, 10) }),
           ...(str(r.icon, 8) && { icon: str(r.icon, 8) })
         })),
+        ...(isDateStr(o.altAnchor) && { altAnchor: o.altAnchor }),
         doneMap: o.doneMap && typeof o.doneMap === 'object' ? Object.fromEntries(Object.entries(o.doneMap).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => typeof x === 'string').slice(0, 60)])) : {},
         extras: o.extras && typeof o.extras === 'object' ? Object.fromEntries(Object.entries(o.extras).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => x && str(x.title, 80)).slice(0, 30).map(x => ({ id: str(x.id, 40), title: str(x.title, 80), done: x.done === true }))])) : {},
         updatedAt: ts(o.updatedAt)

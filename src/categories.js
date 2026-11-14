@@ -5,7 +5,7 @@ export const CATEGORIES = [
   { key: 'workout', tab: 'workout', cat: 'cat-workout', emoji: '🏃‍♀️', label: 'ออกกำลังกาย', focus: 'w-type' },
   { key: 'period', tab: 'period', cat: 'cat-period', emoji: '🌸', label: 'ประจำเดือน', focus: 'p-start' },
   { key: 'symptoms', tab: 'symptoms', cat: 'cat-symptoms', emoji: '🌿', label: 'อาการ & ผิว', focus: 's-date' },
-  { key: 'remind', tab: 'remind', cat: 'cat-lab', emoji: '📌', label: 'บันทึกเตือน', focus: 'rm-title' },
+  { key: 'remind', tab: 'remind', cat: 'cat-lab', emoji: '📌', label: 'บันทึกเตือน', focus: 'rm-smart' },
   { key: 'expense', tab: 'expense', cat: 'cat-body', emoji: '💸', label: 'รายรับ-จ่าย', focus: 'ex-amount' },
   { key: 'body', tab: 'body', cat: 'cat-body', emoji: '⚖️', label: 'น้ำหนัก', focus: 'b-weight' },
   { key: 'care', tab: 'care', cat: 'cat-care', emoji: '🐾', label: 'สัตว์เลี้ยง', focus: 'pet-name' },

@@ -141,7 +141,7 @@ function startData() {
   watchInventory(uid);
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); renderHome(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); renderHome(); renderSummary(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
   watch('settings', userCol(uid, 'settings'), list => {
@@ -157,6 +157,7 @@ function startData() {
     emit('pushSettings');
     renderExpense();
     renderHome();
+    renderSummary();
     window.dispatchEvent(new Event('trackme:push-change'));
   });
   watchToday();
@@ -168,9 +169,9 @@ let todayKey = null;
 function watchToday() {
   if (!state.uid) return;
   todayKey = localDateStr();
-  watch('food-today', query(userCol(state.uid, 'food_records'), where('date', '==', todayKey)), list => { state.todayFood = list; renderHome(); });
+  watch('food-today', query(userCol(state.uid, 'food_records'), where('date', '==', todayKey)), list => { state.todayFood = list; renderHome(); renderSummary(); });
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); renderSummary(); } });
 
 on('auth', user => {
   stopAll();
@@ -194,6 +195,8 @@ $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
+$('#fab-top')?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+$('#fab-bottom')?.addEventListener('click', () => window.scrollTo({ top: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight), behavior: 'smooth' }));
 $('#btn-quick-add').addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {
@@ -203,7 +206,7 @@ $('#quick-sheet').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
-window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); });
+window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); renderSummary(); });
 window.addEventListener('trackme:reminders', updateBell);
 window.addEventListener('trackme:push-change', () => renderHome());
 navigator.serviceWorker?.addEventListener('message', e => {

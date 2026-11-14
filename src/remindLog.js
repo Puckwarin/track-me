@@ -3,71 +3,32 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
+import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
+import { getGeminiKey, getGroqKey, parseReminderWithAI, explainGeminiError } from './nutrition.js';
 
 const KINDS = [
-  ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง (วัคซีน/เห็บหมัด/หาหมอ)'],
-  ['เปลี่ยนของ', '🔄 เปลี่ยนของใช้ (แปรงสีฟัน/ผ้าปู/ไส้กรอง)'],
-  ['เอกสาร/ประกัน/ภาษี', '📄 เอกสาร / พ.ร.บ. / ภาษี / ประกัน'],
-  ['นัดหมาย/อื่น ๆ', '📌 นัดหมาย & เตือนอื่น ๆ']
+  ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
+  ['เปลี่ยนของ', '🔄 เปลี่ยนของใช้'],
+  ['เอกสาร/ประกัน/ภาษี', '📄 เอกสาร/ภาษี/ประกัน'],
+  ['นัดหมาย/อื่น ๆ', '📌 นัดหมาย & อื่น ๆ']
 ];
 
-const SUGGESTIONS = [
-  'หาหมอฟัน', 'จ่ายบิล / ค่าไฟ / ค่าเน็ต', 'กินยา / วิตามินตามนัด', 'วัคซีน', 'ยาเห็บหมัด', 'ถ่ายพยาธิ',
-  'เปลี่ยนแปรงสีฟัน', 'เปลี่ยนผ้าปูที่นอน', 'เปลี่ยนไส้กรองน้ำ',
-  'ต่อ พ.ร.บ.', 'ต่อภาษีรถยนต์', 'ยื่นภาษีเงินได้', 'ต่อประกันสุขภาพ', 'ต่อประกันรถ', 'ต่อบัตร/พาสปอร์ต'
-];
-
-const REPEAT_OPTIONS = [
-  ['', 'ไม่ทำซ้ำ (ครั้งเดียว)'],
-  ['d14', 'ทุก 14 วัน'],
-  ['m1', 'ทุก 1 เดือน'],
-  ['m2', 'ทุก 2 เดือน'],
-  ['m3', 'ทุก 3 เดือน'],
-  ['m6', 'ทุก 6 เดือน'],
-  ['m12', 'ทุก 1 ปี (12 เดือน)']
+const SMART_EXAMPLES = [
+  'นัดอาบน้ำน้องหมา ทุกวันเสาร์ที่สามของเดือน แจ้งเตือนก่อนสามวัน',
+  'ขูดหินปูนน้องหมาปีหน้าแจ้งเตือนก่อนถึงเวลาสองสัปดาห์',
+  'เปลี่ยนผ้าปูวันเดียวกับที่อาบน้ำน้องหมา',
+  'ซักผ้าห่มทุกวันเสาร์ที่ไม่ได้พาน้องหมาไปอาบน้ำ'
 ];
 
 let root;
 let editing = null; // { col, id } | null
+let currentDraft = null;
+let manualOverrides = {};
 const selectedKeys = new Set();
 
 const $r = s => $(s, root);
 
-const addMonths = (dateStr, months) => {
-  const d = new Date(`${dateStr}T00:00:00`), day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-  return d.toISOString().slice(0, 10);
-};
-
-function computeNext(dateStr, repeatVal, customDays) {
-  if (!dateStr) return null;
-  if (customDays && Number(customDays) > 0) return addDays(dateStr, Number(customDays));
-  if (!repeatVal) return null;
-  if (repeatVal.startsWith('d')) return addDays(dateStr, Number(repeatVal.slice(1)));
-  if (repeatVal.startsWith('m')) return addMonths(dateStr, Number(repeatVal.slice(1)));
-  return null;
-}
-
-function encodeRepeat(item) {
-  if (item.repeatMonths) return 'm' + item.repeatMonths;
-  if (item.intervalDays === 14) return 'd14';
-  if (item.intervalDays === 30) return 'm1';
-  if (item.intervalDays === 60) return 'm2';
-  if (item.intervalDays === 90) return 'm3';
-  if (item.intervalDays === 180) return 'm6';
-  if (item.intervalDays === 365) return 'm12';
-  return '';
-}
-
-function repeatText(item) {
-  if (item.repeatMonths) return item.repeatMonths === 12 ? 'ทุก 1 ปี' : `ทุก ${item.repeatMonths} เดือน`;
-  if (item.intervalDays) return `ทุก ${item.intervalDays} วัน`;
-  return '';
-}
-
-function allItems() {
+function rawItems() {
   const petName = id => (state.petProfiles || []).find(p => p.id === id)?.name || '';
   const fromPet = (state.petCare || []).map(x => ({
     ...x,
@@ -87,12 +48,42 @@ function allItems() {
     sub: '',
     remindDays: x.remindDays !== undefined && x.remindDays !== null ? Number(x.remindDays) : 7
   }));
-  return [...fromPet, ...fromRep].sort((a, b) => {
+  return [...fromPet, ...fromRep];
+}
+
+function allItems() {
+  const base = rawItems();
+  const today = localDateStr();
+  return base.map(item => {
+    if (!item.done && item.rule && ['same_as', 'weekly_except_linked'].includes(item.rule.kind)) {
+      const resolved = resolveRuleNextDate(item.rule, base, today, true);
+      if (resolved) return { ...item, nextDate: resolved };
+    }
+    return item;
+  }).sort((a, b) => {
     if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
     const da = a.nextDate || a.date || '9999-12-31';
     const db_ = b.nextDate || b.date || '9999-12-31';
     return da.localeCompare(db_);
   });
+}
+
+function computeNextForItem(item, fromDate) {
+  if (item.rule && item.rule.kind && item.rule.kind !== 'once') {
+    const base = rawItems().filter(x => x.uidKey !== item.uidKey);
+    const resolved = resolveRuleNextDate(item.rule, base, fromDate, false);
+    if (resolved) return resolved;
+  }
+  if (item.intervalDays && Number(item.intervalDays) > 0) return addDays(fromDate, Number(item.intervalDays));
+  if (item.repeatMonths && Number(item.repeatMonths) > 0) return addMonthsSafe(fromDate, Number(item.repeatMonths));
+  return null;
+}
+
+function repeatText(item) {
+  if (item.rule?.summary && item.rule.kind !== 'once') return item.rule.summary;
+  if (item.repeatMonths) return item.repeatMonths === 12 ? 'ทุก 1 ปี' : `ทุก ${item.repeatMonths} เดือน`;
+  if (item.intervalDays) return `ทุก ${item.intervalDays} วัน`;
+  return '';
 }
 
 export function mountRemind(el) {
@@ -101,33 +92,39 @@ export function mountRemind(el) {
   <div class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-5 gap-6">
     <section class="card space-y-4 lg:col-span-2 self-start">
       <header>
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-thumbtack text-brand"></i> บันทึกแจ้งเตือน (นัดหมายตามวันเวลา)</h2>
-        <p class="text-xs text-slate-500 mt-1">สำหรับนัดหมายเฉพาะกิจหรือแจ้งเตือนตามวันเวลาเป๊ะๆ ที่ไม่ได้ทำซ้ำทุกสัปดาห์ (เช่น หาหมอฟัน, จ่ายบิล, กินยา, ต่อ พ.ร.บ.) — เชื่อม Push 08:00 น. และแสดงป้ายเตือนบนหน้า Planner</p>
+        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-brand"></i> บันทึกแจ้งเตือนอัจฉริยะ</h2>
+        <p class="text-xs text-slate-500 mt-1">พิมพ์ประโยคเดียวได้เลย ระบบจะแยกชื่อรายการ หมวดหมู่ วันที่ เวลา รอบทำซ้ำ เงื่อนไขเชื่อมโยง และวันเตือนล่วงหน้าให้ทันที</p>
       </header>
-      <div class="space-y-3">
-        <div><label class="lbl">หมวดหมู่</label><select id="rm-kind" class="input">${KINDS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
-        <div>
-          <label class="lbl">ชื่อรายการ / นัดหมาย *</label>
-          <input id="rm-title" list="rm-titles" class="input" placeholder="เช่น หาหมอฟัน, จ่ายบิลค่าเน็ต, ต่อ พ.ร.บ.">
-          <datalist id="rm-titles">${SUGGESTIONS.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
+
+      <div class="space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <label for="rm-smart" class="lbl !mb-0">พิมพ์หรือวางข้อความแจ้งเตือน *</label>
+          <button id="rm-ai-btn" type="button" class="chip bg-lav-soft text-brand-dark text-[11px] !py-1 hidden"><i class="fa-solid fa-sparkles"></i> ให้ AI ช่วยตีความ</button>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">วันครบกำหนด / นัด *</label><input id="rm-next" type="date" class="input"></div>
-          <div><label class="lbl">เวลานัดหมาย (ไม่บังคับ)</label><input id="rm-time" type="time" class="input"></div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">วันที่ทำ / เริ่มต้น</label><input id="rm-date" type="date" class="input"></div>
-          <div>
-            <label class="lbl">แจ้งเตือนล่วงหน้า</label>
-            <select id="rm-remind" class="input">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <textarea id="rm-smart" rows="3" class="input min-h-24 text-sm leading-relaxed" placeholder="เช่น นัดอาบน้ำน้องหมา ทุกวันเสาร์ที่สามของเดือน แจ้งเตือนก่อนสามวัน"></textarea>
+
+        <div class="space-y-1">
+          <p class="text-[11px] text-slate-400">ตัวอย่างกดลองใช้ได้:</p>
+          <div class="flex flex-wrap gap-1.5">
+            ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-2.5 py-1 text-slate-600 transition">${esc(ex)}</button>`).join('')}
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">รอบทำซ้ำ (ถ้ามี)</label><select id="rm-repeat" class="input">${REPEAT_OPTIONS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
-          <div><label class="lbl">หรือระบุรอบ (วัน)</label><input id="rm-days" type="number" min="1" max="3650" inputmode="numeric" class="input" placeholder="เช่น 90"></div>
-        </div>
-        <div><label class="lbl">หมายเหตุ</label><input id="rm-note" class="input" placeholder="เช่น คลินิก, เลขทะเบียน, จำนวนเงิน"></div>
       </div>
+
+      <div id="rm-preview" class="hidden rounded-2xl border border-brand/25 bg-lav-soft/35 p-3 space-y-2 text-xs"></div>
+
+      <details id="rm-adjust-box" class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs">
+        <summary class="cursor-pointer font-semibold text-slate-600">ปรับค่าที่แปลงได้ด้วยตนเอง (ถ้าต้องการ)</summary>
+        <div class="grid grid-cols-2 gap-2.5 mt-2.5">
+          <div class="col-span-2"><label class="lbl">ชื่อรายการ</label><input id="rm-ov-title" class="input text-xs" placeholder="อัตโนมัติจากข้อความ"></div>
+          <div><label class="lbl">หมวดหมู่</label><select id="rm-ov-kind" class="input text-xs"><option value="">อัตโนมัติ</option>${KINDS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
+          <div><label class="lbl">เตือนล่วงหน้า</label><select id="rm-ov-remind" class="input text-xs"><option value="">อัตโนมัติ</option>${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></div>
+          <div><label class="lbl">วันครบกำหนดถัดไป</label><input id="rm-ov-next" type="date" class="input text-xs"></div>
+          <div><label class="lbl">เวลา (ถ้ามี)</label><input id="rm-ov-time" type="time" class="input text-xs"></div>
+          <div class="col-span-2"><label class="lbl">หมายเหตุเพิ่มเติม</label><input id="rm-ov-note" class="input text-xs" placeholder="คลินิก, รายละเอียด"></div>
+        </div>
+      </details>
+
       <div class="flex flex-wrap justify-end gap-2">
         <button id="rm-cancel" type="button" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
         <button id="rm-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกแจ้งเตือน</button>
@@ -160,19 +157,37 @@ export function mountRemind(el) {
     </section>
   </div>`;
 
-  $r('#rm-date').value = localDateStr();
-  const syncAutoNext = () => {
-    if ($r('#rm-next').dataset.manual === '1') return;
-    const next = computeNext($r('#rm-date').value, $r('#rm-repeat').value, $r('#rm-days').value);
-    if (next) $r('#rm-next').value = next;
+  const syncAiBtn = () => {
+    const hasKey = Boolean(getGeminiKey() || getGroqKey());
+    $r('#rm-ai-btn')?.classList.toggle('hidden', !hasKey);
   };
-  $r('#rm-kind').addEventListener('change', () => {
-    if (!editing && $r('#rm-kind').value === 'เอกสาร/ประกัน/ภาษี') $r('#rm-remind').value = '30';
+  syncAiBtn();
+
+  $r('#rm-smart').addEventListener('input', () => {
+    manualOverrides = {};
+    updateSmartPreview();
   });
-  $r('#rm-next').addEventListener('input', () => { $r('#rm-next').dataset.manual = $r('#rm-next').value ? '1' : ''; });
-  $r('#rm-repeat').addEventListener('change', () => { $r('#rm-days').value = ''; $r('#rm-next').dataset.manual = ''; syncAutoNext(); });
-  $r('#rm-days').addEventListener('input', () => { if ($r('#rm-days').value) $r('#rm-repeat').value = ''; $r('#rm-next').dataset.manual = ''; syncAutoNext(); });
-  $r('#rm-date').addEventListener('change', syncAutoNext);
+  root.addEventListener('click', e => {
+    const exBtn = e.target.closest('[data-rm-ex]');
+    if (exBtn) {
+      $r('#rm-smart').value = SMART_EXAMPLES[Number(exBtn.dataset.rmEx)] || '';
+      manualOverrides = {};
+      updateSmartPreview();
+      $r('#rm-smart').focus();
+    }
+  });
+  ['rm-ov-title', 'rm-ov-kind', 'rm-ov-remind', 'rm-ov-next', 'rm-ov-time', 'rm-ov-note'].forEach(id => {
+    $r('#' + id).addEventListener('input', () => {
+      manualOverrides[id] = $r('#' + id).value;
+      updateSmartPreview(false);
+    });
+    $r('#' + id).addEventListener('change', () => {
+      manualOverrides[id] = $r('#' + id).value;
+      updateSmartPreview(false);
+    });
+  });
+
+  $r('#rm-ai-btn').addEventListener('click', assistWithAI);
   $r('#rm-save').addEventListener('click', saveForm);
   $r('#rm-cancel').addEventListener('click', resetForm);
   $r('#rm-search').addEventListener('input', renderRemind);
@@ -197,41 +212,156 @@ export function mountRemind(el) {
   renderRemind();
 }
 
+function updateSmartPreview(reparse = true) {
+  if (!root) return;
+  const text = $r('#rm-smart').value.trim();
+  const box = $r('#rm-preview');
+  if (!text) {
+    currentDraft = null;
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+  const existing = rawItems().filter(x => !editing || x.id !== editing.id);
+  const parsed = reparse || !currentDraft ? parseSmartReminder(text, existing, localDateStr()) : currentDraft;
+  const effective = {
+    ...parsed,
+    title: (manualOverrides['rm-ov-title'] || '').trim() || parsed.title,
+    kind: manualOverrides['rm-ov-kind'] || parsed.kind,
+    nextDate: manualOverrides['rm-ov-next'] || parsed.nextDate,
+    dueTime: manualOverrides['rm-ov-time'] !== undefined && manualOverrides['rm-ov-time'] !== '' ? manualOverrides['rm-ov-time'] : parsed.dueTime,
+    remindDays: manualOverrides['rm-ov-remind'] !== undefined && manualOverrides['rm-ov-remind'] !== '' ? Number(manualOverrides['rm-ov-remind']) : parsed.remindDays,
+    note: manualOverrides['rm-ov-note'] !== undefined ? manualOverrides['rm-ov-note'].trim() : (parsed.note || '')
+  };
+  currentDraft = parsed;
+
+  if (reparse) {
+    $r('#rm-ov-title').value = manualOverrides['rm-ov-title'] || '';
+    $r('#rm-ov-kind').value = manualOverrides['rm-ov-kind'] || '';
+    $r('#rm-ov-remind').value = manualOverrides['rm-ov-remind'] || '';
+    $r('#rm-ov-next').value = manualOverrides['rm-ov-next'] || '';
+    $r('#rm-ov-time').value = manualOverrides['rm-ov-time'] || '';
+  }
+
+  const ruleText = effective.rule?.summary && effective.rule.kind !== 'once'
+    ? effective.rule.summary
+    : 'แจ้งเตือนครั้งเดียว';
+  const unlinkedWarn = (effective.rule?.kind === 'same_as' || effective.rule?.kind === 'weekly_except_linked') && !effective.rule?.linkedId
+    ? `<p class="text-[11px] text-amber-800">⚠️ ยังไม่พบรายการ "${esc(effective.rule.linkedQuery || '')}" ที่บันทึกไว้ — บันทึกได้ และระบบจะเชื่อมวันให้อัตโนมัติทันทีที่สร้างรายการนั้น</p>`
+    : '';
+
+  box.classList.remove('hidden');
+  box.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-1">
+      <span class="font-bold text-green-700"><i class="fa-solid fa-circle-check mr-1"></i>ระบบเข้าใจว่า:</span>
+      <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">${esc(effective.kind)}</span>
+    </div>
+    <p class="text-sm font-bold text-slate-800">${esc(effective.title)}</p>
+    <div class="flex flex-wrap gap-1.5">
+      <span class="rounded-lg bg-white px-2 py-1 text-slate-700">📅 <b>${esc(fmtDate(effective.nextDate))}</b></span>
+      ${effective.dueTime ? `<span class="rounded-lg bg-white px-2 py-1 text-blue-700">⏰ <b>${esc(effective.dueTime)} น.</b></span>` : ''}
+      <span class="rounded-lg bg-white px-2 py-1 text-brand-dark">🔁 ${esc(ruleText)}</span>
+      <span class="rounded-lg bg-white px-2 py-1 text-slate-700">🔔 ${esc(remindLabel(effective.remindDays))}</span>
+    </div>
+    ${unlinkedWarn}`;
+}
+
+async function assistWithAI() {
+  const text = $r('#rm-smart').value.trim();
+  if (!text) return toast('พิมพ์ข้อความแจ้งเตือนก่อนค่ะ', 'err');
+  const btn = $r('#rm-ai-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังวิเคราะห์…';
+  try {
+    const existing = rawItems().filter(x => !editing || x.id !== editing.id);
+    const ai = await parseReminderWithAI(text, localDateStr(), existing.map(x => x.title));
+    const localBase = parseSmartReminder(text, existing, localDateStr());
+    const validKind = KINDS.some(([v]) => v === ai.kind) ? ai.kind : localBase.kind;
+    const ruleKind = ['once', 'interval', 'monthly', 'yearly', 'nth_weekday', 'last_weekday', 'same_as', 'weekly_except_linked'].includes(ai.ruleKind)
+      ? ai.ruleKind
+      : localBase.rule.kind;
+    const rule = {
+      kind: ruleKind,
+      ...(Number.isInteger(ai.weekday) && ai.weekday >= 0 && ai.weekday <= 6 && { weekday: ai.weekday }),
+      ...(Number.isInteger(ai.nth) && ai.nth >= 1 && ai.nth <= 5 && { nth: ai.nth }),
+      ...(ai.intervalDays > 0 && { intervalDays: Math.round(ai.intervalDays) }),
+      ...(ai.repeatMonths > 0 && { repeatMonths: Math.round(ai.repeatMonths) }),
+      ...(ai.linkedQuery && { linkedQuery: ai.linkedQuery }),
+      summary: localBase.rule?.summary && ruleKind === localBase.rule?.kind ? localBase.rule.summary : (ai.ruleKind === 'once' ? 'ครั้งเดียว' : ai.ruleKind)
+    };
+    const resolvedDate = resolveRuleNextDate(rule, existing, localDateStr(), true) || ai.nextDate || localBase.nextDate;
+    currentDraft = {
+      rawText: text,
+      title: ai.title || localBase.title,
+      kind: validKind,
+      nextDate: resolvedDate,
+      dueTime: ai.dueTime || localBase.dueTime || null,
+      remindDays: Number.isFinite(ai.remindDays) ? Math.round(ai.remindDays) : localBase.remindDays,
+      repeatMonths: ai.repeatMonths || localBase.repeatMonths || null,
+      intervalDays: ai.intervalDays || localBase.intervalDays || null,
+      rule,
+      note: ai.note || ''
+    };
+    manualOverrides = {};
+    updateSmartPreview(false);
+    toast('AI แปลงข้อความให้แล้ว ✓');
+  } catch (err) {
+    toast(explainGeminiError(err), 'err');
+  } finally {
+    if (btn.isConnected) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> ให้ AI ช่วยตีความ';
+    }
+  }
+}
+
 function resetForm() {
   editing = null;
-  $r('#rm-title').value = '';
-  $r('#rm-date').value = localDateStr();
-  $r('#rm-next').value = '';
-  $r('#rm-next').dataset.manual = '';
-  $r('#rm-time').value = '';
-  $r('#rm-repeat').value = '';
-  $r('#rm-days').value = '';
-  $r('#rm-remind').value = '7';
-  $r('#rm-note').value = '';
+  currentDraft = null;
+  manualOverrides = {};
+  $r('#rm-smart').value = '';
+  ['rm-ov-title', 'rm-ov-kind', 'rm-ov-remind', 'rm-ov-next', 'rm-ov-time', 'rm-ov-note'].forEach(id => { $r('#' + id).value = ''; });
+  $r('#rm-adjust-box').open = false;
   $r('#rm-save').innerHTML = '<i class="fa-solid fa-plus"></i> บันทึกแจ้งเตือน';
   $r('#rm-cancel').classList.add('hidden');
+  updateSmartPreview();
 }
 
 async function saveForm() {
-  const kind = $r('#rm-kind').value;
-  const title = $r('#rm-title').value.trim();
-  const date = $r('#rm-date').value || localDateStr();
-  if (!title) return toast('กรอกชื่อรายการก่อนค่ะ', 'err');
-  const repeatVal = $r('#rm-repeat').value;
-  const customDays = $r('#rm-days').value ? Number($r('#rm-days').value) : null;
-  const repeatMonths = repeatVal.startsWith('m') ? Number(repeatVal.slice(1)) : null;
-  const intervalDays = customDays || (repeatVal === 'd14' ? 14 : null);
-  const nextDate = $r('#rm-next').value || computeNext(date, repeatVal, customDays) || date;
-  const dueTime = $r('#rm-time').value.trim() || null;
-  const remindDays = Number($r('#rm-remind').value);
-  const note = $r('#rm-note').value.trim();
+  const rawText = $r('#rm-smart').value.trim();
+  if (!rawText) return toast('พิมพ์ข้อความแจ้งเตือนก่อนค่ะ', 'err');
+  if (!currentDraft) updateSmartPreview(true);
+  const d = currentDraft;
+  const kind = manualOverrides['rm-ov-kind'] || d.kind || 'นัดหมาย/อื่น ๆ';
+  const title = (manualOverrides['rm-ov-title'] || '').trim() || d.title || rawText.slice(0, 80);
+  const today = localDateStr();
+  const nextDate = manualOverrides['rm-ov-next'] || d.nextDate || today;
+  const dueTime = (manualOverrides['rm-ov-time'] || d.dueTime || '').trim() || null;
+  const remindDays = (manualOverrides['rm-ov-remind'] !== undefined && manualOverrides['rm-ov-remind'] !== '')
+    ? Number(manualOverrides['rm-ov-remind'])
+    : (d.remindDays ?? 7);
+  const note = (manualOverrides['rm-ov-note'] !== undefined ? manualOverrides['rm-ov-note'] : (d.note || '')).trim();
 
   const isPet = kind === 'สัตว์เลี้ยง';
   const targetCol = isPet ? 'pet_care_records' : 'replacement_records';
   const petId = (state.petProfiles || [])[0]?.id || '';
   const payload = isPet
-    ? { petId, type: title.slice(0, 80), category: 'สัตว์เลี้ยง', date, nextDate, ...(dueTime && { dueTime }), repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null }
-    : { name: title.slice(0, 120), category: kind, date, nextDate, ...(dueTime && { dueTime }), repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null };
+    ? {
+        petId, type: title.slice(0, 80), category: 'สัตว์เลี้ยง',
+        date: today, nextDate, ...(dueTime && { dueTime }),
+        repeatMonths: d.repeatMonths ?? null, intervalDays: d.intervalDays ?? null,
+        remindDays, rawText: rawText.slice(0, 300),
+        ...(d.rule && { rule: d.rule }),
+        note, done: false, dismissedFor: null
+      }
+    : {
+        name: title.slice(0, 120), category: kind,
+        date: today, nextDate, ...(dueTime && { dueTime }),
+        repeatMonths: d.repeatMonths ?? null, intervalDays: d.intervalDays ?? null,
+        remindDays, rawText: rawText.slice(0, 300),
+        ...(d.rule && { rule: d.rule }),
+        note, done: false, dismissedFor: null
+      };
 
   try {
     if (editing && editing.col === targetCol) {
@@ -242,7 +372,7 @@ async function saveForm() {
       if (editing && editing.col !== targetCol) {
         await deleteDoc(userDoc(state.uid, editing.col, editing.id));
       }
-      toast(editing ? 'ย้ายหมวดและบันทึกแล้ว' : 'บันทึกแจ้งเตือนแล้ว');
+      toast(editing ? 'ย้ายหมวดและบันทึกแล้ว' : 'บันทึกแจ้งเตือนแล้ว ✓');
     }
     resetForm();
   } catch (e) {
@@ -299,17 +429,24 @@ async function onListClick(e) {
 
   if (btn.dataset.edit) {
     editing = { col: item.col, id: item.id };
-    $r('#rm-kind').value = KINDS.some(([v]) => v === item.kind) ? item.kind : 'นัดหมาย/อื่น ๆ';
-    $r('#rm-title').value = item.title;
-    $r('#rm-date').value = item.date || localDateStr();
-    $r('#rm-next').value = item.nextDate || '';
-    $r('#rm-next').dataset.manual = item.nextDate ? '1' : '';
-    $r('#rm-time').value = item.dueTime || '';
-    const rep = encodeRepeat(item);
-    $r('#rm-repeat').value = rep;
-    $r('#rm-days').value = !rep && item.intervalDays ? item.intervalDays : '';
-    $r('#rm-remind').value = String(item.remindDays);
-    $r('#rm-note').value = item.note || '';
+    const fallbackRaw = [item.title, item.rule?.summary && item.rule.kind !== 'once' ? item.rule.summary : repeatText(item), item.nextDate || ''].filter(Boolean).join(' ');
+    $r('#rm-smart').value = item.rawText || fallbackRaw;
+    manualOverrides = {
+      'rm-ov-title': item.title || '',
+      'rm-ov-kind': KINDS.some(([v]) => v === item.kind) ? item.kind : 'นัดหมาย/อื่น ๆ',
+      'rm-ov-next': item.nextDate || '',
+      'rm-ov-time': item.dueTime || '',
+      'rm-ov-remind': String(item.remindDays),
+      'rm-ov-note': item.note || ''
+    };
+    $r('#rm-ov-title').value = manualOverrides['rm-ov-title'];
+    $r('#rm-ov-kind').value = manualOverrides['rm-ov-kind'];
+    $r('#rm-ov-next').value = manualOverrides['rm-ov-next'];
+    $r('#rm-ov-time').value = manualOverrides['rm-ov-time'];
+    $r('#rm-ov-remind').value = manualOverrides['rm-ov-remind'];
+    $r('#rm-ov-note').value = manualOverrides['rm-ov-note'];
+    currentDraft = item.rule ? { ...parseSmartReminder($r('#rm-smart').value, rawItems(), localDateStr()), rule: item.rule } : null;
+    updateSmartPreview(!currentDraft);
     $r('#rm-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกการแก้ไข';
     $r('#rm-cancel').classList.remove('hidden');
     root.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -318,8 +455,8 @@ async function onListClick(e) {
 
   if (btn.dataset.done) {
     const today = localDateStr();
-    const rep = encodeRepeat(item);
-    const next = computeNext(today, rep, !rep ? item.intervalDays : null);
+    const baseDate = item.nextDate && item.nextDate > today ? item.nextDate : today;
+    const next = computeNextForItem(item, baseDate);
     try {
       if (next) {
         await updateDoc(userDoc(state.uid, item.col, item.id), { date: today, nextDate: next, done: false, dismissedFor: null, updatedAt: new Date() });
@@ -360,7 +497,7 @@ function filteredItems() {
     const due = x.nextDate || x.date || '';
     if (from && (!due || due < from)) return false;
     if (to && (!due || due > to)) return false;
-    if (q && !`${x.title} ${x.note || ''} ${x.kind}`.toLowerCase().includes(q)) return false;
+    if (q && !`${x.title} ${x.note || ''} ${x.kind} ${x.rawText || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -401,7 +538,7 @@ export function renderRemind() {
               <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">${esc(x.kind)}</span>
               ${statusBadge}
             </div>
-            <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · ${esc(rep)}` : ''}</p>
+            <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · 🔁 ${esc(rep)}` : ''}</p>
             ${x.note ? `<p class="text-xs text-slate-500 mt-0.5">${esc(x.note)}</p>` : ''}
           </div>
         </label>
@@ -418,5 +555,5 @@ export function renderRemind() {
         </div>
       </div>
     </article>`;
-  }).join('') : '<p class="text-sm text-slate-400 text-center py-6">ยังไม่มีบันทึกแจ้งเตือน — เพิ่มรายการใหม่ทางด้านซ้ายได้เลย</p>';
+  }).join('') : '<p class="text-sm text-slate-400 text-center py-6">ยังไม่มีบันทึกแจ้งเตือน — พิมพ์รายการใหม่ทางด้านซ้ายได้เลย</p>';
 }

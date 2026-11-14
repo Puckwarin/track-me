@@ -67,7 +67,7 @@
       <section id="summary-section" class="space-y-4">
         <div class="card">
           <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-            <h2 class="text-base font-bold text-slate-800"><span class="emoji-bubble emoji-sm cat-lab">🩺</span> สรุปสุขภาพ (เปิดดูตอนพบแพทย์)</h2>
+            <h2 class="text-base font-bold text-slate-800"><span class="emoji-bubble emoji-sm cat-lab">📊</span> สรุปภาพรวมทั้งหมด</h2>
             <button id="btn-copy-summary" class="chip bg-slate-100 text-slate-700"><i class="fa-regular fa-copy"></i> คัดลอกสรุป</button>
           </div>
           <div id="summary-grid" class="grid grid-cols-2 gap-3"></div>
@@ -110,6 +110,16 @@
         </div>
         <div id="quick-grid" class="grid grid-cols-4 gap-3"></div>
       </div>
+    </div>
+
+    <!-- ปุ่มลอยเลื่อนขึ้นบนสุด / ลงล่างสุด -->
+    <div id="scroll-fabs" class="scroll-fabs no-print" aria-label="ตัวช่วยเลื่อนหน้าจอ">
+      <button id="fab-top" type="button" class="fab-scroll-btn" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด">
+        <i class="fa-solid fa-arrow-up"></i>
+      </button>
+      <button id="fab-bottom" type="button" class="fab-scroll-btn" aria-label="เลื่อนลงล่างสุด" title="ลงล่างสุด">
+        <i class="fa-solid fa-arrow-down"></i>
+      </button>
     </div>
   </div>
 

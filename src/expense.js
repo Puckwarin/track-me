@@ -3,7 +3,7 @@ import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toast, openModal } from './util.js';
-import { ocrSlipInBrowser, consumePendingSharedSlip } from './slipOcr.js';
+import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 
 export const EXPENSE_CATEGORIES = [
   'อาหาร',
@@ -114,12 +114,12 @@ export function mountExpense(el) {
       <div class="rounded-2xl border border-dashed border-brand/40 bg-lav-soft/40 p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <label class="btn btn-primary !py-2 !px-3.5 text-xs cursor-pointer">
-            <i class="fa-solid fa-camera"></i> 📷 สแกนสลิป (เลือกรูป)
-            <input id="ex-slip-file" type="file" accept="image/*" class="hidden">
+            <i class="fa-solid fa-camera"></i> 📷 สแกนสลิป (เลือกได้หลายรูป)
+            <input id="ex-slip-file" type="file" accept="image/*" multiple class="hidden">
           </label>
           <span class="text-[11px] text-slate-500">หรือกด แชร์ รูปจากแกลเลอรีเข้า Track Me</span>
         </div>
-        <p id="ex-ocr-status" class="hidden text-xs text-brand-dark font-medium"></p>
+        <p id="ex-ocr-status" class="hidden text-xs font-medium" aria-live="polite"></p>
       </div>
 
       <div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
@@ -211,10 +211,11 @@ export function mountExpense(el) {
 
   $r('#ex-slip-file').addEventListener('change', async e => {
     const input = e.target;
-    const file = input.files?.[0];
+    const files = [...(input.files || [])];
     input.value = '';
-    if (!file) return;
-    await runSlipScan(file);
+    if (!files.length) return;
+    if (files.length === 1) await runSlipScan(files[0]);
+    else await runMultiSlipScan(files);
   });
 
   $r('#ex-save').addEventListener('click', saveManualForm);
@@ -305,19 +306,142 @@ async function saveManualForm() {
 async function runSlipScan(file) {
   const statusEl = root ? $r('#ex-ocr-status') : null;
   if (statusEl) {
-    statusEl.classList.remove('hidden');
+    statusEl.className = 'text-xs text-brand-dark font-medium';
     statusEl.textContent = 'กำลังเริ่มสแกนสลิปในเครื่อง…';
   }
   try {
     const { parsed } = await ocrSlipInBrowser(file, msg => {
       if (statusEl && statusEl.isConnected) statusEl.textContent = msg;
     });
-    if (statusEl) statusEl.classList.add('hidden');
+    if (statusEl && statusEl.isConnected) {
+      statusEl.className = 'text-xs text-green-700 font-semibold';
+      statusEl.textContent = `✓ อ่านสลิปเสร็จแล้ว${parsed.amount ? ` (${fmtMoney(parsed.amount)} ฿)` : ''} — กรุณาตรวจสอบก่อนบันทึก`;
+    }
     openSlipConfirmModal(parsed);
   } catch (err) {
-    if (statusEl && statusEl.isConnected) statusEl.classList.add('hidden');
+    if (statusEl && statusEl.isConnected) {
+      statusEl.className = 'text-xs text-rose-600 font-medium';
+      statusEl.textContent = 'อ่านสลิปไม่สำเร็จ: ' + (err.message || 'กรุณาลองใหม่อีกครั้ง');
+    }
     toast('อ่านสลิปไม่สำเร็จ: ' + (err.message || 'กรุณาลองใหม่อีกครั้ง'), 'err');
   }
+}
+
+async function runMultiSlipScan(files) {
+  const statusEl = root ? $r('#ex-ocr-status') : null;
+  if (statusEl) {
+    statusEl.className = 'text-xs text-brand-dark font-medium';
+    statusEl.textContent = `กำลังอ่านสลิป ${files.length} รูปในเครื่อง…`;
+  }
+  try {
+    const results = await ocrMultipleSlipsInBrowser(files, msg => {
+      if (statusEl && statusEl.isConnected) statusEl.textContent = msg;
+    });
+    const okCount = results.filter(x => x.parsed).length;
+    if (statusEl && statusEl.isConnected) {
+      statusEl.className = okCount ? 'text-xs text-green-700 font-semibold' : 'text-xs text-rose-600 font-medium';
+      statusEl.textContent = okCount
+        ? `✓ ประมวลผลสลิปเสร็จสิ้น ${okCount}/${files.length} ใบ`
+        : 'ไม่สามารถอ่านข้อมูลจากสลิปที่เลือกได้';
+    }
+    if (okCount) openBatchSlipsConfirmModal(results);
+    else toast('อ่านสลิปไม่สำเร็จ กรุณาลองภาพที่ชัดขึ้น', 'err');
+  } catch (err) {
+    if (statusEl && statusEl.isConnected) {
+      statusEl.className = 'text-xs text-rose-600 font-medium';
+      statusEl.textContent = 'อ่านสลิปไม่สำเร็จ: ' + (err.message || 'กรุณาลองใหม่อีกครั้ง');
+    }
+    toast('อ่านสลิปไม่สำเร็จ: ' + (err.message || 'กรุณาลองใหม่อีกครั้ง'), 'err');
+  }
+}
+
+function openBatchSlipsConfirmModal(results) {
+  const okItems = results.filter(r => r.parsed);
+  const failedItems = results.filter(r => !r.parsed);
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-receipt text-brand mr-1"></i> ตรวจสอบสลิปหลายใบ (${okItems.length} ใบ)</h3>
+      <button data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
+      🔒 ประมวลผล OCR บนเครื่องเสร็จสิ้น ${okItems.length} ใบ และล้างรูปภาพออกจากหน่วยความจำแล้ว
+    </p>
+    ${failedItems.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${failedItems.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.error || 'อ่านไม่สำเร็จ')}</p>`).join('')}</div>` : ''}
+    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+      ${okItems.map(({ fileName, parsed }, idx) => `
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-ms-row="${idx}">
+          <label class="flex items-center justify-between gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+            <span class="flex items-center gap-2"><input type="checkbox" class="ms-chk" checked> สลิป ${idx + 1} (${esc(fileName)})</span>
+            <span class="text-[11px] ${parsed.amount ? 'text-green-700' : 'text-amber-700'}">${parsed.amount ? `${fmtMoney(parsed.amount)} ฿` : 'กรุณากรอกยอดเงิน'}</span>
+          </label>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="lbl">ยอดเงิน (บาท) *</label><input type="number" step="0.01" min="0" inputmode="decimal" class="input ms-amt text-xs font-bold text-rose-700" value="${parsed.amount ?? ''}" placeholder="0.00"></div>
+            <div><label class="lbl">หมวดหมู่</label><select class="input ms-cat text-xs">${EXPENSE_CATEGORIES.map(c => `<option value="${esc(c)}" ${c === parsed.category ? 'selected' : ''}>${CAT_ICONS[c] || '💸'} ${esc(c)}</option>`).join('')}</select></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="lbl">วันที่โอน</label><input type="date" class="input ms-date text-xs" value="${esc(parsed.date || localDateStr())}"></div>
+            <div><label class="lbl">เวลา</label><input type="time" class="input ms-time text-xs" value="${esc(parsed.time || nowTimeStr())}"></div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input class="input ms-merchant text-xs" value="${esc(parsed.merchant || '')}" placeholder="ผู้รับเงิน / ร้านค้า">
+            <input class="input ms-note text-xs" value="${esc(parsed.note || '')}" placeholder="หมายเหตุ (ไม่บังคับ)">
+          </div>
+          ${parsed.rawText ? `<details class="text-[11px] text-slate-500"><summary class="cursor-pointer">ดูข้อความ OCR</summary><pre class="mt-1 whitespace-pre-wrap max-h-24 overflow-y-auto">${esc(parsed.rawText)}</pre></details>` : ''}
+        </div>`).join('')}
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="ms-confirm" class="btn btn-primary"><i class="fa-solid fa-check"></i> ยืนยันบันทึกรายจ่ายทั้งหมด</button>
+    </div>`, { wide: true });
+
+  $('#ms-confirm', m.el).addEventListener('click', async () => {
+    const rows = [...m.el.querySelectorAll('[data-ms-row]')];
+    const records = [];
+    for (const row of rows) {
+      if (!row.querySelector('.ms-chk')?.checked) continue;
+      const amount = Number(row.querySelector('.ms-amt').value);
+      const date = row.querySelector('.ms-date').value || localDateStr();
+      if (!Number.isFinite(amount) || amount <= 0) return toast('ตรวจสอบยอดเงินในสลิปที่เลือกให้ถูกต้องก่อนบันทึก', 'err');
+      const time = row.querySelector('.ms-time').value;
+      records.push({
+        id: 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        type: 'expense',
+        amount: Math.round(amount * 100) / 100,
+        category: row.querySelector('.ms-cat').value || 'อื่น ๆ',
+        date,
+        ...(time && { time }),
+        merchant: row.querySelector('.ms-merchant').value.trim().slice(0, 120),
+        note: row.querySelector('.ms-note').value.trim().slice(0, 200),
+        source: 'slip_ocr',
+        createdAt: new Date().toISOString()
+      });
+    }
+    if (!records.length) return toast('เลือกอย่างน้อย 1 สลิปก่อนบันทึก', 'err');
+
+    const btn = $('#ms-confirm', m.el);
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึก…';
+    try {
+      const byMonth = {};
+      records.forEach(r => {
+        const ym = r.date.slice(0, 7);
+        if (!byMonth[ym]) byMonth[ym] = [];
+        byMonth[ym].push(r);
+      });
+      for (const [ym, items] of Object.entries(byMonth)) {
+        await persistMonth(ym, [...items, ...monthItems(ym)]);
+      }
+      selectedMonth = records[0].date.slice(0, 7);
+      if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
+      const totalAmt = records.reduce((s, x) => s + x.amount, 0);
+      toast(`บันทึกรายจ่าย ${records.length} สลิป (${fmtMoney(totalAmt)} บาท) แล้ว 💸`);
+      m.close();
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> ยืนยันบันทึกรายจ่ายทั้งหมด';
+      toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+    }
+  });
 }
 
 export function openSlipConfirmModal(parsed) {

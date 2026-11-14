@@ -4,11 +4,38 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, daysBetween, round1 } from './util.js';
 import { getTargets } from './profile.js';
 import { TYPES } from './workout.js';
-import { sortBodyDesc } from './body.js';
+import { collectReminders, trackedSources } from './reminders.js';
 
 let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
 function mondayOf(ds) { const d = parseLocal(ds); return addDays(ds, -((d.getDay() + 6) % 7)); }
-const num = v => (typeof v === 'number' ? v : 0);
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
+const fmtMoney = n => Math.round(n || 0).toLocaleString();
+function monthsAfter(date, months) {
+  const d = new Date(date + 'T00:00:00'), day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + months);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return d.toISOString().slice(0, 10);
+}
+function inventoryAndReminderSummary(today) {
+  const products = state.trackedProducts || [];
+  const lowCount = products.filter(p => p.quantity != null && p.lowAt != null && Number(p.quantity) <= Number(p.lowAt)).length;
+  const expiringCount = products.filter(p => {
+    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? monthsAfter(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
+    return exp && daysBetween(today, exp) <= 30;
+  }).length;
+  const active = collectReminders();
+  const overdueCount = active.filter(r => r.date && r.date < today).length;
+  return { total: products.length, lowCount, expiringCount, activeCount: active.length, overdueCount, scheduledTotal: trackedSources().length };
+}
+function financeRangeSummary(start, end) {
+  const rows = (state.expenses || []).filter(x => x.date >= start && x.date <= end);
+  const income = rows.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
+  const expense = rows.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
+  const cats = {};
+  rows.filter(x => x.type !== 'income').forEach(x => { cats[x.category || 'อื่น ๆ'] = (cats[x.category || 'อื่น ๆ'] || 0) + num(x.amount); });
+  const topCats = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return { count: rows.length, income, expense, net: income - expense, topCats };
+}
 
 export function mountWeekly(el) {
   root = el;
@@ -85,6 +112,9 @@ export async function renderWeekly() {
   if (ws.length >= 3) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก 💪`);
   if (wDelta !== null && Math.abs(wDelta) >= 1) tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. จากสัปดาห์ก่อน (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
 
+  const fin = financeRangeSummary(weekStart, end);
+  const invRem = inventoryAndReminderSummary(today);
+
   const stat = (label, val, sub = '') => `<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-500">${label}</p><p class="text-lg font-bold text-slate-800">${val}</p><p class="text-[11px] text-slate-500">${sub}</p></div>`;
   $('#wk-body', root).innerHTML = `
     <div class="card space-y-3 lg:col-span-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-utensils text-brand"></i> อาหาร</h3>
@@ -103,6 +133,13 @@ export async function renderWeekly() {
         <p class="text-lg font-bold">${ws.length} ครั้ง <span class="text-xs font-normal text-slate-500">${mins ? `· ${mins} นาที` : ''}${burn ? ` · เผาผลาญ ~${burn} kcal` : ''}</span></p>
         ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
         ${sx ? `<p class="text-xs text-slate-500 pt-1">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-wallet text-emerald-600"></i> การเงินสัปดาห์นี้</h3>
+        ${fin.count ? `<p class="text-sm">รับ <b class="text-emerald-700">฿${fmtMoney(fin.income)}</b> · จ่าย <b class="text-rose-600">฿${fmtMoney(fin.expense)}</b></p>
+        <p class="text-xs text-slate-600">สุทธิ: <b class="${fin.net < 0 ? 'text-rose-600' : 'text-emerald-700'}">${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</b> (${fin.count} รายการ)</p>
+        ${fin.topCats.length ? `<p class="text-[11px] text-slate-500">ใช้จ่ายหลัก: ${fin.topCats.map(([c, v]) => `${esc(c)} ฿${fmtMoney(v)}`).join(' · ')}</p>` : ''}` : '<p class="text-xs text-slate-400">ไม่มีรายการรายรับ-รายจ่ายในช่วงนี้</p>'}</div>
+      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-boxes-stacked text-sky-600"></i> สต๊อก & แจ้งเตือน</h3>
+        <p class="text-xs text-slate-600">สต๊อกทั้งหมด <b>${invRem.total}</b> · ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b></p>
+        <p class="text-xs text-slate-600">แจ้งเตือนถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''} · ทั้งหมด ${invRem.scheduledTotal} กำหนดการ</p></div>
     </div>
     <div class="card lg:col-span-3"><h3 class="font-bold text-slate-800 mb-2">💡 ข้อสังเกต</h3>${tips.length ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-500">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้ 🎉</p>'}
       <p class="text-[11px] text-slate-400 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
@@ -131,9 +168,20 @@ async function renderMonthly(){
       +(i%5===0||i===daysInMonth.length-1?`<text x="${x}" y="${H-8}" font-size="9" text-anchor="middle" fill="#64748b">${i+1}</text>`:'');
   }).join('');
   const chart=`<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">${bars}</svg><p class="text-[11px] text-slate-400">แท่งกราฟ = แคลอรี่รวมต่อวัน (กดดูแต่ละแท่งเพื่อดูตัวเลข)</p>`;
+  const fin = financeRangeSummary(start, end);
+  const invRem = inventoryAndReminderSummary(today);
   $('#wk-body',root).innerHTML=`<div class="card space-y-3 lg:col-span-2"><h3 class="font-bold">สรุปรายเดือน</h3><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
     ${stat('วันที่บันทึกอาหาร',`${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก',avgCal===null?'-':Math.round(avgCal)+' kcal',`เป้า ${targets.kcal} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก',avgP===null?'-':round1(avgP)+' g',`เป้า ${targets.protein} g`)}
     ${stat('น้ำหนัก',weights.length?round1(weights[weights.length-1].weight)+' กก.':'-',weights.length?`เปลี่ยนจากครั้งแรก ${round1(weights[weights.length-1].weight-weights[0].weight)} กก.`:'ไม่มีบันทึกเดือนนี้')}
     ${stat('ออกกำลังกาย',`${workouts.length} ครั้ง`,minutes?`${minutes} นาทีรวม`:'')}${stat('วันที่มีบันทึกอาการ',`${symptoms} วัน`)}
-  </div>${chart}<p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
+  </div>${chart}<p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
+  <div class="space-y-6">
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-wallet text-emerald-600"></i> การเงินเดือนนี้</h3>
+      ${fin.count ? `${stat('รายรับ / รายจ่าย', `฿${fmtMoney(fin.income)} / ฿${fmtMoney(fin.expense)}`, `สุทธิ ${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)} (${fin.count} รายการ)`)}
+      ${fin.topCats.length ? `<p class="text-xs text-slate-600">หมวดใช้จ่ายสูง: ${fin.topCats.map(([c, v]) => `${esc(c)} (฿${fmtMoney(v)})`).join(', ')}</p>` : ''}`
+        : '<p class="text-xs text-slate-400">ยังไม่มีรายการรายรับ-รายจ่ายในเดือนนี้</p>'}</div>
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-boxes-stacked text-sky-600"></i> สต๊อก & แจ้งเตือน</h3>
+      <p class="text-xs text-slate-600">สต๊อกทั้งหมด <b>${invRem.total}</b> รายการ (ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b>)</p>
+      <p class="text-xs text-slate-600">แจ้งเตือนที่ถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''}</p></div>
+  </div>`;
 }

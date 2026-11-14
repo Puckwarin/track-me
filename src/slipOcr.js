@@ -52,7 +52,7 @@ export async function consumePendingSharedSlip() {
 async function prepareSlipCanvas(file) {
   const bitmap = await createImageBitmap(file);
   try {
-    const maxDim = 1800;
+    const maxDim = 1500;
     const minDim = 900;
     const largest = Math.max(bitmap.width, bitmap.height) || 1;
     let scale = 1;
@@ -69,6 +69,14 @@ async function prepareSlipCanvas(file) {
   } finally {
     bitmap.close?.();
   }
+}
+
+function clearCanvas(canvas) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx?.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.width = 0;
+  canvas.height = 0;
 }
 
 export async function ocrSlipInBrowser(file, onProgress = () => {}) {
@@ -101,11 +109,47 @@ export async function ocrSlipInBrowser(file, onProgress = () => {}) {
     if (worker) {
       await worker.terminate().catch(() => {});
     }
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      canvas.width = 0;
-      canvas.height = 0;
+    clearCanvas(canvas);
+  }
+}
+
+export async function ocrMultipleSlipsInBrowser(files, onProgress = () => {}) {
+  const list = [...(files || [])];
+  if (!list.length) return [];
+  let worker = null;
+  const results = [];
+  let curIdx = 0;
+
+  try {
+    onProgress('กำลังเตรียมตัวอ่านสลิปภาษาไทย/อังกฤษในเครื่อง…');
+    worker = await createWorker('tha+eng', 1, {
+      logger: m => {
+        if (m?.status === 'recognizing text' && typeof m.progress === 'number') {
+          onProgress(`กำลังอ่านสลิป ${curIdx + 1}/${list.length} (${Math.round(m.progress * 100)}%)…`);
+        }
+      }
+    });
+
+    for (let i = 0; i < list.length; i++) {
+      curIdx = i;
+      const file = list[i];
+      let canvas = null;
+      onProgress(`กำลังอ่านสลิป ${i + 1}/${list.length}…`);
+      try {
+        try { canvas = await prepareSlipCanvas(file); } catch { canvas = null; }
+        const res = await worker.recognize(canvas || file);
+        const text = res?.data?.text || '';
+        results.push({ fileName: file.name, parsed: parseSlipText(text), error: null });
+      } catch (err) {
+        results.push({ fileName: file.name, parsed: null, error: err?.message || 'อ่านสลิปไม่สำเร็จ' });
+      } finally {
+        clearCanvas(canvas);
+      }
+    }
+    return results;
+  } finally {
+    if (worker) {
+      await worker.terminate().catch(() => {});
     }
   }
 }

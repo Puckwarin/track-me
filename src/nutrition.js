@@ -271,18 +271,27 @@ async function callAI(parts, schema, { order = 'gemini-first', includeMeta = fal
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// ย่อรูปก่อนส่ง (เร็วกว่า ประหยัดโควตา) — ถ้าอ่านไฟล์ไม่ได้ (เช่น HEIC) ส่งไฟล์เดิม
-export async function imageToInlineData(file, maxDim = 1400) {
+// ย่อรูปก่อนส่ง (เร็วกว่า ประหยัดโควตา และล้างหน่วยความจำ Canvas ทันที) — ถ้าอ่านไฟล์ไม่ได้ (เช่น HEIC) ส่งไฟล์เดิม
+export async function imageToInlineData(file, maxDim = 1024, quality = 0.78) {
+  let bmp = null;
+  const c = document.createElement('canvas');
   try {
-    const bmp = await createImageBitmap(file);
+    bmp = await createImageBitmap(file);
     const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    return { mime_type: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] };
+    c.width = Math.max(1, Math.round(bmp.width * scale));
+    c.height = Math.max(1, Math.round(bmp.height * scale));
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    const data = c.toDataURL('image/jpeg', quality).split(',')[1];
+    ctx.clearRect(0, 0, c.width, c.height);
+    return { mime_type: 'image/jpeg', data };
   } catch (e) {
     const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.onerror = no; r.readAsDataURL(file); });
     return { mime_type: file.type || 'image/jpeg', data };
+  } finally {
+    bmp?.close?.();
+    c.width = 0;
+    c.height = 0;
   }
 }
 
@@ -306,7 +315,7 @@ export function lookupPer100gWithProvider(name) {
 }
 
 export async function estimateFromPhoto(file) {
-  const img = await imageToInlineData(file);
+  const img = await imageToInlineData(file, 1024, 0.78);
   return callAI([
     { text: 'วิเคราะห์จานอาหารในรูป ประมาณชื่ออาหาร และสารอาหารโดยรวมของทั้งจาน (kcal, โปรตีน, คาร์บ, ไขมัน เป็นกรัม) เป็นค่าประมาณ ตอบเป็น JSON ตาม schema' },
     { inline_data: img }
@@ -331,34 +340,133 @@ function labelNumber(text, patterns) {
   return null;
 }
 export async function readNutritionLabel(file) {
-  const image=await imageToInlineData(file,1800);
-  const ocr=await tryLabelOcr(file);
-  const kcal=labelNumber(ocr,[/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
-  const protein=labelNumber(ocr,[/(?:protein|โปรตีน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
-  const carbs=labelNumber(ocr,[/(?:total carbohydrate|carbohydrate|คาร์โบไฮเดรต)[^\d]{0,32}(\d+(?:[.,]\d+)?)/i]);
-  const fat=labelNumber(ocr,[/(?:total fat|fat|ไขมัน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
-  if([kcal,protein,carbs,fat].every(x=>x!==null)) return {
-    name:null,basis:/100\s*(?:g|กรัม|ml|มล)/i.test(ocr)?'per_100g':'unknown',
-    servingSizeText:null,servingGrams:null,calories:kcal,protein,carbs,fat,sugar:null,sodium:null,
-    notes:'อ่านเบื้องต้นด้วย OCR — โปรดตรวจตัวเลขและหน่วยกับรูปฉลากก่อนบันทึก'
-  };
-  const instruction=`นี่คือฉลากโภชนาการภาษาไทยหรืออังกฤษ. อ่านเฉพาะตัวเลขที่พิมพ์จริง ห้ามประมาณหรือเดา; ค่าอ่านไม่ชัดให้เป็น null. basis เป็น per_serving, per_100g หรือ unknown; ระบุ servingSizeText/servingGrams หากชัด. ส่ง JSON ตาม schema. ข้อความ OCR เบื้องต้น (อาจผิด): ${ocr.slice(0,4000)}`;
-  return callAI([{text:instruction},{inline_data:image}],{
-    type:'OBJECT',properties:{name:{type:'STRING',nullable:true},basis:{type:'STRING',enum:['per_serving','per_100g','unknown']},servingSizeText:{type:'STRING',nullable:true},servingGrams:N,calories:N,protein:N,carbs:N,fat:N,sugar:N,sodium:N,notes:{type:'STRING',nullable:true}},
-    required:['basis','servingSizeText','servingGrams','calories','protein','carbs','fat','sugar','sodium']
+  const hasAiKey = Boolean(getGeminiKey() || getGroqKey());
+  if (!hasAiKey) {
+    const ocr = await tryLabelOcr(file);
+    const kcal = labelNumber(ocr, [/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
+    const protein = labelNumber(ocr, [/(?:protein|โปรตีน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
+    const carbs = labelNumber(ocr, [/(?:total carbohydrate|carbohydrate|คาร์โบไฮเดรต)[^\d]{0,32}(\d+(?:[.,]\d+)?)/i]);
+    const fat = labelNumber(ocr, [/(?:total fat|fat|ไขมัน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
+    if ([kcal, protein, carbs, fat].some(x => x !== null)) {
+      return {
+        name: null, basis: /100\s*(?:g|กรัม|ml|มล)/i.test(ocr) ? 'per_100g' : 'unknown',
+        servingSizeText: null, servingGrams: null, calories: kcal, protein, carbs, fat, sugar: null, sodium: null,
+        notes: 'อ่านเบื้องต้นด้วย OCR ในเครื่อง (ไม่ได้ตั้งคีย์ AI) — โปรดตรวจตัวเลขและหน่วยกับรูปฉลากก่อนบันทึก'
+      };
+    }
+    throw new Error('NO_KEY');
+  }
+  const image = await imageToInlineData(file, 1200, 0.82);
+  const instruction = 'นี่คือฉลากโภชนาการภาษาไทยหรืออังกฤษ. อ่านเฉพาะตัวเลขที่พิมพ์จริง ห้ามประมาณหรือเดา; ค่าอ่านไม่ชัดให้เป็น null. basis เป็น per_serving, per_100g หรือ unknown; ระบุ servingSizeText/servingGrams หากชัด. ส่ง JSON ตาม schema';
+  return callAI([{ text: instruction }, { inline_data: image }], {
+    type: 'OBJECT', properties: { name: { type: 'STRING', nullable: true }, basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] }, servingSizeText: { type: 'STRING', nullable: true }, servingGrams: N, calories: N, protein: N, carbs: N, fat: N, sugar: N, sodium: N, notes: { type: 'STRING', nullable: true } },
+    required: ['basis', 'servingSizeText', 'servingGrams', 'calories', 'protein', 'carbs', 'fat', 'sugar', 'sodium']
+  });
+}
+
+// วิเคราะห์รูปอาหารหรือฉลากโภชนาการในปุ่มเดียว (ลดขั้นตอนบนมือถือ)
+export async function analyzeFoodImage(file) {
+  const hasAiKey = Boolean(getGeminiKey() || getGroqKey());
+  if (!hasAiKey) {
+    const label = await readNutritionLabel(file);
+    return { kind: 'label', ...label };
+  }
+  const image = await imageToInlineData(file, 1100, 0.8);
+  const instruction = 'ดูภาพนี้แล้วแยกว่าเป็น "ฉลากโภชนาการ/ตารางข้อมูลโภชนาการบนบรรจุภัณฑ์" (kind="label") หรือ "จานอาหาร/เครื่องดื่มพร้อมกิน" (kind="dish").\n' +
+    '- ถ้าเป็น label: อ่านเฉพาะตัวเลขที่พิมพ์จริง ห้ามเดา (ค่าที่ไม่ชัดให้ null), basis เป็น per_serving | per_100g | unknown, ระบุ servingSizeText/servingGrams ถ้าชัด\n' +
+    '- ถ้าเป็น dish: ประมาณชื่อเมนู และค่า kcal, protein, carbs, fat ของทั้งจาน (basis="per_serving")\n' +
+    'ตอบเป็น JSON ตาม schema เท่านั้น';
+  return callAI([{ text: instruction }, { inline_data: image }], {
+    type: 'OBJECT',
+    properties: {
+      kind: { type: 'STRING', enum: ['dish', 'label'] },
+      name: { type: 'STRING', nullable: true },
+      basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] },
+      servingSizeText: { type: 'STRING', nullable: true },
+      servingGrams: N,
+      calories: N,
+      protein: N,
+      carbs: N,
+      fat: N,
+      sugar: N,
+      sodium: N,
+      notes: { type: 'STRING', nullable: true }
+    },
+    required: ['kind', 'name', 'calories', 'protein', 'carbs', 'fat']
   });
 }
 
 // วิเคราะห์ภาพในหน่วยความจำชั่วคราว ไม่บันทึกไฟล์ภาพลงแอป
 export async function estimateStockFromPhoto(file) {
-  const img = await imageToInlineData(file, 1400);
+  const img = await imageToInlineData(file, 1024, 0.78);
   return callAI([
-    { text: `ประเมินจากภาพสินค้า/ของใช้ที่เห็นเท่านั้น ชื่อสินค้า ปริมาณเต็มแพ็ก ปริมาณคงเหลือโดยประมาณ และหน่วย (ชิ้น, ห่อ, ml, g) ถ้าเป็นภาชนะเปิดใช้ให้ประเมินสัดส่วนอย่างระมัดระวัง ถ้าอ่านไม่ออกให้ null และระบุความไม่แน่นอน ตอบ JSON ตาม schema` },
+    { text: `วิเคราะห์ภาพสินค้า/ของใช้/ฉลากวันหมดอายุ: ระบุชื่อสินค้า, ปริมาณเต็มแพ็ก, ปริมาณคงเหลือโดยประมาณ, หน่วย (ชิ้น, ห่อ, หลอด, ml, g), วันหมดอายุหรือควรใช้ก่อนในรูปแบบ YYYY-MM-DD คริสต์ศักราช (หากเป็น พ.ศ. ให้ลบ 543, หากไม่เห็นวันหมดอายุให้ null), สภาพ/หมายเหตุ และระดับความมั่นใจ ตอบ JSON ตาม schema` },
     { inline_data: img }
   ], {
-    type:'OBJECT', properties:{ name:{type:'STRING',nullable:true}, totalQuantity:N, remainingQuantity:N, unit:{type:'STRING',nullable:true}, confidence:{type:'STRING',enum:['low','medium','high']}, notes:{type:'STRING',nullable:true} },
-    required:['name','totalQuantity','remainingQuantity','unit','confidence','notes']
+    type: 'OBJECT',
+    properties: {
+      name: { type: 'STRING', nullable: true },
+      totalQuantity: N,
+      remainingQuantity: N,
+      unit: { type: 'STRING', nullable: true },
+      expiryDate: { type: 'STRING', nullable: true },
+      confidence: { type: 'STRING', enum: ['low', 'medium', 'high'] },
+      notes: { type: 'STRING', nullable: true }
+    },
+    required: ['name', 'totalQuantity', 'remainingQuantity', 'unit', 'expiryDate', 'confidence', 'notes']
   });
+}
+
+export async function estimateStockFromPhotos(files, onProgress = () => {}) {
+  const list = [...files];
+  const results = new Array(list.length);
+  const errors = [];
+  let done = 0;
+  let cursor = 0;
+  const concurrency = Math.min(2, list.length || 1);
+  async function worker() {
+    while (cursor < list.length) {
+      const idx = cursor++;
+      const f = list[idx];
+      try {
+        const res = await estimateStockFromPhoto(f);
+        results[idx] = { fileName: f.name, ...res };
+      } catch (err) {
+        errors.push({ fileName: f.name, message: explainGeminiError(err) });
+      } finally {
+        done++;
+        onProgress(done, list.length);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return { results: results.filter(Boolean), errors };
+}
+
+export async function parseReminderWithAI(text, today, existingTitles = []) {
+  const prompt = `วันนี้คือ ${today}. แปลงข้อความแจ้งเตือนภาษาไทยต่อไปนี้เป็นโครงสร้าง JSON:\n"${text}"\n` +
+    (existingTitles.length ? `รายการแจ้งเตือนที่มีอยู่แล้ว: ${existingTitles.slice(0, 20).join(', ')}\n` : '') +
+    `หมวดหมู่เลือกจาก: สัตว์เลี้ยง | เปลี่ยนของ | เอกสาร/ประกัน/ภาษี | นัดหมาย/อื่น ๆ\n` +
+    `ruleKind เลือกจาก: once | interval | monthly | yearly | nth_weekday | last_weekday | same_as | weekly_except_linked\n` +
+    `weekday: 0=จันทร์..5=เสาร์..6=อาทิตย์ (หรือ null). nth: 1-4 (หรือ null). remindDays: จำนวนวันเตือนล่วงหน้า (เช่น ก่อนสามวัน=3, สองสัปดาห์=14, ค่าเริ่มต้น=7). dueTime: HH:MM หรือ null.`;
+  return callAI([{ text: prompt }], {
+    type: 'OBJECT',
+    properties: {
+      title: S,
+      kind: S,
+      nextDate: { type: 'STRING', nullable: true },
+      dueTime: { type: 'STRING', nullable: true },
+      remindDays: N,
+      ruleKind: S,
+      weekday: N,
+      nth: N,
+      intervalDays: N,
+      repeatMonths: N,
+      linkedQuery: { type: 'STRING', nullable: true },
+      note: { type: 'STRING', nullable: true }
+    },
+    required: ['title', 'kind', 'nextDate', 'remindDays', 'ruleKind']
+  }, { order: 'groq-first' });
 }
 
 // อ่านข้อมูลจากซองอาหารสัตว์เลี้ยง (ไม่เก็บไฟล์ภาพ)

@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, toast } from './util.js';
 import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
 import { syncPeriodRemindToPush } from './push.js';
+import { resolveRuleNextDate } from './reminderParser.js';
 
 let root;
 const selectedKeys = new Set();
@@ -15,29 +16,42 @@ const monthsAfter = (date, months) => {
 };
 
 // รายการที่มีกำหนดการทั้งหมด (ใช้ทั้งตั้งค่าระยะเตือนรายตัว/หลายตัว และคัดกรองรายการที่ถึงเกณฑ์เตือน)
-function trackedSources() {
+export function trackedSources() {
   const petName = id => (state.petProfiles || []).find(p => p.id === id)?.name || 'สัตว์เลี้ยง';
   const rows = [];
+  const today = localDateStr();
+  const allReminderItems = [
+    ...(state.petCare || []).map(x => ({ ...x, title: x.type || 'ดูแลสัตว์เลี้ยง' })),
+    ...(state.replacements || []).map(x => ({ ...x, title: x.name || 'รายการเตือน' }))
+  ];
+  const resolveDue = x => {
+    if (x.rule && ['same_as', 'weekly_except_linked'].includes(x.rule.kind)) {
+      return resolveRuleNextDate(x.rule, allReminderItems, today, true) || x.nextDate;
+    }
+    return x.nextDate;
+  };
 
   for (const x of state.petCare || []) {
-    if (x.done || !x.nextDate) continue;
+    const dueDate = resolveDue(x);
+    if (x.done || !dueDate) continue;
     const remindDays = x.remindDays !== undefined && x.remindDays !== null ? Number(x.remindDays) : 7;
     rows.push({
       uidKey: `pet_care_records:${x.id}`,
       col: 'pet_care_records',
       id: x.id,
-      date: x.nextDate,
+      date: dueDate,
       dueTime: x.dueTime || '',
       remindDays,
       dismissedFor: x.dismissedFor || null,
       icon: '🐾',
       label: `${x.type || 'นัดสัตว์เลี้ยง'} · ${petName(x.petId)}`,
-      detail: x.note || 'ตารางนัดและดูแล'
+      detail: x.rule?.summary && x.rule.kind !== 'once' ? x.rule.summary : (x.note || 'ตารางนัดและดูแล')
     });
   }
 
   for (const x of state.replacements || []) {
-    if (x.done || !x.nextDate) continue;
+    const dueDate = resolveDue(x);
+    if (x.done || !dueDate) continue;
     const remindDays = x.remindDays !== undefined && x.remindDays !== null ? Number(x.remindDays) : 7;
     const cat = x.category || 'เปลี่ยนของ';
     const icon = cat === 'เอกสาร/ประกัน/ภาษี' ? '📄' : cat === 'นัดหมาย/อื่น ๆ' ? '📌' : '🔄';
@@ -45,13 +59,13 @@ function trackedSources() {
       uidKey: `replacement_records:${x.id}`,
       col: 'replacement_records',
       id: x.id,
-      date: x.nextDate,
+      date: dueDate,
       dueTime: x.dueTime || '',
       remindDays,
       dismissedFor: x.dismissedFor || null,
       icon,
       label: `${x.name} · ${cat}`,
-      detail: x.note || 'บันทึกแจ้งเตือน'
+      detail: x.rule?.summary && x.rule.kind !== 'once' ? x.rule.summary : (x.note || 'บันทึกแจ้งเตือน')
     });
   }
 

@@ -11,6 +11,7 @@ const TYPES = {
   stretch: 'ยืดเหยียด (Stretching)',
   other: 'ออกกำลังกาย'
 };
+const DEFAULT_ALT_ANCHOR = '2026-01-05';
 
 function bangkokDateStr(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -37,12 +38,82 @@ function addDays(ymd, n) {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
+function mondayOfUtc(ymd) {
+  return addDays(ymd, -weekdayIdxMon0(ymd));
+}
+
+function weekCodeForDate(ymd, altAnchor = DEFAULT_ALT_ANCHOR) {
+  const anchor = typeof altAnchor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(altAnchor) ? altAnchor : DEFAULT_ALT_ANCHOR;
+  const diffDays = daysBetween(mondayOfUtc(anchor), mondayOfUtc(ymd));
+  const diffWeeks = Math.floor(diffDays / 7);
+  return ((diffWeeks % 2) + 2) % 2 === 0 ? 'A' : 'B';
+}
+
+function routineAppliesToDate(r, ymd, wd, altAnchor) {
+  if (!r || !Array.isArray(r.days) || !r.days.includes(wd)) return false;
+  if (!r.weekPattern || r.weekPattern === 'every') return true;
+  return r.weekPattern === weekCodeForDate(ymd, altAnchor);
+}
+
 function monthsAfter(date, months) {
   const [y, m, d] = date.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1 + months, 1));
   const lastDay = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
   dt.setUTCDate(Math.min(d, lastDay));
   return dt.toISOString().slice(0, 10);
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function nthWeekdayInMonth(year, month1to12, weekday0to6, nth) {
+  const firstWd = (new Date(Date.UTC(year, month1to12 - 1, 1)).getUTCDay() + 6) % 7;
+  const offset = (weekday0to6 - firstWd + 7) % 7;
+  const day = 1 + offset + (nth - 1) * 7;
+  const lastDay = new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
+  return day > lastDay ? null : `${year}-${pad2(month1to12)}-${pad2(day)}`;
+}
+
+function lastWeekdayInMonth(year, month1to12, weekday0to6) {
+  const lastDay = new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
+  const lastWd = (new Date(Date.UTC(year, month1to12 - 1, lastDay)).getUTCDay() + 6) % 7;
+  const back = (lastWd - weekday0to6 + 7) % 7;
+  return `${year}-${pad2(month1to12)}-${pad2(lastDay - back)}`;
+}
+
+function dateMatchesRuleInMonth(dateYmd, rule) {
+  if (!rule || !dateYmd) return false;
+  const [y, m] = dateYmd.split('-').map(Number);
+  if (rule.kind === 'nth_weekday' && Number.isInteger(rule.weekday) && Number.isInteger(rule.nth)) {
+    return nthWeekdayInMonth(y, m, rule.weekday, rule.nth) === dateYmd;
+  }
+  if (rule.kind === 'last_weekday' && Number.isInteger(rule.weekday)) {
+    return lastWeekdayInMonth(y, m, rule.weekday) === dateYmd;
+  }
+  return false;
+}
+
+function resolveReminderDueDate(x, allItems, today) {
+  if (!x.rule || !['same_as', 'weekly_except_linked'].includes(x.rule.kind)) return x.nextDate;
+  const r = x.rule;
+  const linked = (r.linkedId && allItems.find(it => it.id === r.linkedId))
+    || (r.linkedQuery && allItems.find(it => it.title.toLowerCase().includes(String(r.linkedQuery).toLowerCase())))
+    || null;
+  if (r.kind === 'same_as') {
+    if (!linked) return x.nextDate;
+    if (linked.nextDate && linked.nextDate >= today) return linked.nextDate;
+    return linked.nextDate || x.nextDate;
+  }
+  if (r.kind === 'weekly_except_linked' && Number.isInteger(r.weekday)) {
+    const curWd = weekdayIdxMon0(today);
+    let cand = addDays(today, (r.weekday - curWd + 7) % 7);
+    for (let i = 0; i < 60; i++) {
+      const excluded = linked && (linked.nextDate === cand || (linked.rule && dateMatchesRuleInMonth(cand, linked.rule)));
+      if (!excluded) return cand;
+      cand = addDays(cand, 7);
+    }
+    return cand;
+  }
+  return x.nextDate;
 }
 
 function predictNextPeriod(records) {
@@ -79,7 +150,7 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
   const planner = plannerSnap.exists ? plannerSnap.data() : {};
   const doneSet = new Set(planner.doneMap?.[today] || []);
   const pendingRoutines = (planner.routines || [])
-    .filter(r => Array.isArray(r.days) && r.days.includes(wd) && !doneSet.has(r.id))
+    .filter(r => routineAppliesToDate(r, today, wd, planner.altAnchor) && !doneSet.has(r.id))
     .map(r => r.title);
 
   const plannedWorkouts = workoutsSnap.docs
@@ -89,20 +160,27 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
 
   const todos = [...pendingRoutines];
 
+  const allReminderItems = [
+    ...petCareSnap.docs.map(d => ({ id: d.id, ...d.data(), title: d.data().type || 'นัดสัตว์เลี้ยง' })),
+    ...replacementsSnap.docs.map(d => ({ id: d.id, ...d.data(), title: d.data().name || d.data().category || 'รายการเตือน' }))
+  ];
+
   const reminders = [];
   for (const docSnap of petCareSnap.docs) {
     const x = docSnap.data();
-    if (x.done || !x.nextDate) continue;
+    const due = resolveReminderDueDate(x, allReminderItems, today);
+    if (x.done || !due) continue;
     const lead = x.remindDays != null ? Number(x.remindDays) : 7;
-    if (lead >= 0 && x.dismissedFor !== x.nextDate && daysBetween(today, x.nextDate) <= lead) {
+    if (lead >= 0 && x.dismissedFor !== due && daysBetween(today, due) <= lead) {
       reminders.push(`${x.type || 'นัดสัตว์เลี้ยง'}${x.dueTime ? ` (${x.dueTime} น.)` : ''}`);
     }
   }
   for (const docSnap of replacementsSnap.docs) {
     const x = docSnap.data();
-    if (x.done || !x.nextDate) continue;
+    const due = resolveReminderDueDate(x, allReminderItems, today);
+    if (x.done || !due) continue;
     const lead = x.remindDays != null ? Number(x.remindDays) : 7;
-    if (lead >= 0 && x.dismissedFor !== x.nextDate && daysBetween(today, x.nextDate) <= lead) {
+    if (lead >= 0 && x.dismissedFor !== due && daysBetween(today, due) <= lead) {
       reminders.push(`${x.name || x.category || 'รายการแจ้งเตือน'}${x.dueTime ? ` (${x.dueTime} น.)` : ''}`);
     }
   }

@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v2.8.0
+# Project Setup — ตั้งค่า Track Me v2.9.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -227,5 +227,16 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 - **AI Multi-model Fallback & ลำดับการค้นหาโภชนาการ**:
   - การค้นหาโภชนาการโหมดอัตโนมัติจะค้นตามลำดับ **คลังอาหารในเครื่อง → USDA → Open Food Facts → Groq → Gemini (`gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash-lite`)**
   - ปรับ Groq JSON Mode (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) ให้เสถียรขึ้น และให้ Gemini สลับโมเดลถัดไปอัตโนมัติทั้งกรณี Timeout (35 วินาที) และ HTTP 429
+
+---
+
+## อัปเดต v2.9.0 (Mobile-First UX, Smart NL Reminders & Alternating Planner)
+
+- **ไม่ต้องอัปเดต Firestore Rules เพิ่มเติม**: ฟีเจอร์ใหม่ทั้งหมด (กิจวัตรสลับสัปดาห์ `weekPattern` / `altAnchor` ใน `settings/planner`, กฎแจ้งเตือนอัจฉริยะ `rule` / `rawText` ใน `pet_care_records` และ `replacement_records`) ใช้ collection เดิมและอยู่ภายใต้ข้อจำกัดไม่เกิน 30 fields ต่อเอกสารใน `firestore.rules` แล้ว ผู้ใช้ที่ตั้งค่า Rules ไว้แล้วไม่ต้อง Publish ใหม่
+- **ความปลอดภัยและความเป็นส่วนตัวของการสแกนหลายภาพ (Multi-Slip & Multi-Image)**:
+  - **สแกนสลิปหลายใบพร้อมกัน (`tesseract.js`)**: ประมวลผลในเบราว์เซอร์ 100% ใช้ Worker เดียวต่อเนื่อง และล้าง Canvas/Bitmap/หน่วยความจำทันทีหลังอ่านเสร็จ ไม่มีการอัปโหลดรูปลง Firebase Storage หรือ Firestore
+  - **สแกนอาหารปุ่มเดียว & สต๊อกหลายรูป**: ย่อภาพฝั่งเครื่อง (`maxDim=1024`) แล้วตรวจบาร์โค้ดในเครื่องก่อนส่งวิเคราะห์เมื่อจำเป็น พร้อมปิด ImageBitmap ทันทีหลังใช้งาน
+- **Weekly Planner Week A / Week B & Daily Push (08:00 ICT)**:
+  - สคริปต์ `scripts/daily-push.mjs` ซิงค์สูตรคำนวณรอบสัปดาห์ `A / B` และค่า `altAnchor` จาก `settings/planner` รวมถึงคำนวณวันนัดหมายแบบเชื่อมโยง (`same_as` และ `weekly_except_linked`) ให้อัตโนมัติ ทำให้การแจ้งเตือนตอน 08:00 น. ตรงกับหน้า Planner ในแอปทุกวัน
 
 
