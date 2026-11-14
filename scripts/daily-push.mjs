@@ -149,7 +149,12 @@ async function main() {
   const saRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
   const vapidPublic = (process.env.VAPID_PUBLIC_KEY || '').trim();
   const vapidPrivate = (process.env.VAPID_PRIVATE_KEY || '').trim();
-  const vapidSubject = (process.env.VAPID_SUBJECT || 'mailto:trackme@example.com').trim();
+  const rawSubject = (process.env.VAPID_SUBJECT || '').trim();
+  const vapidSubject = !rawSubject
+    ? 'mailto:trackme@example.com'
+    : /^(mailto:|https?:\/\/)/i.test(rawSubject)
+      ? rawSubject
+      : `mailto:${rawSubject}`;
   const appUrl = (process.env.APP_URL || 'https://puckwarin.github.io/track-me/').trim();
 
   if (!saRaw || !vapidPublic || !vapidPrivate) {
@@ -157,7 +162,15 @@ async function main() {
     return;
   }
 
-  const serviceAccount = JSON.parse(saRaw);
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(saRaw);
+    if (typeof serviceAccount.private_key === 'string') {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+  } catch (err) {
+    throw new Error(`FIREBASE_SERVICE_ACCOUNT is not valid JSON: ${err.message}`);
+  }
   initializeApp({ credential: cert(serviceAccount) });
   const db = getFirestore();
 
@@ -167,16 +180,18 @@ async function main() {
   const wd = weekdayIdxMon0(today);
   console.log(`Running Track Me daily push for ${today} (weekday=${wd})`);
 
-  const snap = await db.collectionGroup('settings').where('enabled', '==', true).get();
+  const userRefs = await db.collection('users').listDocuments();
   let sentCount = 0;
   let prunedCount = 0;
 
-  for (const docSnap of snap.docs) {
-    if (docSnap.id !== 'push') continue;
-    const uid = docSnap.ref.parent.parent?.id;
-    if (!uid) continue;
+  for (const userRef of userRefs) {
+    const uid = userRef.id;
+    const docSnap = await userRef.collection('settings').doc('push').get();
+    if (!docSnap.exists) continue;
 
     const data = docSnap.data();
+    if (!data?.enabled) continue;
+
     const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
     if (!subs.length) continue;
 
