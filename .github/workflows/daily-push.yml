@@ -1,0 +1,33 @@
+name: Daily Push Notifications (08:00 ICT)
+
+on:
+  schedule:
+    # 01:00 UTC = 08:00 น. เวลาประเทศไทย (UTC+7)
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-daily-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install push script dependencies
+        working-directory: ./scripts
+        run: npm install --no-audit --no-fund
+
+      - name: Send daily Web Push reminders
+        working-directory: ./scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: node daily-push.mjs

@@ -141,7 +141,16 @@ function startData() {
   watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); renderHome(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
-  watch('settings', userCol(uid, 'settings'), list => { state.profile = list.find(x => x.id === 'profile') || null; refreshProfile(); emit('profile'); renderHome(); });
+  watch('settings', userCol(uid, 'settings'), list => {
+    state.profile = list.find(x => x.id === 'profile') || null;
+    state.planner = list.find(x => x.id === 'planner') || null;
+    state.pushSettings = list.find(x => x.id === 'push') || null;
+    refreshProfile();
+    emit('profile');
+    emit('pushSettings');
+    renderHome();
+    window.dispatchEvent(new Event('trackme:push-change'));
+  });
   watchToday();
   watchDay();
 }
@@ -157,7 +166,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
@@ -187,4 +196,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
 window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); });
 window.addEventListener('trackme:reminders', updateBell);
+window.addEventListener('trackme:push-change', () => renderHome());
+navigator.serviceWorker?.addEventListener('message', e => {
+  if (e.data?.type === 'TRACKME_OPEN_TAB') showTab(e.data.tab);
+});
 initAuth();

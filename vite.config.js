@@ -15,10 +15,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'push-sw.js'],
       manifest: {
-        name: 'Track Me — อาหาร ประจำเดือน น้ำหนัก',
+        id: BASE,
+        name: 'Track Me — อาหาร ประจำเดือน น้ำหนัก & Planner',
         short_name: 'Track Me',
+        description: 'บันทึกอาหาร ออกกำลังกาย ประจำเดือน น้ำหนัก สัตว์เลี้ยง และตารางกิจวัตรประจำวัน',
         lang: 'th',
         start_url: BASE,
         scope: BASE,
@@ -26,11 +28,12 @@ export default defineConfig({
         background_color: '#FAF7F2',
         theme_color: '#FAF7F2',
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
         ]
       },
       workbox: {
+        importScripts: ['push-sw.js'],
         globPatterns: ['**/*.{js,css,html,png,svg,woff2,woff}'],
         navigateFallback: BASE + 'index.html',
         // ไม่ยุ่งกับ Firestore / Auth / Gemini — ให้ SDK จัดการเอง

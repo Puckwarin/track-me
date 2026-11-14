@@ -9,6 +9,29 @@ import { signOutUser, lockCurrentApp } from './auth.js';
 import { state } from './state.js';
 import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
+import {
+  hasEnvVapidKey,
+  getVapidPublicKey,
+  setVapidPublicKey,
+  isIosDevice,
+  isStandalonePwa,
+  getPushStatus,
+  enablePushNotifications,
+  disablePushForThisDevice,
+  syncPeriodRemindToPush,
+  sendTestLocalNotification
+} from './push.js';
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  window.dispatchEvent(new Event('trackme:install-ready'));
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  window.dispatchEvent(new Event('trackme:install-ready'));
+});
 
 export function mountSettings(el) {
   el.innerHTML = `
@@ -35,12 +58,30 @@ export function mountSettings(el) {
 
     <div class="card space-y-3 lg:col-span-2" id="st-profile"></div>
 
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> เตือนรอบเดือน</h3>
-      <p class="text-xs text-slate-500">แสดงแบนเนอร์เตือนและรายการในเมนูแจ้งเตือน <b>เมื่อเปิดแอป</b> (ตั้งค่าเพิ่มเติมได้ในหน้า 🔔 แจ้งเตือน) · เก็บการตั้งค่าเฉพาะเครื่องนี้</p>
-      <select id="st-remind" class="input">${REMIND_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
-      <button id="st-notif" class="btn btn-soft">อนุญาตการแจ้งเตือนของเครื่อง</button>
-      <p id="st-notif-state" class="text-xs text-slate-400"></p>
+    <div id="st-push-card" class="card space-y-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> การแจ้งเตือนอัตโนมัติ (08:00 น.) & รอบเดือน</h3>
+      <p class="text-xs text-slate-500">รับ Web Push แจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกเช้าเวลา 08:00 น. แม้ไม่ได้เปิดแอปค้างไว้ (ส่งผ่าน GitHub Actions ฟรี)</p>
+      <div>
+        <label class="lbl">แจ้งเตือนรอบเดือนล่วงหน้า</label>
+        <select id="st-remind" class="input">${REMIND_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
+      </div>
+      <div id="st-ios-guide" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+        📱 <b>สำหรับ iPhone / iPad (iOS 16.4+):</b> กรุณากดปุ่ม <b>แชร์ (Share)</b> → <b>เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)</b> แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับการแจ้งเตือนได้
+      </div>
+      <div id="st-vapid-wrap" class="hidden space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+        <label class="lbl !mb-0">VAPID Public Key (ใส่กรณีไม่ได้ตั้งใน GitHub Secrets)</label>
+        <div class="flex gap-2">
+          <input id="st-vapid" class="input text-xs flex-1" placeholder="วาง VAPID Public Key ที่สร้างจาก web-push">
+          <button type="button" id="st-vapid-save" class="btn btn-soft text-xs whitespace-nowrap">บันทึกคีย์</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="st-push-enable" class="btn btn-primary"><i class="fa-solid fa-bell"></i> เปิดรับการแจ้งเตือน</button>
+        <button type="button" id="st-push-disable" class="btn btn-ghost hidden">ปิดเครื่องนี้</button>
+        <button type="button" id="st-push-test" class="btn btn-soft">ทดสอบแจ้งเตือน</button>
+        <button type="button" id="st-pwa-install" class="btn btn-soft hidden"><i class="fa-solid fa-mobile-screen-button"></i> ติดตั้งเป็นแอป</button>
+      </div>
+      <p id="st-notif-state" class="text-xs text-slate-500"></p>
     </div>
 
     <div class="card space-y-3" id="st-backup"></div>
@@ -121,12 +162,111 @@ export function mountSettings(el) {
   updatePinState();
   const sel = $('#st-remind', el);
   sel.value = String(getPeriodRemindDays());
-  sel.addEventListener('change', () => { setPeriodRemindDays(sel.value); checkReminder(); window.dispatchEvent(new Event('trackme:data-change')); });
+  sel.addEventListener('change', () => {
+    setPeriodRemindDays(sel.value);
+    checkReminder();
+    syncPeriodRemindToPush();
+    window.dispatchEvent(new Event('trackme:data-change'));
+  });
   window.addEventListener('trackme:reminders', () => { if (sel.isConnected) sel.value = String(getPeriodRemindDays()); });
+
   const ns = $('#st-notif-state', el);
-  const showNs = () => { ns.textContent = 'Notification' in window ? 'สถานะ: ' + ({ granted: 'อนุญาตแล้ว', denied: 'ถูกบล็อก (แก้ที่การตั้งค่าเบราว์เซอร์)', default: 'ยังไม่ได้อนุญาต' }[Notification.permission]) : 'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน'; };
-  $('#st-notif', el).addEventListener('click', async () => { if ('Notification' in window) { await Notification.requestPermission(); showNs(); } });
-  showNs();
+  const enableBtn = $('#st-push-enable', el);
+  const disableBtn = $('#st-push-disable', el);
+  const vapidWrap = $('#st-vapid-wrap', el);
+  const vapidInput = $('#st-vapid', el);
+  const iosGuide = $('#st-ios-guide', el);
+  const installBtn = $('#st-pwa-install', el);
+
+  const updateInstallBtn = () => {
+    if (!installBtn?.isConnected) return;
+    installBtn.classList.toggle('hidden', !deferredInstallPrompt || isStandalonePwa());
+  };
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    try { await deferredInstallPrompt.userChoice; } catch (e) {}
+    deferredInstallPrompt = null;
+    updateInstallBtn();
+  });
+  window.addEventListener('trackme:install-ready', updateInstallBtn);
+  updateInstallBtn();
+
+  if (vapidInput) vapidInput.value = hasEnvVapidKey() ? '' : getVapidPublicKey();
+  if (vapidWrap) vapidWrap.classList.toggle('hidden', hasEnvVapidKey());
+  $('#st-vapid-save', el).addEventListener('click', () => {
+    setVapidPublicKey(vapidInput.value);
+    toast('บันทึก VAPID Public Key แล้ว');
+    showPushStatus();
+  });
+
+  const showPushStatus = async () => {
+    if (!ns?.isConnected) return;
+    const st = await getPushStatus();
+    if (!ns.isConnected) return;
+    if (iosGuide) iosGuide.classList.toggle('hidden', !(isIosDevice() && !isStandalonePwa()));
+    if (!st.supported) {
+      ns.className = 'text-xs text-slate-500';
+      ns.textContent = st.needsIosInstall
+        ? 'ต้องเพิ่มแอปลงหน้าจอโฮม (Add to Home Screen) ก่อนเปิดรับแจ้งเตือนบน iOS'
+        : 'เบราว์เซอร์นี้ไม่รองรับ Web Push Notification (ต้องเปิดผ่าน HTTPS)';
+      disableBtn.classList.add('hidden');
+      return;
+    }
+    if (st.subscribedHere) {
+      ns.className = 'text-xs text-green-700 font-medium';
+      ns.textContent = `✅ เปิดรับแจ้งเตือน 08:00 น. บนอุปกรณ์นี้แล้ว (ลงทะเบียนรวม ${st.totalDevices} อุปกรณ์)`;
+      enableBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> อัปเดตการรับแจ้งเตือน';
+      disableBtn.classList.remove('hidden');
+    } else {
+      const permMsg = st.permission === 'denied' ? 'ถูกบล็อกในเบราว์เซอร์ (เปิดอนุญาตใน Settings ก่อน)' : 'ยังไม่ได้เปิดรับแจ้งเตือนบนเครื่องนี้';
+      ns.className = st.permission === 'denied' ? 'text-xs text-rose-600' : 'text-xs text-slate-500';
+      ns.textContent = `สถานะ: ${permMsg}${st.totalDevices ? ` · มีอุปกรณ์อื่นลงทะเบียนไว้ ${st.totalDevices} เครื่อง` : ''}`;
+      enableBtn.innerHTML = '<i class="fa-solid fa-bell"></i> เปิดรับการแจ้งเตือน';
+      disableBtn.classList.toggle('hidden', st.totalDevices === 0);
+    }
+  };
+
+  enableBtn.addEventListener('click', async () => {
+    enableBtn.disabled = true;
+    try {
+      const customKey = !hasEnvVapidKey() ? vapidInput?.value.trim() : '';
+      await enablePushNotifications(customKey);
+      toast('เปิดรับการแจ้งเตือน 08:00 น. เรียบร้อยแล้ว 🔔');
+      await showPushStatus();
+    } catch (err) {
+      if (vapidWrap && err.message.includes('VAPID')) vapidWrap.classList.remove('hidden');
+      toast(err.message, 'err');
+      await showPushStatus();
+    } finally {
+      enableBtn.disabled = false;
+    }
+  });
+
+  disableBtn.addEventListener('click', async () => {
+    disableBtn.disabled = true;
+    try {
+      await disablePushForThisDevice();
+      toast('ปิดรับการแจ้งเตือนสำหรับเครื่องนี้แล้ว');
+      await showPushStatus();
+    } catch (err) {
+      toast('ดำเนินการไม่สำเร็จ: ' + err.message, 'err');
+    } finally {
+      disableBtn.disabled = false;
+    }
+  });
+
+  $('#st-push-test', el).addEventListener('click', async () => {
+    try {
+      await sendTestLocalNotification();
+      toast('ส่งการแจ้งเตือนทดสอบแล้ว');
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  });
+
+  window.addEventListener('trackme:push-change', showPushStatus);
+  showPushStatus();
   mountBackup($('#st-backup', el));
   mountMigrate($('#st-migrate', el));
 }

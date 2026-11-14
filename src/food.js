@@ -158,7 +158,10 @@ export function mountFood(el) {
     </div>
 
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> รายการอาหารของวัน</h3>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> รายการอาหารของวัน</h3>
+        <button id="f-hist-search" type="button" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-magnifying-glass"></i> ค้นหาประวัติอาหาร</button>
+      </div>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
         <thead class="bg-lav-soft/50 text-slate-600"><tr><th class="p-3">เมนู</th><th class="p-3 text-right">kcal</th><th class="p-3 text-right">โปรตีน</th><th class="p-3 text-center">แก้ไข / ลบ</th></tr></thead>
         <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
@@ -201,6 +204,7 @@ export function mountFood(el) {
     onSaveLibrary: food => addDoc(userCol(state.uid,'custom_foods'), { name:food.name, brand:food.brand||'', unit:food.unit||'100 กรัม', gramsPerUnit:food.gramsPerUnit??100, category:guessFoodCategory(food.name), calories:food.calories, protein:food.protein, carbs:food.carbs, fat:food.fat, sugar:food.sugar, sodium:food.sodium, favorite:false, createdAt:new Date() }).then(()=>toast('บันทึกเข้าคลังอาหารแล้ว')).catch(e=>toast('บันทึกเข้าคลังไม่สำเร็จ: '+e.message,'err'))
   }));
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
+  $('#f-hist-search', root).addEventListener('click', openFoodHistorySearch);
   $('#f-save-lib', root).addEventListener('click', saveCurrentToLibrary);
   $('#f-photo-lib-btn', root).addEventListener('click', saveCurrentToLibrary);
   $('#f-hiwpinto-sync', root).addEventListener('click', () => openHiwpintoSync());
@@ -819,10 +823,65 @@ async function onLabel(e) {
 }
 
 // ---------- Custom food library ----------
+export function openFoodHistorySearch() {
+  const today = localDateStr();
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg"><i class="fa-solid fa-magnifying-glass text-brand mr-1"></i> ค้นหาประวัติอาหารที่บันทึก</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+      <input id="fh-q" class="input" placeholder="🔍 ชื่อเมนู (เว้นว่าง = ดูทั้งหมด)">
+      <input id="fh-from" type="date" class="input" value="${addDays(today, -30)}">
+      <input id="fh-to" type="date" class="input" value="${today}">
+    </div>
+    <div class="flex justify-end mb-3"><button id="fh-go" type="button" class="btn btn-primary text-xs">ค้นหา</button></div>
+    <div id="fh-res" class="space-y-2 max-h-80 overflow-y-auto text-sm text-slate-500">กดปุ่ม "ค้นหา" เพื่อดูรายการในช่วงวันที่เลือก</div>
+  `, { wide: true });
+
+  const search = async () => {
+    const q = $('#fh-q', m.el).value.trim().toLowerCase();
+    const from = $('#fh-from', m.el).value;
+    const to = $('#fh-to', m.el).value;
+    if (!from || !to || from > to) return toast('ช่วงวันที่ไม่ถูกต้อง', 'err');
+    const out = $('#fh-res', m.el);
+    out.textContent = 'กำลังค้นหา...';
+    try {
+      const snap = await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', from), where('date', '<=', to)));
+      const rows = snap.docs
+        .map(d => d.data())
+        .filter(r => !q || String(r.name || '').toLowerCase().includes(q) || String(r.meal || '').toLowerCase().includes(q))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      out.innerHTML = rows.length
+        ? `<p class="text-xs text-slate-500 mb-2">พบ ${rows.length} รายการ</p>` + rows.slice(0, 100).map(r => `
+          <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-800 truncate">${esc(r.name)}</p>
+              <p class="text-xs text-slate-500">${esc(r.date)} · ${esc(r.meal || '-')}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="font-bold text-slate-800 text-xs">${Math.round(r.calories || 0)} kcal</p>
+              <p class="text-[11px] text-slate-500">P ${round1(r.protein || 0)} · C ${round1(r.carbs || 0)} · F ${round1(r.fat || 0)}</p>
+            </div>
+          </div>`).join('')
+        : '<p class="text-center text-xs text-slate-400 py-4">ไม่พบรายการที่ตรงกันในช่วงวันที่นี้</p>';
+    } catch (err) {
+      out.textContent = 'ค้นหาไม่สำเร็จ: ' + err.message;
+    }
+  };
+  $('#fh-go', m.el).addEventListener('click', search);
+  $('#fh-q', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  search();
+}
+
 export function openLibrary(onPick) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คลังอาหารของฉัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="flex flex-col sm:flex-row gap-2 mb-3"><input id="lib-q" class="input" placeholder="🔍 ค้นหา..."><select id="lib-category" class="input sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
+    <div class="flex flex-col sm:flex-row gap-2 mb-2"><input id="lib-q" class="input" placeholder="🔍 ค้นหาชื่อเมนู..."><select id="lib-category" class="input sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select><button id="lib-add" class="btn btn-primary whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button><button id="lib-bulk-add" class="btn btn-soft whitespace-nowrap"><i class="fa-solid fa-file-import"></i> เพิ่มหลายเมนู</button></div>
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
+      <span class="text-slate-500">วันที่เพิ่มเมนู:</span>
+      <input id="lib-from" type="date" class="input !w-auto !py-1 text-xs" aria-label="ตั้งแต่วันที่">
+      <span class="text-slate-400">–</span>
+      <input id="lib-to" type="date" class="input !w-auto !py-1 text-xs" aria-label="ถึงวันที่">
+      <button id="lib-date-clear" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างวันที่</button>
+    </div>
     <button id="lib-restore-builtins" class="hidden chip bg-sky-soft text-blue-700 mb-2">คืนเมนูเริ่มต้นที่ซ่อนไว้</button>
     <div id="lib-bulk" class="flex flex-wrap items-center gap-2 mb-2 rounded-xl bg-slate-50 p-2 text-sm">
       <label class="flex items-center gap-2"><input id="lib-select-visible" type="checkbox"> เลือกเมนูของฉันที่แสดง (<span id="lib-visible-count">0</span>)</label>
@@ -833,10 +892,30 @@ export function openLibrary(onPick) {
     </div>
     <div id="lib-list" class="divide-y divide-slate-100 md:grid md:grid-cols-2 md:divide-y-0 md:gap-x-5"></div>`, { wide: true });
   const selected = new Set();
-  const matches = p => label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase()) && (!$('#lib-category', m.el).value || (p.category || guessFoodCategory(p.name)) === $('#lib-category', m.el).value);
+  const itemDateStr = p => {
+    const raw = p.createdAt || p.updatedAt;
+    if (!raw) return '';
+    const d = typeof raw.toDate === 'function' ? raw.toDate() : new Date(raw);
+    return Number.isNaN(d.getTime()) ? '' : localDateStr(d);
+  };
+  const matches = p => {
+    const from = $('#lib-from', m.el).value;
+    const to = $('#lib-to', m.el).value;
+    if (!label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase())) return false;
+    if ($('#lib-category', m.el).value && (p.category || guessFoodCategory(p.name)) !== $('#lib-category', m.el).value) return false;
+    if (from || to) {
+      const ds = itemDateStr(p);
+      if (!ds) return false;
+      if (from && ds < from) return false;
+      if (to && ds > to) return false;
+    }
+    return true;
+  };
   const visibleCustom = () => getPresets().filter(p => p.custom && matches(p));
   const render = () => {
-    const q = $('#lib-q', m.el).value.toLowerCase();
+    const from = $('#lib-from', m.el).value;
+    const to = $('#lib-to', m.el).value;
+    $('#lib-date-clear', m.el).classList.toggle('hidden', !from && !to);
     const presets = getPresets().filter(matches);
     const custom = presets.filter(p => p.custom);
     const hidden = hiddenBuiltins();
@@ -860,6 +939,9 @@ export function openLibrary(onPick) {
   };
   $('#lib-q', m.el).addEventListener('input', render);
   $('#lib-category', m.el).addEventListener('change', render);
+  $('#lib-from', m.el).addEventListener('change', render);
+  $('#lib-to', m.el).addEventListener('change', render);
+  $('#lib-date-clear', m.el).addEventListener('click', () => { $('#lib-from', m.el).value = ''; $('#lib-to', m.el).value = ''; render(); });
   $('#lib-add', m.el).addEventListener('click', () => openFoodEditor({}));
   $('#lib-bulk-add', m.el).addEventListener('click', () => openBulkFoodImport(m));
   $('#lib-restore-builtins', m.el).addEventListener('click', () => { localStorage.removeItem(HIDDEN_BUILTINS_KEY); refreshDatalist(); render(); });

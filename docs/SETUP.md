@@ -174,3 +174,30 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 - **สแกนซองอาหารสัตว์เลี้ยง & สแกนผลตรวจด้วย AI**: ใช้คีย์ Gemini หรือ Groq ที่ตั้งไว้แล้วในหน้าตั้งค่าได้เลย ไม่ต้องขอคีย์ใหม่แยกต่างหาก
 - **ระยะเตือนล่วงหน้า & แจ้งเตือนรอบเดือน**: ตั้งค่าครั้งแรกได้ทันทีที่เมนู **แจ้งเตือน (รูปกระดิ่ง)** หรือใน **ตั้งค่า** และ **บันทึกแจ้งเตือน** ค่าตั้งเตือนรอบเดือนและธีม (Cozy / Pastel / Dark mode) เก็บเฉพาะในเบราว์เซอร์ของเครื่องนั้น ส่วนระยะเตือนรายรายการ/หมวดบันทึกซิงค์ข้ามอุปกรณ์ผ่าน Firestore อัตโนมัติ
 - **กรณีรันบนโดเมนใหม่หรือพรีวิว**: ถ้าเจอ `auth/unauthorized-domain` ให้เพิ่มโดเมนที่ใช้งานใน Firebase Console → **Authentication → Settings → Authorized domains**
+
+---
+
+## อัปเดต v2.6 (ตั้งค่าการแจ้งเตือนอัตโนมัติ Push Notification 08:00 น. ฟรี)
+
+ระบบแจ้งเตือนโดยไม่ต้องเปิดแอปค้างไว้ ใช้ **Web Push (VAPID) + GitHub Actions** ฟรีทั้งหมด ไม่ต้องผูกบัตรเครดิต:
+
+1. **ไม่ต้องอัปเดต Firestore Rules**: ข้อมูล Weekly Planner (`settings/planner`) และการสมัครรับ Push (`settings/push`) ใช้ collection `settings` ที่มีอยู่แล้วใน `firestore.rules`
+2. **สร้างคู่กุญแจ VAPID (ทำครั้งเดียวในเครื่อง/Terminal)**:
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+   จะได้ค่า **Public Key** และ **Private Key** เก็บไว้สำหรับข้อ 4
+3. **สร้าง Firebase Service Account Key** (ฟรีในแผน Spark ไม่ต้องผูกบัตร):
+   - เข้า [Firebase Console](https://console.firebase.google.com) → โปรเจกต์ของคุณ → ไอคอนฟันเฟือง **Project settings → Service accounts**
+   - กด **Generate new private key** → จะได้ไฟล์ `.json` (เปิดไฟล์ด้วย Text Editor แล้วคัดลอกข้อความทั้งหมด)
+4. **ใส่ GitHub Repository Secrets** (GitHub → Repo ของคุณ → **Settings → Secrets and variables → Actions → New repository secret**):
+   - `VAPID_PUBLIC_KEY` → วาง Public Key จากข้อ 2
+   - `VAPID_PRIVATE_KEY` → วาง Private Key จากข้อ 2
+   - `VAPID_SUBJECT` → ใส่อีเมลติดต่อในรูปแบบ `mailto:your-email@gmail.com`
+   - `FIREBASE_SERVICE_ACCOUNT` → วางข้อความ JSON ทั้งหมดจากข้อ 3
+5. **Deploy ใหม่ & เปิดรับการแจ้งเตือนบนมือถือ**:
+   - เมื่อ push โค้ดหรือกด **Run workflow** ใน `Deploy to GitHub Pages` แล้ว เว็บจะฝัง `VITE_VAPID_PUBLIC_KEY` ให้อัตโนมัติ
+   - เปิดแอป Track Me → กดปุ่ม **"🔔 เปิดรับการแจ้งเตือน"** ที่หน้า Home หรือใน **ตั้งค่า**
+   - **หมายเหตุ iPhone / iPad (iOS 16.4+):** ต้องกดปุ่ม **แชร์ (Share) → เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)** แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับแจ้งเตือนได้
+   - ทดสอบส่งได้ทันทีใน GitHub → **Actions → Daily Push Notifications (08:00 ICT) → Run workflow** (ปกติระบบจะทำงานอัตโนมัติทุกวันเวลา **08:00 น. เวลาประเทศไทย**)
+

@@ -140,6 +140,13 @@ export function mountRemind(el) {
         <input id="rm-search" class="input" placeholder="🔍 ค้นหารายการ...">
         <select id="rm-filter" class="input"><option value="">ทุกหมวดหมู่</option>${KINDS.map(([v]) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>
       </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-slate-500">ช่วงวันครบกำหนด:</span>
+        <input id="rm-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
+        <span class="text-slate-400">–</span>
+        <input id="rm-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
+        <button id="rm-clear-filter" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
+      </div>
       <div id="rm-bulk" class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs">
         <label class="flex items-center gap-1.5 cursor-pointer"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="rm-sel-count">0</b></span>
@@ -167,6 +174,15 @@ export function mountRemind(el) {
   $r('#rm-cancel').addEventListener('click', resetForm);
   $r('#rm-search').addEventListener('input', renderRemind);
   $r('#rm-filter').addEventListener('change', renderRemind);
+  $r('#rm-from').addEventListener('change', renderRemind);
+  $r('#rm-to').addEventListener('change', renderRemind);
+  $r('#rm-clear-filter').addEventListener('click', () => {
+    $r('#rm-search').value = '';
+    $r('#rm-filter').value = '';
+    $r('#rm-from').value = '';
+    $r('#rm-to').value = '';
+    renderRemind();
+  });
   $r('#rm-show-done').addEventListener('change', renderRemind);
   $r('#rm-sel-all').addEventListener('change', e => {
     filteredItems().forEach(x => { if (e.target.checked) selectedKeys.add(x.uidKey); else selectedKeys.delete(x.uidKey); });
@@ -329,10 +345,16 @@ function filteredItems() {
   if (!root) return [];
   const q = ($r('#rm-search')?.value || '').trim().toLowerCase();
   const kind = $r('#rm-filter')?.value || '';
+  const from = $r('#rm-from')?.value || '';
+  const to = $r('#rm-to')?.value || '';
   const showDone = $r('#rm-show-done')?.checked;
+  $r('#rm-clear-filter')?.classList.toggle('hidden', !q && !kind && !from && !to);
   return allItems().filter(x => {
     if (!showDone && x.done) return false;
     if (kind && x.kind !== kind) return false;
+    const due = x.nextDate || x.date || '';
+    if (from && (!due || due < from)) return false;
+    if (to && (!due || due > to)) return false;
     if (q && !`${x.title} ${x.note || ''} ${x.kind}`.toLowerCase().includes(q)) return false;
     return true;
   });

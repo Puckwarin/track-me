@@ -89,18 +89,50 @@ export const SANITIZERS = {
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),imageUrl:str(r.imageUrl,1000),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,120)}))])),
     createdAt:ts(o.createdAt)
   } : null,
-  settings: o => ({
-    sex:o.sex==='male'?'male':'female', birthYear:int(o.birthYear,1900,2100), heightCm:num(o.heightCm), weightKg:num(o.weightKg),
-    activity:['sedentary','light','moderate','active','very'].includes(o.activity)?o.activity:'light',
-    adjust:typeof o.adjust==='number'&&Math.abs(o.adjust)<=1500?Math.round(o.adjust):0,
-    kcalOverride:num(o.kcalOverride), proteinPerKg:num(o.proteinPerKg), fatPct:num(o.fatPct),
-    meals:(Array.isArray(o.meals)?o.meals:[]).slice(0,12).filter(m=>m&&/^[\w-]{1,40}$/.test(m.id||'')&&str(m.name,30)).map(m=>({id:m.id,name:str(m.name,30)})),
-    updatedAt:ts(o.updatedAt)
-  }),
+  settings: o => {
+    if (Array.isArray(o?.routines) || (o?.doneMap && typeof o.doneMap === 'object') || (o?.extras && typeof o.extras === 'object')) {
+      return {
+        routines: (Array.isArray(o.routines) ? o.routines : []).slice(0, 60).filter(r => r && str(r.title, 80)).map(r => ({
+          id: /^[\w-]{1,40}$/.test(r.id || '') ? r.id : 'r' + Math.random().toString(36).slice(2, 9),
+          title: str(r.title, 80),
+          days: (Array.isArray(r.days) ? r.days : []).filter(d => Number.isInteger(d) && d >= 0 && d <= 6),
+          ...(str(r.time, 10) && { time: str(r.time, 10) }),
+          ...(str(r.icon, 8) && { icon: str(r.icon, 8) })
+        })),
+        doneMap: o.doneMap && typeof o.doneMap === 'object' ? Object.fromEntries(Object.entries(o.doneMap).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => typeof x === 'string').slice(0, 60)])) : {},
+        extras: o.extras && typeof o.extras === 'object' ? Object.fromEntries(Object.entries(o.extras).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => x && str(x.title, 80)).slice(0, 30).map(x => ({ id: str(x.id, 40), title: str(x.title, 80), done: x.done === true }))])) : {},
+        updatedAt: ts(o.updatedAt)
+      };
+    }
+    if (Array.isArray(o?.subscriptions) || typeof o?.enabled === 'boolean') {
+      return {
+        enabled: o.enabled === true,
+        ...(Number.isInteger(o.periodRemindDays) && { periodRemindDays: o.periodRemindDays }),
+        subscriptions: (Array.isArray(o.subscriptions) ? o.subscriptions : []).slice(0, 10).filter(s => s && typeof s.endpoint === 'string' && s.keys?.p256dh && s.keys?.auth).map(s => ({
+          endpoint: str(s.endpoint, 1000),
+          keys: { p256dh: str(s.keys.p256dh, 300), auth: str(s.keys.auth, 300) },
+          ...(str(s.userAgent, 120) && { userAgent: str(s.userAgent, 120) })
+        })),
+        updatedAt: ts(o.updatedAt)
+      };
+    }
+    return {
+      sex: o.sex === 'male' ? 'male' : 'female', birthYear: int(o.birthYear, 1900, 2100), heightCm: num(o.heightCm), weightKg: num(o.weightKg),
+      activity: ['sedentary', 'light', 'moderate', 'active', 'very'].includes(o.activity) ? o.activity : 'light',
+      adjust: typeof o.adjust === 'number' && Math.abs(o.adjust) <= 1500 ? Math.round(o.adjust) : 0,
+      kcalOverride: num(o.kcalOverride), proteinPerKg: num(o.proteinPerKg), fatPct: num(o.fatPct),
+      meals: (Array.isArray(o.meals) ? o.meals : []).slice(0, 12).filter(m => m && /^[\w-]{1,40}$/.test(m.id || '') && str(m.name, 30)).map(m => ({ id: m.id, name: str(m.name, 30) })),
+      updatedAt: ts(o.updatedAt)
+    };
+  },
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมายและมื้ออาหาร', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมาย มื้ออาหาร และ Planner', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
 // symptom_records ใช้วันที่เป็น doc id
-export const docIdFor = (col, o, fallback) => ['symptom_records','skin_records'].includes(col) ? o.date : col === 'settings' ? 'profile' : fallback;
+export const docIdFor = (col, o, fallback) => ['symptom_records', 'skin_records'].includes(col)
+  ? o.date
+  : col === 'settings'
+    ? (['planner', 'push'].includes(o?.id) ? o.id : (Array.isArray(o?.routines) || o?.doneMap ? 'planner' : (Array.isArray(o?.subscriptions) || typeof o?.enabled === 'boolean' ? 'push' : 'profile')))
+    : fallback;

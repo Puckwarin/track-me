@@ -3,6 +3,7 @@ import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, toast } from './util.js';
 import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
+import { syncPeriodRemindToPush } from './push.js';
 
 let root;
 const selectedKeys = new Set();
@@ -135,6 +136,7 @@ async function onChange(e) {
   if (e.target.id === 'nt-period-days') {
     setPeriodRemindDays(e.target.value);
     checkReminder();
+    syncPeriodRemindToPush();
     renderReminders();
     toast('อัปเดตการเตือนรอบเดือนแล้ว');
     return;
@@ -310,7 +312,7 @@ export function renderReminders() {
         <button id="nt-bulk-apply" type="button" class="chip bg-sky-soft text-blue-700" ${selectedKeys.size === 0 ? 'disabled' : ''}>ตั้งเตือนรายการที่เลือก</button>
       </div>
       <div class="space-y-2">${configHtml || '<p class="text-xs text-slate-400">ยังไม่มีรายการที่มีวันครบกำหนดในบันทึกเตือนหรือสต๊อก</p>'}</div>
-      <p class="text-[11px] text-slate-400">รายการอัปเดตเมื่อเปิดแอปและซิงค์ข้อมูลสำเร็จ การแจ้งเตือนนี้ไม่ใช่การแจ้งเตือนจากเซิร์ฟเวอร์เมื่อปิดแอป</p>
+      <p class="text-[11px] text-slate-400">สามารถเปิดรับการแจ้งเตือนอัตโนมัติเวลา 08:00 น. แม้ไม่ได้เปิดแอปได้ที่ปุ่ม “เปิดรับการแจ้งเตือน” บนหน้า Home หรือในหน้า ตั้งค่า</p>
     </section>
   </div>`;
 }

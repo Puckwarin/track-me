@@ -98,8 +98,17 @@ export function mountWorkout(el) {
   </div>
   <div class="space-y-6">
     <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-simple text-brand"></i> 7 วันที่ผ่านมา</h3><div id="w-week" class="text-sm text-slate-700 space-y-1"></div></div>
-    <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> ประวัติ & แผนที่บันทึก</h3><div id="w-history" class="space-y-2"></div>
-      <div id="w-tpl-list" class="pt-3 border-t border-slate-100 space-y-1.5"></div></div>
+    <div class="card space-y-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> ประวัติ & แผนที่บันทึก</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <input id="w-hist-q" class="input text-xs sm:col-span-3" placeholder="🔍 ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต">
+        <div><label class="lbl">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
+        <div><label class="lbl">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
+        <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-600 w-full justify-center py-2">ล้างตัวกรอง</button></div>
+      </div>
+      <div id="w-history" class="space-y-2"></div>
+      <div id="w-tpl-list" class="pt-3 border-t border-slate-100 space-y-1.5"></div>
+    </div>
   </div>`;
 
   $('#w-date', root).value = today;
@@ -133,6 +142,16 @@ export function mountWorkout(el) {
   });
   $('#w-day-plans', root).addEventListener('click', handleRecordAction);
   $('#w-history', root).addEventListener('click', handleRecordAction);
+  ['w-hist-q', 'w-hist-from', 'w-hist-to'].forEach(id => {
+    $('#' + id, root).addEventListener('input', renderHistory);
+    $('#' + id, root).addEventListener('change', renderHistory);
+  });
+  $('#w-hist-clear', root).addEventListener('click', () => {
+    $('#w-hist-q', root).value = '';
+    $('#w-hist-from', root).value = '';
+    $('#w-hist-to', root).value = '';
+    renderHistory();
+  });
 
   $('#w-date', root).addEventListener('change', () => {
     const d = $('#w-date', root).value || localDateStr();
@@ -516,7 +535,27 @@ export function render() {
     : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายที่ทำแล้วใน 7 วันนี้</p>')
     + (plannedCount ? `<p class="text-xs text-amber-700 pt-1">📅 มีแผนที่วางไว้ ${plannedCount} รายการ</p>` : '');
 
-  const rows = state.workouts.slice().sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 15);
+  renderHistory();
+  $$('[data-hint]', root).forEach(h => { const n = h.closest('[data-row]')?.querySelector('[data-k="name"]'); if (n) h.textContent = lastHint(n.value); });
+}
+
+function renderHistory() {
+  if (!root) return;
+  const q = ($('#w-hist-q', root)?.value || '').trim().toLowerCase();
+  const from = $('#w-hist-from', root)?.value || '';
+  const to = $('#w-hist-to', root)?.value || '';
+  const filtering = Boolean(q || from || to);
+
+  const filtered = state.workouts.filter(w => {
+    if (from && (w.date || '') < from) return false;
+    if (to && (w.date || '') > to) return false;
+    if (!q) return true;
+    const exerciseNames = Object.values(w.sections || {}).flat().map(r => `${r?.name || ''} ${r?.note || ''}`).join(' ');
+    const hay = `${TYPES[w.type] || w.type || ''} ${w.note || ''} ${exerciseNames}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  const rows = filtered.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, filtering ? 50 : 15);
   $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
     const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<p class="text-xs font-semibold text-slate-500 mt-1">${t}</p>` + w.sections[k].map(r => `<p class="text-xs">• ${esc(r.name)} — ${esc(rowText(r))}${r.note ? ` <span class="text-slate-400">(${esc(r.note)})</span>` : ''}</p>`).join('') : '')).join('');
     const badge = w.status === 'planned' ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1">วางแผนไว้</span>' : '';
@@ -528,6 +567,5 @@ export function render() {
         <button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button>
         <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>
       </div></div></details>`;
-  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึก</p>';
-  $$('[data-hint]', root).forEach(h => { const n = h.closest('[data-row]')?.querySelector('[data-k="name"]'); if (n) h.textContent = lastHint(n.value); });
+  }).join('') : `<p class="text-xs text-slate-400">${filtering ? 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่' : 'ยังไม่มีบันทึก'}</p>`;
 }

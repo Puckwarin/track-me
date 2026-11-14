@@ -63,7 +63,25 @@ export function mountLab(el) {
       <button id="lb-save" class="btn btn-primary w-full justify-center"><i class="fa-solid fa-plus"></i> บันทึกผล</button>
     </div>
   </div>
-  <div class="lg:col-span-2 space-y-4"><div class="flex gap-2"><input id="lb-search" class="input" placeholder="🔍 ค้นหารายการผลตรวจ"></div><div id="lb-list" class="space-y-3"></div></div>`;
+  <div class="lg:col-span-2 space-y-4">
+    <div class="card !p-3 space-y-2.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="lb-search" class="input flex-1 min-w-[160px]" placeholder="🔍 ค้นหารายการผลตรวจ">
+        <select id="lb-filter" class="input !w-auto">
+          <option value="all">ผลตรวจทั้งหมด</option>
+          <option value="abnormal">⚠️ เฉพาะค่าผิดปกติ (สูง/ต่ำ)</option>
+        </select>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-slate-500">ช่วงวันที่:</span>
+        <input id="lb-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
+        <span class="text-slate-400">–</span>
+        <input id="lb-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
+        <button id="lb-clear" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
+      </div>
+    </div>
+    <div id="lb-list" class="space-y-3"></div>
+  </div>`;
   $('#lb-date', root).value = localDateStr();
   $('#lb-name', root).addEventListener('input', e => {
     const p = LAB_PRESETS.find(x => x[0] === e.target.value); if (!p) return;
@@ -73,6 +91,16 @@ export function mountLab(el) {
   $('#lb-photo', root).addEventListener('change', onScanLabPhoto);
   $('#lb-save', root).addEventListener('click', save);
   $('#lb-search', root).addEventListener('input', render);
+  $('#lb-filter', root).addEventListener('change', render);
+  $('#lb-from', root).addEventListener('change', render);
+  $('#lb-to', root).addEventListener('change', render);
+  $('#lb-clear', root).addEventListener('click', () => {
+    $('#lb-search', root).value = '';
+    $('#lb-filter', root).value = 'all';
+    $('#lb-from', root).value = '';
+    $('#lb-to', root).value = '';
+    render();
+  });
   $('#lb-list', root).addEventListener('click', e => {
     const d = e.target.closest('[data-del]');
     if (d && confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
@@ -191,16 +219,43 @@ function spark(rows) {
 
 export function render() {
   if (!root?.isConnected) return;
-  const q = key($('#lb-search', root).value), groups = new Map();
-  state.labs.forEach(r => { const k = key(r.name); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
-  const cards = [...groups.values()].map(rows => rows.sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)))
-    .filter(rows => !q || key(rows[0].name).includes(q)).sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
+  const q = key($('#lb-search', root).value);
+  const mode = $('#lb-filter', root)?.value || 'all';
+  const from = $('#lb-from', root)?.value || '';
+  const to = $('#lb-to', root)?.value || '';
+  $('#lb-clear', root)?.classList.toggle('hidden', !q && mode === 'all' && !from && !to);
+
+  const groups = new Map();
+  state.labs.forEach(r => {
+    if (from && r.date < from) return;
+    if (to && r.date > to) return;
+    const k = key(r.name);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  });
+
+  const cards = [...groups.values()]
+    .map(rows => rows.sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)))
+    .filter(rows => {
+      if (q && !key(rows[0].name).includes(q)) return false;
+      if (mode === 'abnormal') {
+        const last = rows[rows.length - 1];
+        const f = labFlag(last);
+        if (f !== 'low' && f !== 'high') return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
+
   $('#lb-list', root).innerHTML = cards.length ? cards.map(rows => {
     const last = rows[rows.length - 1], f = labFlag(last), prev = rows[rows.length - 2];
     const arrow = prev ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : '';
-    return `<details class="card !p-3"><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
+    const displayRows = mode === 'abnormal'
+      ? rows.slice().reverse().filter(r => { const rf = labFlag(r); return rf === 'low' || rf === 'high'; })
+      : rows.slice().reverse();
+    return `<details class="card !p-3" ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
       <div class="flex items-center gap-3">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-400">${arrow}</span></p>${f ? `<span class="chip !cursor-default ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
-      <div class="mt-3 divide-y divide-slate-100 text-sm">${rows.slice().reverse().map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-400">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="text-rose-400 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
-  }).join('') : '<p class="text-sm text-slate-400">ยังไม่มีผลตรวจ — กรอกด้านซ้าย หรือถ่ายรูปใบผลตรวจให้ AI อ่าน</p>';
+      <div class="mt-3 divide-y divide-slate-100 text-sm">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-400">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="text-rose-400 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
+  }).join('') : `<p class="text-sm text-slate-400">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
 }

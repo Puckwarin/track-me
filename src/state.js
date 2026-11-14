@@ -10,6 +10,8 @@ export const state = {
   templates: [],
   labs: [],
   profile: null,
+  planner: null,
+  pushSettings: null,
   skinRecords: [],
   skincareProducts: [],
   ingredientBlacklist: [],
