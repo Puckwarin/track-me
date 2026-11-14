@@ -487,6 +487,25 @@ html[data-theme="dark"] .ai-chat-fab { border-color: #262220; box-shadow: 0 10px
   border-color: #E2D8CD;
   opacity: .85;
 }
+.ai-confirm-card {
+  padding: 0.65rem 0.75rem;
+  border-radius: 1rem;
+  background: #FDF6E8;
+  border: 1px solid #F2D8A7;
+}
+.ai-confirm-card.is-confirmed {
+  background: var(--color-ok-soft);
+  border-color: #CBE2C9;
+}
+.ai-confirm-card.is-cancelled {
+  background: #F4EDE6;
+  border-color: #E2D8CD;
+  opacity: .75;
+}
+html[data-theme="dark"] .ai-confirm-card { background: #362d1f; border-color: #5c4b30; }
+html[data-theme="dark"] .ai-confirm-card.is-confirmed { background: #21342a; border-color: #324f40; }
+html[data-theme="dark"] .ai-confirm-card.is-cancelled { background: #2b2622; border-color: #3b342e; }
+html[data-theme="dark"] .ai-confirm-card p { color: #f1f5f9 !important; }
 
 .ai-chat-quick {
   display: flex;

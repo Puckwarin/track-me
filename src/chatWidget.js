@@ -1,6 +1,6 @@
 import { $, esc, toast } from './util.js';
 import { getGeminiKey, getGroqKey, explainGeminiError } from './nutrition.js';
-import { runAssistantTurn, undoAssistantAction } from './services/aiAssistant.js';
+import { runAssistantTurn, executeConfirmedAction, undoAssistantAction } from './services/aiAssistant.js';
 
 const QUICK_PROMPTS = [
   '💸 เดือนนี้ค่ากินเท่าไหร่?',
@@ -101,6 +101,41 @@ function renderMessages() {
     if (m.role === 'user') {
       return `<div class="ai-msg-row is-user"><div class="ai-bubble is-user">${formatMessageHtml(m.text)}</div></div>`;
     }
+    const pendingList = m.pendingActions || [];
+    const stillPendingCount = pendingList.filter(a => a.status === 'pending').length;
+    const pendingHtml = pendingList.length ? `
+      <div class="ai-confirm-wrap space-y-2 mt-2.5">
+        <p class="text-[11px] font-bold text-amber-800">⏳ ตรวจสอบก่อนบันทึกลงฐานข้อมูล (${stillPendingCount}/${pendingList.length} รายการ)</p>
+        ${pendingList.map((a, aIdx) => `
+          <div class="ai-confirm-card ${a.status === 'cancelled' ? 'is-cancelled' : a.status === 'confirmed' ? 'is-confirmed' : ''}">
+            <div class="flex items-start gap-2">
+              <span class="text-base leading-none mt-0.5">${a.icon || '📝'}</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-bold text-slate-800">${esc(a.title)}</p>
+                <p class="text-[11px] text-slate-600 mt-0.5">${esc(a.subtitle)}</p>
+                ${a.riskReason ? `<p class="text-[10px] text-amber-800 font-semibold mt-0.5">⚠️ ${esc(a.riskReason)}</p>` : ''}
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap justify-end gap-1.5">
+              ${a.status === 'pending' ? `
+                <button type="button" data-confirm-msg="${msgIdx}" data-confirm-idx="${aIdx}" class="btn btn-primary !py-1.5 !px-3 !min-h-9 text-xs">✅ ยืนยันบันทึก</button>
+                <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost !py-1.5 !px-3 !min-h-9 text-xs text-rose-600">❌ ยกเลิก</button>
+              ` : a.status === 'confirmed'
+                ? '<span class="text-[11px] text-green-700 font-semibold">✅ บันทึกแล้ว (ดูปุ่มยกเลิกด้านล่าง)</span>'
+                : '<span class="text-[11px] text-slate-500 font-medium">❌ ยกเลิกแล้ว — ไม่ได้บันทึกลงระบบ</span>'
+              }
+            </div>
+          </div>
+        `).join('')}
+        ${stillPendingCount > 1 ? `
+          <div class="flex flex-wrap justify-end gap-1.5 pt-1">
+            <button type="button" data-confirm-all-msg="${msgIdx}" class="btn btn-primary !py-1.5 !px-3.5 !min-h-9 text-xs">✅ ยืนยันทั้งหมด (${stillPendingCount})</button>
+            <button type="button" data-cancel-all-msg="${msgIdx}" class="btn btn-ghost !py-1.5 !px-3 !min-h-9 text-xs text-rose-600">ยกเลิกทั้งหมด</button>
+          </div>
+        ` : ''}
+      </div>
+    ` : '';
+
     const cardsHtml = (m.receipts || []).map((r, rIdx) => `
       <div class="ai-action-card ${r.undone ? 'is-undone' : ''}">
         <div class="flex items-start gap-2">
@@ -128,6 +163,7 @@ function renderMessages() {
             ? '<span class="inline-flex items-center gap-2 text-xs text-slate-500"><i class="fa-solid fa-spinner fa-spin"></i> กำลังตรวจข้อมูลและตอบกลับ…</span>'
             : `<div class="text-sm leading-relaxed break-words">${formatMessageHtml(m.text)}</div>`
           }
+          ${pendingHtml}
           ${cardsHtml}
         </div>
       </div>
@@ -183,6 +219,7 @@ async function handleSend(rawText) {
     pendingMsg.pending = false;
     pendingMsg.text = res.text;
     pendingMsg.receipts = (res.receipts || []).map(r => ({ ...r, undone: false }));
+    pendingMsg.pendingActions = (res.pendingActions || []).map(a => ({ ...a, status: a.status || 'pending' }));
   } catch (err) {
     pendingMsg.pending = false;
     pendingMsg.text = `ขออภัยค่ะ เกิดข้อผิดพลาด: ${explainGeminiError(err)}`;
@@ -228,6 +265,76 @@ export function mountChatWidget(goTo) {
   });
 
   $('#ai-chat-messages').addEventListener('click', async e => {
+    const confirmBtn = e.target.closest('[data-confirm-msg]');
+    if (confirmBtn) {
+      const m = messages[Number(confirmBtn.dataset.confirmMsg)];
+      const action = m?.pendingActions?.[Number(confirmBtn.dataset.confirmIdx)];
+      if (!m || !action || action.status !== 'pending') return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'กำลังบันทึก…';
+      try {
+        const out = await executeConfirmedAction(action);
+        action.status = 'confirmed';
+        if (out.receipt) {
+          m.receipts = [...(m.receipts || []), { ...out.receipt, undone: false }];
+        }
+        renderMessages();
+        toast('ยืนยันและบันทึกข้อมูลแล้ว');
+      } catch (err) {
+        toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '✅ ยืนยันบันทึก';
+      }
+      return;
+    }
+
+    const cancelBtn = e.target.closest('[data-cancel-msg]');
+    if (cancelBtn) {
+      const m = messages[Number(cancelBtn.dataset.cancelMsg)];
+      const action = m?.pendingActions?.[Number(cancelBtn.dataset.cancelIdx)];
+      if (!action || action.status !== 'pending') return;
+      action.status = 'cancelled';
+      renderMessages();
+      toast('ยกเลิกการบันทึกรายการนี้แล้ว');
+      return;
+    }
+
+    const confirmAllBtn = e.target.closest('[data-confirm-all-msg]');
+    if (confirmAllBtn) {
+      const m = messages[Number(confirmAllBtn.dataset.confirmAllMsg)];
+      const pendingItems = (m?.pendingActions || []).filter(a => a.status === 'pending');
+      if (!pendingItems.length) return;
+      confirmAllBtn.disabled = true;
+      confirmAllBtn.textContent = 'กำลังบันทึกทั้งหมด…';
+      let savedCount = 0;
+      try {
+        for (const action of pendingItems) {
+          const out = await executeConfirmedAction(action);
+          action.status = 'confirmed';
+          if (out.receipt) {
+            m.receipts = [...(m.receipts || []), { ...out.receipt, undone: false }];
+          }
+          savedCount++;
+        }
+        renderMessages();
+        toast(`บันทึกครบทั้ง ${savedCount} รายการแล้ว`);
+      } catch (err) {
+        renderMessages();
+        toast(`บันทึกสำเร็จ ${savedCount} รายการ · เกิดข้อผิดพลาด: ${err.message}`, 'err');
+      }
+      return;
+    }
+
+    const cancelAllBtn = e.target.closest('[data-cancel-all-msg]');
+    if (cancelAllBtn) {
+      const m = messages[Number(cancelAllBtn.dataset.cancelAllMsg)];
+      if (!m?.pendingActions) return;
+      m.pendingActions.forEach(a => { if (a.status === 'pending') a.status = 'cancelled'; });
+      renderMessages();
+      toast('ยกเลิกทุกรายการที่รอยืนยันแล้ว');
+      return;
+    }
+
     const undoBtn = e.target.closest('[data-undo-msg]');
     if (!undoBtn) return;
     const mIdx = Number(undoBtn.dataset.undoMsg);

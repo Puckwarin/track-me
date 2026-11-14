@@ -53,6 +53,21 @@ export async function getCurrentBrowserSubscription() {
   }
 }
 
+export function getPushHideDetails() {
+  return state.pushSettings?.hideDetails !== false;
+}
+
+export async function setPushHideDetails(hide) {
+  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  const next = Boolean(hide);
+  await setDoc(userDoc(state.uid, 'settings', 'push'), {
+    hideDetails: next,
+    updatedAt: new Date()
+  }, { merge: true });
+  window.dispatchEvent(new Event('trackme:push-change'));
+  return next;
+}
+
 export async function getPushStatus() {
   const supported = isPushSupported();
   const permission = 'Notification' in window ? Notification.permission : 'unsupported';
@@ -66,6 +81,7 @@ export async function getPushStatus() {
     hasVapidKey: Boolean(getVapidPublicKey()),
     subscribedHere,
     totalDevices: savedSubs.length,
+    hideDetails: getPushHideDetails(),
     enabled: state.pushSettings?.enabled !== false && savedSubs.length > 0
   };
 }
@@ -114,6 +130,7 @@ export async function enablePushNotifications(customVapidKey) {
 
   await setDoc(userDoc(state.uid, 'settings', 'push'), {
     enabled: true,
+    hideDetails: state.pushSettings?.hideDetails !== false,
     periodRemindDays: getPeriodRemindDays(),
     subscriptions: merged,
     updatedAt: new Date()

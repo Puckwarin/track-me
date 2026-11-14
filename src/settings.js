@@ -16,6 +16,8 @@ import {
   isIosDevice,
   isStandalonePwa,
   getPushStatus,
+  getPushHideDetails,
+  setPushHideDetails,
   enablePushNotifications,
   disablePushForThisDevice,
   syncPeriodRemindToPush,
@@ -65,6 +67,10 @@ export function mountSettings(el) {
         <label class="lbl">แจ้งเตือนรอบเดือนล่วงหน้า</label>
         <select id="st-remind" class="input">${REMIND_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
       </div>
+      <label class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-slate-700 cursor-pointer">
+        <input type="checkbox" id="st-push-hide-details" class="mt-0.5">
+        <span><b>🔒 ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)</b><br><span class="text-[11px] text-slate-500">แสดงเฉพาะจำนวนรายการรวมบนแจ้งเตือน เพื่อไม่ให้ข้อมูลรอบเดือน สุขภาพ หรือนัดหมายแสดงบนหน้าจอล็อก</span></span>
+      </label>
       <div id="st-ios-guide" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
         📱 <b>สำหรับ iPhone / iPad (iOS 16.4+):</b> กรุณากดปุ่ม <b>แชร์ (Share)</b> → <b>เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)</b> แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับการแจ้งเตือนได้
       </div>
@@ -200,8 +206,23 @@ export function mountSettings(el) {
     showPushStatus();
   });
 
+  const hideDetailsChk = $('#st-push-hide-details', el);
+  if (hideDetailsChk) {
+    hideDetailsChk.checked = getPushHideDetails();
+    hideDetailsChk.addEventListener('change', async () => {
+      try {
+        await setPushHideDetails(hideDetailsChk.checked);
+        toast(hideDetailsChk.checked ? 'เปิดโหมดซ่อนรายละเอียดบนหน้าจอล็อกแล้ว' : 'เปิดแสดงรายละเอียดบนแจ้งเตือนแล้ว');
+      } catch (err) {
+        hideDetailsChk.checked = getPushHideDetails();
+        toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+      }
+    });
+  }
+
   const showPushStatus = async () => {
     if (!ns?.isConnected) return;
+    if (hideDetailsChk?.isConnected) hideDetailsChk.checked = getPushHideDetails();
     const st = await getPushStatus();
     if (!ns.isConnected) return;
     if (iosGuide) iosGuide.classList.toggle('hidden', !(isIosDevice() && !isStandalonePwa()));

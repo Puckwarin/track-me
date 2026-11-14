@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import webpush from 'web-push';
@@ -128,7 +129,33 @@ function predictNextPeriod(records) {
   return addDays(asc[asc.length - 1].start, avgCycle);
 }
 
-async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
+export function formatDigestMessage({ plannedWorkouts = [], todos = [], reminders = [], hideDetails = true }) {
+  const total = plannedWorkouts.length + todos.length + reminders.length;
+  if (!total) return null;
+
+  if (hideDetails !== false) {
+    const summaryParts = [];
+    if (plannedWorkouts.length) summaryParts.push(`ออกกำลังกาย ${plannedWorkouts.length}`);
+    if (todos.length) summaryParts.push(`กิจวัตร ${todos.length}`);
+    if (reminders.length) summaryParts.push(`นัด/เตือน ${reminders.length}`);
+    return {
+      title: `Track Me · แจ้งเตือนวันนี้ (${total} รายการ)`,
+      body: `${summaryParts.join(' · ')} — แตะเพื่อเปิดดูรายละเอียดในแอป`
+    };
+  }
+
+  const parts = [];
+  if (plannedWorkouts.length) parts.push(`💪 ออกกำลังกาย: ${plannedWorkouts.slice(0, 2).join(', ')}`);
+  if (todos.length) parts.push(`📋 สิ่งที่ต้องทำ (${todos.length}): ${todos.slice(0, 3).join(', ')}${todos.length > 3 ? '…' : ''}`);
+  if (reminders.length) parts.push(`🔔 เตือนกำหนด (${reminders.length}): ${reminders.slice(0, 2).join(', ')}${reminders.length > 2 ? '…' : ''}`);
+
+  return {
+    title: `Track Me · แผนวันนี้ (${total} รายการ)`,
+    body: parts.join('\n')
+  };
+}
+
+export async function buildDailyDigest(db, uid, today, wd, periodRemindDays, hideDetails = true) {
   const userRef = db.collection('users').doc(uid);
 
   const [
@@ -209,18 +236,7 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
     }
   }
 
-  const total = plannedWorkouts.length + todos.length + reminders.length;
-  if (!total) return null;
-
-  const parts = [];
-  if (plannedWorkouts.length) parts.push(`💪 ออกกำลังกาย: ${plannedWorkouts.slice(0, 2).join(', ')}`);
-  if (todos.length) parts.push(`📋 สิ่งที่ต้องทำ (${todos.length}): ${todos.slice(0, 3).join(', ')}${todos.length > 3 ? '…' : ''}`);
-  if (reminders.length) parts.push(`🔔 เตือนกำหนด (${reminders.length}): ${reminders.slice(0, 2).join(', ')}${reminders.length > 2 ? '…' : ''}`);
-
-  return {
-    title: `Track Me · แผนวันนี้ (${total} รายการ)`,
-    body: parts.join('\n')
-  };
+  return formatDigestMessage({ plannedWorkouts, todos, reminders, hideDetails });
 }
 
 async function main() {
@@ -273,7 +289,8 @@ async function main() {
     const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
     if (!subs.length) continue;
 
-    const digest = await buildDailyDigest(db, uid, today, wd, data.periodRemindDays ?? -1);
+    const hideDetails = data.hideDetails !== false;
+    const digest = await buildDailyDigest(db, uid, today, wd, data.periodRemindDays ?? -1, hideDetails);
     if (!digest) continue;
 
     const payload = JSON.stringify({
@@ -315,7 +332,9 @@ async function main() {
   console.log(`Done. Sent: ${sentCount}, pruned expired endpoints: ${prunedCount}`);
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}

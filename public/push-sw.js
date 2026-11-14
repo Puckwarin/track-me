@@ -46,12 +46,12 @@ self.addEventListener('push', event => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch (e) {
-    payload = { title: 'Track Me', body: event.data ? event.data.text() : 'มีรายการที่ต้องดูแลวันนี้' };
+    payload = { title: 'Track Me', body: event.data ? event.data.text() : 'แตะเพื่อเปิดดูรายละเอียดในแอป' };
   }
   const title = payload.title || 'Track Me';
   const baseUrl = (self.registration && self.registration.scope) || '/';
   const options = {
-    body: payload.body || 'เปิดแอปเพื่อดูรายการวันนี้',
+    body: payload.body || 'แตะเพื่อเปิดดูรายละเอียดในแอป',
     icon: payload.icon || `${baseUrl}icon-192.png`,
     badge: payload.badge || `${baseUrl}icon-192.png`,
     tag: payload.tag || 'trackme-daily-push',

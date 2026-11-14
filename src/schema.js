@@ -3,6 +3,7 @@ import { isDateStr } from './util.js';
 // ตรวจและคัดกรองข้อมูลก่อนเขียนลง Firestore (ใช้ตอนกู้คืน/ย้ายข้อมูล) — เก็บเฉพาะฟิลด์ที่รู้จัก
 const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
 const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 100000 ? v : null);
+const moneyNum = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 100000000 ? Math.round(v * 100) / 100 : null);
 const int = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
 const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new Date() : d; };
 const sanitizeReminderRule = r => ({
@@ -109,7 +110,22 @@ export const SANITIZERS = {
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),imageUrl:str(r.imageUrl,1000),...(str(r.refTitle,200)&&{refTitle:str(r.refTitle,200)}),...(str(r.refUrl,1000)&&{refUrl:str(r.refUrl,1000)}),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,400)}))])),
     createdAt:ts(o.createdAt)
   } : null,
+  expense_records: o => isDateStr(o?.date) && moneyNum(Number(o?.amount)) !== null ? {
+    type: o.type === 'income' ? 'income' : 'expense',
+    amount: moneyNum(Number(o.amount)),
+    category: str(o.category, 60) || 'อื่น ๆ',
+    date: o.date,
+    ...(typeof o.time === 'string' && /^\d{2}:\d{2}$/.test(o.time) && { time: o.time }),
+    merchant: str(o.merchant, 120),
+    note: str(o.note, 200),
+    source: o.source === 'slip_ocr' ? 'slip_ocr' : 'manual',
+    createdAt: typeof o.createdAt === 'string' && o.createdAt ? str(o.createdAt, 40) : new Date(ts(o.createdAt)).toISOString()
+  } : null,
   settings: o => {
+    // ห้ามสำรองหรือนำเข้า settings/push (มี Push subscription endpoint & keys เฉพาะเครื่อง)
+    if (o?.id === 'push' || Array.isArray(o?.subscriptions) || (typeof o?.enabled === 'boolean' && !Array.isArray(o?.routines))) {
+      return null;
+    }
     if (Array.isArray(o?.routines) || (o?.doneMap && typeof o.doneMap === 'object') || (o?.extras && typeof o.extras === 'object')) {
       return {
         routines: (Array.isArray(o.routines) ? o.routines : []).slice(0, 60).filter(r => r && str(r.title, 80)).map(r => ({
@@ -126,36 +142,9 @@ export const SANITIZERS = {
         updatedAt: ts(o.updatedAt)
       };
     }
-    if (Array.isArray(o?.subscriptions) || typeof o?.enabled === 'boolean') {
-      return {
-        enabled: o.enabled === true,
-        ...(Number.isInteger(o.periodRemindDays) && { periodRemindDays: o.periodRemindDays }),
-        subscriptions: (Array.isArray(o.subscriptions) ? o.subscriptions : []).slice(0, 10).filter(s => s && typeof s.endpoint === 'string' && s.keys?.p256dh && s.keys?.auth).map(s => ({
-          endpoint: str(s.endpoint, 1000),
-          keys: { p256dh: str(s.keys.p256dh, 300), auth: str(s.keys.auth, 300) },
-          ...(str(s.userAgent, 120) && { userAgent: str(s.userAgent, 120) })
-        })),
-        updatedAt: ts(o.updatedAt)
-      };
-    }
     if (o?.kind === 'expense_month' || /^exp_\d{4}-\d{2}$/.test(o?.id || '')) {
-      return {
-        kind: 'expense_month',
-        month: typeof o.month === 'string' && /^\d{4}-\d{2}$/.test(o.month) ? o.month : '',
-        items: (Array.isArray(o.items) ? o.items : []).slice(0, 1000).filter(x => x && isDateStr(x.date) && num(x.amount) !== null).map(x => ({
-          id: /^[\w-]{1,40}$/.test(x.id || '') ? x.id : 'ex' + Math.random().toString(36).slice(2, 9),
-          type: x.type === 'income' ? 'income' : 'expense',
-          amount: Math.round(num(x.amount) * 100) / 100,
-          category: str(x.category, 60) || 'อื่น ๆ',
-          date: x.date,
-          ...(typeof x.time === 'string' && /^\d{2}:\d{2}$/.test(x.time) && { time: x.time }),
-          merchant: str(x.merchant, 120),
-          note: str(x.note, 200),
-          source: x.source === 'slip_ocr' ? 'slip_ocr' : 'manual',
-          createdAt: str(x.createdAt, 40) || new Date().toISOString()
-        })),
-        updatedAt: ts(o.updatedAt)
-      };
+      // โครงสร้างรายจ่ายแบบเก่า (expense_month) จะถูกแตกเป็น expense_records แทนใน backup.js
+      return null;
     }
     return {
       sex: o.sex === 'male' ? 'male' : 'female', birthYear: int(o.birthYear, 1900, 2100), heightCm: num(o.heightCm), weightKg: num(o.weightKg),
@@ -169,11 +158,18 @@ export const SANITIZERS = {
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', settings:'เป้าหมาย มื้ออาหาร Planner และรายจ่าย', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', expense_records:'รายรับ-รายจ่าย', settings:'เป้าหมาย มื้ออาหาร และ Planner', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
-// symptom_records ใช้วันที่เป็น doc id
+export const isSensitivePushSettingsDoc = (o, docId = '') =>
+  docId === 'push' || o?.id === 'push' || Array.isArray(o?.subscriptions) || (typeof o?.enabled === 'boolean' && !Array.isArray(o?.routines));
+export const isLegacyExpenseMonthDoc = (o, docId = '') =>
+  o?.kind === 'expense_month' || /^exp_\d{4}-\d{2}$/.test(docId || o?.id || '');
+
+// symptom_records และ skin_records ใช้วันที่เป็น doc id; expense_records ใช้ id เดิมของรายการ
 export const docIdFor = (col, o, fallback) => ['symptom_records', 'skin_records'].includes(col)
   ? o.date
-  : col === 'settings'
-    ? (['planner', 'push'].includes(o?.id) || /^exp_\d{4}-\d{2}$/.test(o?.id || '') ? o.id : (o?.kind === 'expense_month' && /^\d{4}-\d{2}$/.test(o?.month || '') ? `exp_${o.month}` : (Array.isArray(o?.routines) || o?.doneMap ? 'planner' : (Array.isArray(o?.subscriptions) || typeof o?.enabled === 'boolean' ? 'push' : 'profile'))))
-    : fallback;
+  : col === 'expense_records'
+    ? (/^[\w-]{1,80}$/.test(o?.id || '') ? o.id : fallback)
+    : col === 'settings'
+      ? (o?.id === 'planner' || Array.isArray(o?.routines) || o?.doneMap ? 'planner' : 'profile')
+      : fallback;

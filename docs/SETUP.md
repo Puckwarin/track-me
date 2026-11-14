@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v2.10.0
+# Project Setup — ตั้งค่า Track Me v3.0.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -248,5 +248,28 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
   - ส่งเฉพาะผลลัพธ์ของ Tool ที่ AI เรียกใช้ในแต่ละคำขอเท่านั้น (ไม่มีการแนบข้อมูลสุขภาพหรือประวัติทั้งหมดที่ไม่ได้ถาม)
   - ทุกคำสั่งที่เขียนข้อมูล (`addExpense`, `addFoodLog`, `updateInventory`, `addReminder`) จะแสดงการ์ดสรุปพร้อมปุ่ม **ยกเลิก/ลบรายการนี้** เพื่อกู้คืนได้ทันทีในแชท
 
+---
+
+## อัปเดต v3.0.0 (ย้ายรายจ่ายเป็น `expense_records`, ป้องกัน AI Injection, ความเป็นส่วนตัว Push & IAM ขั้นต่ำ)
+
+### 1) ต้องเผยแพร่ `firestore.rules` ใหม่ (เพิ่ม `expense_records`)
+- เวอร์ชัน v3.0.0 เพิ่ม collection **`expense_records`** (1 เอกสาร = 1 รายการรายรับ-รายจ่าย) เพื่อกันข้อมูลทับกันและรองรับการซิงค์ออฟไลน์ข้ามเครื่อง
+- **ขั้นตอนที่ต้องทำใน Firebase Console:**
+  1. เปิด **Firebase Console → Build → Firestore Database → Rules**
+  2. คัดลอกเนื้อหาล่าสุดจากไฟล์ **`firestore.rules`** ใน branch `main` ไปวางทับ → กด **Publish**
+- **การย้ายข้อมูลเดิมอัตโนมัติ:** หลัง Publish Rules แล้ว เมื่อเปิดแอปและออนไลน์ แอปจะย้ายรายการเก่าจาก `settings/exp_YYYY-MM` เข้าสู่ `expense_records` ให้อัตโนมัติแบบ Idempotent (ไม่เกิดรายการซ้ำ และไม่ลบของเดิมจนกว่าจะย้ายสำเร็จ) ส่วนไฟล์สำรอง JSON เวอร์ชันเก่าก็ยังกู้คืนได้ปกติ
+
+### 2) การตั้งค่า Push Privacy & Backup
+- **หน้าจอล็อกส่วนตัว (ค่าเริ่มต้นเปิด):** ในหน้า **ตั้งค่า → การแจ้งเตือนอัตโนมัติ (08:00 น.)** มีตัวเลือก **"🔒 ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)"** ซึ่งจะส่งเฉพาะสรุปจำนวนรายการรวม (ไม่แสดงชื่อรอบเดือน ยา หรือรายการนัดบนหน้าจอล็อก) หากต้องการให้แสดงรายชื่อหัวข้อบนแจ้งเตือน สามารถติ๊กออกได้เอง
+- **ไฟล์สำรองข้อมูล (Backup JSON):** ระบบตัดเอกสาร `settings/push` (Subscription Endpoint และ Keys ของเครื่อง) ออกจากการส่งออกและนำเข้าโดยอัตโนมัติ
+
+### 3) จำกัดสิทธิ์ `FIREBASE_SERVICE_ACCOUNT` ตามหลัก Least-Privilege (แนะนำ)
+แทนการใช้ Service Account สิทธิ์กว้างระดับ **Firebase Admin SDK Administrator / Editor / Owner** คุณสามารถสร้าง **Custom IAM Role** ที่มีสิทธิ์เฉพาะเท่าที่ `scripts/daily-push.mjs` ใช้จริงได้ใน Google Cloud Console:
+1. เปิด [Google Cloud Console → IAM & Admin → Roles](https://console.cloud.google.com/iam-admin/roles) (เลือกโปรเจกต์ `trackme-2829` ของคุณ) → กด **Create Role**
+2. เพิ่มสิทธิ์ (Permissions) ดังนี้เท่านั้น:
+   - `datastore.entities.get`
+   - `datastore.entities.list`
+   - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
+3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
 
 

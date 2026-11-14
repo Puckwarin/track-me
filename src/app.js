@@ -11,10 +11,11 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { query, where } from 'firebase/firestore';
+import { query, where, writeBatch } from 'firebase/firestore';
 
-import { userCol } from './firebase.js';
+import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
+import { SANITIZERS } from './schema.js';
 import { $, localDateStr, addDays } from './util.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
@@ -133,8 +134,80 @@ function mountAll() {
   mountChatWidget(goTo);
 }
 
+let expenseRecordsLoaded = false;
+let migratingLegacyExpenses = false;
+let legacyMigrationBlocked = false;
+
+function mergeExpenses() {
+  const byId = new Map();
+  // ให้ expense_records เป็นแหล่งข้อมูลหลักเสมอ (กันข้อมูลเก่าทับการแก้/ลบใหม่)
+  for (const r of state.expenseRecords || []) {
+    if (r?.id) byId.set(r.id, r);
+  }
+  for (const doc of state.legacyExpenseDocs || []) {
+    for (const item of doc.items || []) {
+      if (item?.id && !byId.has(item.id)) byId.set(item.id, item);
+    }
+  }
+  state.expenses = [...byId.values()].sort((a, b) =>
+    String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || '')))
+  );
+}
+
+async function migrateLegacyExpensesIfNeeded(uid) {
+  if (migratingLegacyExpenses || legacyMigrationBlocked || !expenseRecordsLoaded || !navigator.onLine) return;
+  const legacyDocs = state.legacyExpenseDocs || [];
+  if (!legacyDocs.length) return;
+
+  migratingLegacyExpenses = true;
+  try {
+    const existingIds = new Set((state.expenseRecords || []).map(x => x.id));
+    const toWrite = new Map();
+    const docIdsToDelete = [];
+
+    for (const doc of legacyDocs) {
+      docIdsToDelete.push(doc.id);
+      for (const item of doc.items || []) {
+        const itemId = item?.id && /^[\w-]{1,80}$/.test(item.id)
+          ? item.id
+          : 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        if (existingIds.has(itemId) || toWrite.has(itemId)) continue;
+        const clean = SANITIZERS.expense_records(item);
+        if (clean) toWrite.set(itemId, clean);
+      }
+    }
+
+    const entries = [...toWrite.entries()];
+    for (let i = 0; i < entries.length; i += 400) {
+      const batch = writeBatch(db);
+      entries.slice(i, i + 400).forEach(([id, data]) => {
+        batch.set(userDoc(uid, 'expense_records', id), data);
+      });
+      await batch.commit();
+    }
+
+    for (let i = 0; i < docIdsToDelete.length; i += 400) {
+      const batch = writeBatch(db);
+      docIdsToDelete.slice(i, i + 400).forEach(docId => {
+        batch.delete(userDoc(uid, 'settings', docId));
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    // ถ้าสิทธิ์ Rules ยังไม่เผยแพร่หรือเครือข่ายขัดข้อง ให้หยุดย้ายรอบนี้โดยไม่ลบเอกสารเดิม
+    console.warn('Legacy expense migration deferred:', err?.code || err?.message);
+    if (/permission-denied/i.test(String(err?.code || err?.message || ''))) {
+      legacyMigrationBlocked = true;
+    }
+  } finally {
+    migratingLegacyExpenses = false;
+  }
+}
+
 function startData() {
   const uid = state.uid;
+  expenseRecordsLoaded = false;
+  legacyMigrationBlocked = false;
   state.loaded = { period: false, body: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); renderHome(); });
   watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); });
@@ -146,21 +219,31 @@ function startData() {
   watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); renderHome(); renderSummary(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
+  watch('expense_records', userCol(uid, 'expense_records'), list => {
+    state.expenseRecords = list;
+    expenseRecordsLoaded = true;
+    mergeExpenses();
+    renderExpense();
+    renderHome();
+    renderWeekly();
+    renderSummary();
+    migrateLegacyExpensesIfNeeded(uid);
+  });
   watch('settings', userCol(uid, 'settings'), list => {
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
-    state.expenses = list
-      .filter(x => x.kind === 'expense_month' && Array.isArray(x.items))
-      .flatMap(x => x.items)
-      .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+    state.legacyExpenseDocs = list.filter(x => x.kind === 'expense_month' && Array.isArray(x.items));
+    mergeExpenses();
     refreshProfile();
     emit('profile');
     emit('pushSettings');
     renderExpense();
     renderHome();
+    renderWeekly();
     renderSummary();
     window.dispatchEvent(new Event('trackme:push-change'));
+    migrateLegacyExpensesIfNeeded(uid);
   });
   watchToday();
   watchDay();
@@ -177,7 +260,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();

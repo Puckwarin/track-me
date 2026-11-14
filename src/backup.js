@@ -2,16 +2,16 @@ import { getDocs, writeBatch } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, localDateStr, downloadFile, toast } from './util.js';
-import { SANITIZERS, COLLECTION_LABELS, docIdFor } from './schema.js';
+import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
 
-const APP = 'Track Me', VERSION = '1.2.0';
+const APP = 'Track Me', VERSION = '1.3.0';
 const toPlain = v => v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v;
 let parsed = null;
 
 export function mountBackup(el) {
   el.innerHTML = `
     <h3 class="font-bold text-slate-800"><i class="fa-solid fa-box-archive text-brand"></i> สำรอง & กู้คืนข้อมูล</h3>
-    <p class="text-xs text-slate-500">ไฟล์สำรองเป็น JSON ไม่มี API Key ไม่มีรหัสผ่าน แต่<b>มีข้อมูลสุขภาพส่วนบุคคล</b> โปรดเก็บรักษาให้ปลอดภัย</p>
+    <p class="text-xs text-slate-500">ไฟล์สำรองเป็น JSON ไม่มี API Key ไม่มีรหัสผ่าน และ <b>ไม่รวม Token Push ของเครื่อง</b> แต่<b>มีข้อมูลสุขภาพส่วนบุคคล</b> โปรดเก็บรักษาให้ปลอดภัย</p>
     <div class="flex flex-wrap gap-3 text-sm" id="bk-cols">${Object.entries(COLLECTION_LABELS).map(([k, t]) => `<label><input type="checkbox" value="${k}" checked> ${t}</label>`).join('')}</div>
     <div class="flex flex-wrap gap-2">
       <button id="bk-export" class="btn btn-primary"><i class="fa-solid fa-download"></i> สำรองข้อมูล (JSON)</button>
@@ -29,9 +29,35 @@ async function exportData(el) {
   if (!cols.length) return toast('เลือกอย่างน้อย 1 หมวด', 'err');
   try {
     const out = {};
+    const legacyFallbackExpenses = [];
     for (const c of cols) {
       const snap = await getDocs(userCol(state.uid, c));
-      out[c] = snap.docs.map(d => ({ id: d.id, ...Object.fromEntries(Object.entries(d.data()).map(([k, v]) => [k, toPlain(v)])) }));
+      if (c === 'settings') {
+        const cleanDocs = [];
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (isSensitivePushSettingsDoc(data, d.id)) continue; // ไม่ส่งออก endpoint & subscription keys
+          if (isLegacyExpenseMonthDoc(data, d.id)) {
+            if (Array.isArray(data.items)) {
+              for (const item of data.items) {
+                if (item && typeof item === 'object') legacyFallbackExpenses.push(item);
+              }
+            }
+            continue;
+          }
+          cleanDocs.push({ id: d.id, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, toPlain(v)])) });
+        }
+        out[c] = cleanDocs;
+      } else {
+        out[c] = snap.docs.map(d => ({ id: d.id, ...Object.fromEntries(Object.entries(d.data()).map(([k, v]) => [k, toPlain(v)])) }));
+      }
+    }
+    if (cols.includes('expense_records') && legacyFallbackExpenses.length) {
+      const byId = new Map((out.expense_records || []).map(r => [r.id, r]));
+      for (const item of legacyFallbackExpenses) {
+        if (item.id && !byId.has(item.id)) byId.set(item.id, item);
+      }
+      out.expense_records = [...byId.values()];
     }
     downloadFile(`trackme-backup-${localDateStr()}.json`, JSON.stringify({ app: APP, version: VERSION, exportDate: localDateStr(), data: out }, null, 2), 'application/json');
     toast('สำรองข้อมูลแล้ว — เก็บไฟล์นี้ให้ปลอดภัย');
@@ -45,16 +71,36 @@ async function readFile(file, el) {
     if (file.size > 20 * 1024 * 1024) throw new Error('ไฟล์ใหญ่เกินไป');
     const json = JSON.parse(await file.text());
     if (json?.app !== APP || typeof json.data !== 'object') throw new Error('ไม่ใช่ไฟล์สำรองของ Track Me');
-    const plan = {};
+    const plan = Object.fromEntries(Object.keys(SANITIZERS).map(k => [k, []]));
     let bad = 0;
+
     for (const c of Object.keys(SANITIZERS)) {
       const list = Array.isArray(json.data[c]) ? json.data[c] : [];
-      plan[c] = [];
       for (const o of list) {
-        const clean = o && typeof o === 'object' ? SANITIZERS[c](o) : null;
+        if (!o || typeof o !== 'object') { bad++; continue; }
+        if (c === 'settings') {
+          if (isSensitivePushSettingsDoc(o, o.id)) continue; // ข้าม settings/push เสมอ
+          if (isLegacyExpenseMonthDoc(o, o.id)) {
+            // แตกข้อมูลรายจ่ายแบบเก่าจากไฟล์สำรองเวอร์ชันก่อนหน้าเข้า expense_records อัตโนมัติ
+            const items = Array.isArray(o.items) ? o.items : [];
+            for (const item of items) {
+              const cleanExp = item && typeof item === 'object' ? SANITIZERS.expense_records(item) : null;
+              const expId = typeof item?.id === 'string' && /^[\w-]{1,80}$/.test(item.id) ? item.id : null;
+              if (!cleanExp || !expId) { bad++; continue; }
+              if (!plan.expense_records.some(r => r.id === expId)) {
+                plan.expense_records.push({ id: expId, data: cleanExp });
+              }
+            }
+            continue;
+          }
+        }
+        const clean = SANITIZERS[c](o);
         const id = typeof o?.id === 'string' && /^[\w-]{1,80}$/.test(o.id) ? o.id : null;
-        if (!clean || !(docIdFor(c, o, id))) { bad++; continue; }
-        plan[c].push({ id: docIdFor(c, o, id), data: clean });
+        const resolvedId = docIdFor(c, o, id);
+        if (!clean || !resolvedId) { bad++; continue; }
+        if (!plan[c].some(r => r.id === resolvedId)) {
+          plan[c].push({ id: resolvedId, data: clean });
+        }
       }
     }
     // ตรวจว่ามีอยู่แล้วกี่รายการ (กันนำเข้าซ้ำ)

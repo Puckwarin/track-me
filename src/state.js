@@ -13,6 +13,8 @@ export const state = {
   planner: null,
   pushSettings: null,
   expenses: [],
+  expenseRecords: [],
+  legacyExpenseDocs: [],
   skinRecords: [],
   skincareProducts: [],
   ingredientBlacklist: [],

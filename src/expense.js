@@ -1,8 +1,8 @@
 // บันทึกรายรับ-รายจ่าย + สแกนสลิปอัตโนมัติ (OCR ในเครื่องเท่านั้น ไม่เก็บรูปภาพลง Firebase)
-import { setDoc } from 'firebase/firestore';
-import { userDoc } from './firebase.js';
+import { deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, round1, toast, openModal } from './util.js';
+import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 
 export const EXPENSE_CATEGORIES = [
@@ -58,43 +58,78 @@ function monthItems(monthStr) {
   return (state.expenses || []).filter(x => (x.date || '').slice(0, 7) === monthStr);
 }
 
-async function persistMonth(monthStr, nextItems) {
-  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
-  const clean = nextItems
-    .slice()
-    .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')))
-    .slice(0, 1000);
-  await setDoc(userDoc(state.uid, 'settings', `exp_${monthStr}`), {
-    kind: 'expense_month',
-    month: monthStr,
-    items: clean,
-    updatedAt: new Date()
-  });
+function buildExpensePayload(record) {
+  return {
+    type: record.type === 'income' ? 'income' : 'expense',
+    amount: Math.round((Number(record.amount) || 0) * 100) / 100,
+    category: String(record.category || 'อื่น ๆ').slice(0, 60),
+    date: record.date,
+    ...(record.time && { time: String(record.time).slice(0, 5) }),
+    merchant: String(record.merchant || '').slice(0, 120),
+    note: String(record.note || '').slice(0, 200),
+    source: record.source === 'slip_ocr' ? 'slip_ocr' : 'manual',
+    createdAt: record.createdAt || new Date().toISOString()
+  };
+}
+
+function explainExpenseWriteError(err) {
+  const msg = String(err?.code || err?.message || '');
+  if (/permission-denied/i.test(msg)) {
+    return 'ยังไม่ได้เผยแพร่ Firestore Rules สำหรับ expense_records — กรุณาอัปเดต Rules ตาม docs/SETUP.md';
+  }
+  return err?.message || 'ไม่สามารถบันทึกข้อมูลได้';
 }
 
 async function saveTransactionRecord(record, prevEdit = null) {
+  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
   const targetMonth = record.date.slice(0, 7);
-  if (prevEdit) {
-    if (prevEdit.oldMonth === targetMonth) {
-      const next = monthItems(targetMonth).map(x => (x.id === prevEdit.id ? record : x));
-      await persistMonth(targetMonth, next);
-    } else {
-      const oldNext = monthItems(prevEdit.oldMonth).filter(x => x.id !== prevEdit.id);
-      const newNext = [record, ...monthItems(targetMonth).filter(x => x.id !== record.id)];
-      await persistMonth(prevEdit.oldMonth, oldNext);
-      await persistMonth(targetMonth, newNext);
-    }
-  } else {
-    const next = [record, ...monthItems(targetMonth)];
-    await persistMonth(targetMonth, next);
+  const docId = prevEdit?.id || record.id;
+  try {
+    await setDoc(userDoc(state.uid, 'expense_records', docId), buildExpensePayload(record));
+  } catch (err) {
+    throw new Error(explainExpenseWriteError(err));
   }
   selectedMonth = targetMonth;
 }
 
+async function saveBatchExpenseRecords(records) {
+  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  try {
+    for (let i = 0; i < records.length; i += 400) {
+      const batch = writeBatch(db);
+      records.slice(i, i + 400).forEach(r => {
+        batch.set(userDoc(state.uid, 'expense_records', r.id), buildExpensePayload(r));
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    throw new Error(explainExpenseWriteError(err));
+  }
+}
+
 async function deleteTransactionRecord(id, dateStr) {
+  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  try {
+    await deleteDoc(userDoc(state.uid, 'expense_records', id));
+  } catch (err) {
+    throw new Error(explainExpenseWriteError(err));
+  }
+  // หากรายการนี้ยังค้างอยู่ในเอกสารเก่า settings/exp_YYYY-MM ให้เอาออกด้วยเพื่อกันเด้งกลับ
   const m = (dateStr || localDateStr()).slice(0, 7);
-  const next = monthItems(m).filter(x => x.id !== id);
-  await persistMonth(m, next);
+  const legacyDoc = (state.legacyExpenseDocs || []).find(d => d.id === `exp_${m}` || d.month === m);
+  if (legacyDoc && Array.isArray(legacyDoc.items) && legacyDoc.items.some(x => x.id === id)) {
+    const remaining = legacyDoc.items.filter(x => x.id !== id);
+    if (remaining.length) {
+      await setDoc(userDoc(state.uid, 'settings', legacyDoc.id), {
+        kind: 'expense_month',
+        month: m,
+        items: remaining,
+        updatedAt: new Date()
+      });
+    } else {
+      await deleteDoc(userDoc(state.uid, 'settings', legacyDoc.id));
+    }
+  }
 }
 
 export function mountExpense(el) {
@@ -160,7 +195,10 @@ export function mountExpense(el) {
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800"><i class="fa-solid fa-receipt text-brand"></i> ประวัติรายรับ-รายจ่าย</h3>
-        <span id="ex-count" class="text-xs text-slate-500"></span>
+        <div class="flex items-center gap-2">
+          <span id="ex-count" class="text-xs text-slate-500"></span>
+          <button type="button" id="ex-export-csv" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs"><i class="fa-solid fa-file-csv"></i> ส่งออก CSV</button>
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <input id="ex-search" class="input text-xs" placeholder="🔍 ค้นหาร้านค้า / โน้ต">
@@ -220,6 +258,7 @@ export function mountExpense(el) {
 
   $r('#ex-save').addEventListener('click', saveManualForm);
   $r('#ex-cancel').addEventListener('click', resetForm);
+  $r('#ex-export-csv').addEventListener('click', exportMonthCsv);
   $r('#ex-month').addEventListener('change', () => {
     selectedMonth = $r('#ex-month').value || localDateStr().slice(0, 7);
     renderExpense();
@@ -422,15 +461,7 @@ function openBatchSlipsConfirmModal(results) {
     btn.disabled = true;
     btn.textContent = 'กำลังบันทึก…';
     try {
-      const byMonth = {};
-      records.forEach(r => {
-        const ym = r.date.slice(0, 7);
-        if (!byMonth[ym]) byMonth[ym] = [];
-        byMonth[ym].push(r);
-      });
-      for (const [ym, items] of Object.entries(byMonth)) {
-        await persistMonth(ym, [...items, ...monthItems(ym)]);
-      }
+      await saveBatchExpenseRecords(records);
       selectedMonth = records[0].date.slice(0, 7);
       if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
       const totalAmt = records.reduce((s, x) => s + x.amount, 0);
@@ -540,6 +571,41 @@ export async function handleSharedSlipLaunch(showTabFn) {
   if (typeof showTabFn === 'function') showTabFn('expense');
   toast('กำลังอ่านสลิปที่แชร์เข้ามาในเครื่อง…');
   await runSlipScan(file);
+}
+
+function getFilteredMonthItems(curMonth) {
+  const inMonth = monthItems(curMonth);
+  const q = ($r('#ex-search')?.value || '').trim().toLowerCase();
+  const fType = $r('#ex-filter-type')?.value || 'all';
+  const fCat = $r('#ex-filter-cat')?.value || '';
+  return inMonth.filter(x => {
+    if (fType !== 'all' && x.type !== fType) return false;
+    if (fCat && x.category !== fCat) return false;
+    if (q && !`${x.merchant || ''} ${x.note || ''} ${x.category || ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function exportMonthCsv() {
+  const curMonth = $r('#ex-month')?.value || selectedMonth;
+  const rows = getFilteredMonthItems(curMonth);
+  if (!rows.length) return toast('ไม่มีรายการในเดือน/ตัวกรองนี้สำหรับส่งออก', 'err');
+  const header = ['วันที่', 'เวลา', 'ประเภท', 'หมวดหมู่', 'ร้านค้า/รายการ', 'จำนวนเงิน (บาท)', 'ที่มา', 'หมายเหตุ'];
+  const csvRows = [
+    header,
+    ...rows.map(x => [
+      x.date || '',
+      x.time || '',
+      x.type === 'income' ? 'รายรับ' : 'รายจ่าย',
+      x.category || '',
+      x.merchant || '',
+      x.amount ?? 0,
+      x.source === 'slip_ocr' ? 'สแกนสลิป' : 'จดเอง',
+      x.note || ''
+    ])
+  ];
+  downloadFile(`trackme-expenses-${curMonth}.csv`, toCsv(csvRows), 'text/csv');
+  toast(`ส่งออก CSV ${rows.length} รายการแล้ว`);
 }
 
 export function renderExpense() {
