@@ -1,5 +1,5 @@
-// โมเดล Gemini ที่ลองใช้งานตามลำดับ (ตระกูล 2.5 ตอบสนองไวและตั้ง thinkingBudget=0 ได้)
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// โมเดล Gemini ที่ลองใช้งานตามลำดับ (Fallback อัตโนมัติเมื่อช้า/Timeout หรือติด 429 Rate Limit)
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
 const GEMINI_TIMEOUT_MS = 35000;
 const KEY_NAME = 'gemini_key';
 const GROQ_KEY = 'groq_key';
@@ -69,8 +69,7 @@ async function requestGeminiModel(model, key, parts, schema) {
       err.modelNotFound = res.status === 404;
       err.quotaExceeded = res.status === 429 || /quota|resource.?exhausted/i.test(message);
       err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
-      err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message) ||
-        (res.status === 429 && !/quota|resource.?exhausted|limit:\s*0/i.test(message));
+      err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message);
       if (err.retryable && attempt < 1) {
         const retryAfter = Number(res.headers.get('retry-after'));
         const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 1200) : 400;
@@ -82,7 +81,9 @@ async function requestGeminiModel(model, key, parts, schema) {
 
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('Gemini ไม่ส่งผลลัพธ์กลับมา');
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   }
 }
 
@@ -97,9 +98,9 @@ async function callGeminiProvider(parts, schema) {
         const result = await requestGeminiModel(model, key, parts, schema);
         return { model, result };
       } catch (e) {
-        if (e.invalidKey || e.timeoutError || e.networkError) throw e;
+        if (e.invalidKey) throw e;
         tried.push({ model, error: e });
-        if (!e.modelNotFound && !e.quotaExceeded && !e.serverBusy && e.status !== 400) throw e;
+        // หาก Timeout, 429 (Quota/Rate Limit), 404, 5xx หรือ error เฉพาะโมเดล ให้สลับไปลองโมเดลถัดไปทันที
       }
     }
     return null;
@@ -119,6 +120,8 @@ async function callGeminiProvider(parts, schema) {
   const err = new Error(summary || last?.message || 'Gemini ไม่พร้อมใช้งาน');
   err.quotaExceeded = tried.length > 0 && tried.every(x => x.error.quotaExceeded);
   err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
+  err.timeoutError = tried.length > 0 && tried.every(x => x.error.timeoutError);
+  err.networkError = tried.length > 0 && tried.every(x => x.error.networkError);
   err.status = last?.status;
   throw err;
 }
@@ -154,42 +157,77 @@ async function callGroq(parts, schema) {
   if (!key) throw new Error('NO_KEY');
   const hasImage = parts.some(p => p.inline_data);
   let models = [...(hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS)];
-  const messages = parts.map(p => p.inline_data
+  const contentParts = parts.map(p => p.inline_data
     ? { type: 'image_url', image_url: { url: 'data:' + p.inline_data.mime_type + ';base64,' + p.inline_data.data } }
     : { type: 'text', text: p.text || '' });
   const schemaHint = schemaSummary(schema);
 
   const sendReq = async (model, useJsonFormat) => {
-    const payload = {
-      model,
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'Return ONLY valid raw JSON (no markdown) with these fields: ' + schemaHint }, ...messages] }],
-      temperature: 0
-    };
+    const messages = hasImage
+      ? [{ role: 'user', content: [{ type: 'text', text: 'Return ONLY a valid json object (no markdown) with these fields: ' + schemaHint }, ...contentParts] }]
+      : [
+          { role: 'system', content: 'You are a nutrition data extractor. Always reply with a single valid json object only (no markdown, no explanation) matching fields: ' + schemaHint },
+          { role: 'user', content: parts.map(p => p.text || '').join('\n') + '\nReturn valid json.' }
+        ];
+    const payload = { model, messages, temperature: 0 };
     if (useJsonFormat) payload.response_format = { type: 'json_object' };
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
-    });
-    const data = await res.json().catch(() => ({}));
-    return { res, data };
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data, fetchErr: null };
+    } catch (cause) {
+      const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
+      const err = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก Groq' : (cause.message || 'Groq network error'));
+      err.timeoutError = isTimeout;
+      err.networkError = !isTimeout;
+      return { res: null, data: {}, fetchErr: err };
+    }
   };
 
   let lastErr = null;
   let discovered = false;
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    let { res, data } = await sendReq(model, true);
-    if (!res.ok && res.status === 400 && /response_format|json_object/i.test(data?.error?.message || '')) {
-      ({ res, data } = await sendReq(model, false));
+    let { res, data, fetchErr } = await sendReq(model, true);
+    if (fetchErr) {
+      lastErr = fetchErr;
+      continue;
+    }
+    if (!res.ok && res.status === 400) {
+      const failedGen = data?.error?.failed_generation;
+      if (typeof failedGen === 'string') {
+        const recovered = failedGen.replace(/```json|```/gi, '').trim().match(/\{[\s\S]*\}/);
+        if (recovered) {
+          try { return JSON.parse(recovered[0]); } catch {}
+        }
+      }
+      if (/response_format|json_object|json_validate_failed/i.test(data?.error?.message || '')) {
+        ({ res, data, fetchErr } = await sendReq(model, false));
+        if (fetchErr) {
+          lastErr = fetchErr;
+          continue;
+        }
+      }
     }
     if (res.ok) {
       const content = data?.choices?.[0]?.message?.content;
-      if (!content) throw new Error('Groq ไม่ส่งผลลัพธ์กลับมา');
-      const cleaned = String(content).split(String.fromCharCode(96).repeat(3)).join('').replace(/^json\s*/i, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+      if (!content) {
+        lastErr = new Error('Groq ไม่ส่งผลลัพธ์กลับมา');
+        continue;
+      }
+      try {
+        const cleaned = String(content).split(String.fromCharCode(96).repeat(3)).join('').replace(/^json\s*/i, '').trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+      } catch {
+        lastErr = new Error('Groq ตอบกลับไม่ใช่รูปแบบ JSON ที่ถูกต้อง');
+        continue;
+      }
     }
     const e = new Error(data?.error?.message || 'Groq HTTP ' + res.status);
     e.status = res.status;
@@ -208,8 +246,10 @@ async function callGroq(parts, schema) {
   throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
 }
 
-async function callAI(parts, schema) {
-  const providers = [['Gemini', getGeminiKey(), () => callGeminiProvider(parts, schema)], ['Groq', getGroqKey(), () => callGroq(parts, schema)]].filter(x => x[1]);
+async function callAI(parts, schema, { order = 'gemini-first', includeMeta = false } = {}) {
+  const geminiEntry = ['Gemini', getGeminiKey(), () => callGeminiProvider(parts, schema)];
+  const groqEntry = ['Groq', getGroqKey(), () => callGroq(parts, schema)];
+  const providers = (order === 'groq-first' ? [groqEntry, geminiEntry] : [geminiEntry, groqEntry]).filter(x => x[1]);
   if (!providers.length) throw new Error('NO_KEY');
   const errors = [];
   for (let i = 0; i < providers.length; i++) {
@@ -217,7 +257,7 @@ async function callAI(parts, schema) {
     try {
       const result = await run();
       if (i > 0) window.dispatchEvent(new CustomEvent('trackme:ai-fallback', { detail: { provider: name, failed: errors.length } }));
-      return result;
+      return includeMeta ? { result, provider: name } : result;
     } catch (e) {
       if (providers.length === 1) throw e;
       errors.push(name + ': ' + (e.message || 'error'));
@@ -254,7 +294,15 @@ export function lookupPer100g(name) {
     type: 'OBJECT',
     properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
     required: ['name', 'calories', 'protein', 'carbs', 'fat']
-  });
+  }, { order: 'groq-first' });
+}
+
+export function lookupPer100gWithProvider(name) {
+  return callAI([{ text: `ให้ข้อมูลโภชนาการมาตรฐานต่อ 100 กรัมของอาหาร "${name}" (ค่าโดยประมาณทั่วไป) ตอบเป็น JSON ตาม schema` }], {
+    type: 'OBJECT',
+    properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
+    required: ['name', 'calories', 'protein', 'carbs', 'fat']
+  }, { order: 'groq-first', includeMeta: true });
 }
 
 export async function estimateFromPhoto(file) {
@@ -385,7 +433,7 @@ export async function testGeminiConnection() {
       });
       return { ok: true, model, details };
     } catch (e) {
-      if (e.invalidKey || e.timeoutError || e.networkError) throw e;
+      if (e.invalidKey) throw e;
       details.push(`${model}: ${e.status ? `HTTP ${e.status} ` : ''}${e.message}`);
     }
   }

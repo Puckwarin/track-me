@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v2.7.1
+# Project Setup — ตั้งค่า Track Me v2.8.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -62,11 +62,11 @@ Firebase Console → **Firestore Database → Rules**
 ## 6.1) คีย์ AI สำรอง, OCR และทดสอบการเชื่อมต่อ (ตัวเลือก)
 คีย์เหล่านี้ต้องสมัครและสร้างเอง แอปไม่สร้างคีย์หรือส่งไปเก็บบน Firebase และเก็บใน localStorage ของเบราว์เซอร์อุปกรณ์นี้เท่านั้น
 
-- **Gemini**: สร้าง API key ที่ [Google AI Studio](https://aistudio.google.com/apikey) แล้ววางใน ตั้งค่า → Gemini API Key → กด **บันทึก** แล้วกด **ทดสอบการเชื่อมต่อ** (ใช้โมเดล `gemini-2.5-flash` / `gemini-2.5-flash-lite` พร้อม `thinkingBudget: 0` และ Timeout 35 วินาที)
-- **Groq**: สร้าง API key จาก [Groq Console](https://console.groq.com/keys) แล้วบันทึกที่ ตั้งค่า → Groq API Key → กด **ทดสอบการเชื่อมต่อ** (งานข้อความใช้ `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` และงานภาพใช้ `llama-3.2-11b-vision-preview` / โมเดล Vision ที่เปิดในบัญชี)
-- วิเคราะห์ภาพ (อาหารจานโปรด, ซองอาหารสัตว์เลี้ยง, และใบผลตรวจ) จะลอง **Gemini → Groq** ตามคีย์ที่มี และสลับเมื่อคำขอล้มเหลว/โควตาเต็ม คำขอรูปส่งตรงให้ผู้ให้บริการนั้น ตรวจนโยบายข้อมูลก่อนใช้รูปส่วนตัว
+- **Gemini**: สร้าง API key ที่ [Google AI Studio](https://aistudio.google.com/apikey) แล้ววางใน ตั้งค่า → Gemini API Key → กด **บันทึก** แล้วกด **ทดสอบการเชื่อมต่อ** (ลองสลับโมเดลอัตโนมัติ `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash-lite` พร้อม Timeout 35 วินาทีต่อโมเดล และวนข้ามอัตโนมัติเมื่อเกิด Timeout หรือ 429 Quota/Rate Limit)
+- **Groq**: สร้าง API key จาก [Groq Console](https://console.groq.com/keys) แล้วบันทึกที่ ตั้งค่า → Groq API Key → กด **ทดสอบการเชื่อมต่อ** (งานข้อความ/JSON Mode ใช้ `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` และงานภาพใช้ `llama-3.2-11b-vision-preview` / โมเดล Vision ที่เปิดในบัญชี)
+- การค้นหาโภชนาการอัตโนมัติจะค้นตามลำดับ **คลังอาหารในเครื่อง → USDA → Open Food Facts → Groq → Gemini (Fallback)** ส่วนงานวิเคราะห์ภาพ (อาหารจานโปรด, ซองอาหารสัตว์เลี้ยง, และใบผลตรวจ) จะลอง **Gemini → Groq** ตามคีย์ที่มี และสลับเมื่อคำขอล้มเหลว/โควตาเต็ม คำขอรูปส่งตรงให้ผู้ให้บริการนั้น ตรวจนโยบายข้อมูลก่อนใช้รูปส่วนตัว
 - อ่านฉลากจะลอง OCR ด้วย Tesseract.js ฝั่งเบราว์เซอร์ก่อน; ค่า OCR เป็นร่าง ต้องตรวจรูปและหน่วยก่อนบันทึก หาก OCR ไม่ครบจึงส่งภาพให้ AI ตามลำดับ fallback
-- **USDA**: ขอคีย์ฟรีที่ [FoodData Central](https://fdc.nal.usda.gov/api-key-signup/) แล้วบันทึกในช่อง USDA API Key พร้อมปุ่ม **ทดสอบการเชื่อมต่อ** เพื่อเช็กคีย์ การค้นหาปกติใช้คลังในเครื่องก่อน แล้ว USDA และ Open Food Facts โดยไม่เรียก AI
+- **USDA**: ขอคีย์ฟรีที่ [FoodData Central](https://fdc.nal.usda.gov/api-key-signup/) แล้วบันทึกในช่อง USDA API Key พร้อมปุ่ม **ทดสอบการเชื่อมต่อ** เพื่อเช็กคีย์ การค้นหาปกติใช้คลังในเครื่องก่อน แล้ว USDA และ Open Food Facts ก่อนส่งต่อ AI เมื่อไม่พบข้อมูล
 
 ## Hiwpinto Sync Helper (ทำครั้งเดียว)
 
@@ -217,4 +217,15 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 
 - **Gemini (`gemini-2.5-flash` / `gemini-2.5-flash-lite`)**: ตั้งค่า `thinkingConfig: { thinkingBudget: 0 }` เพื่อลดเวลาตอบสนองและขยาย Timeout เป็น 35 วินาที (เดิม 20 วินาที)
 - **Groq (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `llama-3.2-11b-vision-preview`)**: อัปเดตแทนโมเดล `llama-4-scout` ที่ถูกถอดออก และปุ่ม **ทดสอบการเชื่อมต่อ** ในหน้าตั้งค่าจะแสดงชื่อโมเดลข้อความและโมเดลภาพที่ใช้ได้จริงของบัญชีนั้น
+
+---
+
+## อัปเดต v2.8.0 (Bulk / Quick Add Food & Multi-model AI Pipeline)
+
+- **ไม่ต้องอัปเดต Firestore Rules เพิ่มเติม**: ฟีเจอร์ **เพิ่มอาหารหลายเมนูพร้อมกัน** ใช้ collection `food_records` และ `custom_foods` เดิมทั้งหมด
+- **Bulk / Quick Add Food ทำงานในเครื่อง 100%**: แปลงข้อความหลายบรรทัดเป็นตาราง Live Preview ได้ทันทีโดยไม่ต้องมี API Key (รองรับทั้งรูปแบบ `ชื่อเมนู ปริมาณ kcal / P / C / F` และรูปแบบ Tab / `|` เดิม)
+- **AI Multi-model Fallback & ลำดับการค้นหาโภชนาการ**:
+  - การค้นหาโภชนาการโหมดอัตโนมัติจะค้นตามลำดับ **คลังอาหารในเครื่อง → USDA → Open Food Facts → Groq → Gemini (`gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash-lite`)**
+  - ปรับ Groq JSON Mode (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) ให้เสถียรขึ้น และให้ Gemini สลับโมเดลถัดไปอัตโนมัติทั้งกรณี Timeout (35 วินาที) และ HTTP 429
+
 

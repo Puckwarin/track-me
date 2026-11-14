@@ -7,6 +7,8 @@ import { lookupPer100g, estimateFromPhoto, readNutritionLabel, explainGeminiErro
 import { openFoodSearch } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
+import { guessFoodCategory, parseBulkFoodText } from './foodParser.js';
+export { guessFoodCategory };
 
 const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
 const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
@@ -44,19 +46,6 @@ const hiddenBuiltins = () => { try { return new Set(JSON.parse(localStorage.getI
 const BUILTIN_FAV_KEY = 'trackme-builtin-favorites';
 const builtinFavorites = () => { try { return new Set(JSON.parse(localStorage.getItem(BUILTIN_FAV_KEY) || '[]')); } catch { return new Set(); } };
 const categoryNames = ['ข้าว/เส้น', 'โปรตีน', 'ผลไม้', 'ผัก', 'ซีเรียล/กราโนลา', 'ขนม/ของว่าง', 'ขนมปัง/เบเกอรี่', 'เครื่องดื่ม/นม', 'อาหารคลีน/Hiwpinto', 'อื่น ๆ'];
-export function guessFoodCategory(name = '') {
-  const n = String(name).toLowerCase();
-  if (/hiwp|hiwpinto|คลีน|น้ำตก|ห่อหมก|กะหล่ำปลีผัด/.test(n)) return 'อาหารคลีน/Hiwpinto';
-  if (/ข้าว|ไรซ์|rice|บะหมี่|เส้น|พาสต้า|noodle/.test(n)) return 'ข้าว/เส้น';
-  if (/ไก่|หมู|เนื้อ|ปลา|ไข่|กุ้ง|เต้าหู้|protein/.test(n)) return 'โปรตีน';
-  if (/กล้วย|ฝรั่ง|แอปเปิล|ผลไม้|ส้ม|มะม่วง|berry/.test(n)) return 'ผลไม้';
-  if (/ผัก|เห็ด|กะหล่ำ|แครอท|บรอกโคลี/.test(n)) return 'ผัก';
-  if (/granola|muesli|ซีเรียล/.test(n)) return 'ซีเรียล/กราโนลา';
-  if (/bread|ขนมปัง|sourdough|biscuits|biscuit/.test(n)) return 'ขนมปัง/เบเกอรี่';
-  if (/นม|milk|กาแฟ|ชา|น้ำผลไม้/.test(n)) return 'เครื่องดื่ม/นม';
-  if (/ขนม|bar|snack|ช็อกโกแลต|choc/.test(n)) return 'ขนม/ของว่าง';
-  return 'อื่น ๆ';
-}
 const gramsInUnit = unit => {
   const matches = [...String(unit || '').matchAll(/(\d+(?:\.\d+)?)\s*(?:g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)(?![a-z])/gi)];
   return matches.length ? Number(matches[matches.length - 1][1]) : null;
@@ -107,6 +96,7 @@ export function mountFood(el) {
       <div class="flex flex-wrap justify-between items-center gap-2">
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-circle-plus text-brand"></i> บันทึกมื้ออาหาร</h2>
         <div class="flex flex-wrap gap-2">
+          <button id="f-bulk-log" type="button" class="chip bg-amber-100 text-amber-900"><i class="fa-solid fa-bolt"></i> เพิ่มหลายเมนูพร้อมกัน</button>
           <button id="f-online" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
           <button id="f-hiwpinto-sync" class="chip bg-emerald-100 text-emerald-800"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Data Hiwpinto</button>
           <button id="f-library" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-book-bookmark"></i> คลังอาหารของฉัน</button>
@@ -195,7 +185,9 @@ export function mountFood(el) {
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
   window.addEventListener('trackme:ai-fallback', e => toast('โควตา/การเชื่อมต่อของ AI หลักใช้ไม่ได้ จึงสลับไปใช้ '+e.detail.provider));
+  $('#f-bulk-log', root).addEventListener('click', () => openQuickBulkFoodLog());
   $('#f-online', root).addEventListener('click', () => openFoodSearch({
+    localFoods: getPresets(),
     onUse: food => {
       const fields = { 'f-name':food.name, 'f-cal':food.calories, 'f-pro':food.protein, 'f-carb':food.carbs, 'f-fat':food.fat, 'f-sugar':food.sugar, 'f-sodium':food.sodium };
       Object.entries(fields).forEach(([id,v]) => { const el=$('#'+id,root); if(el) el.value=v ?? ''; });
@@ -446,8 +438,13 @@ const foodLogPortion = item => {
   }
   const quantity = foodLogQuantity(item);
   if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
+  if (item.portionUnit === 'ml') return `${fmtAmount(quantity)} ml`;
   const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
   if (inferredGrams > 0) return `${fmtAmount(quantity * inferredGrams)} g`;
+  if (item.portionUnit && item.portionUnit !== 'หน่วย') {
+    if (/^\d/.test(item.portionUnit)) return quantity === 1 ? item.portionUnit : `×${fmtAmount(quantity)} (${item.portionUnit})`;
+    return `${fmtAmount(quantity)} ${item.portionUnit}`;
+  }
   return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
 };
 
@@ -796,7 +793,7 @@ function openOnlineSearch() {
 async function onLabel(e) {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
-  const progress = openModal(`<div class="flex items-center gap-3"><span class="animate-spin rounded-full h-6 w-6 border-2 border-brand border-t-transparent"></span><div><h3 class="font-bold">กำลังอ่านฉลากโภชนาการ</h3><p class="text-xs text-slate-500">กำลังส่งภาพให้ Gemini อ่าน ตัวแอปจะหยุดรอภายใน 20 วินาทีหากไม่มีคำตอบ</p></div></div>`);
+  const progress = openModal(`<div class="flex items-center gap-3"><span class="animate-spin rounded-full h-6 w-6 border-2 border-brand border-t-transparent"></span><div><h3 class="font-bold">กำลังอ่านฉลากโภชนาการ</h3><p class="text-xs text-slate-500">กำลังส่งภาพให้ AI อ่าน (รอสูงสุด 35 วินาทีต่อโมเดลและสลับโมเดลสำรองให้อัตโนมัติ)</p></div></div>`);
   try {
     const r = await readNutritionLabel(f);
     progress.close();
@@ -1018,28 +1015,182 @@ export function openLibrary(onPick) {
   render();
 }
 
+function renderFoodBulkPreview(container, { items: parsedItems, errors }) {
+  if (!parsedItems.length && !errors.length) {
+    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">วางข้อความด้านบนเพื่อดูตารางตัวอย่างแบบเรียลไทม์ (ไม่ใช้ AI)</p>';
+    return;
+  }
+  const totals = parsedItems.reduce((a, r) => ({
+    kcal: a.kcal + r.calories,
+    p: a.p + r.protein,
+    c: a.c + r.carbs,
+    f: a.f + r.fat
+  }), { kcal: 0, p: 0, c: 0, f: 0 });
+  const errHtml = errors.length
+    ? `<div class="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700 space-y-1 mb-2">${errors.map(e => `<p>• ${esc(e.error)}</p>`).join('')}</div>`
+    : '';
+  const tableHtml = parsedItems.length
+    ? `<div class="rounded-xl border border-slate-200 overflow-x-auto">
+        <div class="bg-lav-soft/40 px-3 py-1.5 text-xs font-semibold text-brand-dark flex flex-wrap justify-between gap-2">
+          <span>แปลงได้ ${parsedItems.length} รายการ</span>
+          <span>รวม ${Math.round(totals.kcal)} kcal · P ${round1(totals.p)}g · C ${round1(totals.c)}g · F ${round1(totals.f)}g</span>
+        </div>
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50 text-slate-500"><tr><th class="p-2">ชื่อเมนู</th><th class="p-2">ปริมาณ</th><th class="p-2 text-right">kcal</th><th class="p-2 text-right">P</th><th class="p-2 text-right">C</th><th class="p-2 text-right">F</th></tr></thead>
+          <tbody class="divide-y divide-slate-100">${parsedItems.map(r => `
+            <tr><td class="p-2 font-medium text-slate-800">${esc(r.name)}</td><td class="p-2 text-slate-500">${esc(r.amountDisplay)}</td><td class="p-2 text-right font-semibold">${esc(r.calories)}</td><td class="p-2 text-right">${esc(r.protein)}</td><td class="p-2 text-right">${esc(r.carbs)}</td><td class="p-2 text-right">${esc(r.fat)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`
+    : '';
+  container.innerHTML = errHtml + tableHtml;
+}
+
+function openQuickBulkFoodLog() {
+  const defaultDate = $('#f-date', root)?.value || localDateStr();
+  const meals = getMeals();
+  const currentMealId = $('#f-meal', root)?.value || meals[0]?.id || '';
+  const sampleText = [
+    'ยำวุ้นเส้นหมูสับ 1 จาน 280 kcal / P17 / C32 / F10',
+    'ข้าวสวย 1.5 ทัพพี 200 kcal / P4 / C44 / F0',
+    'อกไก่ต้ม 200 กรัม 330 kcal / P62 / C0 / F7',
+    'อเมริกาโน่เย็น 15 kcal / P0 / C3 / F0'
+  ].join('\n');
+
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg"><i class="fa-solid fa-bolt text-amber-500 mr-1"></i> เพิ่มอาหารหลายเมนูพร้อมกัน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+      <div><label class="lbl">วันที่บันทึก</label><input id="qb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
+      <div><label class="lbl">มื้ออาหาร</label><select id="qb-meal" class="input">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+    </div>
+    <div class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 text-xs text-slate-600 mb-2 space-y-1">
+      <p class="font-semibold text-slate-700">วาง 1 บรรทัดต่อ 1 เมนู (แปลงทันทีในเครื่อง ไม่เรียก AI):</p>
+      <p class="font-mono text-[11px] text-slate-500">ยำวุ้นเส้นหมูสับ 1 จาน 280 kcal / P17 / C32 / F10</p>
+      <p class="font-mono text-[11px] text-slate-500">ไก่ป๊อปสไปซี่ 1 ที่ ⇥ 380 ⇥ 20 g ⇥ 35 g ⇥ 18 g</p>
+      <p class="text-[11px] text-slate-500">รองรับคัดลอกจากตาราง Excel/Google Sheets (5 หรือ 7 คอลัมน์), ทศนิยม (0.5 จาน, 1.5 ทัพพี, 200 กรัม), ไม่มีหน่วย, P17g C32g F10g และค่ามาโครขาดเป็น 0</p>
+    </div>
+    <div class="flex items-center justify-between mb-1">
+      <label class="lbl !mb-0">ข้อความรายการอาหาร</label>
+      <button id="qb-sample" type="button" class="text-xs text-brand underline">ใส่ตัวอย่าง</button>
+    </div>
+    <textarea id="qb-input" class="input min-h-36 font-mono text-xs" placeholder="วางรายการอาหารหลายบรรทัดที่นี่..." spellcheck="false"></textarea>
+    <div id="qb-preview" class="mt-3 max-h-60 overflow-y-auto"></div>
+    <label class="flex items-center gap-2 text-xs text-slate-600 mt-3"><input id="qb-save-lib" type="checkbox"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
+    <div class="flex justify-end gap-2 mt-4">
+      <button data-close class="btn btn-ghost">ยกเลิก</button>
+      <button id="qb-save" class="btn btn-primary" disabled>บันทึกเข้ามื้ออาหาร</button>
+    </div>
+  `, { wide: true });
+
+  let parsed = { items: [], errors: [] };
+  const updatePreview = () => {
+    parsed = parseBulkFoodText($('#qb-input', m.el).value);
+    renderFoodBulkPreview($('#qb-preview', m.el), parsed);
+    const saveBtn = $('#qb-save', m.el);
+    saveBtn.disabled = parsed.items.length === 0 || parsed.errors.length > 0;
+    saveBtn.textContent = parsed.items.length ? `บันทึก ${parsed.items.length} รายการเข้ามื้อ` : 'บันทึกเข้ามื้ออาหาร';
+  };
+  $('#qb-input', m.el).addEventListener('input', updatePreview);
+  $('#qb-sample', m.el).addEventListener('click', () => {
+    $('#qb-input', m.el).value = sampleText;
+    updatePreview();
+  });
+  updatePreview();
+
+  $('#qb-save', m.el).addEventListener('click', async () => {
+    const date = $('#qb-date', m.el).value;
+    const mealSel = $('#qb-meal', m.el);
+    const mealId = mealSel.value;
+    const meal = mealSel.selectedOptions[0]?.textContent || '';
+    if (!date || !mealId || !parsed.items.length || parsed.errors.length) return;
+    const saveBtn = $('#qb-save', m.el);
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'กำลังบันทึก…';
+    try {
+      const batch = writeBatch(db);
+      const colRef = userCol(state.uid, 'food_records');
+      const now = new Date();
+      parsed.items.forEach(item => {
+        batch.set(doc(colRef), {
+          date,
+          mealId,
+          meal,
+          name: item.name,
+          quantity: item.quantity,
+          portionUnit: item.portionUnit,
+          ...(item.gramsPerUnit !== null && { gramsPerUnit: item.gramsPerUnit }),
+          unitNutrition: item.unitNutrition,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          createdAt: now
+        });
+      });
+
+      let addedToLib = 0;
+      if ($('#qb-save-lib', m.el).checked) {
+        const identity = n => String(n).trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
+        const existingNames = new Set([...state.customFoods, ...DEFAULT_PRESETS].map(x => identity(x.name)));
+        const seen = new Set();
+        const libRef = userCol(state.uid, 'custom_foods');
+        parsed.items.forEach(item => {
+          const key = identity(item.name);
+          if (!existingNames.has(key) && !seen.has(key)) {
+            seen.add(key);
+            batch.set(doc(libRef), { ...item.libraryRecord, createdAt: now });
+            addedToLib++;
+          }
+        });
+      }
+
+      await batch.commit();
+      if ($('#f-date', root) && $('#f-date', root).value !== date) {
+        $('#f-date', root).value = date;
+        watchDay();
+      }
+      m.close();
+      toast(`บันทึก ${parsed.items.length} เมนูลง${meal}แล้ว${addedToLib ? ` · เพิ่มเข้าคลัง ${addedToLib} เมนู` : ''}`);
+    } catch (error) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = `บันทึก ${parsed.items.length} รายการเข้ามื้อ`;
+      toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
+    }
+  });
+}
+
 function openBulkFoodImport(parentModal) {
-  const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">เพิ่มอาหารหลายเมนู</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <p class="text-xs text-slate-500 mb-3">วางข้อมูลต่อบรรทัด: ชื่อเมนู ⇥ จำนวน ⇥ หน่วย ⇥ kcal ⇥ P ⇥ C ⇥ F<br>ตัวอย่าง: Daily Me Granola (Dark Choc) ⇥ 35 ⇥ g ⇥ 170 ⇥ 4 ⇥ 22 ⇥ 7<br>ใส่โภชนาการตามปริมาณที่ระบุ จำนวนเริ่มต้นจะเติมให้อัตโนมัติ</p>
-    <textarea id="lib-import-data" class="input min-h-56 font-mono text-xs" spellcheck="false"></textarea>
-    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="lib-import-save" class="btn btn-primary">บันทึกเข้าคลัง</button></div>`, { wide: true });
+  const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">เพิ่มอาหารหลายเมนูเข้าคลัง</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-xs text-slate-500 mb-2">รองรับสรุปบรรทัดเดียว, ตาราง 5 คอลัมน์ (จาก Excel/Sheets) และรูปแบบ 7 คอลัมน์ Tab / |:<br>
+    <span class="font-mono text-[11px]">ยำวุ้นเส้นหมูสับ 1 จาน 280 kcal / P17 / C32 / F10</span><br>
+    <span class="font-mono text-[11px]">ไก่ป๊อปสไปซี่ 1 ที่ ⇥ 380 ⇥ 20 g ⇥ 35 g ⇥ 18 g</span></p>
+    <textarea id="lib-import-data" class="input min-h-40 font-mono text-xs" placeholder="วางรายการอาหาร 1 บรรทัดต่อ 1 เมนู..." spellcheck="false"></textarea>
+    <div id="lib-import-preview" class="mt-3 max-h-56 overflow-y-auto"></div>
+    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="lib-import-save" class="btn btn-primary" disabled>บันทึกเข้าคลัง</button></div>`, { wide: true });
+
+  let parsed = { items: [], errors: [] };
+  const updatePreview = () => {
+    parsed = parseBulkFoodText($('#lib-import-data', m.el).value);
+    renderFoodBulkPreview($('#lib-import-preview', m.el), parsed);
+    const saveButton = $('#lib-import-save', m.el);
+    saveButton.disabled = parsed.items.length === 0 || parsed.errors.length > 0;
+  };
+  $('#lib-import-data', m.el).addEventListener('input', updatePreview);
+  updatePreview();
+
   $('#lib-import-save', m.el).addEventListener('click', async () => {
-    const lines = $('#lib-import-data', m.el).value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const parsed = lines.map((line, i) => {
-      const [name, amountText, unitText, calText, pText, cText, fText] = line.includes('\t') ? line.split('\t') : line.split('|').map(v => v.trim());
-      const amount = Number(amountText), calories = Number(calText), protein = Number(pText), carbs = Number(cText), fat = Number(fText);
-      if (!name || !unitText || !Number.isFinite(amount) || amount <= 0 || ![calories, protein, carbs, fat].every(value => Number.isFinite(value) && value >= 0)) return { error: `บรรทัด ${i + 1} มีข้อมูลไม่ครบหรือไม่ใช่ตัวเลขบวก` };
-      const grams = /^(g|gram|grams|กรัม)$/i.test(unitText);
-      const unit = grams ? 'g' : unitText;
-      const divisor = grams ? amount : 1;
-      return { record: { name: name.trim(), unit, gramsPerUnit: grams ? 1 : null, defaultQuantity: amount, calories: calories / divisor, protein: protein / divisor, carbs: carbs / divisor, fat: fat / divisor, category: guessFoodCategory(name), favorite: false, createdAt: new Date() } };
-    });
-    const invalid = parsed.find(item => item.error);
-    if (invalid) return toast(invalid.error, 'err');
+    if (parsed.errors.length) return toast(parsed.errors[0].error, 'err');
+    if (!parsed.items.length) return;
     const identity = item => item.name.trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
     const existingNames = new Set([...state.customFoods, ...DEFAULT_PRESETS].map(identity));
     const unique = [], seen = new Set(), duplicateNames = [];
-    parsed.forEach(({ record }) => { const key = identity(record); if (existingNames.has(key) || seen.has(key)) duplicateNames.push(record.name); else { seen.add(key); unique.push(record); } });
+    const now = new Date();
+    parsed.items.forEach(item => {
+      const record = { ...item.libraryRecord, createdAt: now };
+      const key = identity(record);
+      if (existingNames.has(key) || seen.has(key)) duplicateNames.push(record.name);
+      else { seen.add(key); unique.push(record); }
+    });
     const records = unique;
     if (!records.length) return toast(`มีเมนูอยู่แล้ว: ${[...new Set(duplicateNames)].slice(0, 4).join(', ')}`, 'err');
     const saveButton = $('#lib-import-save', m.el); saveButton.disabled = true; saveButton.textContent = 'กำลังบันทึก…';
