@@ -81,29 +81,47 @@ export function renderHome() {
   const macro = (label, v, goal) => `<div class="macro"><span>${label}</span><b>${round1(v)}<small>/${goal ?? '-'}g</small></b></div>`;
 
   const reminders = collectReminders().slice(0, 3);
+  const thisMonth = today.slice(0, 7);
+  const monthExps = (state.expenses || []).filter(x => (x.date || '').slice(0, 7) === thisMonth);
+  const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  const spentToday = monthExps.filter(x => x.date === today && x.type !== 'income').reduce((a, x) => a + (Number(x.amount) || 0), 0);
 
   const rest = $('#home-rest', el);
   if (rest) {
     rest.innerHTML = `
-      <button data-go="food" class="card food-today cat-food w-full text-left">
-        <div class="flex items-center justify-between gap-3">
-          <span class="tile-head"><span class="emoji-bubble emoji-sm">🍙</span><span>อาหารวันนี้</span></span>
-          <span class="text-xs text-slate-500">${foods.length} รายการ</span>
-        </div>
-        <div class="flex items-end justify-between gap-3 mt-2">
-          <div><span class="text-2xl sm:text-3xl font-bold text-slate-800">${kcal.toLocaleString()}</span><span class="text-sm text-slate-500"> / ${t.kcal.toLocaleString()} kcal</span></div>
-          <span class="text-xs font-medium ${left >= 0 ? 'text-slate-600' : 'text-amber-700'}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()}` : `เกินเป้า ${Math.round(-left).toLocaleString()}`} kcal</span>
-        </div>
-        <div class="progress mt-2.5"><span style="width:${pct}%"></span></div>
-        <div class="grid grid-cols-3 gap-2 mt-2.5">${macro('โปรตีน', sum('protein'), t.protein)}${macro('คาร์บ', sum('carbs'), t.carbs)}${macro('ไขมัน', sum('fat'), t.fat)}</div>
-      </button>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button data-go="food" class="card food-today cat-food w-full text-left">
+          <div class="flex items-center justify-between gap-3">
+            <span class="tile-head"><span class="emoji-bubble emoji-sm">🍙</span><span>อาหารวันนี้</span></span>
+            <span class="text-xs text-slate-500">${foods.length} รายการ</span>
+          </div>
+          <div class="flex items-end justify-between gap-3 mt-2">
+            <div><span class="text-2xl font-bold text-slate-800">${kcal.toLocaleString()}</span><span class="text-sm text-slate-500"> / ${t.kcal.toLocaleString()} kcal</span></div>
+            <span class="text-xs font-medium ${left >= 0 ? 'text-slate-600' : 'text-amber-700'}">${left >= 0 ? `เหลือ ${Math.round(left).toLocaleString()}` : `เกิน ${Math.round(-left).toLocaleString()}`}</span>
+          </div>
+          <div class="progress mt-2.5"><span style="width:${pct}%"></span></div>
+          <div class="grid grid-cols-3 gap-2 mt-2.5">${macro('โปรตีน', sum('protein'), t.protein)}${macro('คาร์บ', sum('carbs'), t.carbs)}${macro('ไขมัน', sum('fat'), t.fat)}</div>
+        </button>
+
+        <button data-go="expense" class="card cat-body w-full text-left flex flex-col justify-between">
+          <div class="flex items-center justify-between gap-2">
+            <span class="tile-head"><span class="emoji-bubble emoji-sm">💸</span><span>รายจ่าย & สแกนสลิป</span></span>
+            <span class="text-xs text-slate-500">${monthExps.length} รายการ</span>
+          </div>
+          <div class="mt-2 space-y-1">
+            <p class="text-xs text-slate-500">ใช้จ่ายเดือนนี้</p>
+            <p class="text-2xl font-bold text-rose-700">${spentMonth.toLocaleString('th-TH', { maximumFractionDigits: 2 })} <span class="text-sm font-normal text-slate-500">฿</span></p>
+            <p class="text-xs text-slate-500">วันนี้ ${spentToday.toLocaleString('th-TH', { maximumFractionDigits: 2 })} ฿ · 📷 สแกนสลิปในเครื่อง</p>
+          </div>
+        </button>
+      </div>
 
       <section class="card space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="font-bold text-slate-800"><span class="emoji-bubble emoji-sm cat-body">🔔</span> ใกล้ถึงกำหนด</h2>
           <button data-go="notifications" class="text-xs text-slate-500 underline">ดูทั้งหมด</button>
         </div>
-        ${reminders.length ? reminders.map(r => `<div class="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span class="emoji-bubble emoji-sm">${r.icon}</span><div class="min-w-0"><b class="text-sm block truncate">${esc(r.label)}</b><span class="text-xs text-slate-500">${esc(fmtDate(r.date))} · ${esc(r.detail)}</span></div></div>`).join('')
+        ${reminders.length ? reminders.map(r => `<div class="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span class="emoji-bubble emoji-sm">${r.icon}</span><div class="min-w-0"><b class="text-sm block truncate">${esc(r.label)}</b><span class="text-xs text-slate-500">${esc(fmtDate(r.date))}${r.dueTime ? ` · ⏰ ${esc(r.dueTime)} น.` : ''} · ${esc(r.detail)}</span></div></div>`).join('')
           : '<p class="rounded-2xl bg-ok-soft p-3 text-sm text-green-800">🌼 ไม่มีอะไรต้องรีบทำ พักผ่อนได้เลย</p>'}
       </section>
 

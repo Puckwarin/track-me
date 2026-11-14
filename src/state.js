@@ -12,6 +12,7 @@ export const state = {
   profile: null,
   planner: null,
   pushSettings: null,
+  expenses: [],
   skinRecords: [],
   skincareProducts: [],
   ingredientBlacklist: [],

@@ -27,6 +27,7 @@ function trackedSources() {
       col: 'pet_care_records',
       id: x.id,
       date: x.nextDate,
+      dueTime: x.dueTime || '',
       remindDays,
       dismissedFor: x.dismissedFor || null,
       icon: '🐾',
@@ -45,6 +46,7 @@ function trackedSources() {
       col: 'replacement_records',
       id: x.id,
       date: x.nextDate,
+      dueTime: x.dueTime || '',
       remindDays,
       dismissedFor: x.dismissedFor || null,
       icon,
@@ -121,8 +123,27 @@ export function collectReminders() {
     }
   }
 
-  rows.sort((a, b) => a.date.localeCompare(b.date));
+  rows.sort((a, b) => a.date.localeCompare(b.date) || (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'));
   return rows;
+}
+
+// รายการนัดหมาย/แจ้งเตือนเฉพาะของ "วันนั้นๆ" สำหรับป้ายแจ้งเตือนด้านบนในหน้า Planner
+export function remindersForDate(dateStr) {
+  const rows = trackedSources().filter(x => x.date === dateStr);
+  const pLead = getPeriodRemindDays();
+  const cycle = periodStats(state.period || []);
+  if (pLead >= 0 && cycle?.next === dateStr) {
+    rows.push({
+      uidKey: 'period:next',
+      col: 'period',
+      date: cycle.next,
+      dueTime: '',
+      icon: '🌸',
+      label: 'คาดการณ์รอบเดือน',
+      detail: 'ค่าประมาณ'
+    });
+  }
+  return rows.sort((a, b) => (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99'));
 }
 
 export function mountReminders(el) {
@@ -254,7 +275,7 @@ export function renderReminders() {
         <span class="emoji-bubble">${x.icon}</span>
         <div class="min-w-0">
           <b class="text-sm block truncate">${esc(x.label)}</b>
-          <p class="text-xs text-slate-600">${esc(fmtDate(x.date))} · <span class="${diff < 0 ? 'text-rose-600 font-semibold' : ''}">${esc(when)}</span> · ${esc(x.detail)}</p>
+          <p class="text-xs text-slate-600">${esc(fmtDate(x.date))}${x.dueTime ? ` · ⏰ ${esc(x.dueTime)} น.` : ''} · <span class="${diff < 0 ? 'text-rose-600 font-semibold' : ''}">${esc(when)}</span> · ${esc(x.detail)}</p>
         </div>
       </div>
       <button data-nt-dismiss="${esc(x.uidKey)}" class="chip bg-white border border-slate-200 text-slate-600 shrink-0">รับทราบ / ปิดรอบนี้</button>
@@ -269,7 +290,7 @@ export function renderReminders() {
         <span class="text-base">${x.icon}</span>
         <span class="min-w-0">
           <b class="text-xs sm:text-sm block truncate text-slate-800">${esc(x.label)}</b>
-          <span class="text-[11px] text-slate-500">ครบกำหนด ${esc(fmtDate(x.date))} (${diff < 0 ? `เลย ${-diff} วัน` : diff === 0 ? 'วันนี้' : `อีก ${diff} วัน`})</span>
+          <span class="text-[11px] text-slate-500">ครบกำหนด ${esc(fmtDate(x.date))}${x.dueTime ? ` (${esc(x.dueTime)} น.)` : ''} · ${diff < 0 ? `เลย ${-diff} วัน` : diff === 0 ? 'วันนี้' : `อีก ${diff} วัน`}</span>
         </span>
       </label>
       <select data-nt-remind="${esc(x.uidKey)}" class="input !w-auto !py-1.5 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>

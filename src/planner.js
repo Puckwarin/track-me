@@ -2,6 +2,7 @@ import { setDoc, updateDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { TYPES } from './workout.js';
+import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, toast, openModal } from './util.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
@@ -36,8 +37,7 @@ function getPlanner() {
   const p = state.planner || {};
   return {
     routines: Array.isArray(p.routines) ? p.routines : [],
-    doneMap: p.doneMap && typeof p.doneMap === 'object' ? p.doneMap : {},
-    extras: p.extras && typeof p.extras === 'object' ? p.extras : {}
+    doneMap: p.doneMap && typeof p.doneMap === 'object' ? p.doneMap : {}
   };
 }
 
@@ -52,7 +52,6 @@ async function savePlanner(next) {
   const payload = {
     routines: (next.routines || []).slice(0, 60),
     doneMap: pruneObj(next.doneMap),
-    extras: pruneObj(next.extras),
     updatedAt: new Date()
   };
   state.planner = { id: 'planner', ...payload };
@@ -64,8 +63,11 @@ async function savePlanner(next) {
   }
 }
 
+// Planner รวมเฉพาะ 2 กลุ่มงานที่ทำตามแผน/ทำซ้ำทุกสัปดาห์:
+// (ก) ตารางออกกำลังกายที่วางแผนไว้ในวันนั้นๆ
+// (ข) กิจวัตรประจำวัน/งานบ้านที่ตั้งค่าทำซ้ำได้ (Recurring Tasks)
 export function itemsForDate(dateStr) {
-  const { routines, doneMap, extras } = getPlanner();
+  const { routines, doneMap } = getPlanner();
   const wd = weekdayIdx(dateStr);
   const doneSet = new Set(doneMap[dateStr] || []);
 
@@ -94,17 +96,25 @@ export function itemsForDate(dateStr) {
       sub: 'กิจวัตรประจำสัปดาห์'
     }));
 
-  const dayExtras = (extras[dateStr] || []).map(x => ({
-    kind: 'extra',
-    id: x.id,
-    title: x.title,
-    done: Boolean(x.done),
-    time: '',
-    icon: '📌',
-    sub: 'เพิ่มเฉพาะวันนี้'
-  }));
+  return [...workouts, ...dayRoutines];
+}
 
-  return [...workouts, ...dayRoutines, ...dayExtras];
+function renderDayReminderBanner(dateStr) {
+  const dayReminders = remindersForDate(dateStr);
+  if (!dayReminders.length) return '';
+  return `
+    <div class="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+        <span class="font-bold text-amber-900">🔔 นัดหมาย/เตือนวันนี้:</span>
+        ${dayReminders.map(r => `
+          <button type="button" data-pl-go="remind" class="inline-flex items-center gap-1 rounded-lg bg-white border border-amber-200 px-2 py-0.5 text-amber-950 font-medium hover:bg-amber-100/60">
+            <span>${r.icon}</span>
+            ${r.dueTime ? `<span class="text-rose-700 font-semibold">${esc(r.dueTime)} น.</span>` : ''}
+            <span class="truncate max-w-[180px]">${esc(r.label)}</span>
+          </button>`).join('')}
+      </div>
+      <button type="button" data-pl-go="notifications" class="text-[11px] font-semibold text-amber-800 underline shrink-0">ดูแจ้งเตือน</button>
+    </div>`;
 }
 
 export function mountPlanner(el, navigate) {
@@ -142,39 +152,16 @@ export function mountPlanner(el, navigate) {
       return;
     }
 
+    const goBtn = e.target.closest('[data-pl-go]');
+    if (goBtn) {
+      goFn(goBtn.dataset.plGo);
+      return;
+    }
+
     const editW = e.target.closest('[data-pl-edit-workout]');
     if (editW) {
       goFn('workout', 'w-date');
       return;
-    }
-
-    const delExtra = e.target.closest('[data-pl-del-extra]');
-    if (delExtra) {
-      const [d, id] = delExtra.dataset.plDelExtra.split(':');
-      const p = getPlanner();
-      const list = (p.extras[d] || []).filter(x => x.id !== id);
-      const extras = { ...p.extras };
-      if (list.length) extras[d] = list;
-      else delete extras[d];
-      await savePlanner({ ...p, extras });
-      return;
-    }
-
-    const addBtn = e.target.closest('[data-pl-add-day]');
-    if (addBtn) {
-      const targetDay = addBtn.dataset.plAddDay;
-      const form = addBtn.closest('[data-pl-add-wrap]');
-      const inp = form?.querySelector('[data-pl-input]');
-      await addDayTask(targetDay, inp);
-    }
-  });
-
-  root.addEventListener('keydown', async e => {
-    if (e.key === 'Enter' && e.target.matches('[data-pl-input]')) {
-      e.preventDefault();
-      const wrap = e.target.closest('[data-pl-add-wrap]');
-      const day = wrap?.querySelector('[data-pl-add-day]')?.dataset.plAddDay;
-      if (day) await addDayTask(day, e.target);
     }
   });
 
@@ -207,26 +194,10 @@ export function mountPlanner(el, navigate) {
       if (cur.size) doneMap[d] = [...cur];
       else delete doneMap[d];
       await savePlanner({ ...p, doneMap });
-      return;
-    }
-
-    if (kind === 'extra') {
-      const p = getPlanner();
-      const list = (p.extras[d] || []).map(x => (x.id === id ? { ...x, done: checked } : x));
-      await savePlanner({ ...p, extras: { ...p.extras, [d]: list } });
     }
   });
 
   renderPlanner();
-}
-
-async function addDayTask(dateStr, inputEl) {
-  const title = (inputEl?.value || '').trim().slice(0, 80);
-  if (!title) return toast('พิมพ์ชื่อรายการก่อนเพิ่มค่ะ', 'err');
-  const p = getPlanner();
-  const list = [...(p.extras[dateStr] || []), { id: 't' + Date.now().toString(36), title, done: false }];
-  if (inputEl) inputEl.value = '';
-  await savePlanner({ ...p, extras: { ...p.extras, [dateStr]: list } });
 }
 
 function renderTaskListHtml(dateStr) {
@@ -236,16 +207,14 @@ function renderTaskListHtml(dateStr) {
         const key = `${it.kind}:${dateStr}:${it.id}`;
         const kindBadge = it.kind === 'workout'
           ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-green-800' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
-          : it.kind === 'routine'
-            ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-lav-soft text-brand-dark">ประจำสัปดาห์</span>`
-            : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">วันนี้</span>`;
+          : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-lav-soft text-brand-dark">กิจวัตรประจำสัปดาห์</span>`;
         return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-75' : 'border-lav-soft/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40">
           <span class="flex items-start gap-2.5 min-w-0 flex-1">
             <input type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
             <span class="min-w-0 flex-1">
               <span class="flex flex-wrap items-center gap-1.5">
                 <span class="text-sm font-medium ${it.done ? 'line-through text-slate-400' : 'text-slate-800'}">${it.icon} ${esc(it.title)}</span>
-                ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">${esc(it.time)}</span>` : ''}
+                ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">${esc(it.time)} น.</span>` : ''}
                 ${kindBadge}
               </span>
               ${it.sub && it.kind === 'workout' ? `<span class="block text-[11px] text-slate-500 mt-0.5">${esc(it.sub)}</span>` : ''}
@@ -253,18 +222,14 @@ function renderTaskListHtml(dateStr) {
           </span>
           <span class="flex items-center gap-1 shrink-0">
             ${it.kind === 'workout' ? `<button type="button" data-pl-edit-workout="${esc(it.id)}" class="text-[11px] text-brand-dark underline px-1">ดูแผน</button>` : ''}
-            ${it.kind === 'extra' ? `<button type="button" data-pl-del-extra="${esc(dateStr + ':' + it.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ"><i class="fa-solid fa-xmark text-xs"></i></button>` : ''}
           </span>
         </label>`;
       }).join('')
-    : `<p class="text-xs text-slate-400 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีรายการในวันนี้ — เพิ่มงานด้านล่าง หรือตั้งกิจวัตรประจำสัปดาห์ได้</p>`;
+    : `<p class="text-xs text-slate-400 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจวัตรในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
 
   return `
-    <div class="space-y-2">${rowsHtml}</div>
-    <div data-pl-add-wrap class="flex gap-2 pt-1">
-      <input data-pl-input class="input !py-2 text-sm flex-1" placeholder="เพิ่มสิ่งที่ต้องทำวัน${WEEKDAYS[weekdayIdx(dateStr)]} (เช่น ล้างแก้ว, ซักผ้า)...">
-      <button type="button" data-pl-add-day="${dateStr}" class="btn btn-soft !py-2 !px-3 text-xs whitespace-nowrap"><i class="fa-solid fa-plus"></i> เพิ่ม</button>
-    </div>`;
+    ${renderDayReminderBanner(dateStr)}
+    <div class="space-y-2">${rowsHtml}</div>`;
 }
 
 export function renderPlanner() {
@@ -282,9 +247,10 @@ export function renderPlanner() {
   const dayMeta = days.map((d, idx) => {
     const items = itemsForDate(d);
     const done = items.filter(x => x.done).length;
+    const remCount = remindersForDate(d).length;
     totalAll += items.length;
     doneAll += done;
-    return { date: d, wd: WEEKDAYS[idx], items, done, hasWorkout: items.some(x => x.kind === 'workout') };
+    return { date: d, wd: WEEKDAYS[idx], items, done, remCount };
   });
 
   const routinesCount = getPlanner().routines.length;
@@ -296,11 +262,12 @@ export function renderPlanner() {
         const isSel = m.date === selectedDate;
         const isToday = m.date === today;
         const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" class="flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 text-xs transition ${
+        return `<button type="button" data-pl-day="${m.date}" class="relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 text-xs transition ${
           isSel ? 'bg-brand text-white border-brand shadow-sm'
             : isToday ? 'bg-white border-brand/60 text-brand-dark font-semibold hover:bg-lav-soft/60'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
         }">
+          ${m.remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ"></span>` : ''}
           <span class="text-[11px] opacity-80">${m.wd}</span>
           <span class="text-sm font-bold leading-tight">${Number(m.date.slice(8))}</span>
           <span class="text-[10px] mt-0.5 ${isSel ? 'text-white/90' : allDone ? 'text-emerald-600 font-semibold' : 'text-slate-400'}">
@@ -331,6 +298,11 @@ export function renderPlanner() {
             <span class="text-xs text-slate-500">${itemsForDate(selectedDate).filter(x => x.done).length}/${itemsForDate(selectedDate).length} เสร็จ</span>
           </div>
           ${renderTaskListHtml(selectedDate)}
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            <button type="button" data-pl-routines class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> ตั้งกิจวัตรประจำสัปดาห์</button>
+            <button type="button" data-pl-go="workout" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-dumbbell"></i> วางแผนออกกำลังกาย</button>
+            <button type="button" data-pl-go="remind" class="chip bg-amber-50 border border-amber-200 text-amber-900"><i class="fa-solid fa-thumbtack"></i> เพิ่มนัดหมายเฉพาะกิจ</button>
+          </div>
         </div>
       </div>`;
 
@@ -338,7 +310,7 @@ export function renderPlanner() {
   <section class="card space-y-3.5">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <h2 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand mr-1"></i> Weekly Planner & To-Do</h2>
+        <h2 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand mr-1"></i> Weekly Planner & กิจวัตร</h2>
         <p class="text-xs text-slate-500">${esc(rangeText)} · เสร็จแล้ว ${doneAll}/${totalAll} รายการ</p>
       </div>
       <div class="flex flex-wrap gap-1.5">
@@ -376,7 +348,7 @@ function openRoutinesModal() {
       <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-repeat text-brand mr-1"></i> กิจวัตรประจำสัปดาห์ (Recurring Tasks)</h3>
       <button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">ตั้งครั้งเดียว ระบบจะดึงไปแสดงใน Planner ของทุกสัปดาห์ตามวันที่เลือกไว้ให้อัตโนมัติ</p>
+    <p class="text-xs text-slate-500 mb-3">ตั้งครั้งเดียว ระบบจะดึงไปแสดงใน Planner ของทุกสัปดาห์ตามวันที่เลือกไว้ให้อัตโนมัติ (สำหรับนัดหมายครั้งเดียวตามวันเวลาเป๊ะๆ ให้ใช้เมนู 📌 บันทึกเตือน)</p>
 
     <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3 mb-4">
       <div class="flex flex-wrap gap-1.5" id="rt-presets">

@@ -1,4 +1,46 @@
-// Service Worker Push Notification & Notification Click handler (loaded by Workbox via importScripts)
+// Service Worker handlers: Web Share Target POST receiver, Push Notification & Notification Click
+const SHARE_CACHE = 'trackme-share-tmp';
+const SHARE_KEY = '/__pending-shared-slip__';
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'POST') return;
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch (e) {
+    return;
+  }
+  if (!url.pathname.endsWith('/share-target')) return;
+
+  event.respondWith((async () => {
+    const baseUrl = (self.registration && self.registration.scope) || '/';
+    try {
+      const formData = await req.formData();
+      let file = formData.get('slip') || formData.get('image') || formData.get('file');
+      if (!file) {
+        for (const val of formData.values()) {
+          if (val && typeof val === 'object' && 'arrayBuffer' in val) {
+            file = val;
+            break;
+          }
+        }
+      }
+      if (file && file.size > 0) {
+        const cache = await caches.open(SHARE_CACHE);
+        const headers = new Headers({
+          'Content-Type': file.type || 'image/jpeg',
+          'X-Share-Filename': encodeURIComponent(file.name || 'slip.jpg')
+        });
+        await cache.put(SHARE_KEY, new Response(file, { headers }));
+      }
+    } catch (e) {
+      // Redirect back to app cleanly even if share payload is empty/unsupported
+    }
+    return Response.redirect(`${baseUrl}?shared-slip=1`, 303);
+  })());
+});
+
 self.addEventListener('push', event => {
   let payload = {};
   try {

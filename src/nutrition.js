@@ -234,9 +234,9 @@ export async function estimateFromPhoto(file) {
 // อ่านฉลากโภชนาการ — ห้ามเดา: ค่าที่ไม่เห็นชัดต้องเป็น null
 async function tryLabelOcr(file) {
   try {
-    const mod=await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
-    const worker=await mod.createWorker('tha+eng');
-    try { const result=await worker.recognize(file); return result?.data?.text||''; }
+    const mod = await import('tesseract.js');
+    const worker = await mod.createWorker('tha+eng');
+    try { const result = await worker.recognize(file); return result?.data?.text || ''; }
     finally { await worker.terminate(); }
   } catch { return ''; }
 }

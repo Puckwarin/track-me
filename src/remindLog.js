@@ -12,8 +12,8 @@ const KINDS = [
 ];
 
 const SUGGESTIONS = [
-  'วัคซีน', 'ยาเห็บหมัด', 'ถ่ายพยาธิ', 'ตรวจสุขภาพ', 'ขูดหินปูน', 'อาบน้ำ/ตัดขน',
-  'เปลี่ยนแปรงสีฟัน', 'เปลี่ยนผ้าปูที่นอน', 'เปลี่ยนฟองน้ำล้างจาน', 'เปลี่ยนไส้กรองน้ำ',
+  'หาหมอฟัน', 'จ่ายบิล / ค่าไฟ / ค่าเน็ต', 'กินยา / วิตามินตามนัด', 'วัคซีน', 'ยาเห็บหมัด', 'ถ่ายพยาธิ',
+  'เปลี่ยนแปรงสีฟัน', 'เปลี่ยนผ้าปูที่นอน', 'เปลี่ยนไส้กรองน้ำ',
   'ต่อ พ.ร.บ.', 'ต่อภาษีรถยนต์', 'ยื่นภาษีเงินได้', 'ต่อประกันสุขภาพ', 'ต่อประกันรถ', 'ต่อบัตร/พาสปอร์ต'
 ];
 
@@ -101,27 +101,30 @@ export function mountRemind(el) {
   <div class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-5 gap-6">
     <section class="card space-y-4 lg:col-span-2 self-start">
       <header>
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-thumbtack text-brand"></i> บันทึกแจ้งเตือน</h2>
-        <p class="text-xs text-slate-500 mt-1">รวมนัดสัตว์เลี้ยง รอบเปลี่ยนของ ต่อ พ.ร.บ. ยื่นภาษี ต่อประกัน และนัดสำคัญไว้ที่เดียว</p>
+        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-thumbtack text-brand"></i> บันทึกแจ้งเตือน (นัดหมายตามวันเวลา)</h2>
+        <p class="text-xs text-slate-500 mt-1">สำหรับนัดหมายเฉพาะกิจหรือแจ้งเตือนตามวันเวลาเป๊ะๆ ที่ไม่ได้ทำซ้ำทุกสัปดาห์ (เช่น หาหมอฟัน, จ่ายบิล, กินยา, ต่อ พ.ร.บ.) — เชื่อม Push 08:00 น. และแสดงป้ายเตือนบนหน้า Planner</p>
       </header>
       <div class="space-y-3">
         <div><label class="lbl">หมวดหมู่</label><select id="rm-kind" class="input">${KINDS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
         <div>
-          <label class="lbl">ชื่อรายการ / กิจกรรม *</label>
-          <input id="rm-title" list="rm-titles" class="input" placeholder="เช่น ยาเห็บหมัด, เปลี่ยนแปรงสีฟัน, ต่อ พ.ร.บ.">
+          <label class="lbl">ชื่อรายการ / นัดหมาย *</label>
+          <input id="rm-title" list="rm-titles" class="input" placeholder="เช่น หาหมอฟัน, จ่ายบิลค่าเน็ต, ต่อ พ.ร.บ.">
           <datalist id="rm-titles">${SUGGESTIONS.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">วันที่ทำ / เริ่มต้น</label><input id="rm-date" type="date" class="input"></div>
-          <div><label class="lbl">วันครบกำหนด / นัดถัดไป</label><input id="rm-next" type="date" class="input"></div>
+          <div><label class="lbl">วันครบกำหนด / นัด *</label><input id="rm-next" type="date" class="input"></div>
+          <div><label class="lbl">เวลานัดหมาย (ไม่บังคับ)</label><input id="rm-time" type="time" class="input"></div>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">รอบทำซ้ำ</label><select id="rm-repeat" class="input">${REPEAT_OPTIONS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
-          <div><label class="lbl">หรือระบุรอบ (วัน)</label><input id="rm-days" type="number" min="1" max="3650" inputmode="numeric" class="input" placeholder="เช่น 90"></div>
+          <div><label class="lbl">วันที่ทำ / เริ่มต้น</label><input id="rm-date" type="date" class="input"></div>
+          <div>
+            <label class="lbl">แจ้งเตือนล่วงหน้า</label>
+            <select id="rm-remind" class="input">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          </div>
         </div>
-        <div>
-          <label class="lbl">แจ้งเตือนล่วงหน้า</label>
-          <select id="rm-remind" class="input">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="lbl">รอบทำซ้ำ (ถ้ามี)</label><select id="rm-repeat" class="input">${REPEAT_OPTIONS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
+          <div><label class="lbl">หรือระบุรอบ (วัน)</label><input id="rm-days" type="number" min="1" max="3650" inputmode="numeric" class="input" placeholder="เช่น 90"></div>
         </div>
         <div><label class="lbl">หมายเหตุ</label><input id="rm-note" class="input" placeholder="เช่น คลินิก, เลขทะเบียน, จำนวนเงิน"></div>
       </div>
@@ -200,6 +203,7 @@ function resetForm() {
   $r('#rm-date').value = localDateStr();
   $r('#rm-next').value = '';
   $r('#rm-next').dataset.manual = '';
+  $r('#rm-time').value = '';
   $r('#rm-repeat').value = '';
   $r('#rm-days').value = '';
   $r('#rm-remind').value = '7';
@@ -211,14 +215,14 @@ function resetForm() {
 async function saveForm() {
   const kind = $r('#rm-kind').value;
   const title = $r('#rm-title').value.trim();
-  const date = $r('#rm-date').value;
+  const date = $r('#rm-date').value || localDateStr();
   if (!title) return toast('กรอกชื่อรายการก่อนค่ะ', 'err');
-  if (!date) return toast('เลือกวันที่ทำ/เริ่มต้นก่อนค่ะ', 'err');
   const repeatVal = $r('#rm-repeat').value;
   const customDays = $r('#rm-days').value ? Number($r('#rm-days').value) : null;
   const repeatMonths = repeatVal.startsWith('m') ? Number(repeatVal.slice(1)) : null;
   const intervalDays = customDays || (repeatVal === 'd14' ? 14 : null);
   const nextDate = $r('#rm-next').value || computeNext(date, repeatVal, customDays) || date;
+  const dueTime = $r('#rm-time').value.trim() || null;
   const remindDays = Number($r('#rm-remind').value);
   const note = $r('#rm-note').value.trim();
 
@@ -226,8 +230,8 @@ async function saveForm() {
   const targetCol = isPet ? 'pet_care_records' : 'replacement_records';
   const petId = (state.petProfiles || [])[0]?.id || '';
   const payload = isPet
-    ? { petId, type: title.slice(0, 80), category: 'สัตว์เลี้ยง', date, nextDate, repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null }
-    : { name: title.slice(0, 120), category: kind, date, nextDate, repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null };
+    ? { petId, type: title.slice(0, 80), category: 'สัตว์เลี้ยง', date, nextDate, ...(dueTime && { dueTime }), repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null }
+    : { name: title.slice(0, 120), category: kind, date, nextDate, ...(dueTime && { dueTime }), repeatMonths, intervalDays, remindDays, note, done: false, dismissedFor: null };
 
   try {
     if (editing && editing.col === targetCol) {
@@ -300,6 +304,7 @@ async function onListClick(e) {
     $r('#rm-date').value = item.date || localDateStr();
     $r('#rm-next').value = item.nextDate || '';
     $r('#rm-next').dataset.manual = item.nextDate ? '1' : '';
+    $r('#rm-time').value = item.dueTime || '';
     const rep = encodeRepeat(item);
     $r('#rm-repeat').value = rep;
     $r('#rm-days').value = !rep && item.intervalDays ? item.intervalDays : '';
@@ -396,7 +401,7 @@ export function renderRemind() {
               <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">${esc(x.kind)}</span>
               ${statusBadge}
             </div>
-            <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${rep ? ` · ${esc(rep)}` : ''}</p>
+            <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · ${esc(rep)}` : ''}</p>
             ${x.note ? `<p class="text-xs text-slate-500 mt-0.5">${esc(x.note)}</p>` : ''}
           </div>
         </label>

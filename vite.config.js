@@ -30,14 +30,30 @@ export default defineConfig({
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
-        ]
+        ],
+        share_target: {
+          action: `${BASE}share-target`,
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [
+              {
+                name: 'slip',
+                accept: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.heic']
+              }
+            ]
+          }
+        }
       },
       workbox: {
         importScripts: ['push-sw.js'],
         globPatterns: ['**/*.{js,css,html,png,svg,woff2,woff}'],
         navigateFallback: BASE + 'index.html',
-        // ไม่ยุ่งกับ Firestore / Auth / Gemini — ให้ SDK จัดการเอง
-        navigateFallbackDenylist: [/^\/__\//, /\/__\/auth\//],
+        // ไม่ยุ่งกับ Firestore / Auth / Gemini / Share Target POST — ให้จัดการเอง
+        navigateFallbackDenylist: [/^\/__\//, /\/__\/auth\//, /\/share-target$/],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024
       }
     })

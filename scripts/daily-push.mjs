@@ -81,16 +81,13 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
   const pendingRoutines = (planner.routines || [])
     .filter(r => Array.isArray(r.days) && r.days.includes(wd) && !doneSet.has(r.id))
     .map(r => r.title);
-  const pendingExtras = ((planner.extras || {})[today] || [])
-    .filter(x => !x.done)
-    .map(x => x.title);
 
   const plannedWorkouts = workoutsSnap.docs
     .map(d => d.data())
     .filter(w => w.status === 'planned')
     .map(w => TYPES[w.type] || w.type || 'ออกกำลังกาย');
 
-  const todos = [...pendingRoutines, ...pendingExtras];
+  const todos = [...pendingRoutines];
 
   const reminders = [];
   for (const docSnap of petCareSnap.docs) {
@@ -98,7 +95,7 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
     if (x.done || !x.nextDate) continue;
     const lead = x.remindDays != null ? Number(x.remindDays) : 7;
     if (lead >= 0 && x.dismissedFor !== x.nextDate && daysBetween(today, x.nextDate) <= lead) {
-      reminders.push(x.type || 'นัดสัตว์เลี้ยง');
+      reminders.push(`${x.type || 'นัดสัตว์เลี้ยง'}${x.dueTime ? ` (${x.dueTime} น.)` : ''}`);
     }
   }
   for (const docSnap of replacementsSnap.docs) {
@@ -106,7 +103,7 @@ async function buildDailyDigest(db, uid, today, wd, periodRemindDays) {
     if (x.done || !x.nextDate) continue;
     const lead = x.remindDays != null ? Number(x.remindDays) : 7;
     if (lead >= 0 && x.dismissedFor !== x.nextDate && daysBetween(today, x.nextDate) <= lead) {
-      reminders.push(x.name || x.category || 'รายการแจ้งเตือน');
+      reminders.push(`${x.name || x.category || 'รายการแจ้งเตือน'}${x.dueTime ? ` (${x.dueTime} น.)` : ''}`);
     }
   }
   for (const docSnap of productsSnap.docs) {

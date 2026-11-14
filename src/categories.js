@@ -6,6 +6,7 @@ export const CATEGORIES = [
   { key: 'period', tab: 'period', cat: 'cat-period', emoji: '🌸', label: 'ประจำเดือน', focus: 'p-start' },
   { key: 'symptoms', tab: 'symptoms', cat: 'cat-symptoms', emoji: '🌿', label: 'อาการ & ผิว', focus: 's-date' },
   { key: 'remind', tab: 'remind', cat: 'cat-lab', emoji: '📌', label: 'บันทึกเตือน', focus: 'rm-title' },
+  { key: 'expense', tab: 'expense', cat: 'cat-body', emoji: '💸', label: 'รายรับ-จ่าย', focus: 'ex-amount' },
   { key: 'body', tab: 'body', cat: 'cat-body', emoji: '⚖️', label: 'น้ำหนัก', focus: 'b-weight' },
   { key: 'care', tab: 'care', cat: 'cat-care', emoji: '🐾', label: 'สัตว์เลี้ยง', focus: 'pet-name' },
   { key: 'inventory', tab: 'inventory', cat: 'cat-inventory', emoji: '🧺', label: 'ของใช้', focus: 'inv-name' }
@@ -17,7 +18,7 @@ export const GROUPS = {
   home: ['home'],
   food: ['food'],
   health: ['weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
-  care: ['care', 'remind', 'inventory'],
+  care: ['care', 'remind', 'expense', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
@@ -29,6 +30,7 @@ export const SUBTABS = {
   report: { emoji: '📄', label: 'รายงาน', cat: 'cat-neutral' },
   care: { emoji: '🐾', label: 'สัตว์เลี้ยง & ผลตรวจ', cat: 'cat-care' },
   remind: { emoji: '📌', label: 'บันทึกเตือน', cat: 'cat-lab' },
+  expense: { emoji: '💸', label: 'รายรับ-รายจ่าย', cat: 'cat-body' },
   inventory: { emoji: '🧺', label: 'ของใช้ & สต๊อก', cat: 'cat-inventory' },
   notifications: { emoji: '🔔', label: 'แจ้งเตือน', cat: 'cat-body' },
   settings: { emoji: '⚙️', label: 'ตั้งค่า', cat: 'cat-neutral' }

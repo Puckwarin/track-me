@@ -36,10 +36,11 @@ import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
+import { mountExpense, renderExpense, handleSharedSlipLaunch } from './expense.js';
 
 registerSW({ immediate: true });
 
-const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'inventory', 'body', 'report', 'notifications', 'settings'];
+const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
 
 function renderSubnav(group, name) {
@@ -63,6 +64,7 @@ export function showTab(name) {
   renderSubnav(group, name);
   if (name === 'home') renderHome();
   if (name === 'weekly') renderWeekly();
+  if (name === 'expense') renderExpense();
   if (name === 'notifications') renderReminders();
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
 }
@@ -121,6 +123,7 @@ function mountAll() {
   mountSymptoms($('#tab-symptoms'));
   mountCare($('#tab-care'));
   mountRemind($('#tab-remind'));
+  mountExpense($('#tab-expense'));
   mountInventory($('#tab-inventory'));
   mountBody($('#tab-body'));
   mountReport($('#tab-report'));
@@ -145,9 +148,14 @@ function startData() {
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
+    state.expenses = list
+      .filter(x => x.kind === 'expense_month' && Array.isArray(x.items))
+      .flatMap(x => x.items)
+      .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
     refreshProfile();
     emit('profile');
     emit('pushSettings');
+    renderExpense();
     renderHome();
     window.dispatchEvent(new Event('trackme:push-change'));
   });
@@ -166,7 +174,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
@@ -175,6 +183,7 @@ on('auth', user => {
     startData();
     let start = null; try { start = sessionStorage.getItem('active_tab'); } catch (e) {}
     showTab(start || 'home');
+    handleSharedSlipLaunch(showTab);
   }
   renderSyncStatus();
 });
