@@ -37,6 +37,7 @@ import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
 import { mountExpense, renderExpense, handleSharedSlipLaunch } from './expense.js';
+import { mountChatWidget } from './chatWidget.js';
 
 registerSW({ immediate: true });
 
@@ -129,6 +130,7 @@ function mountAll() {
   mountReport($('#tab-report'));
   mountSettings($('#tab-settings'));
   mountReminders($('#tab-notifications'));
+  mountChatWidget(goTo);
 }
 
 function startData() {

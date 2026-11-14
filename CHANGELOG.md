@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.10.0] - 2026-11-14
+
+### เพิ่มฟีเจอร์ (Added)
+- **AI Chat Assistant & Client-Side Function Calling (`src/services/aiAssistant.js`, `src/chatWidget.js`)**:
+  - เพิ่ม **Floating AI Chat Widget** มุมขวาล่าง (จัดตำแหน่งเหนือปุ่มเลื่อนบน/ล่าง ไม่ทับซ้อนกัน) รองรับการใช้งานบนมือถือแบบเต็มจอ/ครึ่งจอ พร้อม **Quick Prompts** แตะใช้งานทันที และรองรับทั้ง 3 ธีม (**Cozy / Pastel / Dark**)
+  - ทำงานแบบ **Client-Side Function Calling 100%** ด้วย API Key จาก `localStorage` ที่มีอยู่แล้วในหน้าตั้งค่า (รองรับทั้ง **Gemini `functionDeclarations`** และ **Groq OpenAI-compatible `tools`** พร้อมสลับสำรองอัตโนมัติ)
+  - **Read Tools (ค้นหาข้อมูล)**: `getExpenses` (สรุปรายรับ-รายจ่ายแยกหมวดตามช่วงวัน), `getInventory` (รายการสต๊อกและของใกล้หมด), `getNutritionSummary` (สรุปแคลอรี่และ P/C/F เทียบเป้าหมาย), `getRemindersAndPlanner` (ตาราง Weekly Planner รวมสลับสัปดาห์ A/B และนัดเตือน)
+  - **Write Tools (จดบันทึกและอัปเดต)**: `addExpense` (รองรับวันที่ภาษาธรรมชาติ เช่น วันนี้/เมื่อวาน), `addFoodLog` (ดึงจากคลังในเครื่องหรือประมาณโภชนาการให้อัตโนมัติ), `updateInventory` (เพิ่ม/ตัดสต๊อกตามชื่อสินค้า), `addReminder` (สร้างนัดเตือนพร้อมเวลาและเตือนล่วงหน้า)
+  - **Safety, Undo & Privacy**: แสดงการ์ดยืนยันพร้อมปุ่ม **ยกเลิก/ลบรายการนี้** ในแชททุกครั้งที่มีการเขียน/แก้ไขข้อมูลใน Firestore และจำกัดข้อมูลที่ส่งให้ AI เฉพาะผลลัพธ์จาก Tool ที่ถูกเรียกใช้ (ไม่มีการส่งข้อมูลที่ไม่เกี่ยวข้องหรือเก็บรูปภาพลงฐานข้อมูล)
+
+---
+
 ## [v2.9.0] - 2026-11-14
 
 ### เพิ่มฟีเจอร์ & ปรับปรุง UX บนมือถือ (Added & Mobile-First UX)
