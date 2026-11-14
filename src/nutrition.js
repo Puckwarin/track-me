@@ -1,5 +1,6 @@
-// โมเดล Gemini ที่ลองใช้งานตามลำดับ (แต่ละโมเดลมีโควตาแยกกัน)
-const GEMINI_MODELS = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
+// โมเดล Gemini ที่ลองใช้งานตามลำดับ (ตระกูล 2.5 ตอบสนองไวและตั้ง thinkingBudget=0 ได้)
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const GEMINI_TIMEOUT_MS = 35000;
 const KEY_NAME = 'gemini_key';
 const GROQ_KEY = 'groq_key';
 export const getGroqKey = () => localStorage.getItem(GROQ_KEY) || '';
@@ -12,7 +13,7 @@ async function discoverFallbackGeminiModels(key) {
   try {
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
       headers: { 'x-goog-api-key': key },
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(10000)
     });
     if (!res.ok) return [];
     const data = await res.json().catch(() => ({}));
@@ -20,7 +21,7 @@ async function discoverFallbackGeminiModels(key) {
       .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map(m => String(m.name || '').replace(/^models\//, ''))
       .filter(id => id && !GEMINI_MODELS.includes(id) &&
-        /(flash|lite|hydrogen)/i.test(id) &&
+        /(flash|lite)/i.test(id) &&
         !/tts|live|image|audio|embedding|transcribe|thinking|1\.5|2\.0|exp/i.test(id))
       .slice(0, 3);
   } catch {
@@ -32,6 +33,10 @@ async function requestGeminiModel(model, key, parts, schema) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const generationConfig = { responseMimeType: 'application/json' };
   if (schema) generationConfig.responseSchema = schema;
+  // ปิดโหมดคิดนานในโมเดล Gemini 2.5 เพื่อให้ตอบกลับรวดเร็วและไม่ติด Timeout
+  if (/^gemini-2\.5-/i.test(model)) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
   const body = JSON.stringify({
     contents: [{ parts }],
     generationConfig
@@ -39,23 +44,20 @@ async function requestGeminiModel(model, key, parts, schema) {
 
   for (let attempt = 0; attempt < 2; attempt++) {
     let res;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       res = await fetch(url, {
         method: 'POST',
         // ส่ง key ใน header (ไม่ใส่ใน URL เพื่อไม่ให้ไปค้างใน log/ประวัติเบราว์เซอร์)
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body,
-        signal: controller.signal
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
       });
     } catch (cause) {
-      const err = new Error(cause.name === 'AbortError' ? 'หมดเวลารอคำตอบจาก Gemini (20 วินาที)' : (cause.message || 'Network error'));
-      err.timeoutError = cause.name === 'AbortError';
-      err.networkError = !err.timeoutError;
+      const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
+      const err = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก Gemini (35 วินาที)' : (cause.message || 'Network error'));
+      err.timeoutError = isTimeout;
+      err.networkError = !isTimeout;
       throw err;
-    } finally {
-      clearTimeout(timeout);
     }
 
     const data = await res.json().catch(() => ({}));
@@ -121,8 +123,9 @@ async function callGeminiProvider(parts, schema) {
   throw err;
 }
 
-const GROQ_VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'];
-const GROQ_TEXT_MODELS = ['llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct'];
+const GROQ_TEXT_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const GROQ_VISION_MODELS = ['llama-3.2-11b-vision-preview', 'llama-3.2-90b-vision-preview'];
+const GROQ_TIMEOUT_MS = 35000;
 
 function schemaSummary(schema) {
   if (!schema?.properties) return 'JSON object';
@@ -132,33 +135,61 @@ function schemaSummary(schema) {
   }).join(', ');
 }
 
+async function fetchGroqModels(key) {
+  try {
+    const mRes = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!mRes.ok) return [];
+    const mData = await mRes.json().catch(() => ({}));
+    return (mData.data || []).map(x => x.id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function callGroq(parts, schema) {
   const key = getGroqKey();
   if (!key) throw new Error('NO_KEY');
   const hasImage = parts.some(p => p.inline_data);
-  const models = hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  let models = [...(hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS)];
   const messages = parts.map(p => p.inline_data
     ? { type: 'image_url', image_url: { url: 'data:' + p.inline_data.mime_type + ';base64,' + p.inline_data.data } }
     : { type: 'text', text: p.text || '' });
   const schemaHint = schemaSummary(schema);
-  let lastErr = null;
-  for (const model of models) {
+
+  const sendReq = async (model, useJsonFormat) => {
+    const payload = {
+      model,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Return ONLY valid raw JSON (no markdown) with these fields: ' + schemaHint }, ...messages] }],
+      temperature: 0
+    };
+    if (useJsonFormat) payload.response_format = { type: 'json_object' };
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: [{ type: 'text', text: 'Return only valid JSON with these fields: ' + schemaHint }, ...messages] }],
-        response_format: { type: 'json_object' },
-        temperature: 0
-      }),
-      signal: AbortSignal.timeout(25000)
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
     });
     const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
+
+  let lastErr = null;
+  let discovered = false;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    let { res, data } = await sendReq(model, true);
+    if (!res.ok && res.status === 400 && /response_format|json_object/i.test(data?.error?.message || '')) {
+      ({ res, data } = await sendReq(model, false));
+    }
     if (res.ok) {
       const content = data?.choices?.[0]?.message?.content;
       if (!content) throw new Error('Groq ไม่ส่งผลลัพธ์กลับมา');
-      return JSON.parse(String(content).split(String.fromCharCode(96).repeat(3)).join('').replace(/^json\s*/i, '').trim());
+      const cleaned = String(content).split(String.fromCharCode(96).repeat(3)).join('').replace(/^json\s*/i, '').trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
     }
     const e = new Error(data?.error?.message || 'Groq HTTP ' + res.status);
     e.status = res.status;
@@ -166,6 +197,13 @@ async function callGroq(parts, schema) {
     e.quotaExceeded = [402, 429].includes(res.status) || /quota|rate.?limit/i.test(e.message);
     lastErr = e;
     if (e.invalidKey) throw e;
+    // ถ้าโมเดลวิชันหลักไม่มีในบัญชี ลองค้นหาโมเดลวิชันที่เปิดใช้งานอยู่จริงจากบัญชีนี้เพิ่มอีก 1 รอบ
+    if (hasImage && !discovered && i === models.length - 1) {
+      discovered = true;
+      const available = await fetchGroqModels(key);
+      const extraVision = available.filter(id => !models.includes(id) && /vision|llava|pixtral/i.test(id));
+      if (extraVision.length) models = [...models, ...extraVision];
+    }
   }
   throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
 }
@@ -372,13 +410,15 @@ export async function testGroqConnection() {
     throw err;
   }
   const ids = (mData.data || []).map(x => x.id);
-  const picked = GROQ_VISION_MODELS.find(id => ids.includes(id)) || GROQ_TEXT_MODELS.find(id => ids.includes(id)) || ids.find(id => !/whisper|tts|guard/i.test(id));
-  if (!picked) return { ok: true, model: 'API Key ถูกต้อง' };
+  const textModel = GROQ_TEXT_MODELS.find(id => ids.includes(id)) || ids.find(id => !/whisper|tts|guard|embed|vision/i.test(id));
+  const visionModel = GROQ_VISION_MODELS.find(id => ids.includes(id)) || ids.find(id => /vision|llava|pixtral/i.test(id)) || null;
+  const picked = textModel || visionModel;
+  if (!picked) return { ok: true, model: 'API Key ถูกต้อง', visionModel: null };
   const cRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
     body: JSON.stringify({ model: picked, messages: [{ role: 'user', content: 'Reply with JSON {"ok":true}' }], response_format: { type: 'json_object' }, max_tokens: 20, temperature: 0 }),
-    signal: AbortSignal.timeout(12000)
+    signal: AbortSignal.timeout(15000)
   });
   const cData = await cRes.json().catch(() => ({}));
   if (!cRes.ok) {
@@ -386,7 +426,7 @@ export async function testGroqConnection() {
     err.quotaExceeded = cRes.status === 429;
     throw err;
   }
-  return { ok: true, model: picked };
+  return { ok: true, model: picked, visionModel };
 }
 
 export const explainGeminiError = e => e.message === 'NO_KEY'

@@ -1,10 +1,24 @@
 import { openModal, esc } from './util.js';
+import { safeHttpUrl } from './workoutParser.js';
 
 const SECTION_ORDER = ['warmup', 'main', 'cooldown'];
 const SECTION_TITLES = { warmup:'วอร์มอัพ (Warm-up)', main:'ท่าหลัก (Main workout)', cooldown:'คูลดาวน์ (Cool-down)' };
 const imageMarkup = r => r.imageUrl
   ? '<img data-exercise-image src="'+esc(r.imageUrl)+'" alt="ตัวอย่างท่า '+esc(r.name)+'" loading="lazy" class="w-full h-full object-cover rounded-2xl">'
   : '<div data-image-placeholder class="w-full h-full min-h-28 rounded-2xl bg-slate-100 text-slate-400 flex flex-col items-center justify-center gap-2 text-xs"><span class="text-3xl">🏋️</span><span>ยังไม่มีภาพตัวอย่าง</span></div>';
+
+function refMarkup(r) {
+  const url = safeHttpUrl(r.refUrl);
+  const title = (r.refTitle || '').trim();
+  if (url) {
+    return '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2.5 py-1 text-xs text-blue-800 hover:bg-sky-soft"><i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i><span class="truncate max-w-[240px]">'+esc(title || url)+'</span></a>';
+  }
+  if (title) {
+    const q = 'https://www.google.com/search?q=' + encodeURIComponent(title);
+    return '<div class="inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600"><span>🔗 '+esc(title)+'</span><a href="'+esc(q)+'" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline font-medium">ค้นหาลิงก์</a></div>';
+  }
+  return '';
+}
 
 export function runActiveWorkout(rows, onFinish) {
   const started = Date.now();
@@ -23,6 +37,7 @@ export function runActiveWorkout(rows, onFinish) {
         '<div class="aspect-square overflow-hidden rounded-2xl bg-slate-100 md:aspect-[4/5]">'+imageMarkup(r)+'</div>'+
         '<div class="min-w-0 space-y-2 md:space-y-3"><h4 class="text-base font-semibold text-slate-800 md:text-xl">'+esc(r.name)+'</h4>'+
         '<div class="flex flex-wrap items-center gap-2">'+weight+'<strong class="text-base md:text-lg">'+count+' × '+esc(reps)+'</strong></div>'+
+        refMarkup(r)+
         (r.note?'<p class="text-sm leading-relaxed text-slate-600 md:text-base">'+esc(r.note)+'</p>':'')+
         '<div class="flex flex-wrap gap-2 pt-1">'+checks+'</div></div></article>';
     }).join('');

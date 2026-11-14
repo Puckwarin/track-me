@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { bodyLatest } from './body.js';
 import { findExerciseImage } from './exerciseMedia.js';
 import { runActiveWorkout } from './workoutActive.js';
+import { parseWorkoutText, safeHttpUrl } from './workoutParser.js';
 import { $, $$, esc, fmtDate, localDateStr, parseLocal, addDays, toNum, toast, openModal } from './util.js';
 
 export const TYPES = {
@@ -29,9 +30,32 @@ let root, draft = emptyDraft();
 let weekStart = '';
 let editingId = null;
 let editingTemplateId = null;
+let lastParsedImport = null;
+
+const SAMPLE_IMPORT_TEXT = `Day A — Lower Body
+ขาและสะโพก
+ประมาณ 20–30 นาที
+1. Warm-up
+Rehabilitación de cadera: ejercicios, fases y recuperación funcional | CTO - AM
+1. March in Place
+60 วินาที
+เดินยกเข่าสลับซ้ายขวา แกว่งแขนตามธรรมชาติ
+
+2. Main Workout
+Tutoriel d’Exercice: Goblet Squat
+1. Goblet Squat
+2 kg
+2 × 10 ครั้ง
+ถือดัมเบลไว้หน้าอก ย่อตัวเหมือนนั่งเก้าอี้ แล้วดันตัวกลับขึ้นมา
+
+3. Cool-down — ยืนทั้งหมด
+9 Quick Morning Exercises To Tone Muscles And Blast Fat Over 50 - SHEfinds
+1. Slow March
+45–60 วินาที
+เดินอยู่กับที่ช้า ๆ ให้ลมหายใจกลับสู่ปกติ`;
 
 function emptyDraft() { return { warmup: [], main: [], cooldown: [] }; }
-const blankRow = () => ({ name: '', imageUrl: '', weightKg: null, perSide: false, sets: 1, reps: null, repUnit: 'reps', note: '' });
+const blankRow = () => ({ name: '', imageUrl: '', refTitle: '', refUrl: '', weightKg: null, perSide: false, sets: 1, reps: null, repUnit: 'reps', note: '' });
 function mondayOf(dateStr) {
   const dt = parseLocal(dateStr || localDateStr());
   const offset = (dt.getDay() + 6) % 7;
@@ -72,6 +96,35 @@ export function mountWorkout(el) {
         </div>
       </div>
 
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <button type="button" id="w-import-toggle" class="chip bg-lav-soft text-brand-dark font-semibold border border-brand/25 hover:bg-brand/15">
+          <i class="fa-solid fa-paste"></i> 📋 วางข้อความเพื่อนำเข้า (Quick Import)
+        </button>
+        <div class="flex flex-wrap gap-1.5">
+          <button type="button" id="w-last" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-clock-rotate-left"></i> ใช้แผนล่าสุดของประเภทนี้</button>
+          <button type="button" id="w-clear" class="chip bg-slate-100 text-slate-600"><i class="fa-solid fa-eraser"></i> ล้างฟอร์ม</button>
+        </div>
+      </div>
+
+      <div id="w-import-panel" class="hidden rounded-2xl border border-brand/30 bg-lav-soft/35 p-3.5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-brand mr-1"></i> นำเข้าตารางจากข้อความ (Smart Paste)</h3>
+            <p class="text-[11px] text-slate-500">วางข้อความจากเว็บ โน้ต หรือแชทได้เลย ระบบจะแยกหัวโปรแกรม หมวด Warm-up / Main / Cool-down ลิงก์อ้างอิง น้ำหนัก เซต และคำอธิบายให้ในเครื่องทันที</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button type="button" id="w-import-sample" class="chip bg-white border border-slate-200 text-slate-600 text-[11px]">ใส่ตัวอย่าง</button>
+            <button type="button" id="w-import-close" class="text-slate-400 hover:text-slate-600 px-1.5" aria-label="ปิดหน้าต่างนำเข้า"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <textarea id="w-import-text" rows="7" class="input text-xs leading-relaxed font-sans" placeholder="วางข้อความตารางออกกำลังกายที่นี่... เช่น&#10;Day A — Lower Body&#10;ขาและสะโพก&#10;ประมาณ 20–30 นาที&#10;1. Warm-up&#10;1. March in Place&#10;60 วินาที&#10;เดินยกเข่าสลับซ้ายขวา..."></textarea>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" id="w-import-clear" class="btn btn-ghost !py-1.5 !px-3 text-xs">ล้างข้อความ</button>
+          <button type="button" id="w-import-parse" class="btn btn-primary !py-2 !px-4 text-xs"><i class="fa-solid fa-table-list"></i> แปลงข้อมูลลงตาราง</button>
+        </div>
+        <div id="w-import-preview" class="hidden space-y-3 pt-2 border-t border-brand/20"></div>
+      </div>
+
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div><label class="lbl">วันที่</label><input type="date" id="w-date" class="input"></div>
         <div><label class="lbl">สถานะ</label><select id="w-status" class="input"><option value="done">ทำจริงแล้ว</option><option value="planned">วางแผนไว้</option></select></div>
@@ -79,12 +132,10 @@ export function mountWorkout(el) {
         <div><label class="lbl">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
         <div><label class="lbl">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
         <div><label class="lbl">เริ่มจากเทมเพลต</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
+        <div class="col-span-2 sm:col-span-2"><label class="lbl">ชื่อโปรแกรม (ไม่บังคับ)</label><input id="w-title" class="input" placeholder="เช่น Day A — Lower Body"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="lbl">กลุ่มกล้ามเนื้อ</label><input id="w-muscle" class="input" placeholder="เช่น ขาและสะโพก"></div>
       </div>
       <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" id="w-last" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-clock-rotate-left"></i> ใช้แผนล่าสุดของประเภทนี้</button>
-        <button type="button" id="w-clear" class="chip bg-slate-100 text-slate-600"><i class="fa-solid fa-eraser"></i> ล้างฟอร์ม</button>
-      </div>
       <div id="w-sections" class="space-y-5"></div>
       <div><label class="lbl">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
       <div class="flex flex-wrap justify-end gap-2">
@@ -115,7 +166,15 @@ export function mountWorkout(el) {
   $('#w-sections', root).addEventListener('input', onInput);
   $('#w-sections', root).addEventListener('change', onInput);
   $('#w-sections', root).addEventListener('click', e => {
-    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), media = e.target.closest('[data-media]');
+    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), media = e.target.closest('[data-media]'), refEdit = e.target.closest('[data-ref-edit]');
+    if (refEdit) {
+      const box = refEdit.closest('[data-row]')?.querySelector('[data-ref-box]');
+      if (box) {
+        box.open = true;
+        box.querySelector('[data-k="refUrl"]')?.focus();
+      }
+      return;
+    }
     if (media) {
       const [sec, i] = media.dataset.media.split(':');
       const row = draft[sec]?.[+i];
@@ -131,6 +190,28 @@ export function mountWorkout(el) {
     }
     if (add) { draft[add.dataset.add].push(blankRow()); renderSections(); }
     if (rm) { const [sec, i] = rm.dataset.rm.split(':'); draft[sec].splice(+i, 1); renderSections(); }
+  });
+
+  $('#w-import-toggle', root).addEventListener('click', () => {
+    const panel = $('#w-import-panel', root);
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) $('#w-import-text', root).focus();
+  });
+  $('#w-import-close', root).addEventListener('click', () => $('#w-import-panel', root).classList.add('hidden'));
+  $('#w-import-sample', root).addEventListener('click', () => {
+    $('#w-import-text', root).value = SAMPLE_IMPORT_TEXT;
+    runImportPreview();
+  });
+  $('#w-import-clear', root).addEventListener('click', () => {
+    $('#w-import-text', root).value = '';
+    lastParsedImport = null;
+    const prev = $('#w-import-preview', root);
+    prev.innerHTML = '';
+    prev.classList.add('hidden');
+  });
+  $('#w-import-parse', root).addEventListener('click', runImportPreview);
+  $('#w-import-preview', root).addEventListener('click', e => {
+    if (e.target.closest('#w-import-apply')) applyImportToForm();
   });
 
   $('#w-wk-prev', root).addEventListener('click', () => { weekStart = addDays(weekStart, -7); renderWeekStrip(); });
@@ -217,6 +298,8 @@ function handleRecordAction(e) {
     if (r) {
       editingId = null;
       updateRecordEditUi();
+      $('#w-title', root).value = r.title || '';
+      $('#w-muscle', root).value = r.muscleGroup || '';
       loadSections(r.sections, r.type);
       window.scrollTo({ top: root.offsetTop, behavior: 'smooth' });
     }
@@ -244,6 +327,8 @@ function startRecordEdit(id) {
   weekStart = mondayOf($('#w-date', root).value);
   $('#w-status', root).value = r.status === 'planned' ? 'planned' : 'done';
   $('#w-type', root).value = TYPES[r.type] ? r.type : 'other';
+  $('#w-title', root).value = r.title || '';
+  $('#w-muscle', root).value = r.muscleGroup || '';
   $('#w-dur', root).value = r.durationMin ?? '';
   $('#w-int', root).value = ['light', 'moderate', 'vigorous'].includes(r.intensity) ? r.intensity : 'moderate';
   $('#w-note', root).value = r.note || '';
@@ -254,12 +339,14 @@ function startRecordEdit(id) {
   burnPreview();
   renderWeekStrip();
   window.scrollTo({ top: root.offsetTop, behavior: 'smooth' });
-  toast('โหลดบันทึกเข้าสู่โหมดแก้ไขแล้ว — ปรับแผนหรือผลจริงได้ตามต้องการ');
+  toast('โหลดบันทึกเข้าสู่โหมดแก้ไขแล้ว — ปรับแผนหรือเพิ่ม URL อ้างอิงได้ตามต้องการ');
 }
 
 function clearForm() {
   editingId = null;
   draft = emptyDraft();
+  $('#w-title', root).value = '';
+  $('#w-muscle', root).value = '';
   $('#w-note', root).value = '';
   $('#w-dur', root).value = '';
   $('#w-status', root).value = ($('#w-date', root).value || localDateStr()) > localDateStr() ? 'planned' : 'done';
@@ -273,6 +360,8 @@ function startTemplateEdit(id) {
   if (!t) return;
   editingTemplateId = t.id;
   $('#w-tpl-edit-name', root).value = t.name || '';
+  $('#w-title', root).value = t.name || '';
+  $('#w-muscle', root).value = t.muscleGroup || '';
   $('#w-tpl-edit-bar', root).classList.remove('hidden');
   loadSections(t.sections, t.type, true);
   window.scrollTo({ top: root.offsetTop, behavior: 'smooth' });
@@ -292,8 +381,10 @@ async function saveEditedTemplate() {
   const sections = clean();
   if (!Object.values(sections).some(r => r.length)) return toast('เพิ่มท่าอย่างน้อย 1 ท่าก่อนบันทึกเทมเพลต', 'err');
   try {
+    const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
     await updateDoc(userDoc(state.uid, 'workout_templates', editingTemplateId), {
       name,
+      ...(muscleGroup && { muscleGroup }),
       type: $('#w-type', root).value,
       sections,
       updatedAt: new Date()
@@ -329,7 +420,7 @@ function onInput(e) {
   const t = e.target, sec = t.dataset.sec; if (!sec) return;
   const row = draft[sec][+t.dataset.i]; if (!row) return;
   const k = t.dataset.k;
-  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl') row[k] = t.value;
+  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl' || k === 'refTitle' || k === 'refUrl') row[k] = t.value;
   else if (k === 'perSide') row.perSide = t.checked;
   else row[k] = toNum(t.value);
   if (k === 'name' && e.type === 'change') { const h = t.closest('[data-row]')?.querySelector('[data-hint]'); if (h) h.textContent = lastHint(t.value); }
@@ -344,6 +435,121 @@ function lastPerformance(name) {
 }
 const rowText = r => `${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
 const lastHint = name => { const p = lastPerformance(name); return p ? `ครั้งล่าสุด (${fmtDate(p.date)}): ${rowText(p.r)}` : ''; };
+
+function renderRefBadge(r, editKey = '', recordEditId = '') {
+  const url = safeHttpUrl(r.refUrl);
+  const title = (r.refTitle || '').trim();
+  if (!url && !title) return '';
+  if (url) {
+    return `<div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+      <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2 py-0.5 text-[11px] text-blue-800 hover:bg-sky-soft">
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        <span class="truncate max-w-[230px]">${esc(title || url)}</span>
+      </a>
+    </div>`;
+  }
+  const searchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(title);
+  return `<div class="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px]">
+    <span class="inline-flex items-center gap-1 rounded-lg bg-slate-100 border border-slate-200 px-2 py-0.5 text-slate-600 max-w-full">
+      <span>🔗</span><span class="truncate max-w-[220px]">${esc(title)}</span>
+    </span>
+    <a href="${esc(searchUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:underline font-medium">🔍 ค้นหา</a>
+    ${editKey ? `<button type="button" data-ref-edit="${esc(editKey)}" class="text-brand-dark hover:underline">✏️ เพิ่ม URL</button>` : ''}
+    ${recordEditId ? `<button type="button" data-edit-workout="${esc(recordEditId)}" class="text-brand-dark hover:underline">✏️ เพิ่ม URL</button>` : ''}
+  </div>`;
+}
+
+function runImportPreview() {
+  const text = ($('#w-import-text', root)?.value || '').trim();
+  const prevEl = $('#w-import-preview', root);
+  if (!text) {
+    toast('กรุณาวางข้อความตารางออกกำลังกายก่อน', 'err');
+    return;
+  }
+  const parsed = parseWorkoutText(text);
+  lastParsedImport = parsed;
+  if (!parsed.totalExercises) {
+    prevEl.classList.remove('hidden');
+    prevEl.innerHTML = `<div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+      ไม่พบรายการท่าออกกำลังกายที่มีเลขลำดับ (เช่น <code>1. Goblet Squat</code>) — ลองตรวจสอบว่ามีตัวเลขนำหน้าชื่อท่าหรือกด "ใส่ตัวอย่าง" เพื่อดูรูปแบบครับ
+    </div>`;
+    return;
+  }
+
+  const headerBadges = [
+    parsed.programName ? `<span class="px-2 py-0.5 rounded-lg bg-white border border-brand/25 font-bold text-slate-800">🏋️ ${esc(parsed.programName)}</span>` : '',
+    parsed.muscleGroup ? `<span class="px-2 py-0.5 rounded-lg bg-lav-soft text-brand-dark font-medium">🎯 ${esc(parsed.muscleGroup)}</span>` : '',
+    parsed.durationText ? `<span class="px-2 py-0.5 rounded-lg bg-sky-soft text-blue-800">⏱ ${esc(parsed.durationText)}${parsed.durationMin ? ` (~${parsed.durationMin} นาที)` : ''}</span>` : '',
+    `<span class="px-2 py-0.5 rounded-lg bg-ok-soft text-green-800">ประเภท: ${esc(TYPES[parsed.suggestedType] || parsed.suggestedType)}</span>`
+  ].filter(Boolean).join('');
+
+  const sectionsHtml = SECTIONS.map(([k, title, icon], si) => {
+    const rows = parsed.sections[k] || [];
+    if (!rows.length) return '';
+    const sub = parsed.sectionNotes?.[k] ? ` <span class="text-xs font-normal text-slate-500">— ${esc(parsed.sectionNotes[k])}</span>` : '';
+    return `<div class="rounded-xl bg-white border border-slate-200 p-2.5 space-y-2">
+      <p class="text-xs font-bold text-slate-700"><i class="fa-solid ${icon} text-brand mr-1"></i>${si + 1}. ${esc(title)}${sub}</p>
+      <div class="space-y-1.5">
+        ${rows.map((r, idx) => `<div class="rounded-lg bg-slate-50 border border-slate-100 p-2 space-y-1 text-xs">
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <b class="text-slate-800">${idx + 1}. ${esc(r.name)}</b>
+            <span class="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-medium">${esc(rowText(r))}</span>
+          </div>
+          ${r.note ? `<p class="text-[11px] text-slate-600">${esc(r.note)}</p>` : ''}
+          ${renderRefBadge(r)}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  prevEl.classList.remove('hidden');
+  prevEl.innerHTML = `
+    <div class="space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-xs font-bold text-green-800"><i class="fa-solid fa-circle-check mr-1"></i> แปลงสำเร็จ ${parsed.totalExercises} ท่า (ตรวจสอบตัวอย่างก่อนนำเข้า)</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5 text-[11px]">${headerBadges}</div>
+      <div class="space-y-2 max-h-72 overflow-y-auto pr-1">${sectionsHtml}</div>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <label class="inline-flex items-center gap-1.5 text-xs text-slate-600">
+          <input type="checkbox" id="w-import-append" class="accent-violet-500"> เพิ่มต่อท้ายท่าเดิม (ไม่ล้างท่าในฟอร์ม)
+        </label>
+        <button type="button" id="w-import-apply" class="btn btn-primary !py-2 !px-4 text-xs">
+          <i class="fa-solid fa-check"></i> ยืนยันนำเข้าลงฟอร์ม (${parsed.totalExercises} ท่า)
+        </button>
+      </div>
+    </div>`;
+}
+
+function applyImportToForm() {
+  if (!lastParsedImport?.totalExercises) return;
+  const p = lastParsedImport;
+  const append = $('#w-import-append', root)?.checked;
+
+  if (p.programName) $('#w-title', root).value = p.programName;
+  if (p.muscleGroup) $('#w-muscle', root).value = p.muscleGroup;
+  if (p.durationMin) $('#w-dur', root).value = String(p.durationMin);
+  if (p.suggestedType && TYPES[p.suggestedType]) $('#w-type', root).value = p.suggestedType;
+
+  const secNotes = Object.entries(p.sectionNotes || {})
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k === 'warmup' ? 'Warm-up' : k === 'main' ? 'Main' : 'Cool-down'}: ${v}`);
+  if (secNotes.length && !$('#w-note', root).value.trim()) {
+    $('#w-note', root).value = secNotes.join(' · ');
+  }
+
+  if (!append) draft = emptyDraft();
+  for (const k of ['warmup', 'main', 'cooldown']) {
+    const items = (p.sections[k] || []).map(row => ({ ...blankRow(), ...row }));
+    draft[k] = append ? [...draft[k], ...items] : items;
+  }
+
+  renderSections();
+  burnPreview();
+  $('#w-import-panel', root).classList.add('hidden');
+  $('#w-sections', root).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast(`นำเข้า ${p.totalExercises} ท่าลงฟอร์มแล้ว — ปรับแต่งหรือกดบันทึกได้เลย 💪`);
+}
 
 function renderSections() {
   $('#w-sections', root).innerHTML = SECTIONS.map(([k, title, icon], si) => `
@@ -361,7 +567,16 @@ function renderSections() {
             <label class="flex items-center gap-1"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" ${r.perSide ? 'checked' : ''}> น้ำหนักข้างละ (ต่อข้าง)</label>
             <select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input !w-auto !py-1"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select>
           </div>
-          <div class="space-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-3 md:space-y-0"><input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input" placeholder="URL รูป/GIF (ไม่บังคับ)" value="${esc(r.imageUrl || "")}"><button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 md:whitespace-nowrap">ค้นหารูปที่ตรงกับท่า</button></div>${r.imageUrl ? `<img src="${esc(r.imageUrl)}" alt="ตัวอย่าง ${esc(r.name)}" loading="lazy" class="max-h-36 rounded-lg object-contain bg-white md:max-h-48">` : '<p class="text-xs text-slate-400">ภาพตัวอย่างจะแสดงเมื่อเพิ่ม URL หรือพบภาพที่ตรงกับชื่อท่า</p>'}<input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="โน้ตท่า เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
+          <div class="space-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-3 md:space-y-0"><input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input" placeholder="URL รูป/GIF (ไม่บังคับ)" value="${esc(r.imageUrl || "")}"><button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 md:whitespace-nowrap">ค้นหารูปที่ตรงกับท่า</button></div>${r.imageUrl ? `<img src="${esc(r.imageUrl)}" alt="ตัวอย่าง ${esc(r.name)}" loading="lazy" class="max-h-36 rounded-lg object-contain bg-white md:max-h-48">` : '<p class="text-xs text-slate-400">ภาพตัวอย่างจะแสดงเมื่อเพิ่ม URL หรือพบภาพที่ตรงกับชื่อท่า</p>'}
+          <input data-sec="${k}" data-i="${i}" data-k="note" class="input" placeholder="คำอธิบายท่า / โน้ต เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
+          ${renderRefBadge(r, `${k}:${i}`)}
+          <details data-ref-box class="text-xs text-slate-500">
+            <summary class="cursor-pointer select-none hover:text-slate-700">🔗 แหล่งอ้างอิง / URL บทความ (ไม่บังคับ)</summary>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
+              <input data-sec="${k}" data-i="${i}" data-k="refTitle" class="input text-xs" placeholder="ชื่อบทความ / แหล่งอ้างอิง" value="${esc(r.refTitle || '')}">
+              <input data-sec="${k}" data-i="${i}" data-k="refUrl" type="url" class="input text-xs" placeholder="URL ลิงก์อ้างอิง (https://...)" value="${esc(r.refUrl || '')}">
+            </div>
+          </details>
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
         </div>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีท่า</p>'}
       <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มท่า</button>
@@ -369,7 +584,16 @@ function renderSections() {
 }
 
 const clean = () => Object.fromEntries(Object.entries(draft).map(([k, rows]) => [k, rows.filter(r => r.name.trim()).map(r => ({
-  name: r.name.trim().slice(0, 80), imageUrl: (r.imageUrl || '').trim().slice(0, 1000), weightKg: r.weightKg, perSide: !!r.perSide, sets: Math.max(1, Math.round(r.sets || 1)), reps: r.reps, repUnit: r.repUnit || 'reps', note: (r.note || '').trim().slice(0, 120)
+  name: r.name.trim().slice(0, 80),
+  imageUrl: (r.imageUrl || '').trim().slice(0, 1000),
+  ...(r.refTitle?.trim() && { refTitle: r.refTitle.trim().slice(0, 200) }),
+  ...(safeHttpUrl(r.refUrl) && { refUrl: safeHttpUrl(r.refUrl).slice(0, 1000) }),
+  weightKg: r.weightKg,
+  perSide: !!r.perSide,
+  sets: Math.max(1, Math.round(r.sets || 1)),
+  reps: r.reps,
+  repUnit: r.repUnit || 'reps',
+  note: (r.note || '').trim().slice(0, 400)
 }))]));
 
 async function startActiveWorkout() {
@@ -379,10 +603,13 @@ async function startActiveWorkout() {
   try {
     await runActiveWorkout(rows, async (performedSets, actualMinutes) => {
       const duration = toNum($('#w-dur', root).value) || actualMinutes, volumeKg = performedSets.reduce((sum, x) => sum + (x.weightKg || 0) * (x.reps || 0), 0);
+      const title = $('#w-title', root).value.trim().slice(0, 100);
+      const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
       const payload = {
-        date: $('#w-date', root).value, type, typeLabel: TYPES[type], status: 'done',
+        date: $('#w-date', root).value || localDateStr(), type, typeLabel: TYPES[type], status: 'done',
+        ...(title && { title }), ...(muscleGroup && { muscleGroup }),
         durationMin: duration, intensity, estKcal: estimateBurn(type, intensity, duration, currentWeightKg()),
-        sections, performedSets, completedSetCount: performedSets.length, volumeKg, note: $('#w-note', root).value.trim()
+        sections, performedSets, completedSetCount: performedSets.length, volumeKg, note: $('#w-note', root).value.trim().slice(0, 500)
       };
       if (editingId) {
         await updateDoc(userDoc(state.uid, 'workout_records', editingId), { ...payload, updatedAt: new Date() });
@@ -405,9 +632,12 @@ async function save() {
   const type = $('#w-type', root).value;
   const status = $('#w-status', root).value === 'planned' ? 'planned' : 'done';
   const intensity = $('#w-int', root).value;
+  const title = $('#w-title', root).value.trim().slice(0, 100);
+  const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
   const payload = {
     date, type, typeLabel: TYPES[type], status, durationMin: dur, intensity,
-    estKcal: estimateBurn(type, intensity, dur, currentWeightKg()), sections, note: $('#w-note', root).value.trim()
+    ...(title && { title }), ...(muscleGroup && { muscleGroup }),
+    estKcal: estimateBurn(type, intensity, dur, currentWeightKg()), sections, note: $('#w-note', root).value.trim().slice(0, 500)
   };
   try {
     if (editingId) {
@@ -433,7 +663,7 @@ function saveTemplatePrompt() {
   const { el, close } = openModal(`
     <h3 class="font-bold text-slate-800 mb-3"><i class="fa-solid fa-bookmark text-brand mr-1"></i> บันทึกเป็นเทมเพลตใหม่</h3>
     <div class="space-y-3">
-      <div><label class="lbl">ชื่อเทมเพลต</label><input id="wt-name" class="input" placeholder="เช่น Day A / Upper body 1"></div>
+      <div><label class="lbl">ชื่อเทมเพลต</label><input id="wt-name" class="input" value="${esc($('#w-title', root).value.trim())}" placeholder="เช่น Day A / Upper body 1"></div>
       <div class="flex justify-end gap-2">
         <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
         <button type="button" id="wt-ok" class="btn btn-primary">บันทึก</button>
@@ -444,8 +674,15 @@ function saveTemplatePrompt() {
   const submit = async () => {
     const name = inp.value.trim().slice(0, 60);
     if (!name) return toast('กรุณาตั้งชื่อเทมเพลต', 'err');
+    const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
     try {
-      await addDoc(userCol(state.uid, 'workout_templates'), { name, type: $('#w-type', root).value, sections, createdAt: new Date() });
+      await addDoc(userCol(state.uid, 'workout_templates'), {
+        name,
+        ...(muscleGroup && { muscleGroup }),
+        type: $('#w-type', root).value,
+        sections,
+        createdAt: new Date()
+      });
       toast('บันทึกเทมเพลตแล้ว');
       close();
     } catch (e) { toast(e.message, 'err'); }
@@ -493,7 +730,7 @@ function renderWeekStrip() {
     <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-lav-soft px-3 py-2 text-xs">
       <div class="min-w-0">
         <span class="px-1.5 py-0.5 rounded font-medium mr-1 ${w.status === 'planned' ? 'bg-amber-100 text-amber-800' : 'bg-ok-soft text-green-700'}">${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}</span>
-        <b>${esc(TYPES[w.type] || w.type)}</b>${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
+        <b>${esc(w.title || TYPES[w.type] || w.type)}</b>${w.title ? ` <span class="text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
         ${w.note ? `<span class="text-slate-400 ml-1">${esc(w.note)}</span>` : ''}
       </div>
       <div class="flex flex-wrap gap-1.5">
@@ -550,18 +787,31 @@ function renderHistory() {
     if (from && (w.date || '') < from) return false;
     if (to && (w.date || '') > to) return false;
     if (!q) return true;
-    const exerciseNames = Object.values(w.sections || {}).flat().map(r => `${r?.name || ''} ${r?.note || ''}`).join(' ');
-    const hay = `${TYPES[w.type] || w.type || ''} ${w.note || ''} ${exerciseNames}`.toLowerCase();
+    const exerciseNames = Object.values(w.sections || {}).flat().map(r => `${r?.name || ''} ${r?.note || ''} ${r?.refTitle || ''}`).join(' ');
+    const hay = `${w.title || ''} ${w.muscleGroup || ''} ${TYPES[w.type] || w.type || ''} ${w.note || ''} ${exerciseNames}`.toLowerCase();
     return hay.includes(q);
   });
 
   const rows = filtered.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, filtering ? 50 : 15);
   $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
-    const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<p class="text-xs font-semibold text-slate-500 mt-1">${t}</p>` + w.sections[k].map(r => `<p class="text-xs">• ${esc(r.name)} — ${esc(rowText(r))}${r.note ? ` <span class="text-slate-400">(${esc(r.note)})</span>` : ''}</p>`).join('') : '')).join('');
+    const detail = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `
+      <div class="mt-2 space-y-1.5">
+        <p class="text-xs font-semibold text-slate-600">${t}</p>
+        ${w.sections[k].map((r, ri) => `
+          <div class="rounded-xl bg-slate-50 border border-slate-100 p-2 space-y-1">
+            <div class="flex flex-wrap items-center justify-between gap-1.5 text-xs">
+              <b class="text-slate-800">${ri + 1}. ${esc(r.name)}</b>
+              <span class="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700">${esc(rowText(r))}</span>
+            </div>
+            ${r.note ? `<p class="text-[11px] text-slate-600 leading-relaxed">${esc(r.note)}</p>` : ''}
+            ${renderRefBadge(r, '', w.id)}
+          </div>`).join('')}
+      </div>` : '')).join('');
     const badge = w.status === 'planned' ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1">วางแผนไว้</span>' : '';
-    return `<details class="rounded-lg border border-lav-soft p-2"><summary class="cursor-pointer text-sm">${badge}<b>${esc(fmtDate(w.date))}</b> · ${esc(TYPES[w.type] || w.type)}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}</summary>
-      <div class="mt-1">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1 text-slate-500">โน้ต: ${esc(w.note)}</p>` : ''}
-      <div class="flex flex-wrap gap-2 mt-2">
+    const titleStr = w.title ? `${esc(w.title)} <span class="text-xs font-normal text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : esc(TYPES[w.type] || w.type);
+    return `<details class="rounded-xl border border-lav-soft p-2.5"><summary class="cursor-pointer text-sm">${badge}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` <span class="text-[11px] px-1.5 py-0.5 rounded bg-lav-soft text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}</summary>
+      <div class="mt-1.5">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-500">โน้ต: ${esc(w.note)}</p>` : ''}
+      <div class="flex flex-wrap gap-2 mt-2.5">
         ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">ทำเสร็จแล้ว</button>` : ''}
         <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-pen"></i> แก้ไข</button>
         <button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button>
