@@ -1,15 +1,18 @@
 // บันทึกรายรับ-รายจ่าย + สแกนสลิปอัตโนมัติ (OCR ในเครื่องเท่านั้น ไม่เก็บรูปภาพลง Firebase)
-import { deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { deleteDoc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
+import { parseStatementText } from './statementParser.js';
 
 export const EXPENSE_CATEGORIES = [
   'อาหาร',
   'เครื่องดื่ม/คาเฟ่',
   'ช้อปปิ้ง',
   'เดินทาง',
+  'รถยนต์/ภาษี',
+  'ค่าโทรศัพท์',
   'บิล/ค่าใช้จ่ายประจำ',
   'สุขภาพ',
   'สัตว์เลี้ยง',
@@ -45,6 +48,7 @@ let root;
 let txType = 'expense';
 let editing = null; // { id, oldMonth } | null
 let selectedMonth = localDateStr().slice(0, 7);
+let pendingStatement = [];
 
 const $r = s => $(s, root);
 const fmtMoney = n => (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -60,14 +64,14 @@ function monthItems(monthStr) {
 
 function buildExpensePayload(record) {
   return {
-    type: record.type === 'income' ? 'income' : 'expense',
+    type: ['income', 'transfer'].includes(record.type) ? record.type : 'expense',
     amount: Math.round((Number(record.amount) || 0) * 100) / 100,
     category: String(record.category || 'อื่น ๆ').slice(0, 60),
     date: record.date,
     ...(record.time && { time: String(record.time).slice(0, 5) }),
     merchant: String(record.merchant || '').slice(0, 120),
     note: String(record.note || '').slice(0, 200),
-    source: record.source === 'slip_ocr' ? 'slip_ocr' : 'manual',
+    source: ['slip_ocr', 'statement'].includes(record.source) ? record.source : 'manual',
     createdAt: record.createdAt || new Date().toISOString()
   };
 }
@@ -157,6 +161,12 @@ export function mountExpense(el) {
         <p id="ex-ocr-status" class="hidden text-xs font-medium" aria-live="polite"></p>
       </div>
 
+      <section class="rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2"><b class="text-sm text-slate-800">🏦 นำเข้า Statement (วางข้อความ)</b><span class="text-[10px] text-green-700">ประมวลผลในเบราว์เซอร์</span></div>
+        <p class="text-xs text-slate-500">คัดลอกข้อความหลายบรรทัดจาก PDF Statement แล้ววางที่นี่ ข้อมูลยอดคงเหลือและเลขบัญชีจะไม่ถูกนำไปบันทึก</p>
+        <textarea id="ex-statement-text" rows="6" class="input w-full text-xs" placeholder="วางข้อความ Statement ที่นี่..."></textarea>
+        <div class="flex items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">ประมวลผลข้อความ Statement</button></div>
+      </section>
       <div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
         <button type="button" data-ex-type="expense" class="py-2 rounded-xl text-xs font-semibold transition">รายจ่าย (Expense)</button>
         <button type="button" data-ex-type="income" class="py-2 rounded-xl text-xs font-semibold transition">รายรับ (Income)</button>
@@ -192,6 +202,10 @@ export function mountExpense(el) {
       <div id="ex-breakdown" class="space-y-1.5 pt-1"></div>
     </section>
 
+    <section id="ex-pending-card" class="card space-y-3 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-800">🧐 กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3><button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button></div>
+      <div id="ex-pending-list" class="space-y-2"></div>
+    </section>
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800"><i class="fa-solid fa-receipt text-brand"></i> ประวัติรายรับ-รายจ่าย</h3>
@@ -257,6 +271,15 @@ export function mountExpense(el) {
   });
 
   $r('#ex-save').addEventListener('click', saveManualForm);
+  $r('#ex-statement-parse').addEventListener('click', processStatementPaste);
+  $r('#ex-pending-import').addEventListener('click', importSelectedStatementItems);
+  $r('#ex-pending-list').addEventListener('change', e => {
+    const row = e.target.closest('[data-pending-id]'); if (!row) return;
+    const item = pendingStatement.find(x => x.id === row.dataset.pendingId); if (!item) return;
+    if (e.target.matches('[data-pending-category]')) item.category = e.target.value;
+    if (e.target.matches('[data-pending-select]')) item.selected = e.target.checked;
+    if (e.target.matches('[data-pending-rule]')) item.rememberRule = e.target.checked;
+  });
   $r('#ex-cancel').addEventListener('click', resetForm);
   $r('#ex-export-csv').addEventListener('click', exportMonthCsv);
   $r('#ex-month').addEventListener('change', () => {
@@ -573,6 +596,95 @@ export async function handleSharedSlipLaunch(showTabFn) {
   await runSlipScan(file);
 }
 
+
+async function loadExpenseRules() {
+  if (!state.uid) return [];
+  try {
+    const snap = await getDoc(userDoc(state.uid, 'settings', 'expense_rules'));
+    return snap.exists() && Array.isArray(snap.data().rules) ? snap.data().rules : [];
+  } catch (err) { console.warn('Could not load expense rules:', err?.code || err?.message); return []; }
+}
+
+function suggestStatementCategory(item, rules) {
+  const text = (item.merchant || '').toLocaleLowerCase();
+  const hit = rules.find(rule => rule && rule.keyword && text.includes(String(rule.keyword).toLocaleLowerCase()));
+  if (hit?.category) return hit.category;
+  if (/dlt|กรมการขนส่ง|ภาษีรถ/i.test(text)) return 'รถยนต์/ภาษี';
+  if (/เอไอเอส|ais|เติมเงินมือถือ|ค่าโทรศัพท์/i.test(text)) return 'ค่าโทรศัพท์';
+  if (item.type === 'income' && /เงินเดือน|payroll/i.test(text)) return 'เงินเดือน';
+  return item.type === 'income' ? 'โอนเข้า/คืนเงิน' : 'อื่น ๆ';
+}
+
+function statementDuplicate(item) {
+  const target = new Date(item.date + 'T' + (item.time || '00:00') + ':00').getTime();
+  return (state.expenses || []).some(old => {
+    if (Number(old.amount) !== Number(item.amount) || old.type !== item.type) return false;
+    const dayDiff = Math.abs(new Date(old.date + 'T00:00:00').getTime() - new Date(item.date + 'T00:00:00').getTime());
+    if (dayDiff > 86400000) return false;
+    if (!old.time) return dayDiff === 0;
+    return Math.abs(new Date(old.date + 'T' + old.time + ':00').getTime() - target) <= 15 * 60000;
+  });
+}
+
+async function processStatementPaste() {
+  const input = $r('#ex-statement-text'), status = $r('#ex-statement-status');
+  if (!input.value.trim()) return toast('กรุณาวางข้อความ Statement ก่อนค่ะ', 'err');
+  const { items, errors } = parseStatementText(input.value);
+  if (!items.length) { status.textContent = 'อ่านไม่พบรายการที่รองรับ (' + errors.length + ' บรรทัด)'; return; }
+  const rules = await loadExpenseRules();
+  pendingStatement = items.map((item, index) => {
+    const next = { ...item, id: 'st' + Date.now().toString(36) + index.toString(36), selected: true, rememberRule: false };
+    next.category = suggestStatementCategory(next, rules);
+    next.duplicate = statementDuplicate(next);
+    return next;
+  });
+  status.textContent = 'อ่านได้ ' + items.length + ' รายการ · ข้าม/อ่านไม่ได้ ' + errors.length + ' บรรทัด';
+  renderPendingStatement();
+}
+
+function renderPendingStatement() {
+  const card = $r('#ex-pending-card'); if (!card) return;
+  card.classList.toggle('hidden', !pendingStatement.length);
+  $r('#ex-pending-count').textContent = pendingStatement.length ? '(' + pendingStatement.length + ' รายการ)' : '';
+  $r('#ex-pending-list').innerHTML = pendingStatement.map(item => {
+    const cats = item.type === 'income' ? INCOME_CATEGORIES : item.type === 'transfer' ? ['โอนระหว่างบัญชี'] : EXPENSE_CATEGORIES;
+    return '<article data-pending-id="' + esc(item.id) + '" class="rounded-xl border border-slate-200 p-3 space-y-2">' +
+      '<div class="flex items-start gap-2"><input type="checkbox" data-pending-select checked class="mt-1"><div class="min-w-0 flex-1"><b class="text-sm">' + esc(item.merchant || 'ไม่พบรายละเอียด') + '</b><p class="text-xs text-slate-500">' + esc(fmtDate(item.date)) + ' · ' + esc(item.time) + ' น.</p><p class="text-sm font-semibold">' + fmtMoney(item.amount) + ' ฿ · ' + (item.type === 'income' ? 'รายรับ' : item.type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย') + '</p>' +
+      (item.duplicate ? '<p class="text-xs font-semibold text-amber-700">⚠️ อาจซ้ำกับรายการเดิม</p>' : '') + '</div></div>' +
+      '<div class="flex flex-wrap items-center gap-2"><label class="text-xs text-slate-500">หมวดหมู่</label><select data-pending-category class="input flex-1 text-xs">' +
+      cats.map(c => '<option value="' + esc(c) + '"' + (c === item.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></div>' +
+      '<label class="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" data-pending-rule> จำกฎนี้สำหรับครั้งถัดไป</label></article>';
+  }).join('');
+}
+
+async function importSelectedStatementItems() {
+  const selected = pendingStatement.filter(x => x.selected);
+  if (!selected.length) return toast('กรุณาเลือกรายการที่ต้องการนำเข้าก่อนค่ะ', 'err');
+  const records = selected.map(item => ({
+    id: 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    type: item.type, amount: item.amount, category: item.category, date: item.date, time: item.time,
+    merchant: item.merchant, note: '', source: 'statement', createdAt: new Date().toISOString()
+  }));
+  const rulesToSave = selected.filter(x => x.rememberRule && x.merchant && x.category).map(x => ({ keyword: x.merchant.slice(0, 80), category: x.category }));
+  const btn = $r('#ex-pending-import'); btn.disabled = true;
+  try {
+    await saveBatchExpenseRecords(records);
+    if (rulesToSave.length && state.uid) {
+      const merged = [...await loadExpenseRules()];
+      rulesToSave.forEach(rule => {
+        const index = merged.findIndex(x => String(x.keyword || '').toLowerCase() === rule.keyword.toLowerCase());
+        if (index >= 0) merged[index] = rule; else merged.push(rule);
+      });
+      await setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true });
+    }
+    pendingStatement = pendingStatement.filter(x => !x.selected);
+    renderPendingStatement();
+    if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
+    toast('นำเข้า ' + records.length + ' รายการแล้ว');
+  } catch (err) { toast('นำเข้าไม่สำเร็จ: ' + err.message, 'err'); }
+  finally { btn.disabled = false; }
+}
+
 function getFilteredMonthItems(curMonth) {
   const inMonth = monthItems(curMonth);
   const q = ($r('#ex-search')?.value || '').trim().toLowerCase();
@@ -615,7 +727,7 @@ export function renderExpense() {
   const inMonth = monthItems(curMonth);
 
   const totalIncome = inMonth.filter(x => x.type === 'income').reduce((s, x) => s + (Number(x.amount) || 0), 0);
-  const totalExpense = inMonth.filter(x => x.type !== 'income').reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const totalExpense = inMonth.filter(x => x.type === 'expense').reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const net = totalIncome - totalExpense;
 
   $r('#ex-summary').innerHTML = `
@@ -634,7 +746,7 @@ export function renderExpense() {
 
   // สัดส่วนรายจ่ายตามหมวดในเดือนที่เลือก
   const byCat = {};
-  inMonth.filter(x => x.type !== 'income').forEach(x => {
+  inMonth.filter(x => x.type === 'expense').forEach(x => {
     const c = x.category || 'อื่น ๆ';
     byCat[c] = (byCat[c] || 0) + (Number(x.amount) || 0);
   });
@@ -670,6 +782,7 @@ export function renderExpense() {
   $r('#ex-count').textContent = `${filtered.length} รายการ`;
   $r('#ex-list').innerHTML = filtered.length ? filtered.map(x => {
     const isInc = x.type === 'income';
+    const isTransfer = x.type === 'transfer';
     return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 min-w-0">
         <span class="emoji-bubble emoji-sm">${CAT_ICONS[x.category] || '💸'}</span>
@@ -683,7 +796,7 @@ export function renderExpense() {
         </div>
       </div>
       <div class="text-right shrink-0 space-y-1">
-        <p class="text-sm font-bold ${isInc ? 'text-green-700' : 'text-rose-700'}">${isInc ? '+' : '-'}${fmtMoney(x.amount)} ฿</p>
+        <p class="text-sm font-bold ${isInc ? 'text-green-700' : 'text-rose-700'}">${isInc ? '+' : isTransfer ? '↔ ' : '-'}${fmtMoney(x.amount)} ฿</p>
         <div class="flex justify-end gap-1.5 text-[11px]">
           <button type="button" data-ex-edit="${esc(x.id)}" class="text-blue-700 hover:underline">แก้</button>
           <button type="button" data-ex-del="${esc(x.id)}" class="text-rose-500 hover:underline">ลบ</button>
