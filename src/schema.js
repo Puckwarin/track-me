@@ -109,6 +109,9 @@ export const SANITIZERS = {
     type:o.type, typeLabel:str(o.typeLabel,40), status:o.status==='planned'?'planned':'done', durationMin:num(o.durationMin), intensity:['light','moderate','vigorous'].includes(o.intensity)?o.intensity:null, estKcal:num(o.estKcal),
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),imageUrl:str(r.imageUrl,1000),...(str(r.refTitle,200)&&{refTitle:str(r.refTitle,200)}),...(str(r.refUrl,1000)&&{refUrl:str(r.refUrl,1000)}),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,400)}))])),
     performedSets:Array.isArray(o.performedSets)?o.performedSets.slice(0,300).filter(x=>x&&str(x.name,80)).map(x=>({name:str(x.name,80),section:['warmup','main','cooldown'].includes(x.section)?x.section:'main',set:int(x.set,1,99),weightKg:num(x.weightKg),reps:num(x.reps),completed:x.completed===true})):[], completedSetCount:int(o.completedSetCount,0,300), volumeKg:num(o.volumeKg),
+    ...(['energized','good','tired','exhausted'].includes(o.feeling)&&{feeling:o.feeling}),
+    ...(int(o.sessionRpe,1,10)!==null&&{sessionRpe:int(o.sessionRpe,1,10)}),
+    ...(Array.isArray(o.exerciseFeedback)&&{exerciseFeedback:o.exerciseFeedback.slice(0,40).filter(x=>x&&str(x.name,80)).map(x=>({name:str(x.name,80),section:['warmup','main','cooldown'].includes(x.section)?x.section:'main',...(int(x.rpe,1,10)!==null&&{rpe:int(x.rpe,1,10)}),...(int(x.rir,0,10)!==null&&{rir:int(x.rir,0,10)}),...(['increase','maintain','deload'].includes(x.nextAction)&&{nextAction:x.nextAction}),...(str(x.nextLabel,120)&&{nextLabel:str(x.nextLabel,120)})}))}),
     note:str(o.note,500), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,
   workout_templates: o => str(o.name,60) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
@@ -145,6 +148,14 @@ export const SANITIZERS = {
         ...(isDateStr(o.altAnchor) && { altAnchor: o.altAnchor }),
         doneMap: o.doneMap && typeof o.doneMap === 'object' ? Object.fromEntries(Object.entries(o.doneMap).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => typeof x === 'string').slice(0, 60)])) : {},
         extras: o.extras && typeof o.extras === 'object' ? Object.fromEntries(Object.entries(o.extras).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => x && str(x.title, 80)).slice(0, 30).map(x => ({ id: str(x.id, 40), title: str(x.title, 80), done: x.done === true }))])) : {},
+        ...(Array.isArray(o.recentDone) && {
+          recentDone: o.recentDone.slice(0, 40).filter(x => x && str(x.title, 80) && isDateStr(x.date)).map(x => ({
+            ...(str(x.id, 40) && { id: str(x.id, 40) }),
+            title: str(x.title, 80),
+            ...(str(x.icon, 8) && { icon: str(x.icon, 8) }),
+            date: x.date
+          }))
+        }),
         updatedAt: ts(o.updatedAt)
       };
     }

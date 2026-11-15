@@ -2,7 +2,7 @@ import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'fireb
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
-import { lookupPer100g, analyzeFoodImage, explainGeminiError } from './nutrition.js';
+import { analyzeFoodImage, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
@@ -53,10 +53,10 @@ export function mountFood(el) {
 
       <div class="space-y-1.5">
         <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition">
-          <input type="file" id="f-scan" accept="image/*" class="hidden">
+          <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
           <i class="fa-solid fa-camera-retro text-xl text-brand"></i>
-          <span class="block text-sm font-semibold text-slate-800 mt-1">📷 ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด</span>
-          <span class="block text-xs text-slate-500">สแกน 1 ปุ่มเดียว — ตรวจบาร์โค้ด ฉลากโภชนาการ และจานอาหารให้อัตโนมัติ</span>
+          <span class="block text-sm font-semibold text-slate-800 mt-1">📷 ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
+          <span class="block text-xs text-slate-500">สแกน 1 ปุ่มเดียว — แสดงความคืบหน้าและเปิดหน้าต่างตรวจยืนยันก่อนบันทึก</span>
         </label>
         <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
       </div>
@@ -318,6 +318,16 @@ export function watchDay() {
   watchFoodRecords(state.uid, date, list => { items = list; renderDay(); });
 }
 
+export function resetFoodToToday() {
+  if (!root) return;
+  const dateEl = $('#f-date', root);
+  const today = localDateStr();
+  if (dateEl && dateEl.value !== today) {
+    dateEl.value = today;
+    watchDay();
+  }
+}
+
 function fillMealSelect() {
   if (!root) return;
   const opts = getMeals().map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
@@ -382,6 +392,7 @@ function clearFoodForm() {
   ['f-sugar','f-sodium'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
   $('#f-sugar-wrap',root).classList.add('hidden'); $('#f-sodium-wrap',root).classList.add('hidden');
   $('#f-photo-lib-bar', root)?.classList.add('hidden');
+  setFoodScanStatus('', '');
   $('#f-qty',root).value=1;
   base=null; qtyMode='auto';
   syncFoodWeightForm();
@@ -725,88 +736,254 @@ function setFoodScanStatus(text, tone = 'busy') {
   else el.classList.add('text-slate-500');
 }
 
-// ---------- Unified 1-button scan (Barcode -> Label / Dish) ----------
-async function onUnifiedScan(e) {
-  const f = e.target.files[0]; e.target.value = '';
-  if (!f) return;
-
-  // 1) ลองตรวจจับบาร์โค้ดในเครื่องก่อน (~50ms)
+// ---------- Unified multi-image scan (Barcode -> Label / Dish) ----------
+async function scanSingleFoodFile(file, { signal } = {}) {
   if ('BarcodeDetector' in window) {
-    setFoodScanStatus('กำลังตรวจสอบบาร์โค้ดในภาพ...', 'busy');
     let code = null;
-    try { code = await detectBarcode(f); } catch { code = null; }
+    try { code = await detectBarcode(file); } catch { code = null; }
     if (code) {
-      setFoodScanStatus(`พบบาร์โค้ด ${code} · กำลังค้นหาข้อมูลสินค้า...`, 'busy');
       try {
         const hits = await barcodeOff(code);
         if (hits.length) {
           const hit = hits[0];
           const grams = hit.servingGrams || 100;
-          const k = grams / 100, p = hit.per100;
-          base = null;
-          $('#f-name', root).value = `${hit.name}${hit.brand ? ' · ' + hit.brand : ''} (${grams}g)`;
-          $('#f-qty', root).value = 1;
-          $('#f-cal', root).value = Math.round((p.calories || 0) * k);
-          $('#f-pro', root).value = p.protein != null ? round1(p.protein * k) : '';
-          $('#f-carb', root).value = p.carbs != null ? round1(p.carbs * k) : '';
-          $('#f-fat', root).value = p.fat != null ? round1(p.fat * k) : '';
-          $('#f-sugar', root).value = p.sugar != null ? round1(p.sugar * k) : '';
-          $('#f-sodium', root).value = p.sodium != null ? Math.round(p.sodium * k) : '';
-          $('#f-sugar-wrap', root)?.classList.toggle('hidden', p.sugar == null);
-          $('#f-sodium-wrap', root)?.classList.toggle('hidden', p.sodium == null);
-          updateFoodPreview();
-          const bar = $('#f-photo-lib-bar', root);
-          if (bar) {
-            $('#f-photo-lib-text', root).textContent = `บาร์โค้ด ${code}: ${hit.name} (~${Math.round((p.calories || 0) * k)} kcal / ${grams}g)`;
-            bar.classList.remove('hidden');
-          }
-          setFoodScanStatus(`✓ พบบาร์โค้ด ${code} (${hit.name}) — ดึงค่าเสร็จสิ้น`, 'ok');
-          toast('ดึงข้อมูลจากบาร์โค้ดแล้ว — ตรวจสอบและกดบันทึกได้เลย');
-          return;
+          const k = grams / 100;
+          const p = hit.per100 || {};
+          return {
+            sourceType: 'barcode',
+            barcode: code,
+            name: `${hit.name}${hit.brand ? ' · ' + hit.brand : ''}`,
+            unit: `${grams}g`,
+            gramsPerUnit: grams,
+            calories: Math.round((p.calories || 0) * k),
+            protein: p.protein != null ? round1(p.protein * k) : '',
+            carbs: p.carbs != null ? round1(p.carbs * k) : '',
+            fat: p.fat != null ? round1(p.fat * k) : '',
+            sugar: p.sugar != null ? round1(p.sugar * k) : '',
+            sodium: p.sodium != null ? Math.round(p.sodium * k) : '',
+            notes: `บาร์โค้ด ${code}`
+          };
         }
-        setFoodScanStatus(`พบบาร์โค้ด ${code} แต่ยังไม่พบใน Open Food Facts · เปิดค้นหาให้แล้ว`, 'err');
-        openFoodSearchModal(code);
-        return;
-      } catch (err) {
-        setFoodScanStatus('ค้นหาบาร์โค้ดไม่สำเร็จ: ' + err.message, 'err');
+      } catch {
+        // Fallback to AI label/dish analysis if barcode lookup fails or is unavailable offline
       }
     }
   }
 
-  // 2) วิเคราะห์ภาพด้วย AI (แยกฉลาก vs จานอาหารอัตโนมัติในรอบเดียว)
-  setFoodScanStatus('กำลังวิเคราะห์ภาพอาหาร / ฉลากโภชนาการ...', 'busy');
-  try {
-    const r = await analyzeFoodImage(f);
-    if (r.kind === 'label') {
-      const per100 = r.basis === 'per_100g';
-      setFoodScanStatus('✓ อ่านฉลากโภชนาการเสร็จสิ้น — ตรวจสอบค่าก่อนบันทึก', 'ok');
-      openFoodEditor({
-        prefill: {
-          name: r.name || '', brand: '',
-          unit: per100 ? '100 กรัม' : (r.basis === 'per_serving' ? (r.servingSizeText || '') : ''),
-          gramsPerUnit: per100 ? 100 : (r.basis === 'per_serving' ? r.servingGrams : null),
-          calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, sugar: r.sugar, sodium: r.sodium
-        },
-        scan: { basis: r.basis || 'unknown', servingGrams: r.servingGrams, servingSizeText: r.servingSizeText, notes: r.notes },
-        onSaved: food => applyPreset(food)
-      });
-      return;
-    }
+  const r = await analyzeFoodImage(file, { signal });
+  const isLabel = r.kind === 'label';
+  const per100 = r.basis === 'per_100g';
+  const unit = isLabel
+    ? (per100 ? '100 กรัม' : (r.basis === 'per_serving' ? (r.servingSizeText || 'หน่วยบริโภค') : 'หน่วย'))
+    : 'จาน/ที่';
+  const gramsPerUnit = isLabel
+    ? (per100 ? 100 : (r.basis === 'per_serving' && Number.isFinite(r.servingGrams) ? r.servingGrams : null))
+    : null;
+  return {
+    sourceType: isLabel ? 'label' : 'dish',
+    basis: r.basis || 'unknown',
+    name: (r.name || '').trim() || (isLabel ? 'สินค้าจากฉลาก' : 'เมนูอาหารจากภาพ'),
+    unit,
+    gramsPerUnit,
+    calories: r.calories != null ? Math.round(r.calories) : '',
+    protein: r.protein != null ? round1(r.protein) : '',
+    carbs: r.carbs != null ? round1(r.carbs) : '',
+    fat: r.fat != null ? round1(r.fat) : '',
+    sugar: r.sugar != null ? round1(r.sugar) : '',
+    sodium: r.sodium != null ? Math.round(r.sodium) : '',
+    notes: r.notes || ''
+  };
+}
 
-    base = null;
-    $('#f-name', root).value = r.name || '';
-    $('#f-qty', root).value = 1;
-    [['f-cal', r.calories], ['f-pro', r.protein], ['f-carb', r.carbs], ['f-fat', r.fat]].forEach(([id, v]) => { $('#' + id, root).value = v ?? ''; });
-    if (r.sugar != null) { $('#f-sugar', root).value = r.sugar; $('#f-sugar-wrap', root)?.classList.remove('hidden'); }
-    if (r.sodium != null) { $('#f-sodium', root).value = r.sodium; $('#f-sodium-wrap', root)?.classList.remove('hidden'); }
-    updateFoodPreview();
-    const bar = $('#f-photo-lib-bar', root);
-    if (bar) {
-      $('#f-photo-lib-text', root).textContent = `ประเมิน: ${r.name || 'เมนูอาหาร'} (~${r.calories ?? 0} kcal)`;
-      bar.classList.remove('hidden');
+function openBatchFoodScanModal(results, errors) {
+  const defaultDate = $('#f-date', root)?.value || localDateStr();
+  const meals = getMeals();
+  const currentMealId = $('#f-meal', root)?.value || meals[0]?.id || '';
+  const sourceLabels = {
+    barcode: ['บาร์โค้ด', 'bg-sky-soft text-blue-700'],
+    label: ['ฉลากโภชนาการ', 'bg-lav-soft text-brand-dark'],
+    dish: ['จานอาหาร', 'bg-amber-100 text-amber-800']
+  };
+
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-bold text-lg text-slate-800">🍽️ ตรวจสอบผลสแกนอาหาร (${results.length} รูป)</h3>
+      <button data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
+      ✓ ประมวลผลเสร็จสิ้น ${results.length} รายการ${errors.length ? ` · ไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บรูปภาพลงระบบ)
+    </p>
+    ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+      <div><label class="lbl">วันที่บันทึก</label><input id="bfs-date" type="date" class="input" value="${esc(defaultDate)}"></div>
+      <div><label class="lbl">มื้ออาหาร</label><select id="bfs-meal" class="input">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+    </div>
+    <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+      ${results.map((r, i) => {
+        const d = r.data || {};
+        const [badgeText, badgeCls] = sourceLabels[d.sourceType] || sourceLabels.dish;
+        return `<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-bfs-row="${i}">
+          <label class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+            <span class="flex items-center gap-2"><input type="checkbox" class="bfs-chk" checked> รูปที่ ${i + 1} (${esc(r.fileName)})</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full ${badgeCls}">${badgeText}</span>
+          </label>
+          ${d.notes ? `<p class="text-[11px] text-slate-500">${esc(d.notes)}</p>` : ''}
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div class="sm:col-span-2"><label class="lbl">ชื่อเมนู *</label><input class="input bfs-name text-xs font-semibold" value="${esc(d.name || '')}"></div>
+            <div><label class="lbl">จำนวน</label><input type="number" step="0.1" min="0.1" class="input bfs-qty text-xs" value="1"></div>
+            <div><label class="lbl">หน่วย</label><input class="input bfs-unit text-xs" value="${esc(d.unit || 'หน่วย')}"></div>
+          </div>
+          <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-xs">
+            <div><label class="lbl">kcal *</label><input type="number" min="0" step="1" class="input bfs-cal !py-1" value="${esc(d.calories)}"></div>
+            <div><label class="lbl">P (g)</label><input type="number" min="0" step="0.1" class="input bfs-pro !py-1" value="${esc(d.protein)}"></div>
+            <div><label class="lbl">C (g)</label><input type="number" min="0" step="0.1" class="input bfs-carb !py-1" value="${esc(d.carbs)}"></div>
+            <div><label class="lbl">F (g)</label><input type="number" min="0" step="0.1" class="input bfs-fat !py-1" value="${esc(d.fat)}"></div>
+            <div><label class="lbl">น้ำตาล</label><input type="number" min="0" step="0.1" class="input bfs-sugar !py-1" value="${esc(d.sugar)}"></div>
+            <div><label class="lbl">โซเดียม</label><input type="number" min="0" step="1" class="input bfs-sodium !py-1" value="${esc(d.sodium)}"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <label class="flex items-center gap-2 text-xs text-slate-600 mt-3"><input id="bfs-save-lib" type="checkbox"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="bfs-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> ยืนยันบันทึกเข้ามื้ออาหาร</button>
+    </div>`, { wide: true });
+
+  $('#bfs-save', m.el).addEventListener('click', async () => {
+    const date = $('#bfs-date', m.el).value;
+    const mealSel = $('#bfs-meal', m.el);
+    const mealId = mealSel.value;
+    const meal = mealSel.selectedOptions[0]?.textContent || '';
+    if (!date || !mealId) return toast('เลือกวันที่และมื้ออาหารก่อนบันทึก', 'err');
+
+    const rows = [...m.el.querySelectorAll('[data-bfs-row]')];
+    const itemsToSave = [];
+    for (const row of rows) {
+      if (!row.querySelector('.bfs-chk')?.checked) continue;
+      const idx = Number(row.dataset.bfsRow);
+      const orig = results[idx]?.data || {};
+      const name = row.querySelector('.bfs-name').value.trim();
+      const qty = Number(row.querySelector('.bfs-qty').value);
+      const portionUnit = row.querySelector('.bfs-unit').value.trim() || 'หน่วย';
+      const calRaw = row.querySelector('.bfs-cal').value;
+      const cal = Number(calRaw);
+      if (!name || !Number.isFinite(qty) || qty <= 0 || calRaw === '' || !Number.isFinite(cal) || cal < 0) {
+        return toast('ตรวจสอบชื่อ จำนวน และแคลอรี่ในรายการที่เลือกให้ถูกต้องก่อนบันทึก', 'err');
+      }
+      const pro = toNum(row.querySelector('.bfs-pro').value) ?? 0;
+      const carb = toNum(row.querySelector('.bfs-carb').value) ?? 0;
+      const fat = toNum(row.querySelector('.bfs-fat').value) ?? 0;
+      const sugar = toNum(row.querySelector('.bfs-sugar').value);
+      const sodium = toNum(row.querySelector('.bfs-sodium').value);
+      const unitNutrition = {
+        calories: cal,
+        protein: pro,
+        carbs: carb,
+        fat,
+        ...(sugar !== null && { sugar }),
+        ...(sodium !== null && { sodium })
+      };
+      itemsToSave.push({
+        name: foodLogName(name),
+        quantity: qty,
+        portionUnit: portionUnit.slice(0, 24),
+        gramsPerUnit: Number.isFinite(orig.gramsPerUnit) ? orig.gramsPerUnit : null,
+        unitNutrition,
+        calories: Math.round(cal * qty),
+        protein: round1(pro * qty),
+        carbs: round1(carb * qty),
+        fat: round1(fat * qty),
+        ...(sugar !== null && { sugar: round1(sugar * qty) }),
+        ...(sodium !== null && { sodium: Math.round(sodium * qty) })
+      });
     }
-    setFoodScanStatus(`✓ วิเคราะห์จานอาหารเสร็จสิ้น: ${r.name || 'เมนูอาหาร'} (~${r.calories ?? 0} kcal)`, 'ok');
-    toast('วิเคราะห์สำเร็จ — ตรวจสอบค่าแล้วกดบันทึก หรือเก็บลงคลังได้');
+    if (!itemsToSave.length) return toast('เลือกอย่างน้อย 1 รายการก่อนบันทึก', 'err');
+
+    const btn = $('#bfs-save', m.el);
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึก…';
+    try {
+      const now = new Date();
+      const commits = [];
+      for (let i = 0; i < itemsToSave.length; i += 450) {
+        const batch = writeBatch(db);
+        const colRef = userCol(state.uid, 'food_records');
+        itemsToSave.slice(i, i + 450).forEach(rec => {
+          batch.set(doc(colRef), { date, mealId, meal, ...rec, createdAt: now });
+        });
+        commits.push(batch.commit());
+      }
+
+      let addedToLib = 0;
+      if ($('#bfs-save-lib', m.el).checked) {
+        const identity = n => String(n).trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
+        const existingNames = new Set([...state.customFoods, ...DEFAULT_PRESETS].map(x => identity(x.name)));
+        const seen = new Set();
+        const batch = writeBatch(db);
+        const libRef = userCol(state.uid, 'custom_foods');
+        itemsToSave.forEach(item => {
+          const k = identity(item.name);
+          if (!existingNames.has(k) && !seen.has(k)) {
+            seen.add(k);
+            batch.set(doc(libRef), {
+              name: item.name,
+              brand: '',
+              unit: item.portionUnit || 'หน่วย',
+              gramsPerUnit: item.gramsPerUnit,
+              defaultQuantity: 1,
+              category: guessFoodCategory(item.name),
+              calories: item.unitNutrition.calories,
+              protein: item.unitNutrition.protein,
+              carbs: item.unitNutrition.carbs,
+              fat: item.unitNutrition.fat,
+              sugar: item.unitNutrition.sugar ?? null,
+              sodium: item.unitNutrition.sodium ?? null,
+              favorite: false,
+              createdAt: now
+            });
+            addedToLib++;
+          }
+        });
+        if (addedToLib) commits.push(batch.commit());
+      }
+
+      Promise.all(commits).catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
+      if ($('#f-date', root) && $('#f-date', root).value !== date) {
+        $('#f-date', root).value = date;
+        watchDay();
+      }
+      if ($('#f-meal', root) && mealId) $('#f-meal', root).value = mealId;
+      setFoodScanStatus('', 'busy');
+      m.close();
+      toast(`บันทึก ${itemsToSave.length} รายการลง${meal}แล้ว${addedToLib ? ` · เพิ่มเข้าคลัง ${addedToLib} เมนู` : ''}`);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> ยืนยันบันทึกเข้ามื้ออาหาร';
+      toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+    }
+  });
+}
+
+async function onUnifiedScan(e) {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+
+  setFoodScanStatus(formatImageProgress('กำลังวิเคราะห์', { total: files.length, activeIndex: 1, completed: 0, percent: 0 }), 'busy');
+  try {
+    const { results, errors } = await runImageBatch(
+      files,
+      (file, _idx, opts) => scanSingleFoodFile(file, opts),
+      info => setFoodScanStatus(formatImageProgress('กำลังวิเคราะห์', info), 'busy'),
+      { concurrency: 2 }
+    );
+    if (!results.length && errors.length) {
+      setFoodScanStatus(errors[0].message, 'err');
+      return toast(errors[0].message, 'err');
+    }
+    setFoodScanStatus(`✓ ประมวลผลครบ ${files.length}/${files.length} รูป (สำเร็จ ${results.length}) — ตรวจสอบและยืนยัน`, 'ok');
+    openBatchFoodScanModal(results, errors);
   } catch (err) {
     const msg = explainGeminiError(err);
     setFoodScanStatus(msg, 'err');

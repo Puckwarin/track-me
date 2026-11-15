@@ -49,6 +49,13 @@ export function mountReport(el) {
   $('#r-csv', root).addEventListener('click', csv);
 }
 
+export function resetReportToToday() {
+  if (!root) return;
+  const today = localDateStr();
+  if ($('#r-from', root)) $('#r-from', root).value = addDays(today, -90);
+  if ($('#r-to', root)) $('#r-to', root).value = today;
+}
+
 async function load() {
   const from = $('#r-from', root).value, to = $('#r-to', root).value;
   if (!from || !to || from > to) throw new Error('ช่วงวันที่ไม่ถูกต้อง');

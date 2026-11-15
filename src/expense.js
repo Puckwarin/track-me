@@ -5,7 +5,10 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
-import { advanceRecurringDate, calculateExpenseBudgets, expenseSettingDocId, normalizeExpenseKeyword, suggestExpenseCategory } from './expenseLogic.js';
+import {
+  advanceRecurringDate, calculateExpenseBudgets, detectRecurringExpenses,
+  estimateMonthlyRecurringTotal, expenseSettingDocId, normalizeExpenseKeyword, suggestExpenseCategory
+} from './expenseLogic.js';
 
 export const EXPENSE_CATEGORIES = [
   'อาหาร',
@@ -53,6 +56,7 @@ let pendingStatement = [];
 let expenseRules = [];
 let expenseBudgets = {};
 let recurringExpenses = [];
+let analyzedRecurringCandidates = [];
 let manualCategoryTouched = false;
 
 const $r = s => $(s, root);
@@ -272,7 +276,13 @@ export function mountExpense(el) {
     </section>
 
     <section id="ex-pending-card" class="card space-y-3 hidden">
-      <div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-800">🧐 กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3><button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button></div>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-slate-800">🧐 กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างกล่องรอตรวจ</button>
+          <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button>
+        </div>
+      </div>
       <div id="ex-pending-list" class="space-y-2"></div>
     </section>
     <section class="card space-y-3">
@@ -319,10 +329,26 @@ export function mountExpense(el) {
       openRecurringEditor();
       return;
     }
+    const recurringAdopt = e.target.closest('[data-recurring-adopt]');
+    if (recurringAdopt) {
+      const candidate = analyzedRecurringCandidates[Number(recurringAdopt.dataset.recurringAdopt)];
+      if (candidate) {
+        openRecurringEditor({
+          merchant: candidate.merchant,
+          amount: candidate.avgAmount,
+          category: EXPENSE_CATEGORIES.includes(candidate.category) ? candidate.category : 'บิล/ค่าใช้จ่ายประจำ',
+          frequency: 'monthly',
+          nextDate: candidate.predictedNextDate,
+          dayOfMonth: candidate.dayOfMonth,
+          note: `วิเคราะห์จากประวัติ ${candidate.monthsCount} เดือน`
+        }, { isEdit: false });
+      }
+      return;
+    }
     const recurringEdit = e.target.closest('[data-recurring-edit]');
     if (recurringEdit) {
       const plan = recurringExpenses.find(item => item.planId === recurringEdit.dataset.recurringEdit);
-      if (plan) openRecurringEditor(plan);
+      if (plan) openRecurringEditor(plan, { isEdit: true });
       return;
     }
     const recurringDelete = e.target.closest('[data-recurring-delete]');
@@ -337,6 +363,15 @@ export function mountExpense(el) {
       if (plan && confirm(`ยืนยันบันทึกรายจ่าย “${plan.merchant}” จำนวน ${fmtMoney(plan.amount)} ฿ สำหรับวันที่ ${fmtDate(plan.nextDate)} หรือไม่?`)) {
         recordRecurringExpense(plan);
       }
+      return;
+    }
+    const pendingRemove = e.target.closest('[data-pending-remove]');
+    if (pendingRemove) {
+      const removeId = pendingRemove.dataset.pendingRemove;
+      pendingStatement = pendingStatement.filter(x => x.id !== removeId);
+      renderPendingStatement();
+      if (!pendingStatement.length && $r('#ex-statement-status')) $r('#ex-statement-status').textContent = '';
+      toast('ลบรายการออกจากกล่องรอตรวจแล้ว');
       return;
     }
     const editBtn = e.target.closest('[data-ex-edit]');
@@ -374,13 +409,34 @@ export function mountExpense(el) {
   $r('#ex-merchant').addEventListener('input', applyManualCategorySuggestion);
   $r('#ex-note').addEventListener('input', applyManualCategorySuggestion);
   $r('#ex-statement-parse').addEventListener('click', processStatementPaste);
+  $r('#ex-pending-clear').addEventListener('click', clearPendingStatement);
   $r('#ex-pending-import').addEventListener('click', importSelectedStatementItems);
   $r('#ex-pending-list').addEventListener('change', e => {
     const row = e.target.closest('[data-pending-id]'); if (!row) return;
     const item = pendingStatement.find(x => x.id === row.dataset.pendingId); if (!item) return;
-    if (e.target.matches('[data-pending-category]')) item.category = e.target.value;
+    if (e.target.matches('[data-pending-category]')) {
+      item.category = e.target.value;
+      item.categoryTouched = true;
+    }
     if (e.target.matches('[data-pending-select]')) item.selected = e.target.checked;
-    if (e.target.matches('[data-pending-rule]')) item.rememberRule = e.target.checked;
+  });
+  $r('#ex-pending-list').addEventListener('input', e => {
+    const row = e.target.closest('[data-pending-id]'); if (!row) return;
+    const item = pendingStatement.find(x => x.id === row.dataset.pendingId); if (!item) return;
+    if (e.target.matches('[data-pending-merchant]')) {
+      item.merchant = e.target.value.slice(0, 120);
+      if (!item.categoryTouched && item.type !== 'transfer') {
+        const suggested = suggestStatementCategory(item, expenseRules);
+        if (suggested) {
+          item.category = suggested;
+          const catSelect = row.querySelector('[data-pending-category]');
+          if (catSelect && [...catSelect.options].some(opt => opt.value === suggested)) catSelect.value = suggested;
+        }
+      }
+    }
+    if (e.target.matches('[data-pending-note]')) {
+      item.note = e.target.value.slice(0, 200);
+    }
   });
   $r('#ex-cancel').addEventListener('click', resetForm);
   $r('#ex-export-csv').addEventListener('click', exportMonthCsv);
@@ -415,8 +471,27 @@ function applyManualCategorySuggestion() {
   const merchant = $r('#ex-merchant')?.value.trim();
   const note = $r('#ex-note')?.value.trim();
   if (!category || manualCategoryTouched || (!merchant && !note)) return;
-  const suggestion = suggestExpenseCategory({ type: txType, merchant, note }, expenseRules, EXPENSE_CATEGORIES, INCOME_CATEGORIES);
+  const suggestion = suggestExpenseCategory({ type: txType, merchant, note }, expenseRules, EXPENSE_CATEGORIES, INCOME_CATEGORIES, state.expenses || []);
   if (suggestion && [...category.options].some(option => option.value === suggestion)) category.value = suggestion;
+}
+
+function clearOcrStatus() {
+  const statusEl = root ? $r('#ex-ocr-status') : null;
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.className = 'hidden text-xs font-medium';
+  }
+}
+
+export function resetExpenseToToday() {
+  if (!root) return;
+  const today = localDateStr();
+  selectedMonth = today.slice(0, 7);
+  if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
+  if (!editing) {
+    if ($r('#ex-date')) $r('#ex-date').value = today;
+    if ($r('#ex-time')) $r('#ex-time').value = nowTimeStr();
+  }
 }
 
 function resetForm() {
@@ -431,6 +506,7 @@ function resetForm() {
   $r('#ex-note').value = '';
   $r('#ex-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการ';
   $r('#ex-cancel').classList.add('hidden');
+  clearOcrStatus();
 }
 
 function startEdit(item) {
@@ -509,7 +585,7 @@ async function runMultiSlipScan(files) {
   const statusEl = root ? $r('#ex-ocr-status') : null;
   if (statusEl) {
     statusEl.className = 'text-xs text-brand-dark font-medium';
-    statusEl.textContent = `กำลังอ่านสลิป ${files.length} รูปในเครื่อง…`;
+    statusEl.textContent = `อัปโหลด ${files.length} รูป · กำลังเตรียมอ่านสลิป 1/${files.length} (0%)…`;
   }
   try {
     const results = await ocrMultipleSlipsInBrowser(files, msg => {
@@ -519,7 +595,7 @@ async function runMultiSlipScan(files) {
     if (statusEl && statusEl.isConnected) {
       statusEl.className = okCount ? 'text-xs text-green-700 font-semibold' : 'text-xs text-rose-600 font-medium';
       statusEl.textContent = okCount
-        ? `✓ ประมวลผลสลิปเสร็จสิ้น ${okCount}/${files.length} ใบ`
+        ? `✓ ประมวลผลครบ ${files.length}/${files.length} รูป (อ่านได้ ${okCount} ใบ) — ตรวจสอบและยืนยัน`
         : 'ไม่สามารถอ่านข้อมูลจากสลิปที่เลือกได้';
     }
     if (okCount) openBatchSlipsConfirmModal(results);
@@ -601,10 +677,15 @@ function openBatchSlipsConfirmModal(results) {
     btn.textContent = 'กำลังบันทึก…';
     try {
       await saveBatchExpenseRecords(records);
+      const learnedRules = records
+        .filter(r => r.type === 'expense' && r.merchant && r.category && r.category !== 'อื่น ๆ')
+        .map(r => ({ keyword: r.merchant.slice(0, 80), category: r.category }));
+      if (learnedRules.length && state.uid) rememberExpenseRules(learnedRules);
       selectedMonth = records[0].date.slice(0, 7);
       if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
       const totalAmt = records.reduce((s, x) => s + x.amount, 0);
       toast(`บันทึกรายจ่าย ${records.length} สลิป (${fmtMoney(totalAmt)} บาท) แล้ว 💸`);
+      clearOcrStatus();
       m.close();
     } catch (err) {
       btn.disabled = false;
@@ -681,8 +762,12 @@ export function openSlipConfirmModal(parsed) {
     btn.disabled = true;
     try {
       await saveTransactionRecord(record);
+      if (record.merchant && record.category && record.category !== 'อื่น ๆ' && state.uid) {
+        rememberExpenseRules([{ keyword: record.merchant.slice(0, 80), category: record.category }]);
+      }
       if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
       toast(`บันทึกรายจ่าย ${fmtMoney(record.amount)} บาท แล้ว 💸`);
+      clearOcrStatus();
       m.close();
     } catch (err) {
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
@@ -719,7 +804,7 @@ function loadExpenseRules() {
 }
 
 function suggestStatementCategory(item, rules) {
-  return suggestExpenseCategory(item, rules, EXPENSE_CATEGORIES, INCOME_CATEGORIES)
+  return suggestExpenseCategory(item, rules, EXPENSE_CATEGORIES, INCOME_CATEGORIES, state.expenses || [])
     || (item.type === 'transfer' ? 'โอนระหว่างบัญชี' : 'อื่น ๆ');
 }
 
@@ -734,6 +819,13 @@ function statementDuplicate(item) {
   });
 }
 
+function clearPendingStatement() {
+  pendingStatement = [];
+  renderPendingStatement();
+  if ($r('#ex-statement-status')) $r('#ex-statement-status').textContent = '';
+  toast('ล้างกล่องรอตรวจ Statement แล้ว');
+}
+
 async function processStatementPaste() {
   const input = $r('#ex-statement-text'), status = $r('#ex-statement-status');
   if (!input.value.trim()) return toast('กรุณาวางข้อความ Statement ก่อนค่ะ', 'err');
@@ -742,7 +834,13 @@ async function processStatementPaste() {
   if (!items.length) { status.textContent = 'อ่านไม่พบรายการที่รองรับ (' + errors.length + ' บรรทัด)'; return; }
   const rules = loadExpenseRules();
   pendingStatement = items.map((item, index) => {
-    const next = { ...item, id: 'st' + Date.now().toString(36) + index.toString(36), selected: true, rememberRule: false };
+    const next = {
+      ...item,
+      id: 'st' + Date.now().toString(36) + index.toString(36),
+      selected: true,
+      note: item.note || '',
+      categoryTouched: false
+    };
     next.category = suggestStatementCategory(next, rules);
     next.duplicate = statementDuplicate(next);
     return next;
@@ -758,11 +856,24 @@ function renderPendingStatement() {
   $r('#ex-pending-list').innerHTML = pendingStatement.map(item => {
     const cats = item.type === 'income' ? INCOME_CATEGORIES : item.type === 'transfer' ? ['โอนระหว่างบัญชี'] : EXPENSE_CATEGORIES;
     return '<article data-pending-id="' + esc(item.id) + '" class="rounded-xl border border-slate-200 p-3 space-y-2">' +
-      '<div class="flex items-start gap-2"><input type="checkbox" data-pending-select checked class="mt-1"><div class="min-w-0 flex-1"><b class="text-sm">' + esc(item.merchant || 'ไม่พบรายละเอียด') + '</b><p class="text-xs text-slate-500">' + esc(fmtDate(item.date)) + ' · ' + esc(item.time) + ' น.</p><p class="text-sm font-semibold">' + fmtMoney(item.amount) + ' ฿ · ' + (item.type === 'income' ? 'รายรับ' : item.type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย') + '</p>' +
-      (item.duplicate ? '<p class="text-xs font-semibold text-amber-700">⚠️ อาจซ้ำกับรายการเดิม</p>' : '') + '</div></div>' +
-      '<div class="flex flex-wrap items-center gap-2"><label class="text-xs text-slate-500">หมวดหมู่</label><select data-pending-category class="input flex-1 text-xs">' +
-      cats.map(c => '<option value="' + esc(c) + '"' + (c === item.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></div>' +
-      '<label class="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" data-pending-rule> จำกฎนี้สำหรับครั้งถัดไป</label></article>';
+      '<div class="flex items-start justify-between gap-2">' +
+        '<div class="flex items-start gap-2 min-w-0 flex-1">' +
+          '<input type="checkbox" data-pending-select ' + (item.selected ? 'checked' : '') + ' class="mt-1">' +
+          '<div class="min-w-0 flex-1 space-y-1">' +
+            '<p class="text-xs text-slate-500">' + esc(fmtDate(item.date)) + (item.time ? ' · ' + esc(item.time) + ' น.' : '') + ' · <b class="text-slate-800">' + fmtMoney(item.amount) + ' ฿</b> (' + (item.type === 'income' ? 'รายรับ' : item.type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย') + ')</p>' +
+            (item.duplicate ? '<p class="text-xs font-semibold text-amber-700">⚠️ อาจซ้ำกับรายการเดิม</p>' : '') +
+          '</div>' +
+        '</div>' +
+        '<button type="button" data-pending-remove="' + esc(item.id) + '" class="text-xs text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded" aria-label="ลบรายการนี้ออกจากกล่องรอตรวจ">✕</button>' +
+      '</div>' +
+      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' +
+        '<div><label class="lbl !mb-0.5 text-[11px]">ผู้รับเงิน / ร้านค้า / ที่มา</label><input type="text" data-pending-merchant maxlength="120" class="input !py-1.5 text-xs font-semibold" value="' + esc(item.merchant || '') + '" placeholder="แก้ชื่อร้านค้า/ที่มาให้จำง่าย"></div>' +
+        '<div><label class="lbl !mb-0.5 text-[11px]">หมวดหมู่</label><select data-pending-category class="input !py-1.5 text-xs">' +
+          cats.map(c => '<option value="' + esc(c) + '"' + (c === item.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div><input type="text" data-pending-note maxlength="200" class="input !py-1.5 text-xs" value="' + esc(item.note || '') + '" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"></div>' +
+    '</article>';
   }).join('');
 }
 
@@ -771,10 +882,19 @@ async function importSelectedStatementItems() {
   if (!selected.length) return toast('กรุณาเลือกรายการที่ต้องการนำเข้าก่อนค่ะ', 'err');
   const records = selected.map(item => ({
     id: 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    type: item.type, amount: item.amount, category: item.category, date: item.date, time: item.time,
-    merchant: item.merchant, note: '', source: 'statement', createdAt: new Date().toISOString()
+    type: item.type,
+    amount: item.amount,
+    category: item.category,
+    date: item.date,
+    time: item.time,
+    merchant: String(item.merchant || '').trim().slice(0, 120),
+    note: String(item.note || '').trim().slice(0, 200),
+    source: 'statement',
+    createdAt: new Date().toISOString()
   }));
-  const rulesToSave = selected.filter(x => x.rememberRule && x.merchant && x.category).map(x => ({ keyword: x.merchant.slice(0, 80), category: x.category }));
+  const rulesToSave = records
+    .filter(x => x.type === 'expense' && x.merchant && EXPENSE_CATEGORIES.includes(x.category) && x.category !== 'อื่น ๆ')
+    .map(x => ({ keyword: x.merchant.slice(0, 80), category: x.category }));
   const btn = $r('#ex-pending-import'); btn.disabled = true;
   try {
     await saveBatchExpenseRecords(records);
@@ -783,6 +903,7 @@ async function importSelectedStatementItems() {
     }
     pendingStatement = pendingStatement.filter(x => !x.selected);
     renderPendingStatement();
+    if (!pendingStatement.length && $r('#ex-statement-status')) $r('#ex-statement-status').textContent = '';
     if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
     toast('นำเข้า ' + records.length + ' รายการแล้ว');
   } catch (err) { toast('นำเข้าไม่สำเร็จ: ' + err.message, 'err'); }
@@ -862,13 +983,13 @@ function isValidExpenseDate(date) {
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }
 
-function openRecurringEditor(plan = null) {
-  const planId = plan?.planId || `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {}) {
+  const planId = (isEdit && plan?.planId) || `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
   const categoryOptions = EXPENSE_CATEGORIES.map(category =>
     `<option value="${esc(category)}"${category === plan?.category ? ' selected' : ''}>${esc(category)}</option>`
   ).join('');
   const modal = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${plan ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${isEdit ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="space-y-3">
       <div><label class="lbl">ร้านค้า / รายการ *</label><input id="ex-recurring-merchant" class="input" maxlength="120" value="${esc(plan?.merchant || '')}" placeholder="เช่น ค่าเช่าบ้าน"></div>
       <div class="grid grid-cols-2 gap-2"><div><label class="lbl">จำนวนเงิน (บาท) *</label><input id="ex-recurring-amount" type="number" min="0" max="100000000" step="0.01" class="input" value="${plan?.amount ?? ''}"></div>
@@ -898,7 +1019,7 @@ function openRecurringEditor(plan = null) {
       kind: 'expense_recurring', planId, merchant: merchant.slice(0, 120),
       amount: Math.round(amount * 100) / 100, category, frequency, nextDate, dayOfMonth,
       note: $('#ex-recurring-note', modal.el).value.trim().slice(0, 200),
-      createdAt: plan?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString()
+      createdAt: (isEdit && plan?.createdAt) || new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     const id = expenseSettingDocId('expense_recurring', planId);
     updateExpenseSetting(id, data);
@@ -906,7 +1027,7 @@ function openRecurringEditor(plan = null) {
       .catch(err => toast(`บันทึกประจำไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err'));
     modal.close();
     renderExpense();
-    toast(plan ? 'อัปเดตรายการประจำแล้ว' : 'เพิ่มรายการประจำแล้ว');
+    toast(isEdit ? 'อัปเดตรายการประจำแล้ว' : 'เพิ่มรายการประจำแล้ว');
   });
 }
 
@@ -1038,7 +1159,17 @@ export function renderExpense() {
     : '<p class="text-xs text-slate-400">ยังไม่มีรายจ่ายในเดือนนี้</p>';
   renderExpenseBudgets(curMonth);
   const today = localDateStr();
-  $r('#ex-recurring-list').innerHTML = recurringExpenses.length ? recurringExpenses.map(plan => {
+  analyzedRecurringCandidates = detectRecurringExpenses(state.expenses || [], recurringExpenses);
+  const monthlyEstimate = estimateMonthlyRecurringTotal(recurringExpenses, analyzedRecurringCandidates);
+
+  const estimateBanner = (recurringExpenses.length || analyzedRecurringCandidates.length)
+    ? `<div class="rounded-xl bg-lav-soft/60 border border-brand/20 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span class="font-semibold text-slate-700">📌 ประมาณการรายจ่ายซ้ำต่อเดือน: <b class="text-brand-dark text-sm">${fmtMoney(monthlyEstimate.totalMonthly)} ฿/เดือน</b></span>
+        <span class="text-slate-500">ตั้งไว้ ${fmtMoney(monthlyEstimate.plannedMonthly)} ฿${monthlyEstimate.detectedMonthly ? ` · วิเคราะห์เพิ่ม ~${fmtMoney(monthlyEstimate.detectedMonthly)} ฿` : ''}</span>
+      </div>`
+    : '';
+
+  const plannedHtml = recurringExpenses.map(plan => {
       const due = plan.nextDate <= today;
       return `<article class="rounded-xl border ${due ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'} p-3 flex flex-wrap items-center justify-between gap-2">
         <div class="min-w-0"><b class="text-sm text-slate-800">${esc(plan.merchant)}</b>
@@ -1051,7 +1182,26 @@ export function renderExpense() {
           <button type="button" data-recurring-delete="${esc(plan.planId)}" class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-rose-600">ลบ</button>
         </div>
       </article>`;
-  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีรายการประจำ</p>';
+  }).join('');
+
+  const detectedHtml = analyzedRecurringCandidates.length
+    ? `<div class="pt-2 border-t border-slate-100 space-y-2">
+        <p class="text-xs font-semibold text-slate-600">🔍 ระบบวิเคราะห์ยอดที่จ่ายซ้ำทุกเดือน (${analyzedRecurringCandidates.length} รายการ)</p>
+        ${analyzedRecurringCandidates.map((cand, idx) => `
+          <article class="rounded-xl border border-dashed border-sky-300 bg-sky-50/40 p-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <b class="text-xs sm:text-sm text-slate-800">${esc(cand.merchant)}</b>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">${esc(cand.category)}</span>
+              </div>
+              <p class="text-[11px] text-slate-500">เฉลี่ย ~<b>${fmtMoney(cand.avgAmount)} ฿/เดือน</b>${cand.isVariable ? ` (${fmtMoney(cand.minAmount)}–${fmtMoney(cand.maxAmount)} ฿)` : ''} · พบ ${cand.monthsCount} เดือน (${esc(cand.months.slice(-3).join(', '))}) · คาดรอบถัดไป ${esc(fmtDate(cand.predictedNextDate))}</p>
+            </div>
+            <button type="button" data-recurring-adopt="${idx}" class="btn btn-soft !py-1.5 !px-2.5 text-xs shrink-0">+ ตั้งเป็นประจำ</button>
+          </article>`).join('')}
+      </div>`
+    : (!recurringExpenses.length ? '<p class="text-xs text-slate-400">ยังไม่มีรายการประจำ (เมื่อมีรายจ่ายร้านเดิมซ้ำตั้งแต่ 2 เดือนขึ้นไป ระบบจะวิเคราะห์มาให้ที่นี่)</p>' : '');
+
+  $r('#ex-recurring-list').innerHTML = estimateBanner + plannedHtml + detectedHtml;
 
   // อัปเดตตัวเลือกหมวดหมู่ในตัวกรอง
   const filterCatSel = $r('#ex-filter-cat');

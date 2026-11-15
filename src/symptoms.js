@@ -115,6 +115,18 @@ export function selectDate(d) {
   setTimeout(() => root.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
 }
 
+export function resetSymptomsToToday() {
+  if (!root) return;
+  const today = localDateStr();
+  const dateEl = $('#s-date', root);
+  if (dateEl) {
+    dateEl.min = addDays(today, -399);
+    dateEl.max = today;
+    dateEl.value = today;
+  }
+  loadForm();
+}
+
 const get = date => state.symptoms.find(s => s.id === date);
 const SKIN_FIELDS = [['rash', 'ผื่น'], ['itch', 'คัน'], ['burning', 'แสบ'], ['redness', 'แดง'], ['peeling', 'ลอก'], ['dryness', 'แห้ง']];
 const getSkin = date => state.skinRecords?.find(s => s.id === date);

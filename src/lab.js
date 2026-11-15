@@ -2,7 +2,7 @@ import { addDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } from './util.js';
-import { readLabReportFromPhoto, explainGeminiError } from './nutrition.js';
+import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -44,10 +44,10 @@ export function mountLab(el) {
     <div class="card space-y-3">
       <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-vial text-brand"></i> บันทึกผลตรวจ / ผลเลือด</h2>
       <label class="border-2 border-dashed border-lav-soft bg-lav-soft/40 rounded-xl p-3 text-center cursor-pointer block">
-        <input type="file" id="lb-photo" accept="image/*" class="hidden">
+        <input type="file" id="lb-photo" accept="image/*" multiple class="hidden">
         <i class="fa-solid fa-camera text-lg text-brand"></i>
-        <span class="block text-sm font-semibold text-slate-700">ถ่ายรูป / เลือกรูปใบผลตรวจ</span>
-        <span class="block text-xs text-slate-500">ให้ AI อ่านค่าหลายรายการแล้วตรวจสอบก่อนบันทึก</span>
+        <span class="block text-sm font-semibold text-slate-700">ถ่ายรูป / เลือกรูปใบผลตรวจ (เลือกได้หลายรูป)</span>
+        <span class="block text-xs text-slate-500">แสดงความคืบหน้าและให้ AI อ่านค่าหลายรายการเพื่อตรวจยืนยันก่อนบันทึก</span>
       </label>
       <p id="lb-scan-status" class="hidden text-xs text-slate-500"></p>
       <div><label class="lbl">วันที่ตรวจ</label><input id="lb-date" type="date" class="input"></div>
@@ -109,24 +109,54 @@ export function mountLab(el) {
 }
 
 async function onScanLabPhoto(e) {
-  const f = e.target.files?.[0];
+  const files = [...(e.target.files || [])];
   e.target.value = '';
-  if (!f) return;
+  if (!files.length) return;
   const st = $('#lb-scan-status', root);
-  st.className = 'text-xs text-slate-500';
-  st.textContent = 'กำลังอ่านใบผลตรวจด้วย AI...';
+  st.className = 'text-xs text-slate-500 font-medium';
+  st.classList.remove('hidden');
+  st.textContent = formatImageProgress('กำลังอ่านใบผลตรวจ', { total: files.length, activeIndex: 1, completed: 0, percent: 0 });
+
   try {
-    const res = await readLabReportFromPhoto(f);
-    st.classList.add('hidden');
-    const items = (res?.items || []).filter(x => x && x.name && typeof x.value === 'number' && Number.isFinite(x.value));
-    if (!items.length) {
-      return toast('ไม่พบค่าตรวจที่อ่านได้ชัดเจน ลองถ่ายให้ชัดขึ้นหรือกรอกเองค่ะ', 'err');
+    const { results, errors } = await runImageBatch(
+      files,
+      file => readLabReportFromPhoto(file),
+      info => {
+        if (st.isConnected) st.textContent = formatImageProgress('กำลังอ่านใบผลตรวจ', info);
+      },
+      { concurrency: 2 }
+    );
+
+    const items = [];
+    let detectedDate = '';
+    const labNames = [];
+    for (const r of results) {
+      const res = r.data;
+      if (!detectedDate && isDateStr(res?.date)) detectedDate = res.date;
+      if (res?.labName && !labNames.includes(res.labName.trim())) labNames.push(res.labName.trim());
+      for (const it of res?.items || []) {
+        if (it && it.name && typeof it.value === 'number' && Number.isFinite(it.value)) {
+          items.push({ ...it, fileName: r.fileName });
+        }
+      }
     }
-    const defaultDate = isDateStr(res.date) ? res.date : ($('#lb-date', root).value || localDateStr());
-    const labName = (res.labName || '').trim();
+
+    if (!items.length) {
+      const errMsg = errors[0]?.message || 'ไม่พบค่าตรวจที่อ่านได้ชัดเจน ลองถ่ายให้ชัดขึ้นหรือกรอกเองค่ะ';
+      st.className = 'text-xs text-rose-600 font-medium';
+      st.textContent = errMsg;
+      return toast(errMsg, 'err');
+    }
+
+    st.className = 'text-xs text-green-700 font-semibold';
+    st.textContent = `✓ ประมวลผลครบ ${files.length}/${files.length} รูป (พบ ${items.length} รายการ) — ตรวจสอบและยืนยัน`;
+
+    const defaultDate = detectedDate || ($('#lb-date', root).value || localDateStr());
+    const labName = labNames.join(', ');
     const m = openModal(`
-      <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ)</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
       <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3">โปรดเทียบตัวเลขและค่าอ้างอิงกับใบผลตรวจจริงก่อนกดบันทึก</p>
+      ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 mb-3">
         <div><label class="lbl">วันที่ตรวจ</label><input id="lbs-date" type="date" class="input" value="${esc(defaultDate)}"></div>
         <div><label class="lbl">คลินิก/หมายเหตุรวม</label><input id="lbs-note" class="input" value="${esc(labName)}" placeholder="ไม่บังคับ"></div>
@@ -137,6 +167,7 @@ async function onScanLabPhoto(e) {
             <div class="flex items-center gap-2">
               <input type="checkbox" class="lbs-check" data-i="${i}" checked>
               <input class="input !py-1.5 text-sm font-semibold" data-f="name" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
+              ${files.length > 1 ? `<span class="text-[10px] text-slate-400 shrink-0">${esc(it.fileName)}</span>` : ''}
             </div>
             <div class="grid grid-cols-4 gap-1.5 text-xs">
               <div><label class="lbl">ค่า</label><input type="number" step="any" class="input !py-1" data-f="value" value="${it.value ?? ''}"></div>
@@ -188,6 +219,8 @@ async function onScanLabPhoto(e) {
           commits.push(batch.commit());
         }
         Promise.all(commits).catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
+        st.textContent = '';
+        st.classList.add('hidden');
         m.close();
         toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
       } catch (err) {
@@ -196,9 +229,16 @@ async function onScanLabPhoto(e) {
       }
     });
   } catch (err) {
-    st.className = 'text-xs text-rose-600';
+    st.className = 'text-xs text-rose-600 font-medium';
     st.textContent = explainGeminiError(err);
+    toast(explainGeminiError(err), 'err');
   }
+}
+
+export function resetLabToToday() {
+  if (!root) return;
+  const d = $('#lb-date', root);
+  if (d) d.value = localDateStr();
 }
 
 function save() {
@@ -208,7 +248,8 @@ function save() {
   if (low !== null && high !== null && low > high) return toast('ค่าอ้างอิงต่ำสุดต้องไม่มากกว่าสูงสุด', 'err');
   addDoc(userCol(state.uid, 'lab_records'), { date, name: name.slice(0, 80), value, unit: $('#lb-unit', root).value.trim().slice(0, 20), refLow: low, refHigh: high, note: $('#lb-note', root).value.trim().slice(0, 200), createdAt: new Date() })
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
-  ['lb-name', 'lb-value', 'lb-unit', 'lb-low', 'lb-high'].forEach(id => { $('#' + id, root).value = ''; });
+  ['lb-name', 'lb-value', 'lb-unit', 'lb-low', 'lb-high', 'lb-note'].forEach(id => { $('#' + id, root).value = ''; });
+  $('#lb-date', root).value = localDateStr();
   toast('บันทึกผลตรวจแล้ว');
 }
 

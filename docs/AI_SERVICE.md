@@ -30,7 +30,8 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 
 ## AI Chat Assistant (`src/services/aiAssistant.js`, `src/services/chatRoles.js`, `src/chatWidget.js`)
 
-- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me (Read Tools 6 ตัว: `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness`; Write Tools 4 ตัว: `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`)
+- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me (Read Tools 6 ตัว: `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness`; Write Tools 4 ตัว: `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`) โดย `getWorkouts` ส่งค่า `feeling`, `sessionRpe` และ `exerciseFeedback` (`rpe`, `rir`, `nextAction`) เพื่อใช้วิเคราะห์การปรับระดับครั้งถัดไป
+- ปรับ `buildSystemPrompt()` และ `CHAT_ROLES` ให้ตอบกระชับ อ่านง่าย (สรุปคำตอบหลัก 1–2 ประโยค + ข้อย่อยสั้น ๆ 2–4 ข้อ ยกเว้นเมื่อผู้ใช้ขอรายละเอียดเชิงลึก)
 - เก็บหน้าต่างสนทนาต่อเนื่องย้อนหลังสูงสุด 20 ข้อความต่อคำขอ (`HISTORY_LIMIT = 20`) พร้อมบทบาทที่เลือกและคำสั่งเพิ่มเติมที่ผู้ใช้กำหนด
 - ป้องกัน Prompt Injection ด้วย `sanitizeDataText()` และ `wrapUntrustedToolData()` รอบผลลัพธ์จาก Read Tools รวมถึงบังคับการ์ดยืนยันจากผู้ใช้สำหรับรายการยอดสูงหรือการเขียนหลายรายการพร้อมกัน
 - บันทึกประวัติแชทล่าสุด (สูงสุด 30 ข้อความ), บทบาทที่เลือก และคำสั่งเพิ่มเติมไว้ใน `localStorage` ของเบราว์เซอร์เครื่องนั้น (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) โดยไม่ซิงค์ลง Firestore และล้างออกได้ด้วยปุ่มเริ่มบทสนทนาใหม่

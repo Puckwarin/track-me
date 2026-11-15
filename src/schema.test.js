@@ -42,4 +42,41 @@ describe('schema sanitizers', () => {
     expect(SANITIZERS.settings({ ...recurring, nextDate: '2026-02-30' })).toBeNull();
     expect(SANITIZERS.expense_records({ date: '2026-04-10', amount: 80, source: 'recurring' })).toMatchObject({ source: 'recurring' });
   });
+
+  it('sanitizes workout reflection/RPE/RIR feedback and planner recentDone', () => {
+    const workout = SANITIZERS.workout_records({
+      date: '2026-11-15',
+      type: 'lower',
+      status: 'done',
+      feeling: 'energized',
+      sessionRpe: 8,
+      exerciseFeedback: [
+        { name: 'Goblet Squat', section: 'main', rpe: 7, rir: 2, nextAction: 'maintain', nextLabel: 'คงน้ำหนัก' },
+        { name: '', section: 'main', rpe: 7 }
+      ]
+    });
+    expect(workout.feeling).toBe('energized');
+    expect(workout.sessionRpe).toBe(8);
+    expect(workout.exerciseFeedback).toHaveLength(1);
+    expect(workout.exerciseFeedback[0]).toMatchObject({ name: 'Goblet Squat', rpe: 7, rir: 2, nextAction: 'maintain' });
+
+    const invalidWorkout = SANITIZERS.workout_records({
+      date: '2026-11-15',
+      type: 'lower',
+      feeling: 'unknown_value',
+      sessionRpe: 99
+    });
+    expect(invalidWorkout.feeling).toBeUndefined();
+    expect(invalidWorkout.sessionRpe).toBeUndefined();
+
+    const planner = SANITIZERS.settings({
+      id: 'planner',
+      routines: [{ id: 'r1', title: 'ล้างจาน', icon: '🍽️', days: [0, 1], weekPattern: 'every' }],
+      recentDone: [
+        { id: 'r1', title: 'ล้างจาน', icon: '🍽️', date: '2026-11-15' },
+        { id: 'bad', title: '', date: 'invalid-date' }
+      ]
+    });
+    expect(planner.recentDone).toEqual([{ id: 'r1', title: 'ล้างจาน', icon: '🍽️', date: '2026-11-15' }]);
+  });
 });

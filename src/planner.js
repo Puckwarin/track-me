@@ -52,11 +52,97 @@ export function routineAppliesToDate(r, dateStr, altAnchor) {
   return r.weekPattern === weekCodeForDate(dateStr, altAnchor);
 }
 
+const ROUTINE_EMOJI_RULES = [
+  [/ล้างจาน|จาน|ชาม|หม้อ|กระทะ|dish/i, '🍽️'],
+  [/แก้ว|ขวด|tumbler|cup|mug/i, '🥤'],
+  [/น้ำดื่ม|ดื่มน้ำ|กรอกน้ำ|water|hydrat/i, '💧'],
+  [/หมา|แมว|สัตว์|ทรายแมว|pet|dog|cat/i, '🐾'],
+  [/แปรงฟัน|ไหมขัดฟัน|ฟัน|brush|floss|teeth/i, '🪥'],
+  [/อาบน้ำ|สระผม|shower|bath|hair/i, '🚿'],
+  [/ครีม|กันแดด|สกินแคร์|เซรั่ม|มอยส์|ล้างหน้า|หน้า|skincare|sunscreen|cream/i, '🧴'],
+  [/วิตามิน|ยา|อาหารเสริม|vitamin|pill|med/i, '💊'],
+  [/ซักผ้า|พับผ้า|ตากผ้า|รีดผ้า|เสื้อผ้า|laundry|cloth/i, '🧺'],
+  [/กวาด|ถูพื้น|ถูบ้าน|ดูดฝุ่น|จัดห้อง|จัดโต๊ะ|ทำความสะอาด|clean|sweep|mop|tidy/i, '🧹'],
+  [/ขยะ|ทิ้งขยะ|trash|garbage/i, '🗑️'],
+  [/ผ้าปู|ปลอกหมอน|ที่นอน|ผ้าห่ม|bed|sheet/i, '🛏️'],
+  [/วิ่ง|เดิน|ก้าว|run|walk|jog/i, '🏃‍♀️'],
+  [/โยคะ|ยืดเหยียด|สมาธิ|หายใจ|yoga|stretch|meditat/i, '🧘'],
+  [/ออกกำลัง|เวท|ฟิตเนส|พิลาทิส|workout|gym|pilates|squat/i, '💪'],
+  [/หนังสือ|อ่าน|เรียน|ภาษา|การบ้าน|read|study|book/i, '📚'],
+  [/นอน|เข้านอน|พักผ่อน|sleep/i, '😴'],
+  [/ต้นไม้|รดน้ำ|สวน|plant|garden/i, '🪴'],
+  [/บัญชี|รายจ่าย|เงิน|ออม|budget|money|expense/i, '💸'],
+  [/ทำอาหาร|กับข้าว|หุงข้าว|มื้อ|cook|meal/i, '🍳'],
+  [/กาแฟ|ชา|มัทฉะ|coffee|tea/i, '☕'],
+  [/ล้าง|ซัก|เช็ด|wash/i, '🧼']
+];
+
+export function inferRoutineEmoji(title = '', currentIcon = '') {
+  const icon = String(currentIcon || '').trim();
+  if (icon && icon !== '✨') return icon;
+  const text = String(title || '').trim();
+  if (!text) return '✨';
+  for (const [pattern, emoji] of ROUTINE_EMOJI_RULES) {
+    if (pattern.test(text)) return emoji;
+  }
+  return '✅';
+}
+
+export function getRecentCompletedRoutines(planner = {}, limit = 10) {
+  const routines = Array.isArray(planner?.routines) ? planner.routines : [];
+  const byId = new Map(routines.map(r => [r.id, r]));
+  const doneMap = planner?.doneMap && typeof planner.doneMap === 'object' ? planner.doneMap : {};
+  const recorded = Array.isArray(planner?.recentDone) ? planner.recentDone : [];
+
+  const candidates = [];
+  for (const item of recorded) {
+    if (!item?.title) continue;
+    candidates.push({
+      id: item.id || '',
+      title: String(item.title).trim(),
+      icon: inferRoutineEmoji(item.title, item.icon),
+      date: isDateStr(item.date) ? item.date : ''
+    });
+  }
+
+  const datesDesc = Object.keys(doneMap).filter(isDateStr).sort((a, b) => b.localeCompare(a));
+  for (const d of datesDesc) {
+    const ids = Array.isArray(doneMap[d]) ? [...doneMap[d]].reverse() : [];
+    for (const id of ids) {
+      const r = byId.get(id);
+      if (!r?.title) continue;
+      candidates.push({
+        id: r.id,
+        title: String(r.title).trim(),
+        icon: inferRoutineEmoji(r.title, r.icon),
+        date: d
+      });
+    }
+  }
+
+  const seen = new Set();
+  const unique = [];
+  for (const c of candidates) {
+    const key = c.title.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(c);
+    if (unique.length >= limit) break;
+  }
+  return unique;
+}
+
+export function resetPlannerToToday() {
+  weekOffset = 0;
+  selectedDate = localDateStr();
+}
+
 function getPlanner() {
   const p = state.planner || {};
   return {
     routines: Array.isArray(p.routines) ? p.routines : [],
     doneMap: p.doneMap && typeof p.doneMap === 'object' ? p.doneMap : {},
+    recentDone: Array.isArray(p.recentDone) ? p.recentDone : [],
     altAnchor: isDateStr(p.altAnchor) ? p.altAnchor : DEFAULT_ALT_ANCHOR
   };
 }
@@ -73,6 +159,7 @@ async function savePlanner(next) {
   const payload = {
     routines: (next.routines || []).slice(0, 60),
     doneMap: pruneObj(next.doneMap),
+    recentDone: (Array.isArray(next.recentDone) ? next.recentDone : cur.recentDone).slice(0, 40),
     altAnchor: isDateStr(next.altAnchor) ? next.altAnchor : cur.altAnchor,
     updatedAt: new Date()
   };
@@ -114,7 +201,7 @@ export function itemsForDate(dateStr) {
       title: r.title,
       done: doneSet.has(r.id),
       time: r.time || '',
-      icon: r.icon || '✨',
+      icon: inferRoutineEmoji(r.title, r.icon),
       weekPattern: r.weekPattern || 'every',
       sub: r.weekPattern === 'A' ? 'สลับสัปดาห์ (รอบ A)' : r.weekPattern === 'B' ? 'สลับสัปดาห์ (รอบ B)' : 'กิจวัตรประจำสัปดาห์'
     }));
@@ -238,7 +325,24 @@ export function mountPlanner(el, navigate) {
       const doneMap = { ...p.doneMap };
       if (cur.size) doneMap[d] = [...cur];
       else delete doneMap[d];
-      await savePlanner({ ...p, doneMap });
+
+      let recentDone = [...(p.recentDone || [])];
+      const matchedRoutine = p.routines.find(r => r.id === id);
+      if (checked && matchedRoutine) {
+        const cleanTitle = String(matchedRoutine.title || '').trim();
+        recentDone = [
+          {
+            id: matchedRoutine.id,
+            title: cleanTitle,
+            icon: inferRoutineEmoji(cleanTitle, matchedRoutine.icon),
+            date: d
+          },
+          ...recentDone.filter(x => String(x?.title || '').trim().toLowerCase() !== cleanTitle.toLowerCase())
+        ].slice(0, 40);
+      } else if (!checked) {
+        recentDone = recentDone.filter(x => !(x?.id === id && x?.date === d));
+      }
+      await savePlanner({ ...p, doneMap, recentDone });
     }
   });
 
@@ -387,6 +491,26 @@ export function renderPlanner() {
     </div>` : ''}
 
     ${bodyHtml}
+
+    ${(() => {
+      const recent = getRecentCompletedRoutines(p, 10);
+      if (!recent.length) return '';
+      return `
+      <div class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-700">✅ กิจวัตรที่ทำล่าสุด (${recent.length} รายการ)</span>
+          <span class="text-[11px] text-slate-400">ไม่ซ้ำชื่อ</span>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          ${recent.map(item => `
+            <span class="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1 text-xs text-slate-700">
+              <span aria-hidden="true">${item.icon}</span>
+              <span class="font-medium">${esc(item.title)}</span>
+              ${item.date ? `<span class="text-[10px] text-slate-400">· ${esc(fmtDate(item.date))}</span>` : ''}
+            </span>`).join('')}
+        </div>
+      </div>`;
+    })()}
   </section>`;
 }
 
@@ -397,6 +521,7 @@ function openRoutinesModal() {
   let pickedPattern = 'every';
   const curWeekCode = weekCodeForDate(localDateStr(), getPlanner().altAnchor);
 
+  const recentRoutines = getRecentCompletedRoutines(getPlanner(), 10);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3">
       <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-repeat text-brand mr-1"></i> กิจวัตร & ตารางสลับสัปดาห์</h3>
@@ -408,8 +533,21 @@ function openRoutinesModal() {
       <div class="flex flex-wrap gap-1.5" id="rt-presets">
         ${ROUTINE_PRESETS.map(([ic, title]) => `<button type="button" data-rt-preset="${esc(ic + '|' + title)}" class="chip bg-white border border-slate-200 text-slate-700 text-xs hover:bg-lav-soft">${ic} ${esc(title)}</button>`).join('')}
       </div>
+      ${recentRoutines.length ? `
+      <div class="space-y-1">
+        <p class="text-[11px] font-semibold text-slate-500">เคยทำล่าสุด (แตะเพื่อเติมชื่อ):</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${recentRoutines.map(item => `<button type="button" data-rt-preset="${esc(item.icon + '|' + item.title)}" class="chip bg-sky-soft/70 border border-sky-200 text-slate-700 text-xs hover:bg-sky-soft">${item.icon} ${esc(item.title)}</button>`).join('')}
+        </div>
+      </div>` : ''}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <div class="sm:col-span-2"><label class="lbl">ชื่อกิจวัตร *</label><input id="rt-title" class="input" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ล้างแก้ว"></div>
+        <div class="sm:col-span-2">
+          <label class="lbl">ชื่อกิจวัตร *</label>
+          <div class="flex items-center gap-2">
+            <span id="rt-icon-badge" class="w-10 h-10 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจวัตร">✨</span>
+            <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ล้างแก้ว">
+          </div>
+        </div>
         <div><label class="lbl">เวลา (ไม่บังคับ)</label><input id="rt-time" type="time" class="input"></div>
       </div>
       <div>
@@ -463,6 +601,7 @@ function openRoutinesModal() {
   const renderList = () => {
     const list = getPlanner().routines;
     $('#rt-list', m.el).innerHTML = list.length ? list.map(r => {
+      const icon = inferRoutineEmoji(r.title, r.icon);
       const patBadge = r.weekPattern === 'A'
         ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-800 font-bold">สัปดาห์ A</span>'
         : r.weekPattern === 'B'
@@ -471,7 +610,7 @@ function openRoutinesModal() {
       return `
       <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
         <div class="min-w-0">
-          <p class="font-semibold text-slate-800 truncate">${r.icon || '✨'} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded">${esc(r.time)}</span>` : ''}</p>
+          <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded">${esc(r.time)}</span>` : ''}</p>
           <p class="text-[11px] text-slate-500">${(r.days || []).length === 7 ? 'ทุกวัน' : (r.days || []).map(d => WEEKDAYS[d]).join(', ')}</p>
         </div>
         <div class="flex gap-1.5 shrink-0">
@@ -481,6 +620,11 @@ function openRoutinesModal() {
       </div>`;
     }).join('')
       : '<p class="text-xs text-slate-400 text-center py-4">ยังไม่มีกิจวัตรที่ตั้งไว้</p>';
+  };
+
+  const syncIconBadge = (titleVal = '') => {
+    const badge = $('#rt-icon-badge', m.el);
+    if (badge) badge.textContent = inferRoutineEmoji(titleVal, pickedIcon);
   };
 
   const resetEdit = () => {
@@ -493,16 +637,23 @@ function openRoutinesModal() {
     $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-plus"></i> เพิ่มกิจวัตร';
     $('#rt-cancel-edit', m.el).classList.add('hidden');
     $('#rt-create-pair', m.el).classList.remove('hidden');
+    syncIconBadge('');
     renderPattern();
     renderDays();
   };
+
+  $('#rt-title', m.el).addEventListener('input', e => {
+    pickedIcon = '✨';
+    syncIconBadge(e.target.value);
+  });
 
   m.el.addEventListener('click', async e => {
     const preset = e.target.closest('[data-rt-preset]');
     if (preset) {
       const [ic, title] = preset.dataset.rtPreset.split('|');
-      pickedIcon = ic;
+      pickedIcon = inferRoutineEmoji(title, ic);
       $('#rt-title', m.el).value = title;
+      syncIconBadge(title);
       $('#rt-title', m.el).focus();
       return;
     }
@@ -542,11 +693,12 @@ function openRoutinesModal() {
       const r = getPlanner().routines.find(x => x.id === editBtn.dataset.rtEdit);
       if (!r) return;
       editingId = r.id;
-      pickedIcon = r.icon || '✨';
+      pickedIcon = inferRoutineEmoji(r.title, r.icon);
       pickedPattern = r.weekPattern || 'every';
       pickedDays = new Set(r.days || []);
       $('#rt-title', m.el).value = r.title;
       $('#rt-time', m.el).value = r.time || '';
+      syncIconBadge(r.title);
       $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข';
       $('#rt-cancel-edit', m.el).classList.remove('hidden');
       $('#rt-create-pair', m.el).classList.add('hidden');
@@ -576,8 +728,9 @@ function openRoutinesModal() {
     const daysB = [0, 1, 2, 3, 4, 5, 6].filter(d => !pickedDays.has(d));
     const p = getPlanner();
     const baseId = Date.now().toString(36);
-    const recA = { id: 'ra' + baseId, title, days: daysA, weekPattern: 'A', icon: pickedIcon, ...(time && { time }) };
-    const recB = { id: 'rb' + baseId, title, days: daysB, weekPattern: 'B', icon: pickedIcon, ...(time && { time }) };
+    const icon = inferRoutineEmoji(title, pickedIcon);
+    const recA = { id: 'ra' + baseId, title, days: daysA, weekPattern: 'A', icon, ...(time && { time }) };
+    const recB = { id: 'rb' + baseId, title, days: daysB, weekPattern: 'B', icon, ...(time && { time }) };
     await savePlanner({ ...p, routines: [...p.routines, recA, recB] });
     toast(`สร้างคู่สลับ "${title}" (A: ${daysA.map(d => WEEKDAYS[d]).join('/')} · B: ${daysB.map(d => WEEKDAYS[d]).join('/')}) แล้ว`);
     resetEdit();
@@ -592,11 +745,12 @@ function openRoutinesModal() {
     if (!days.length) return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
 
     const p = getPlanner();
+    const icon = inferRoutineEmoji(title, pickedIcon);
     const rec = {
       id: editingId || ('r' + Date.now().toString(36)),
       title,
       days,
-      icon: pickedIcon,
+      icon,
       ...(pickedPattern !== 'every' && { weekPattern: pickedPattern }),
       ...(time && { time })
     };

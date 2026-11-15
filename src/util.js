@@ -44,13 +44,66 @@ export function toast(msg, kind = 'ok') {
 }
 
 // Modal เล็ก ๆ ใช้ซ้ำได้
-export function openModal(innerHtml, { wide = false } = {}) {
+export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false } = {}) {
+  const widthClass = size === 'xl' ? 'max-w-5xl' : (size === 'lg' || wide ? 'max-w-2xl' : 'max-w-lg');
+  const bodyClass = flush ? 'is-flush p-0 overflow-hidden flex flex-col' : 'overflow-y-auto p-6';
   const el = document.createElement('div');
   el.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4';
-  el.innerHTML = `<div class="modal-box bg-white w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} overflow-y-auto p-6" role="dialog" aria-modal="true">${innerHtml}</div>`;
+  el.innerHTML = `<div class="modal-box bg-white w-full ${widthClass} ${bodyClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
   document.body.appendChild(el);
-  const close = () => el.remove();
-  el.addEventListener('mousedown', e => { if (e.target === el) close(); });
+  const onKey = e => {
+    if (e.key === 'Escape' && !staticBackdrop) close();
+  };
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    el.remove();
+  };
+  document.addEventListener('keydown', onKey);
+  if (!staticBackdrop) {
+    el.addEventListener('mousedown', e => { if (e.target === el) close(); });
+  }
   $$('[data-close]', el).forEach(b => b.addEventListener('click', close));
   return { el, close, box: el.firstElementChild };
+}
+
+export function confirmDialog({
+  title = 'ยืนยันการทำรายการ',
+  message = '',
+  confirmText = 'ยืนยัน',
+  cancelText = 'ยกเลิก',
+  danger = false
+} = {}) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      close();
+      resolve(result);
+    };
+    const { el, close } = openModal(`
+      <div class="space-y-4">
+        <div class="space-y-1.5">
+          <h3 class="text-base font-bold text-slate-800">${esc(title)}</h3>
+          ${message ? `<p class="text-sm text-slate-600 leading-relaxed break-words">${esc(message)}</p>` : ''}
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 pt-1">
+          <button type="button" data-confirm-no class="btn btn-ghost min-h-[44px]">${esc(cancelText)}</button>
+          <button type="button" data-confirm-yes class="btn ${danger ? 'btn-pink' : 'btn-primary'} min-h-[44px]">${esc(confirmText)}</button>
+        </div>
+      </div>`, { staticBackdrop: true });
+    const yesBtn = $('[data-confirm-yes]', el);
+    const noBtn = $('[data-confirm-no]', el);
+    yesBtn?.addEventListener('click', () => finish(true));
+    noBtn?.addEventListener('click', () => finish(false));
+    el.addEventListener('mousedown', e => { if (e.target === el) finish(false); });
+    const onEsc = e => {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', onEsc);
+        finish(false);
+      }
+    };
+    document.addEventListener('keydown', onEsc);
+    noBtn?.focus();
+  });
 }

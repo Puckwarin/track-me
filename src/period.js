@@ -112,6 +112,15 @@ export function mountPeriod(el) {
   render();
 }
 
+export function resetPeriodToToday() {
+  const now = new Date();
+  cal = { y: now.getFullYear(), m: now.getMonth() };
+  if (!root) return;
+  const startEl = $('#p-start', root);
+  if (startEl) startEl.value = localDateStr();
+  render();
+}
+
 function shiftMonth(n) { const d = new Date(cal.y, cal.m + n, 1); cal = { y: d.getFullYear(), m: d.getMonth() }; renderCalendar(); }
 
 function periodDays() {
@@ -178,6 +187,8 @@ function save() {
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   ['p-end', 'p-note'].forEach(id => { $('#' + id, root).value = ''; });
   $('#p-flow', root).value = '';
+  $('#p-start', root).value = localDateStr();
+  toast('บันทึกรอบเดือนแล้ว');
 }
 
 // ---------- การแจ้งเตือน (ทำงานเมื่อเปิดแอป — ไม่มี server push เพราะต้องใช้แผนเสียเงิน) ----------

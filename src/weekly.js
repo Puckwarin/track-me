@@ -57,6 +57,12 @@ export function mountWeekly(el) {
   renderWeekly();
 }
 
+export function resetWeeklyToToday() {
+  const today = localDateStr();
+  weekStart = mondayOf(today);
+  selectedMonth = today.slice(0, 7);
+}
+
 const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {

@@ -65,6 +65,12 @@ export function mountBody(el) {
   render();
 }
 
+export function resetBodyToToday() {
+  if (!root) return;
+  const dateEl = $('#b-date', root);
+  if (dateEl) dateEl.value = localDateStr();
+}
+
 export const sortBodyDesc = items => items.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
 export function bodyLatest(items) {
@@ -148,4 +154,6 @@ function save() {
   for (const [k, v] of Object.entries(rec)) if (v !== null && (v <= 0 || v > 400)) return toast('ค่าไม่สมเหตุสมผล: ' + k, 'err');
   addDoc(userCol(state.uid, 'body_records'), { date, ...rec, note: $('#b-note', root).value.trim(), createdAt: new Date() }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   ['b-weight', 'b-bust', 'b-waist', 'b-hip', 'b-arm', 'b-thigh', 'b-note'].forEach(id => { $('#' + id, root).value = ''; });
+  $('#b-date', root).value = localDateStr();
+  toast('บันทึกน้ำหนัก/สัดส่วนแล้ว');
 }

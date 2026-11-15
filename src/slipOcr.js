@@ -82,19 +82,19 @@ export async function ocrSlipInBrowser(file, onProgress = () => {}) {
   let canvas = null;
   let worker = null;
   try {
-    onProgress('กำลังเตรียมภาพสลิปในเครื่อง…');
+    onProgress('อัปโหลด 1 รูป · กำลังเตรียมภาพสลิป 1/1 (0%)…');
     try {
       canvas = await prepareSlipCanvas(file);
     } catch {
       canvas = null;
     }
 
-    onProgress('กำลังโหลดตัวอ่านภาษาไทย/อังกฤษ (ครั้งแรกอาจใช้เวลาสักครู่)…');
+    onProgress('อัปโหลด 1 รูป · กำลังโหลดตัวอ่านสลิป 1/1 (10%)…');
     const { createWorker } = await import('tesseract.js');
     worker = await createWorker('tha+eng', 1, {
       logger: m => {
         if (m?.status === 'recognizing text' && typeof m.progress === 'number') {
-          onProgress(`กำลังอ่านข้อความจากสลิป (${Math.round(m.progress * 100)}%)…`);
+          onProgress(`อัปโหลด 1 รูป · กำลังอ่านสลิป 1/1 (${Math.round(m.progress * 100)}%)…`);
         }
       }
     });
@@ -121,12 +121,13 @@ export async function ocrMultipleSlipsInBrowser(files, onProgress = () => {}) {
   let curIdx = 0;
 
   try {
-    onProgress('กำลังเตรียมตัวอ่านสลิปภาษาไทย/อังกฤษในเครื่อง…');
+    onProgress(`อัปโหลด ${list.length} รูป · กำลังเตรียมตัวอ่านสลิป 1/${list.length} (0%)…`);
     const { createWorker } = await import('tesseract.js');
     worker = await createWorker('tha+eng', 1, {
       logger: m => {
         if (m?.status === 'recognizing text' && typeof m.progress === 'number') {
-          onProgress(`กำลังอ่านสลิป ${curIdx + 1}/${list.length} (${Math.round(m.progress * 100)}%)…`);
+          const overallPct = Math.min(99, Math.round(((curIdx + m.progress) / list.length) * 100));
+          onProgress(`อัปโหลด ${list.length} รูป · กำลังอ่านสลิป ${curIdx + 1}/${list.length} (${overallPct}%)…`);
         }
       }
     });
@@ -135,7 +136,8 @@ export async function ocrMultipleSlipsInBrowser(files, onProgress = () => {}) {
       curIdx = i;
       const file = list[i];
       let canvas = null;
-      onProgress(`กำลังอ่านสลิป ${i + 1}/${list.length}…`);
+      const basePct = Math.round((i / list.length) * 100);
+      onProgress(`อัปโหลด ${list.length} รูป · กำลังอ่านสลิป ${i + 1}/${list.length} (${basePct}%)…`);
       try {
         try { canvas = await prepareSlipCanvas(file); } catch { canvas = null; }
         const res = await worker.recognize(canvas || file);
@@ -147,6 +149,7 @@ export async function ocrMultipleSlipsInBrowser(files, onProgress = () => {}) {
         clearCanvas(canvas);
       }
     }
+    onProgress(`✓ ประมวลผลครบ ${list.length}/${list.length} รูป (100%)`);
     return results;
   } finally {
     if (worker) {

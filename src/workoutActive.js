@@ -1,4 +1,4 @@
-import { openModal, esc } from './util.js';
+import { openModal, confirmDialog, esc } from './util.js';
 import { safeHttpUrl } from './workoutParser.js';
 
 const SECTION_ORDER = ['warmup', 'main', 'cooldown'];
@@ -7,25 +7,137 @@ const SECTION_TITLES = {
   main: '2. ท่าหลัก (Main Workout)',
   cooldown: '3. คูลดาวน์ (Cool-down)'
 };
+const SECTION_SHORT = {
+  warmup: '1. วอร์มอัพ',
+  main: '2. ท่าหลัก',
+  cooldown: '3. คูลดาวน์'
+};
+
+export const WORKOUT_FEELINGS = [
+  { id: 'energized', icon: '⚡', label: 'สดชื่น มีพลัง' },
+  { id: 'good', icon: '😊', label: 'กำลังดี' },
+  { id: 'tired', icon: '😮‍💨', label: 'เหนื่อยตึง' },
+  { id: 'exhausted', icon: '🥵', label: 'ล้ามาก' }
+];
+
+export const RPE_CHOICES = [
+  { val: 5, label: '5 เบามาก' },
+  { val: 6, label: '6 เบา' },
+  { val: 7, label: '7 พอดี' },
+  { val: 8, label: '8 หนัก' },
+  { val: 9, label: '9 หนักมาก' },
+  { val: 10, label: '10 สุดแรง' }
+];
+
+export const RIR_CHOICES = [
+  { val: 0, label: '0 (หมดแรง)' },
+  { val: 1, label: '1 ครั้ง' },
+  { val: 2, label: '2 ครั้ง' },
+  { val: 3, label: '3 ครั้ง' },
+  { val: 4, label: '4+ ครั้ง' }
+];
+
+export function formatFeelingLabel(id) {
+  const f = WORKOUT_FEELINGS.find(x => x.id === id);
+  return f ? `${f.icon} ${f.label}` : '';
+}
+
+export function suggestNextProgression({ rpe = null, rir = null, completedSets = 0, plannedSets = 1 } = {}) {
+  const hasRpe = Number.isFinite(rpe);
+  const hasRir = Number.isFinite(rir);
+  if (!hasRpe && !hasRir) return null;
+
+  const targetSets = Math.max(1, Number(plannedSets) || 1);
+  const doneSets = Math.max(0, Number(completedSets) || 0);
+
+  if ((hasRpe && rpe >= 10) || (hasRpe && rpe >= 9 && hasRir && rir === 0)) {
+    return { action: 'deload', label: 'รอบหน้าลดน้ำหนักเล็กน้อยหรือเพิ่มเวลาพัก' };
+  }
+  if (doneSets < targetSets && ((hasRpe && rpe >= 8) || (hasRir && rir <= 1))) {
+    return { action: 'deload', label: 'พักให้ฟื้นแล้วเก็บเซตให้ครบก่อนเพิ่มโหลด' };
+  }
+  if (doneSets >= targetSets && ((hasRir && rir >= 3) || (hasRpe && rpe <= 6 && (!hasRir || rir >= 2)))) {
+    return { action: 'increase', label: 'รอบหน้าเพิ่มน้ำหนัก (+1–2 kg) หรือเพิ่ม 1–2 ครั้ง' };
+  }
+  return { action: 'maintain', label: 'คงน้ำหนักและเซตเดิม โฟกัสฟอร์มให้แน่น' };
+}
+
+export function buildExerciseFeedbackSummary(rows = [], feedbackMap = {}, checkedCounts = {}) {
+  const out = [];
+  rows.forEach((r, ri) => {
+    const entry = feedbackMap[ri];
+    if (!entry) return;
+    const rpe = Number.isInteger(entry.rpe) ? entry.rpe : null;
+    const rir = Number.isInteger(entry.rir) ? entry.rir : null;
+    if (rpe === null && rir === null) return;
+    const next = suggestNextProgression({
+      rpe,
+      rir,
+      completedSets: checkedCounts[ri] || 0,
+      plannedSets: r.sets || 1
+    });
+    out.push({
+      name: r.name,
+      section: SECTION_ORDER.includes(r.section) ? r.section : 'main',
+      ...(rpe !== null && { rpe }),
+      ...(rir !== null && { rir }),
+      ...(next && { nextAction: next.action, nextLabel: next.label })
+    });
+  });
+  return out;
+}
+
+export function summarizeSessionNextStep(exerciseFeedback = []) {
+  if (!Array.isArray(exerciseFeedback) || !exerciseFeedback.length) return '';
+  const inc = exerciseFeedback.filter(x => x.nextAction === 'increase').length;
+  const deload = exerciseFeedback.filter(x => x.nextAction === 'deload').length;
+  if (deload > 0 && deload >= inc) return `แนะนำพักฟื้น/ลดโหลดใน ${deload} ท่า`;
+  if (inc > 0) return `พร้อมเพิ่มความท้าทายใน ${inc} ท่า`;
+  return 'รักษาระดับปัจจุบันในรอบถัดไป';
+}
+
+export function formatExercisePrescription(r = {}) {
+  const count = Math.max(1, Math.min(30, Number(r.sets) || 1));
+  const unitText = r.repUnit === 'sec' ? 'วินาที' : r.repUnit === 'min' ? 'นาที' : 'ครั้ง';
+  const weightText = r.weightKg != null ? `${r.weightKg} kg${r.perSide ? '/ข้าง' : ''}` : '';
+  const sideRepsText = r.perSide && r.weightKg == null ? '/ข้าง' : '';
+  const repsText = `${r.reps ?? '—'} ${unitText}${sideRepsText}`;
+  const setRepText = count === 1 && (r.repUnit === 'sec' || r.repUnit === 'min')
+    ? repsText
+    : `${count} × ${repsText}`;
+  return { count, weightText, setRepText };
+}
+
+export function countTotalSets(rows = []) {
+  return rows.reduce((sum, r) => sum + Math.max(1, Math.min(30, Number(r?.sets) || 1)), 0);
+}
 
 function imageMarkup(r) {
   const validImg = safeHttpUrl(r.imageUrl);
   if (validImg) {
-    return `<button type="button" data-zoom-img="${esc(validImg)}" data-zoom-name="${esc(r.name)}" class="w-full h-full block focus:outline-none cursor-zoom-in" aria-label="ขยายภาพท่า ${esc(r.name)}"><img data-exercise-image src="${esc(validImg)}" alt="ตัวอย่างท่า ${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-contain bg-white p-1 rounded-2xl"></button>`;
+    return `<button type="button" data-zoom-img="${esc(validImg)}" data-zoom-name="${esc(r.name)}" class="w-full h-full block focus-visible:outline-2 focus-visible:outline-brand cursor-zoom-in" aria-label="ขยายภาพท่า ${esc(r.name)}"><img data-exercise-image src="${esc(validImg)}" alt="ตัวอย่างท่า ${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-contain bg-white p-1"></button>`;
   }
-  const hintText = r.imageHint ? 'รอลิงก์รูปเต็ม' : 'ยังไม่มีภาพตัวอย่าง';
-  return `<div data-image-placeholder class="w-full h-full min-h-28 rounded-2xl bg-slate-100 text-slate-400 flex flex-col items-center justify-center gap-1.5 px-2 text-center text-xs"><span class="text-2xl">🏋️</span><span>${hintText}</span></div>`;
+  const hintText = r.imageHint ? 'รอลิงก์รูปเต็ม' : 'ไม่มีรูป';
+  return `<div data-image-placeholder class="w-full h-full bg-slate-100 text-slate-400 flex flex-col items-center justify-center gap-1 px-1.5 text-center text-[11px] leading-tight"><span class="text-xl" aria-hidden="true">🏋️</span><span>${hintText}</span></div>`;
 }
 
 function refMarkup(r) {
   const url = safeHttpUrl(r.refUrl);
   const title = (r.refTitle || '').trim();
   if (url) {
-    return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2.5 py-1 text-xs text-blue-800 hover:bg-sky-soft"><i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i><span class="truncate max-w-[240px]">${esc(title || url)}</span></a>`;
+    return `<div class="pt-0.5 max-w-full min-w-0">
+      <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2.5 py-1 text-xs text-blue-800 hover:bg-sky-soft">
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] shrink-0" aria-hidden="true"></i>
+        <span class="truncate min-w-0">${esc(title || url)}</span>
+      </a>
+    </div>`;
   }
   if (title) {
     const q = 'https://www.google.com/search?q=' + encodeURIComponent(title);
-    return `<div class="inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600"><span>🔗 ${esc(title)}</span><a href="${esc(q)}" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline font-medium">ค้นหาลิงก์</a></div>`;
+    return `<div class="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600 max-w-full min-w-0">
+      <span class="break-words [overflow-wrap:anywhere] min-w-0">🔗 ${esc(title)}</span>
+      <a href="${esc(q)}" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline font-medium shrink-0">ค้นหาลิงก์</a>
+    </div>`;
   }
   return '';
 }
@@ -34,96 +146,550 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   const started = Date.now();
   let restTimer = null;
   let restSeconds = 0;
+  let activeRestPreset = 0;
+  let activeSection = 'all';
+  let step = 'play'; // 'play' | 'reflect'
+  let snapshotDone = [];
+  let snapshotMinutes = 1;
+  let snapshotCheckedCounts = {};
+  let showAllExercisesInReflect = false;
 
-  const groups = SECTION_ORDER.map(section => {
+  const reflectState = {
+    feeling: '',
+    sessionRpe: null,
+    reflectionNote: '',
+    exerciseFeedback: {} // [ri]: { rpe: number|null, rir: number|null }
+  };
+
+  const totalSetsAll = countTotalSets(rows);
+  const activeSections = SECTION_ORDER.filter(sec => rows.some(r => r.section === sec));
+
+  const groups = activeSections.map(section => {
     const members = rows.map((r, ri) => ({ r, ri })).filter(x => x.r.section === section);
-    if (!members.length) return '';
-    const cards = members.map(({ r, ri }) => {
-      const count = Math.max(1, Math.min(30, Number(r.sets) || 1));
-      const checks = Array.from({ length: count }, (_, si) =>
-        `<label class="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 min-h-[44px] text-sm cursor-pointer hover:bg-slate-50"><input type="checkbox" data-done data-ri="${ri}" data-si="${si}" class="accent-brand"> เซต ${si + 1}</label>`
-      ).join('');
-      const weight = r.weightKg != null
-        ? `<span class="text-sm font-medium text-slate-700">${esc(r.weightKg)} kg${r.perSide ? '/ข้าง' : ''}</span><span class="text-slate-300" aria-hidden="true">·</span>`
-        : '';
-      const unitText = r.repUnit === 'sec' ? 'วินาที' : r.repUnit === 'min' ? 'นาที' : 'ครั้ง';
-      const sideText = r.perSide && r.weightKg == null ? '/ข้าง' : '';
-      const reps = `${r.reps ?? '—'} ${unitText}${sideText}`;
-      return `<article class="grid grid-cols-[5rem_1fr] gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[minmax(9rem,11rem)_1fr] md:gap-5 md:p-5">
-        <div class="aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-white md:aspect-[4/5]">${imageMarkup(r)}</div>
-        <div class="min-w-0 space-y-2 md:space-y-2.5">
-          <h4 class="text-base font-semibold text-slate-800 md:text-lg">${esc(r.name)}</h4>
-          <div class="flex flex-wrap items-center gap-2 tabular-nums">${weight}<strong class="text-base md:text-lg text-slate-800">${count} × ${esc(reps)}</strong></div>
-          ${refMarkup(r)}
-          ${r.note ? `<p class="text-sm leading-relaxed text-slate-600 md:text-base">${esc(r.note)}</p>` : ''}
-          <div class="flex flex-wrap gap-2 pt-1">${checks}</div>
-        </div>
-      </article>`;
+    const cards = members.map(({ r, ri }, idx) => {
+      const { count, weightText, setRepText } = formatExercisePrescription(r);
+      const checks = Array.from({ length: count }, (_, si) => `
+        <label class="wa-set-btn" data-set-label="${ri}:${si}">
+          <input type="checkbox" data-done data-ri="${ri}" data-si="${si}" class="sr-only">
+          <i class="fa-regular fa-circle text-xs opacity-60 shrink-0" data-set-icon aria-hidden="true"></i>
+          <span class="whitespace-nowrap">เซต ${si + 1}</span>
+        </label>`).join('');
+
+      return `
+        <article class="wa-card p-4 sm:p-5 flex flex-col gap-3 min-w-0" data-ex-card="${ri}" data-ex-sets="${count}">
+          <div class="flex items-start gap-3.5 sm:gap-4 min-w-0">
+            <div class="w-20 h-20 sm:w-24 sm:h-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">${imageMarkup(r)}</div>
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <div class="flex items-start justify-between gap-2 min-w-0">
+                <h4 class="text-base sm:text-lg font-bold text-slate-800 leading-snug break-words [overflow-wrap:anywhere] min-w-0">
+                  <span class="text-brand tabular-nums mr-1">${idx + 1}.</span>${esc(r.name)}
+                </h4>
+                <span class="hidden text-xs font-semibold text-green-700 shrink-0 whitespace-nowrap" data-card-done-badge>✓ ครบ</span>
+              </div>
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums text-sm sm:text-base">
+                ${weightText ? `<span class="font-semibold text-brand-dark">${esc(weightText)}</span><span class="text-slate-300" aria-hidden="true">·</span>` : ''}
+                <strong class="font-bold text-slate-800">${esc(setRepText)}</strong>
+              </div>
+              ${refMarkup(r)}
+            </div>
+          </div>
+          ${r.note ? `<p class="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">${esc(r.note)}</p>` : ''}
+          <div class="space-y-2 pt-0.5">
+            <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+              <span class="tabular-nums" data-card-progress="${ri}">0 / ${count} เซต</span>
+              ${count > 1 ? `<button type="button" data-toggle-all="${ri}" class="text-xs font-semibold text-brand-dark hover:underline py-1 px-1.5 whitespace-nowrap">เลือกครบทุกเซต</button>` : ''}
+            </div>
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">${checks}</div>
+          </div>
+        </article>`;
     }).join('');
-    return `<section class="space-y-3"><h3 class="font-semibold text-slate-700">${esc(SECTION_TITLES[section])}</h3><div class="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-5">${cards}</div></section>`;
+
+    return `
+      <section class="space-y-3" data-wa-section="${section}">
+        <div class="flex flex-wrap items-baseline justify-between gap-2 pb-1.5 border-b border-slate-200">
+          <h3 class="text-sm sm:text-base font-bold text-slate-800">${esc(SECTION_TITLES[section])}</h3>
+          <span class="text-xs text-slate-500 tabular-nums">${members.length} ท่า</span>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">${cards}</div>
+      </section>`;
   }).join('');
 
   const subtitleParts = [
     meta.muscleGroup ? meta.muscleGroup.trim() : '',
-    meta.durationMin ? `ประมาณ ${meta.durationMin} นาที` : ''
+    meta.durationMin ? `ประมาณ ${meta.durationMin} นาที` : '',
+    `${rows.length} ท่า`
   ].filter(Boolean);
 
+  const sectionTabsHtml = activeSections.length > 1
+    ? `<div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 overflow-x-auto mt-3" role="tablist" aria-label="ช่วงการฝึก">
+        <button type="button" role="tab" aria-selected="true" data-sec-tab="all" class="wa-sec-tab is-active">ทั้งหมด (${rows.length})</button>
+        ${activeSections.map(sec => {
+          const cnt = rows.filter(r => r.section === sec).length;
+          return `<button type="button" role="tab" aria-selected="false" data-sec-tab="${sec}" class="wa-sec-tab">${esc(SECTION_SHORT[sec])} (${cnt})</button>`;
+        }).join('')}
+      </div>`
+    : '';
+
   const m = openModal(
-    `<div class="flex justify-between items-start gap-3">
-      <div class="min-w-0">
-        <h3 class="font-bold text-lg md:text-xl text-slate-800 truncate">${esc(meta.title || 'กำลังออกกำลังกาย')}</h3>
-        <p class="text-sm text-slate-500">${esc(subtitleParts.length ? subtitleParts.join(' · ') + ' · แตะเมื่อทำแต่ละเซตเสร็จ' : 'แตะเมื่อทำแต่ละเซตเสร็จ')}</p>
+    `<header class="wa-header shrink-0 px-4 sm:px-6 pt-3 sm:pt-5 pb-3.5 space-y-3">
+      <div class="flex items-start justify-between gap-3 min-w-0">
+        <div class="min-w-0 flex-1 space-y-0.5">
+          <h3 id="wa-modal-title" class="font-bold text-lg sm:text-xl text-slate-800 leading-snug break-words [overflow-wrap:anywhere]">${esc(meta.title || 'กำลังออกกำลังกาย')}</h3>
+          <p id="wa-modal-sub" class="text-xs sm:text-sm text-slate-500 break-words">${esc(subtitleParts.join(' · '))}</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="text-right">
+            <span class="block text-[11px] text-slate-500 leading-none">เวลาฝึก</span>
+            <b id="active-time" class="text-xl sm:text-2xl font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
+          </div>
+          <button type="button" data-wa-close class="icon-btn min-w-[44px] min-h-[44px]" aria-label="ปิดหน้าต่างฝึก"><i class="fa-solid fa-xmark"></i></button>
+        </div>
       </div>
-      <b id="active-time" class="text-lg tabular-nums shrink-0 text-slate-800">00:00</b>
+
+      <div id="wa-play-controls" class="space-y-3">
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between gap-2 text-xs text-slate-600 tabular-nums">
+            <span id="active-progress-text">ความคืบหน้า: 0 / ${totalSetsAll} เซต (0%)</span>
+            <span>แตะที่เซตเมื่อทำเสร็จ</span>
+          </div>
+          <div class="progress h-2"><span id="active-progress-bar" style="width:0%"></span></div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-xs font-semibold text-slate-600 mr-0.5 whitespace-nowrap">จับเวลาพัก:</span>
+            <button type="button" data-rest-sec="30" class="wa-rest-btn">30 วิ</button>
+            <button type="button" data-rest-sec="60" id="active-rest" class="wa-rest-btn">60 วิ</button>
+            <button type="button" data-rest-sec="90" class="wa-rest-btn">90 วิ</button>
+            <button type="button" id="active-rest-stop" class="wa-rest-btn hidden">หยุด</button>
+          </div>
+          <span id="active-rest-time" class="text-sm font-bold tabular-nums text-brand-dark whitespace-nowrap"></span>
+        </div>
+
+        ${sectionTabsHtml}
+      </div>
+    </header>
+
+    <div class="wa-body flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-5">
+      <div id="wa-play-view" class="space-y-6">${groups}</div>
+      <div id="wa-reflect-view" class="hidden space-y-5"></div>
     </div>
-    <div class="flex flex-wrap items-center gap-2 mt-3">
-      <button type="button" data-rest-sec="30" class="chip bg-slate-100 text-slate-700 min-h-[40px]">พัก 30 วิ</button>
-      <button type="button" data-rest-sec="60" id="active-rest" class="btn btn-soft !py-1.5 !px-3.5 !min-h-[40px]">พัก 60 วินาที</button>
-      <button type="button" data-rest-sec="90" class="chip bg-slate-100 text-slate-700 min-h-[40px]">พัก 90 วิ</button>
-      <span id="active-rest-time" class="self-center text-sm font-medium tabular-nums text-slate-600 ml-1"></span>
-    </div>
-    <div class="max-h-[55vh] overflow-y-auto md:max-h-[65vh] space-y-5 mt-4 pr-1">${groups}</div>
-    <div class="flex justify-end gap-2 mt-4">
-      <button type="button" data-close class="btn btn-ghost">ปิด</button>
-      <button type="button" id="active-finish" class="btn btn-primary">จบและบันทึกผล</button>
-    </div>`,
-    { wide: true }
+
+    <footer id="wa-play-footer" class="wa-footer shrink-0 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <span id="active-summary" class="text-xs sm:text-sm font-medium text-slate-600 tabular-nums">ทำแล้ว 0 / ${totalSetsAll} เซต</span>
+      <div class="flex items-center gap-2 ml-auto">
+        <button type="button" data-wa-close class="btn btn-ghost min-h-[44px]">ปิด</button>
+        <button type="button" id="active-finish" class="btn btn-primary min-h-[44px]"><i class="fa-solid fa-check"></i> จบและประเมินผล</button>
+      </div>
+    </footer>
+    <footer id="wa-reflect-footer" class="wa-footer hidden shrink-0 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+      <button type="button" id="wa-back-play" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">← กลับไปแก้ไขเซต</button>
+      <div class="flex items-center gap-2 ml-auto">
+        <button type="button" id="wa-skip-save" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">ข้ามและบันทึกเลย</button>
+        <button type="button" id="wa-save-all" class="btn btn-primary min-h-[44px]"><i class="fa-solid fa-check"></i> บันทึกผลทั้งหมด</button>
+      </div>
+    </footer>`,
+    { size: 'xl', flush: true, staticBackdrop: true }
   );
 
-  const time = m.el.querySelector('#active-time');
-  const rest = m.el.querySelector('#active-rest-time');
+  const titleEl = m.el.querySelector('#wa-modal-title');
+  const subEl = m.el.querySelector('#wa-modal-sub');
+  const timeEl = m.el.querySelector('#active-time');
+  const restEl = m.el.querySelector('#active-rest-time');
+  const restStopBtn = m.el.querySelector('#active-rest-stop');
+  const progressText = m.el.querySelector('#active-progress-text');
+  const progressBar = m.el.querySelector('#active-progress-bar');
+  const summaryEl = m.el.querySelector('#active-summary');
+  const finishBtn = m.el.querySelector('#active-finish');
+  const playControls = m.el.querySelector('#wa-play-controls');
+  const playView = m.el.querySelector('#wa-play-view');
+  const reflectView = m.el.querySelector('#wa-reflect-view');
+  const playFooter = m.el.querySelector('#wa-play-footer');
+  const reflectFooter = m.el.querySelector('#wa-reflect-footer');
+  const saveAllBtn = m.el.querySelector('#wa-save-all');
+  const skipSaveBtn = m.el.querySelector('#wa-skip-save');
+  const backPlayBtn = m.el.querySelector('#wa-back-play');
+
   const clock = setInterval(() => {
+    if (step !== 'play') return;
     const n = Math.floor((Date.now() - started) / 1000);
-    time.textContent = String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+    timeEl.textContent = String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
   }, 1000);
-  const clear = () => {
-    clearInterval(clock);
+
+  const stopRestTimer = (label = '') => {
     clearInterval(restTimer);
+    restTimer = null;
+    activeRestPreset = 0;
+    restEl.textContent = label;
+    restStopBtn?.classList.add('hidden');
+    m.el.querySelectorAll('[data-rest-sec]').forEach(b => b.classList.remove('is-active'));
   };
 
+  const clearTimers = () => {
+    clearInterval(clock);
+    clearInterval(restTimer);
+    document.removeEventListener('keydown', onEsc);
+  };
+
+  const getCheckedCount = () => m.el.querySelectorAll('[data-done]:checked').length;
+
+  const attemptClose = async () => {
+    const checked = getCheckedCount();
+    if (checked > 0 || step === 'reflect') {
+      const ok = await confirmDialog({
+        title: 'ออกจากการฝึกตอนนี้?',
+        message: `คุณทำไปแล้ว ${checked} เซต หากปิดตอนนี้ผลและแบบประเมินจะยังไม่ถูกบันทึก`,
+        confirmText: 'ออกโดยไม่บันทึก',
+        cancelText: step === 'reflect' ? 'กลับไปประเมินต่อ' : 'ฝึกต่อ',
+        danger: true
+      });
+      if (!ok) return;
+    }
+    clearTimers();
+    m.close();
+  };
+
+  const onEsc = e => {
+    if (e.key === 'Escape' && document.body.lastElementChild === m.el) {
+      e.preventDefault();
+      attemptClose();
+    }
+  };
+  document.addEventListener('keydown', onEsc);
+
+  const syncProgressUI = () => {
+    const checked = getCheckedCount();
+    const pct = totalSetsAll ? Math.round((checked / totalSetsAll) * 100) : 0;
+    progressText.textContent = `ความคืบหน้า: ${checked} / ${totalSetsAll} เซต (${pct}%)`;
+    progressBar.style.width = `${pct}%`;
+    summaryEl.textContent = `ทำแล้ว ${checked} / ${totalSetsAll} เซต`;
+
+    m.el.querySelectorAll('[data-ex-card]').forEach(card => {
+      const ri = card.dataset.exCard;
+      const totalCardSets = Number(card.dataset.exSets) || 1;
+      const doneInCard = card.querySelectorAll('[data-done]:checked').length;
+      const isComplete = doneInCard === totalCardSets;
+      card.classList.toggle('is-complete', isComplete);
+      card.querySelector('[data-card-done-badge]')?.classList.toggle('hidden', !isComplete);
+      const cardProg = card.querySelector(`[data-card-progress="${ri}"]`);
+      if (cardProg) cardProg.textContent = `${doneInCard} / ${totalCardSets} เซต`;
+      const toggleBtn = card.querySelector(`[data-toggle-all="${ri}"]`);
+      if (toggleBtn) toggleBtn.textContent = isComplete ? 'ล้างการติ๊ก' : 'เลือกครบทุกเซต';
+
+      card.querySelectorAll('[data-set-label]').forEach(lbl => {
+        const cb = lbl.querySelector('[data-done]');
+        const icon = lbl.querySelector('[data-set-icon]');
+        const done = !!cb?.checked;
+        lbl.classList.toggle('is-done', done);
+        if (icon) {
+          icon.className = done
+            ? 'fa-solid fa-circle-check text-xs shrink-0'
+            : 'fa-regular fa-circle text-xs opacity-60 shrink-0';
+        }
+      });
+    });
+  };
+
+  function renderReflectStep() {
+    const primaryIndices = [];
+    const extraIndices = [];
+    rows.forEach((r, ri) => {
+      if (r.section === 'main' || (snapshotCheckedCounts[ri] || 0) > 0) {
+        primaryIndices.push(ri);
+      } else {
+        extraIndices.push(ri);
+      }
+    });
+    const visibleIndices = showAllExercisesInReflect || !primaryIndices.length
+      ? rows.map((_, i) => i)
+      : primaryIndices;
+
+    const exCardsHtml = visibleIndices.map(ri => {
+      const r = rows[ri];
+      const { count, weightText, setRepText } = formatExercisePrescription(r);
+      const doneSets = snapshotCheckedCounts[ri] || 0;
+      const cur = reflectState.exerciseFeedback[ri] || { rpe: null, rir: null };
+      const suggestion = suggestNextProgression({
+        rpe: cur.rpe,
+        rir: cur.rir,
+        completedSets: doneSets,
+        plannedSets: count
+      });
+      const badgeTone = suggestion?.action === 'increase'
+        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        : suggestion?.action === 'deload'
+          ? 'bg-amber-50 border-amber-200 text-amber-800'
+          : 'bg-sky-50 border-sky-200 text-sky-800';
+
+      return `
+        <div class="wa-card p-3.5 sm:p-4 space-y-3 min-w-0">
+          <div class="flex flex-wrap items-baseline justify-between gap-2 min-w-0">
+            <div class="min-w-0">
+              <h5 class="font-bold text-sm sm:text-base text-slate-800 break-words">${esc(r.name)}</h5>
+              <p class="text-xs text-slate-500 tabular-nums">${weightText ? `${esc(weightText)} · ` : ''}${esc(setRepText)} (ทำแล้ว ${doneSets}/${count} เซต)</p>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <p class="text-xs font-semibold text-slate-600">ความเหนื่อยของท่านี้ (RPE)</p>
+            <div class="flex flex-wrap gap-1.5">
+              ${RPE_CHOICES.map(c => `<button type="button" data-ex-rpe="${ri}:${c.val}" class="wa-eval-btn ${cur.rpe === c.val ? 'is-active' : ''}">${esc(c.label)}</button>`).join('')}
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <p class="text-xs font-semibold text-slate-600">คาดว่าทำต่อได้อีกกี่ครั้งก่อนหมดแรง (RIR)</p>
+            <div class="flex flex-wrap gap-1.5">
+              ${RIR_CHOICES.map(c => `<button type="button" data-ex-rir="${ri}:${c.val}" class="wa-eval-btn ${cur.rir === c.val ? 'is-active' : ''}">${esc(c.label)}</button>`).join('')}
+            </div>
+          </div>
+
+          ${suggestion ? `<div class="rounded-xl border px-3 py-2 text-xs font-medium ${badgeTone}">💡 แนะนำรอบหน้า: ${esc(suggestion.label)}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    reflectView.innerHTML = `
+      <section class="wa-card p-4 space-y-3">
+        <div>
+          <h4 class="font-bold text-sm sm:text-base text-slate-800">ความรู้สึกหลังออกกำลังกาย</h4>
+          <p class="text-xs text-slate-500">เลือกเพื่อบันทึกแนวโน้มและให้ผู้ช่วย AI แนะนำการปรับโหลดรอบหน้า</p>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          ${WORKOUT_FEELINGS.map(f => `
+            <button type="button" data-wa-feeling="${f.id}" class="wa-eval-btn justify-center !py-2.5 ${reflectState.feeling === f.id ? 'is-active' : ''}">
+              <span>${f.icon}</span><span>${esc(f.label)}</span>
+            </button>`).join('')}
+        </div>
+
+        <div class="space-y-1.5 pt-1">
+          <p class="text-xs font-semibold text-slate-600">ความเหนื่อยรวมทั้งเซสชัน (Session RPE 1–10)</p>
+          <div class="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+            ${Array.from({ length: 10 }, (_, idx) => {
+              const v = idx + 1;
+              return `<button type="button" data-wa-srpe="${v}" class="wa-eval-btn justify-center !px-2 ${reflectState.sessionRpe === v ? 'is-active' : ''}">${v}</button>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="label text-xs" for="wa-reflection-note">โน้ตความรู้สึกเพิ่มเติม (ถ้ามี)</label>
+          <textarea id="wa-reflection-note" rows="2" class="input text-sm" placeholder="เช่น วันนี้แรงดี ท่า Squat ลงลึกได้สบาย แต่แขนซ้ายตึงนิดหน่อย">${esc(reflectState.reflectionNote)}</textarea>
+        </div>
+      </section>
+
+      <section class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 class="font-bold text-sm sm:text-base text-slate-800">ประเมินรายท่า (RPE &amp; จำนวนครั้งที่เหลือ)</h4>
+            <p class="text-xs text-slate-500">ระบุเฉพาะท่าที่อยากติดตาม ระบบจะคำนวณคำแนะนำรอบถัดไปให้อัตโนมัติ</p>
+          </div>
+          ${extraIndices.length ? `<button type="button" id="wa-toggle-extra-ex" class="text-xs font-semibold text-brand-dark hover:underline py-1">${showAllExercisesInReflect ? 'ซ่อนท่าวอร์มอัพ/คูลดาวน์' : `แสดงเพิ่มอีก ${extraIndices.length} ท่า`}</button>` : ''}
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">${exCardsHtml}</div>
+      </section>`;
+  }
+
+  function enterReflectStep() {
+    step = 'reflect';
+    stopRestTimer('');
+    snapshotMinutes = Math.max(1, Math.round((Date.now() - started) / 60000));
+    snapshotCheckedCounts = {};
+    snapshotDone = [...m.el.querySelectorAll('[data-done]:checked')].map(c => {
+      const ri = +c.dataset.ri;
+      const si = +c.dataset.si;
+      snapshotCheckedCounts[ri] = (snapshotCheckedCounts[ri] || 0) + 1;
+      const r = rows[ri];
+      return {
+        name: r.name,
+        section: r.section,
+        set: si + 1,
+        weightKg: r.weightKg ?? null,
+        reps: r.reps ?? null,
+        repUnit: r.repUnit || 'reps',
+        completed: true
+      };
+    });
+
+    titleEl.textContent = 'ประเมินหลังออกกำลังกาย';
+    subEl.textContent = `${meta.title || 'บันทึกผลการฝึก'} · ทำแล้ว ${snapshotDone.length} / ${totalSetsAll} เซต · ${snapshotMinutes} นาที`;
+    playControls.classList.add('hidden');
+    playView.classList.add('hidden');
+    playFooter.classList.add('hidden');
+    reflectView.classList.remove('hidden');
+    reflectFooter.classList.remove('hidden');
+    renderReflectStep();
+    m.el.querySelector('.wa-body')?.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  function returnToPlayStep() {
+    step = 'play';
+    titleEl.textContent = meta.title || 'กำลังออกกำลังกาย';
+    subEl.textContent = subtitleParts.join(' · ');
+    reflectView.classList.add('hidden');
+    reflectFooter.classList.add('hidden');
+    playControls.classList.remove('hidden');
+    playView.classList.remove('hidden');
+    playFooter.classList.remove('hidden');
+  }
+
+  async function submitFinish(skipReflection = false) {
+    if (saveAllBtn.disabled || skipSaveBtn.disabled) return;
+    saveAllBtn.disabled = true;
+    skipSaveBtn.disabled = true;
+    const activeBtn = skipReflection ? skipSaveBtn : saveAllBtn;
+    const prevHtml = activeBtn.innerHTML;
+    activeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...';
+
+    const exerciseFeedback = skipReflection
+      ? []
+      : buildExerciseFeedbackSummary(rows, reflectState.exerciseFeedback, snapshotCheckedCounts);
+    const noteText = skipReflection ? '' : reflectState.reflectionNote.trim();
+    const hasAnyFeedback = !skipReflection && (
+      reflectState.feeling ||
+      reflectState.sessionRpe !== null ||
+      noteText ||
+      exerciseFeedback.length > 0
+    );
+    const feedbackPayload = hasAnyFeedback
+      ? {
+          ...(reflectState.feeling && { feeling: reflectState.feeling }),
+          ...(reflectState.sessionRpe !== null && { sessionRpe: reflectState.sessionRpe }),
+          ...(noteText && { reflectionNote: noteText }),
+          ...(exerciseFeedback.length && { exerciseFeedback })
+        }
+      : null;
+
+    try {
+      await onFinish(snapshotDone, snapshotMinutes, feedbackPayload);
+      clearTimers();
+      m.close();
+    } catch {
+      saveAllBtn.disabled = false;
+      skipSaveBtn.disabled = false;
+      activeBtn.innerHTML = prevHtml;
+    }
+  }
+
+  m.el.addEventListener('change', e => {
+    if (e.target.matches('[data-done]')) syncProgressUI();
+  });
+
+  m.el.addEventListener('input', e => {
+    if (e.target.id === 'wa-reflection-note') {
+      reflectState.reflectionNote = e.target.value;
+    }
+  });
+
   m.el.addEventListener('click', e => {
-    if (e.target.closest('[data-close]')) clear();
+    if (e.target.closest('[data-wa-close]')) {
+      attemptClose();
+      return;
+    }
+
+    const feelingBtn = e.target.closest('[data-wa-feeling]');
+    if (feelingBtn) {
+      const val = feelingBtn.dataset.waFeeling;
+      reflectState.feeling = reflectState.feeling === val ? '' : val;
+      renderReflectStep();
+      return;
+    }
+
+    const srpeBtn = e.target.closest('[data-wa-srpe]');
+    if (srpeBtn) {
+      const val = Number(srpeBtn.dataset.waSrpe);
+      reflectState.sessionRpe = reflectState.sessionRpe === val ? null : val;
+      renderReflectStep();
+      return;
+    }
+
+    const exRpeBtn = e.target.closest('[data-ex-rpe]');
+    if (exRpeBtn) {
+      const [riStr, valStr] = exRpeBtn.dataset.exRpe.split(':');
+      const ri = Number(riStr);
+      const val = Number(valStr);
+      const cur = reflectState.exerciseFeedback[ri] || { rpe: null, rir: null };
+      reflectState.exerciseFeedback[ri] = { ...cur, rpe: cur.rpe === val ? null : val };
+      renderReflectStep();
+      return;
+    }
+
+    const exRirBtn = e.target.closest('[data-ex-rir]');
+    if (exRirBtn) {
+      const [riStr, valStr] = exRirBtn.dataset.exRir.split(':');
+      const ri = Number(riStr);
+      const val = Number(valStr);
+      const cur = reflectState.exerciseFeedback[ri] || { rpe: null, rir: null };
+      reflectState.exerciseFeedback[ri] = { ...cur, rir: cur.rir === val ? null : val };
+      renderReflectStep();
+      return;
+    }
+
+    if (e.target.closest('#wa-toggle-extra-ex')) {
+      showAllExercisesInReflect = !showAllExercisesInReflect;
+      renderReflectStep();
+      return;
+    }
+
+    const secTab = e.target.closest('[data-sec-tab]');
+    if (secTab) {
+      activeSection = secTab.dataset.secTab;
+      m.el.querySelectorAll('[data-sec-tab]').forEach(btn => {
+        const isOn = btn.dataset.secTab === activeSection;
+        btn.classList.toggle('is-active', isOn);
+        btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+      });
+      m.el.querySelectorAll('[data-wa-section]').forEach(secEl => {
+        const show = activeSection === 'all' || secEl.dataset.waSection === activeSection;
+        secEl.classList.toggle('hidden', !show);
+      });
+      return;
+    }
+
+    const toggleAllBtn = e.target.closest('[data-toggle-all]');
+    if (toggleAllBtn) {
+      const card = toggleAllBtn.closest('[data-ex-card]');
+      const boxes = [...(card?.querySelectorAll('[data-done]') || [])];
+      const allChecked = boxes.length > 0 && boxes.every(b => b.checked);
+      boxes.forEach(b => { b.checked = !allChecked; });
+      syncProgressUI();
+      return;
+    }
+
+    if (e.target.closest('#active-rest-stop')) {
+      stopRestTimer('');
+      return;
+    }
+
     const restBtn = e.target.closest('[data-rest-sec]');
     if (restBtn) {
       const sec = Math.max(5, Number(restBtn.dataset.restSec) || 60);
       clearInterval(restTimer);
       restSeconds = sec;
+      activeRestPreset = sec;
+      m.el.querySelectorAll('[data-rest-sec]').forEach(b => {
+        b.classList.toggle('is-active', Number(b.dataset.restSec) === activeRestPreset);
+      });
+      restStopBtn?.classList.remove('hidden');
       const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-      rest.textContent = fmt(restSeconds);
+      restEl.textContent = `พัก ${fmt(restSeconds)}`;
       restTimer = setInterval(() => {
         restSeconds--;
-        rest.textContent = restSeconds > 0 ? fmt(restSeconds) : 'พักครบแล้ว';
-        if (restSeconds <= 0) clearInterval(restTimer);
+        if (restSeconds > 0) {
+          restEl.textContent = `พัก ${fmt(restSeconds)}`;
+        } else {
+          stopRestTimer('พักครบแล้ว ✓');
+        }
       }, 1000);
       return;
     }
+
     const zoomBtn = e.target.closest('[data-zoom-img]');
     if (zoomBtn) {
       openModal(
         `<div class="space-y-3">
           <div class="flex items-center justify-between gap-2">
-            <h4 class="font-bold text-slate-800">${esc(zoomBtn.dataset.zoomName || 'ภาพประกอบท่า')}</h4>
-            <button type="button" data-close class="btn btn-ghost !py-1 !px-3 !min-h-[36px] text-xs">ปิด</button>
+            <h4 class="font-bold text-slate-800 break-words min-w-0">${esc(zoomBtn.dataset.zoomName || 'ภาพประกอบท่า')}</h4>
+            <button type="button" data-close class="btn btn-ghost !py-1.5 !px-3 !min-h-[40px] text-xs shrink-0">ปิด</button>
           </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-2 flex items-center justify-center max-h-[68vh] overflow-hidden">
             <img src="${esc(zoomBtn.dataset.zoomImg)}" alt="${esc(zoomBtn.dataset.zoomName || '')}" referrerpolicy="no-referrer" class="max-h-[64vh] w-auto object-contain rounded-xl">
@@ -139,28 +705,13 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     e.target.closest('button')?.remove() || e.target.remove();
     const placeholder = document.createElement('div');
     placeholder.dataset.imagePlaceholder = '';
-    placeholder.className = 'w-full h-full min-h-28 rounded-2xl bg-slate-100 text-slate-400 flex flex-col items-center justify-center gap-1.5 px-2 text-center text-xs';
-    placeholder.innerHTML = '<span class="text-2xl">🏋️</span><span>ภาพนี้เปิดไม่ได้</span>';
+    placeholder.className = 'w-full h-full bg-slate-100 text-slate-400 flex flex-col items-center justify-center gap-1 px-1.5 text-center text-[11px] leading-tight';
+    placeholder.innerHTML = '<span class="text-xl" aria-hidden="true">🏋️</span><span>เปิดรูปไม่ได้</span>';
     holder?.append(placeholder);
   }, true);
 
-  m.el.querySelector('#active-finish').onclick = async () => {
-    const done = [...m.el.querySelectorAll('[data-done]:checked')].map(c => {
-      const ri = +c.dataset.ri;
-      const si = +c.dataset.si;
-      const r = rows[ri];
-      return {
-        name: r.name,
-        section: r.section,
-        set: si + 1,
-        weightKg: r.weightKg ?? null,
-        reps: r.reps ?? null,
-        repUnit: r.repUnit || 'reps',
-        completed: true
-      };
-    });
-    await onFinish(done, Math.max(1, Math.round((Date.now() - started) / 60000)));
-    clear();
-    m.close();
-  };
+  finishBtn.onclick = () => enterReflectStep();
+  backPlayBtn.onclick = () => returnToPlayStep();
+  skipSaveBtn.onclick = () => submitFinish(true);
+  saveAllBtn.onclick = () => submitFinish(false);
 }

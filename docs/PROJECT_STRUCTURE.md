@@ -27,10 +27,10 @@
 | `state.js`, `sync.js` | in-memory app state, event bus, Firestore listeners และสถานะ offline/sync |
 | `schema.js` | sanitizers, collection labels และ document ID สำหรับ backup/restore |
 | `util.js`, `style.css`, `theme.js` | utilities, shared styles และ theme |
-| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, โภชนาการและ AI consumers |
-| `period.js`, `body.js`, `symptoms.js`, `profile.js`, `lab.js` | สุขภาพ, เป้าหมายและผลตรวจ |
-| `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, กฎหมวดหมู่, Statement และ OCR สลิป |
-| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง, สต๊อก, Planner และการเตือน |
+| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, โภชนาการ, AI consumers และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
+| `period.js`, `body.js`, `symptoms.js`, `profile.js`, `lab.js` | สุขภาพ, เป้าหมายและผลตรวจ (รองรับสแกนหลายภาพ) |
+| `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, วิเคราะห์จ่ายซ้ำรายเดือน, กฎหมวดหมู่, Statement และ OCR สลิป |
+| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง (รองรับสแกนซองหลายภาพ), สต๊อก, Planner และการเตือน |
 | `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutConstants.js` | แผน/บันทึก workout, ตัวแปลงข้อความและตาราง, กรอบภาพ และโหมดจับเวลาพัก |
 | `reports.js`, `weekly.js`, `summary.js`, `home.js` | หน้าสรุปและรายงาน |
 | `settings.js`, `backup.js`, `migrate.js`, `onboarding.js` | ตั้งค่า, backup/restore, migration และ first-run UX |

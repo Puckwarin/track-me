@@ -132,7 +132,9 @@ input.input::-webkit-datetime-edit { padding: 0; }
 @media (max-width: 640px) {
   .modal-backdrop { align-items: flex-end; padding: env(safe-area-inset-top) 0 0; }
   .modal-box { max-width: none; border-radius: 1.75rem 1.75rem 0 0; padding: 1.25rem 1.25rem calc(1.25rem + var(--safe-b)); max-height: 92dvh; animation: sheet-up .22s ease-out; }
+  .modal-box.is-flush { padding: 0; max-height: 94dvh; height: 94dvh; }
   .modal-box::before { content: ""; display: block; width: 2.5rem; height: .3rem; border-radius: 9999px; background: #E2D8CD; margin: -.4rem auto .9rem; }
+  .modal-box.is-flush::before { margin: .65rem auto .2rem; flex: none; }
 }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 .toast { bottom: calc(var(--nav-h) + var(--safe-b) + 1rem); }
@@ -666,5 +668,128 @@ html[data-theme="dark"] .ai-chat-quick { background: #221e1c; border-color: #3b3
 html[data-theme="dark"] .ai-quick-btn { background: #2c2724; border-color: #453c35; color: #e2e8f0; }
 html[data-theme="dark"] .ai-quick-btn:hover { background: #3a2e29; color: #f3c3a6; }
 
+/* ---------- Active Workout Player UI ---------- */
+.modal-box.is-flush { max-height: min(90dvh, 56rem); }
+.wa-header { background: #FFFDFA; border-bottom: 1px solid #EFE5DA; }
+.wa-body { background: #FAF7F2; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.wa-footer { background: #FFFDFA; border-top: 1px solid #EFE5DA; padding-bottom: max(0.85rem, var(--safe-b)); }
+.wa-card {
+  background: #fff;
+  border: 1px solid #EAE0D5;
+  border-radius: 1.25rem;
+  transition: border-color .18s, background-color .18s;
+}
+.wa-card.is-complete {
+  background: #F4FAF4;
+  border-color: #B7DAB9;
+}
+.wa-set-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.9rem;
+  border: 1px solid #E5DAD0;
+  background: #FAF7F2;
+  color: #5B4F47;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.wa-set-btn:hover { background: var(--color-lav-soft); border-color: #D7C2B5; }
+.wa-set-btn.is-done {
+  background: var(--color-ok-soft);
+  border-color: #8FC495;
+  color: #255C32;
+  font-weight: 600;
+}
+.wa-sec-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: #6F6259;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+.wa-sec-tab:hover { color: var(--color-ink); background: rgb(255 255 255 / .65); }
+.wa-sec-tab.is-active {
+  background: #fff;
+  color: var(--color-brand-dark);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(74 64 58 / .08);
+}
+.wa-rest-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid #E5DAD0;
+  background: #fff;
+  color: #5B4F47;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.wa-rest-btn:hover { background: var(--color-lav-soft); color: var(--color-brand-dark); }
+.wa-rest-btn.is-active { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }
+.wa-eval-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 1px solid #E5DAD0;
+  background: #FAF7F2;
+  color: #5B4F47;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.wa-eval-btn:hover { background: var(--color-lav-soft); border-color: #D7C2B5; }
+.wa-eval-btn.is-active { background: var(--color-brand); border-color: var(--color-brand); color: #fff; font-weight: 600; }
 
+html[data-theme="pastel"] .wa-header,
+html[data-theme="pastel"] .wa-footer { background: #FFFCFE; border-color: #F2E4F1; }
+html[data-theme="pastel"] .wa-body { background: #FCF6FB; }
+html[data-theme="pastel"] .wa-card { border-color: #EFE0EE; }
+html[data-theme="pastel"] .wa-card.is-complete { background: #F1FAF5; border-color: #B7E4CA; }
+html[data-theme="pastel"] .wa-set-btn { background: #FCF6FB; border-color: #EAD8EA; }
+html[data-theme="pastel"] .wa-rest-btn,
+html[data-theme="pastel"] .wa-eval-btn { background: #FCF6FB; border-color: #EAD8EA; }
+html[data-theme="pastel"] .wa-eval-btn.is-active { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }
 
+html[data-theme="dark"] .wa-header,
+html[data-theme="dark"] .wa-footer { background: #262220; border-color: #3b342e; }
+html[data-theme="dark"] .wa-body { background: #1c1916; }
+html[data-theme="dark"] .wa-card { background: #262220; border-color: #3b342e; }
+html[data-theme="dark"] .wa-card.is-complete { background: #1e2d24; border-color: #365943; }
+html[data-theme="dark"] .wa-set-btn { background: #1f1b19; border-color: #453c35; color: #e2e8f0; }
+html[data-theme="dark"] .wa-set-btn:hover { background: #332924; }
+html[data-theme="dark"] .wa-set-btn.is-done { background: #233b2b; border-color: #4b8a60; color: #b9f3c9; }
+html[data-theme="dark"] .wa-sec-tab { color: #c4b8ad; }
+html[data-theme="dark"] .wa-sec-tab:hover { background: #332d29; color: #f5eee6; }
+html[data-theme="dark"] .wa-sec-tab.is-active { background: #262220; color: #f3c3a6; box-shadow: none; border: 1px solid #453c35; }
+html[data-theme="dark"] .wa-rest-btn,
+html[data-theme="dark"] .wa-eval-btn { background: #2c2724; border-color: #453c35; color: #e2e8f0; }
+html[data-theme="dark"] .wa-rest-btn:hover,
+html[data-theme="dark"] .wa-eval-btn:hover { background: #3a2e29; color: #f3c3a6; }
+html[data-theme="dark"] .wa-rest-btn.is-active,
+html[data-theme="dark"] .wa-eval-btn.is-active { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }

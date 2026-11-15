@@ -18,7 +18,7 @@ export const GROUPS = {
   home: ['home'],
   food: ['food'],
   health: ['weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
-  care: ['care', 'remind', 'expense', 'inventory'],
+  care: ['expense', 'care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {

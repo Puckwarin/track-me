@@ -388,31 +388,79 @@ export async function estimateStockFromPhoto(file, { signal } = {}) {
   }, { signal });
 }
 
-export async function estimateStockFromPhotos(files, onProgress = () => {}, { signal } = {}) {
-  const list = [...files];
-  const results = new Array(list.length);
+export function formatImageProgress(actionLabel, info) {
+  const total = Math.max(1, Number(info?.total) || 1);
+  const completed = Math.max(0, Math.min(total, Number(info?.completed) || 0));
+  const percent = Math.max(0, Math.min(100, Number.isFinite(info?.percent) ? info.percent : Math.round((completed / total) * 100)));
+  if (completed >= total) {
+    return `✓ ประมวลผลครบ ${total}/${total} รูป (100%)`;
+  }
+  const active = Math.max(completed + 1, Math.min(total, Number(info?.activeIndex) || completed + 1));
+  return `อัปโหลด ${total} รูป · ${actionLabel} ${active}/${total} (${percent}%)…`;
+}
+
+export async function runImageBatch(files, processor, onProgress = () => {}, { concurrency = 2, signal } = {}) {
+  const list = [...(files || [])];
+  const total = list.length;
+  if (!total) return { results: [], errors: [] };
+
+  const results = new Array(total);
   const errors = [];
-  let done = 0;
+  let completed = 0;
+  let started = 0;
   let cursor = 0;
-  const concurrency = Math.min(2, list.length || 1);
+  const workerCount = Math.max(1, Math.min(concurrency, total));
+
+  onProgress({ total, started: 0, activeIndex: 1, completed: 0, percent: 0, fileName: list[0]?.name || '' });
+
   async function worker() {
-    while (cursor < list.length) {
+    while (cursor < total) {
       if (signal?.aborted) break;
       const idx = cursor++;
-      const f = list[idx];
+      const file = list[idx];
+      started = Math.max(started, idx + 1);
+      onProgress({
+        total,
+        started,
+        activeIndex: Math.min(total, Math.max(completed + 1, started)),
+        completed,
+        percent: Math.round((completed / total) * 100),
+        fileName: file?.name || ''
+      });
       try {
-        const res = await estimateStockFromPhoto(f, { signal });
-        results[idx] = { fileName: f.name, ...res };
+        const data = await processor(file, idx, { signal });
+        results[idx] = { index: idx, fileName: file?.name || `รูปที่ ${idx + 1}`, data };
       } catch (err) {
-        errors.push({ fileName: f.name, message: explainGeminiError(err) });
+        errors.push({ index: idx, fileName: file?.name || `รูปที่ ${idx + 1}`, message: explainGeminiError(err) });
       } finally {
-        done++;
-        onProgress(done, list.length);
+        completed++;
+        onProgress({
+          total,
+          started,
+          activeIndex: completed >= total ? total : Math.min(total, Math.max(completed + 1, started)),
+          completed,
+          percent: Math.round((completed / total) * 100),
+          fileName: file?.name || ''
+        });
       }
     }
   }
-  await Promise.all(Array.from({ length: concurrency }, worker));
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
   return { results: results.filter(Boolean), errors };
+}
+
+export async function estimateStockFromPhotos(files, onProgress = () => {}, { signal } = {}) {
+  const { results, errors } = await runImageBatch(
+    files,
+    (file, _idx, opts) => estimateStockFromPhoto(file, opts),
+    info => onProgress(info.completed, info.total, info),
+    { concurrency: 2, signal }
+  );
+  return {
+    results: results.map(item => ({ fileName: item.fileName, ...item.data })),
+    errors
+  };
 }
 
 export async function parseReminderWithAI(text, today, existingTitles = [], { signal } = {}) {

@@ -1,10 +1,10 @@
-import { addDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { userCol, userDoc } from './firebase.js';
+import { addDoc, setDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
+import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, localDateStr, toast } from './util.js';
+import { $, esc, localDateStr, toast, openModal } from './util.js';
 import { watch } from './sync.js';
-import { readPetFoodLabel, explainGeminiError } from './nutrition.js';
-import { mountLab, render as renderLab } from './lab.js';
+import { readPetFoodLabel, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
+import { mountLab, render as renderLab, resetLabToToday } from './lab.js';
 
 let root, petFormDirty = false;
 const $r = s => $(s, root);
@@ -28,8 +28,8 @@ export function mountCare(el) {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-semibold">อาหารและแคลอรี</h3>
         <label class="chip bg-lav-soft text-brand-dark cursor-pointer">
-          <input id="pet-food-scan" type="file" accept="image/*" class="hidden">
-          <i class="fa-solid fa-camera"></i> สแกนจากซองอาหาร
+          <input id="pet-food-scan" type="file" accept="image/*" multiple class="hidden">
+          <i class="fa-solid fa-camera"></i> สแกนซองอาหาร (เลือกได้หลายรูป)
         </label>
       </div>
       <p id="pet-food-scan-status" class="hidden text-xs text-slate-500"></p>
@@ -52,6 +52,10 @@ export function mountCare(el) {
   renderAll();
 }
 
+export function resetCareToToday() {
+  resetLabToToday();
+}
+
 export function watchCare(uid) {
   for (const [key, col] of [['petProfiles', 'pet_profiles'], ['petCare', 'pet_care_records'], ['petFoods', 'pet_food_records']]) {
     watch(`care:${col}`, userCol(uid, col), records => { state[key] = records; renderAll(); window.dispatchEvent(new Event('trackme:data-change')); });
@@ -63,30 +67,150 @@ function renderAll() {
   renderPet(); renderPetWeight(); renderPetFoods(); renderLab();
 }
 
-async function onScanPetFood(e) {
-  const f = e.target.files?.[0];
-  e.target.value = '';
-  if (!f) return;
-  const st = $r('#pet-food-scan-status');
-  st.className = 'text-xs text-slate-500';
-  st.textContent = 'กำลังอ่านข้อมูลจากซองอาหารด้วย AI...';
-  try {
-    const res = await readPetFoodLabel(f);
-    const fullName = [res.brand, res.name].filter(Boolean).join(' · ');
-    if (fullName) $r('#pet-food-name').value = fullName;
-    if (res.kcalPer100g != null) $r('#pet-food-kcal').value = Math.round(res.kcalPer100g);
+function openPetFoodScanModal(results, errors) {
+  const pet = (state.petProfiles || [])[0];
+  const prepared = results.map(r => {
+    const res = r.data || {};
+    const fullName = [res.brand, res.name].filter(Boolean).join(' · ') || 'อาหารสัตว์เลี้ยง';
     const info = [];
     if (res.proteinPct != null) info.push(`โปรตีน ${res.proteinPct}%`);
     if (res.fatPct != null) info.push(`ไขมัน ${res.fatPct}%`);
     if (res.fiberPct != null) info.push(`ไฟเบอร์ ${res.fiberPct}%`);
     if (res.moisturePct != null) info.push(`ความชื้น ${res.moisturePct}%`);
-    if (info.length && !$r('#pet-food-notes').value.trim()) $r('#pet-food-notes').value = info.join(' · ');
+    if (res.notes) info.push(res.notes);
+    return {
+      fileName: r.fileName,
+      name: fullName,
+      kcalPer100: res.kcalPer100g != null ? Math.round(res.kcalPer100g) : '',
+      notes: info.join(' · ')
+    };
+  });
+
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-bold text-lg text-slate-800">🐾 ตรวจสอบผลสแกนซองอาหาร (${prepared.length} รูป)</h3>
+      <button data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
+      ✓ ประมวลผลครบ ${prepared.length} รูป${errors.length ? ` · ไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บรูปภาพลงระบบ)
+    </p>
+    ${!pet ? '<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">⚠️ ยังไม่มีโปรไฟล์น้อง: กรุณาบันทึกข้อมูลน้องก่อน หรือกด “นำรายการแรกใส่ฟอร์ม”</p>' : ''}
+    ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
+    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+      ${prepared.map((item, i) => `
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-pfs-row="${i}">
+          <label class="flex items-center justify-between gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+            <span class="flex items-center gap-2"><input type="checkbox" class="pfs-chk" checked> รายการที่ ${i + 1} (${esc(item.fileName)})</span>
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="sm:col-span-2"><label class="lbl">ชื่ออาหาร/ขนม *</label><input class="input pfs-name text-xs" value="${esc(item.name)}"></div>
+            <div><label class="lbl">kcal / 100g</label><input type="number" min="0" step="1" class="input pfs-kcal text-xs" value="${esc(item.kcalPer100)}" placeholder="ถ้ามี"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="lbl">ปริมาณที่กิน (g) *</label><input type="number" min="0" step="1" class="input pfs-grams text-xs" placeholder="เช่น 50"></div>
+            <div><label class="lbl">สถานะการแพ้</label><select class="input pfs-allergy text-xs"><option value="unknown">ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select></div>
+          </div>
+          <div><label class="lbl">สารอาหาร / หมายเหตุ</label><input class="input pfs-notes text-xs" value="${esc(item.notes)}" placeholder="โปรตีน ไขมัน ไฟเบอร์..."></div>
+        </div>`).join('')}
+    </div>
+    <div class="flex flex-wrap justify-end gap-2 mt-4">
+      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="pfs-fill" class="btn btn-soft text-xs">นำรายการแรกใส่ฟอร์ม</button>
+      <button type="button" id="pfs-save" class="btn btn-primary text-xs"><i class="fa-solid fa-check"></i> ยืนยันบันทึกรายการที่เลือก</button>
+    </div>`, { wide: true });
+
+  $('#pfs-fill', m.el).addEventListener('click', () => {
+    const firstRow = m.el.querySelector('[data-pfs-row]');
+    if (!firstRow) return;
+    $r('#pet-food-name').value = firstRow.querySelector('.pfs-name').value.trim();
+    $r('#pet-food-grams').value = firstRow.querySelector('.pfs-grams').value;
+    $r('#pet-food-kcal').value = firstRow.querySelector('.pfs-kcal').value;
+    $r('#pet-food-allergy').value = firstRow.querySelector('.pfs-allergy').value;
+    $r('#pet-food-notes').value = firstRow.querySelector('.pfs-notes').value.trim();
     renderPetEstimate();
-    st.className = 'text-xs text-green-700';
-    st.textContent = `อ่านจากซองแล้ว: ${fullName || 'อาหารสัตว์เลี้ยง'}${res.kcalPer100g != null ? ` · ${Math.round(res.kcalPer100g)} kcal/100g` : ' · ไม่พบตัวเลข kcal บนรูป (กรอกเพิ่มเองได้)'}${info.length ? ` · ${info.join(', ')}` : ''}`;
+    const st = $r('#pet-food-scan-status');
+    if (st) { st.textContent = ''; st.classList.add('hidden'); }
+    m.close();
+    toast('นำข้อมูลใส่ฟอร์มแล้ว — กรอกปริมาณและกดบันทึกอาหารได้เลย');
+  });
+
+  $('#pfs-save', m.el).addEventListener('click', async () => {
+    if (!pet) return toast('กรุณาบันทึกโปรไฟล์น้องด้านบนก่อนบันทึกอาหารค่ะ', 'err');
+    const rows = [...m.el.querySelectorAll('[data-pfs-row]')];
+    const itemsToSave = [];
+    for (const row of rows) {
+      if (!row.querySelector('.pfs-chk')?.checked) continue;
+      const name = row.querySelector('.pfs-name').value.trim();
+      const gramsRaw = row.querySelector('.pfs-grams').value;
+      const grams = gramsRaw === '' ? null : Number(gramsRaw);
+      const kcalRaw = row.querySelector('.pfs-kcal').value;
+      const kcalPer100 = kcalRaw === '' ? null : Number(kcalRaw);
+      if (!name || grams === null || !Number.isFinite(grams) || grams < 0) {
+        return toast('กรุณากรอกชื่ออาหารและปริมาณ (g) ในรายการที่เลือกก่อนบันทึก', 'err');
+      }
+      itemsToSave.push({
+        petId: pet.id,
+        date: localDateStr(),
+        name: name.slice(0, 120),
+        grams,
+        kcalPer100: Number.isFinite(kcalPer100) ? kcalPer100 : null,
+        allergy: row.querySelector('.pfs-allergy').value,
+        note: row.querySelector('.pfs-notes').value.trim().slice(0, 2000),
+        createdAt: new Date()
+      });
+    }
+    if (!itemsToSave.length) return toast('เลือกอย่างน้อย 1 รายการก่อนบันทึก', 'err');
+
+    const btn = $('#pfs-save', m.el);
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึก…';
+    try {
+      const batch = writeBatch(db);
+      const colRef = userCol(state.uid, 'pet_food_records');
+      itemsToSave.forEach(rec => batch.set(doc(colRef), rec));
+      batch.commit().catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
+      const st = $r('#pet-food-scan-status');
+      if (st) { st.textContent = ''; st.classList.add('hidden'); }
+      m.close();
+      toast(`บันทึกอาหารน้อง ${itemsToSave.length} รายการแล้ว 🐾`);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> ยืนยันบันทึกรายการที่เลือก';
+      toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+    }
+  });
+}
+
+async function onScanPetFood(e) {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+  const st = $r('#pet-food-scan-status');
+  st.className = 'text-xs text-slate-500 font-medium';
+  st.classList.remove('hidden');
+  st.textContent = formatImageProgress('กำลังอ่านซองอาหาร', { total: files.length, activeIndex: 1, completed: 0, percent: 0 });
+  try {
+    const { results, errors } = await runImageBatch(
+      files,
+      file => readPetFoodLabel(file),
+      info => {
+        if (st.isConnected) st.textContent = formatImageProgress('กำลังอ่านซองอาหาร', info);
+      },
+      { concurrency: 2 }
+    );
+    if (!results.length && errors.length) {
+      st.className = 'text-xs text-rose-600 font-medium';
+      st.textContent = errors[0].message;
+      toast(errors[0].message, 'err');
+      return;
+    }
+    st.className = 'text-xs text-green-700 font-semibold';
+    st.textContent = `✓ ประมวลผลครบ ${files.length}/${files.length} รูป (สำเร็จ ${results.length}) — ตรวจสอบและยืนยัน`;
+    openPetFoodScanModal(results, errors);
   } catch (err) {
-    st.className = 'text-xs text-rose-600';
+    st.className = 'text-xs text-rose-600 font-medium';
     st.textContent = explainGeminiError(err);
+    toast(explainGeminiError(err), 'err');
   }
 }
 
@@ -95,5 +219,5 @@ const ageText=birthDate=>{if(!birthDate)return 'ไม่ระบุวัน�
 function renderPet(){const p=(state.petProfiles||[])[0];if(p&&!petFormDirty){$r('#pet-name').value=p.name||'';$r('#pet-kind').value=p.kind||'';$r('#pet-birth').value=p.birthDate||'';$r('#pet-weight').value=p.weightKg||'';$r('#pet-life').value=p.lifeStage||'neutered';}renderPetEstimate();}
 function renderPetWeight(){const p=(state.petProfiles||[])[0],chart=$r('#pet-weight-chart');if(!p){chart.innerHTML='<p class="text-xs text-slate-500">เพิ่มข้อมูลน้องก่อนเพื่อเริ่มบันทึกน้ำหนัก</p>';return;}let rows=(p.weightHistory||[]).filter(x=>x&&typeof x.date==='string'&&Number.isFinite(Number(x.weightKg))).map(x=>({date:x.date,weightKg:Number(x.weightKg)}));if(!rows.length&&Number(p.weightKg)>0){const stamp=p.updatedAt?.toDate?.()||p.updatedAt;const date=stamp instanceof Date&&!Number.isNaN(stamp.getTime())?stamp.toISOString().slice(0,10):localDateStr();rows=[{date,weightKg:Number(p.weightKg)}];}rows.sort((a,b)=>a.date.localeCompare(b.date));if(!rows.length){chart.innerHTML='<p class="text-xs text-slate-500">ยังไม่มีข้อมูลน้ำหนัก</p>';return;}const w=Math.max(360,rows.length*74),h=190,pad={l:42,r:14,t:16,b:34},vals=rows.map(x=>x.weightKg),lo=Math.min(...vals),hi=Math.max(...vals),span=Math.max(1,hi-lo),x=i=>pad.l+(rows.length===1?(w-pad.l-pad.r)/2:i*(w-pad.l-pad.r)/(rows.length-1)),y=v=>pad.t+(hi-v+span*.12)/(span*1.24)*(h-pad.t-pad.b),points=rows.map((r,i)=>`${x(i)},${y(r.weightKg)}`).join(' ');chart.innerHTML=`<svg role="img" aria-label="กราฟแนวโน้มน้ำหนัก ${esc(p.name)}" viewBox="0 0 ${w} ${h}" class="block w-full max-w-3xl"><title>แนวโน้มน้ำหนัก ${esc(p.name)}</title><line x1="${pad.l}" y1="${h-pad.b}" x2="${w-pad.r}" y2="${h-pad.b}" stroke="currentColor" opacity=".25"/><polyline points="${points}" fill="none" stroke="#8b5e3c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${rows.map((r,i)=>`<circle cx="${x(i)}" cy="${y(r.weightKg)}" r="4" fill="#8b5e3c"><title>${esc(r.date)} · ${r.weightKg} kg</title></circle><text x="${x(i)}" y="${h-10}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".75">${esc(r.date.slice(5))}</text>`).join('')}<text x="${pad.l-6}" y="${pad.t+8}" text-anchor="end" font-size="11" fill="currentColor">${hi.toFixed(1)} kg</text><text x="${pad.l-6}" y="${h-pad.b-2}" text-anchor="end" font-size="11" fill="currentColor">${lo.toFixed(1)} kg</text></svg>`;}
 function renderPetEstimate(){const p=(state.petProfiles||[])[0],weight=num('pet-weight')??p?.weightKg;if(!weight){$r('#pet-profile').textContent='เพิ่มข้อมูลน้องและน้ำหนักเพื่อประเมินพลังงานต่อวัน';$r('#pet-calorie-estimate').textContent='';return;}const name=$r('#pet-name').value.trim()||p?.name||'น้อง',kind=$r('#pet-kind').value.trim()||p?.kind||'ไม่ระบุพันธุ์',birth=$r('#pet-birth').value||p?.birthDate||null;const factors={neutered:1.5,intact:1.7,inactive:1.1,'puppy-young':3,'puppy-old':2};const factor=factors[$r('#pet-life').value]||1.5,rer=70*Math.pow(weight,.75),min=Math.round(rer*factor*.9),max=Math.round(rer*factor*1.1),kcal100=num('pet-food-kcal');const grams=kcal100>0?` · เมื่ออาหารนี้ให้ ${kcal100} kcal/100g: ประมาณ ${Math.round(min*100/kcal100)}–${Math.round(max*100/kcal100)} g/วัน`:'';$r('#pet-profile').textContent=`${name} · ${kind} · วันเกิด ${birth||'ไม่ระบุ'} (${ageText(birth)}) · ${weight} kg`;$r('#pet-calorie-estimate').textContent=`พลังงานเริ่มต้นประเมิน ${min}–${max} kcal/วัน (RER ${Math.round(rer)} × ปัจจัย ${factor}; ปรับตามคำแนะนำสัตวแพทย์)${grams}`;}
-function savePetFood(){const p=(state.petProfiles||[])[0],name=$r('#pet-food-name').value.trim(),grams=num('pet-food-grams'),kcal=num('pet-food-kcal');if(!p||!name||grams===null)return toast('กรอกข้อมูลน้อง ชื่ออาหาร และปริมาณก่อนค่ะ','err');try{addDoc(userCol(state.uid,'pet_food_records'),{petId:p.id,date:localDateStr(),name,grams,kcalPer100:kcal,allergy:$r('#pet-food-allergy').value,note:$r('#pet-food-notes').value.trim(),createdAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกอาหารน้องแล้ว');}catch(e){toast(e.message,'err');}}
+function savePetFood(){const p=(state.petProfiles||[])[0],name=$r('#pet-food-name').value.trim(),grams=num('pet-food-grams'),kcal=num('pet-food-kcal');if(!p||!name||grams===null)return toast('กรอกข้อมูลน้อง ชื่ออาหาร และปริมาณก่อนค่ะ','err');try{addDoc(userCol(state.uid,'pet_food_records'),{petId:p.id,date:localDateStr(),name,grams,kcalPer100:kcal,allergy:$r('#pet-food-allergy').value,note:$r('#pet-food-notes').value.trim(),createdAt:new Date()}).catch(e=>toast(e.message,'err'));['#pet-food-name','#pet-food-grams','#pet-food-kcal','#pet-food-notes'].forEach(sel=>{if($r(sel))$r(sel).value='';});if($r('#pet-food-allergy'))$r('#pet-food-allergy').value='unknown';const st=$r('#pet-food-scan-status');if(st){st.textContent='';st.classList.add('hidden');}renderPetEstimate();toast('บันทึกอาหารน้องแล้ว');}catch(e){toast(e.message,'err');}}
 function renderPetFoods(){const rows=(state.petFoods||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);$r('#pet-food-list').innerHTML=rows.map(x=>`<div class="rounded-lg bg-slate-50 p-2 flex justify-between items-start gap-2"><div>${esc(x.date)} · <b>${esc(x.name)}</b> ${esc(x.grams)} g${x.kcalPer100!=null?` · ${Math.round(x.kcalPer100*x.grams/100)} kcal`:''} · ${x.allergy==='yes'?'⚠️ สงสัยแพ้':x.allergy==='no'?'ไม่พบอาการแพ้':'ยังไม่ทราบ'}<small class="block text-slate-500">${esc(x.note||'')}</small></div><button data-del-pet-food="${esc(x.id)}" class="text-rose-400 text-xs p-1">ลบ</button></div>`).join('')||'<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาหาร</p>';$r('#pet-food-list').onclick=e=>{const b=e.target.closest('[data-del-pet-food]');if(b&&confirm('ลบบันทึกอาหารน้องนี้?'))deleteDoc(userDoc(state.uid,'pet_food_records',b.dataset.delPetFood)).catch(err=>toast(err.message,'err'));};}

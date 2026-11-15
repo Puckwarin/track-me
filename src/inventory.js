@@ -3,7 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, localDateStr, round1, toast, openModal, isDateStr } from './util.js';
 import { watch } from './sync.js';
-import { estimateStockFromPhoto, estimateStockFromPhotos, explainGeminiError } from './nutrition.js';
+import { estimateStockFromPhotos, explainGeminiError, formatImageProgress } from './nutrition.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 
 const categories = ['คน · อาหาร/ขนม','สัตว์เลี้ยง · อาหาร/ขนม','สกินแคร์/ของใช้คน','ของใช้สัตว์เลี้ยง','ของใช้ในบ้าน','อื่น ๆ'];
@@ -44,7 +44,7 @@ export function mountInventory(el) {
         <span>📷 ถ่ายหรือเลือกรูปสินค้า/วันหมดอายุ (เลือกได้หลายรูปพร้อมกัน)</span>
         <input id="inv-photo" type="file" accept="image/*" multiple class="hidden">
       </label>
-      <p class="text-xs text-slate-500 mt-1">ย่อภาพในเครื่องแล้วส่งวิเคราะห์ชั่วคราว (ไม่บันทึกรูปลงระบบ) · เลือก 1 รูปจะเติมลงฟอร์ม / เลือกหลายรูปจะเปิดหน้ารวมให้บันทึกทีเดียว</p>
+      <p class="text-xs text-slate-500 mt-1">ย่อภาพในเครื่องแล้วส่งวิเคราะห์ชั่วคราว (ไม่บันทึกรูปลงระบบ) · หลังประมวลผลเสร็จจะมีหน้าต่างให้ตรวจสอบและยืนยันก่อนบันทึก</p>
       <p id="inv-photo-status" class="hidden text-xs mt-1.5" aria-live="polite"></p>
     </div>
     <div class="flex gap-2 justify-end"><button id="inv-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button><button id="inv-save" class="btn btn-primary">บันทึกสต๊อก</button></div>
@@ -76,7 +76,7 @@ function render(){if(!root?.isConnected)return;const q=($r('#inv-search')?.value
   renderShoppingList();
 }
 function renderShoppingList(){const box=$r('#shopping-list');if(!box)return;const low=listProducts().filter(p=>p.quantity!=null&&p.lowAt!=null&&p.quantity<=p.lowAt);box.classList.toggle('hidden',low.length===0);if(!low.length){box.innerHTML='';return;}box.innerHTML=`<div class="flex flex-wrap justify-between items-center gap-2"><div><h3 class="font-semibold">🛒 รายการซื้อของ · ${low.length} รายการ</h3><p class="text-xs">สร้างให้อัตโนมัติจากของที่ถึงเกณฑ์เตือน</p></div><button data-copy-shopping class="btn btn-soft !px-3 !py-2 text-xs">คัดลอกรายการ</button></div><ul class="space-y-1">${low.map(p=>`<li class="flex justify-between items-center gap-2 rounded-lg bg-white/70 px-2 py-1 text-sm"><span>□ <b>${esc(p.name)}</b> · เหลือ ${esc(p.quantity)} ${esc(p.unit||'หน่วย')}</span><button data-shopping-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">เติมสต๊อก</button></li>`).join('')}</ul>`;}
-function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';$r('#inv-save').textContent='บันทึกสต๊อก';$r('#inv-cancel').classList.add('hidden');}
+function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';$r('#inv-save').textContent='บันทึกสต๊อก';$r('#inv-cancel').classList.add('hidden');const st=$r('#inv-photo-status');if(st){st.textContent='';st.classList.add('hidden');}}
 function editProduct(p){editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);$r('#inv-save').textContent='บันทึกการแก้ไข';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
 function saveProduct(){const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonths(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
 async function onInventoryClick(e){
@@ -198,6 +198,8 @@ function openBatchInventoryModal(results, errors) {
         }
       });
       batch.commit().catch(err=>toast('บันทึกไม่สำเร็จ: '+err.message,'err'));
+      const st = $r('#inv-photo-status');
+      if (st) { st.textContent = ''; st.classList.add('hidden'); }
       m.close();
       toast(`บันทึกสต๊อกแล้ว (เพิ่มใหม่ ${added}${updated ? `, อัปเดตเดิม ${updated}` : ''})`);
     } catch (err) {
@@ -208,54 +210,33 @@ function openBatchInventoryModal(results, errors) {
   });
 }
 
-async function scanPhoto(e){
-  const input=e.target, files=[...(input.files||[])];
-  input.value='';
-  if(!files.length) return;
-  const st=$r('#inv-photo-status');
-  st.className='text-xs mt-1.5 text-slate-500 font-medium';
+async function scanPhoto(e) {
+  const input = e.target;
+  const files = [...(input.files || [])];
+  input.value = '';
+  if (!files.length) return;
+  const st = $r('#inv-photo-status');
+  st.className = 'text-xs mt-1.5 text-slate-500 font-medium';
   st.classList.remove('hidden');
+  st.textContent = formatImageProgress('กำลังประมวลผล', { total: files.length, activeIndex: 1, completed: 0, percent: 0 });
 
-  if(files.length===1){
-    st.textContent='กำลังย่อภาพและวิเคราะห์อย่างรวดเร็ว…';
-    try{
-      const result=await estimateStockFromPhoto(files[0]);
-      if(result.name){
-        $r('#inv-name').value=result.name;
-        $r('#inv-category').value=guessInventoryCategory(result.name);
-      }
-      if(result.remainingQuantity!=null || result.totalQuantity!=null){
-        $r('#inv-qty').value=result.remainingQuantity ?? result.totalQuantity;
-        if(result.totalQuantity!=null) $r('#inv-low').value=$r('#inv-low').value||Math.max(1,Math.round(result.totalQuantity*.2));
-      }
-      if(result.unit) $r('#inv-unit').value=result.unit;
-      const exp=normalizeScannedDate(result.expiryDate);
-      if(exp) $r('#inv-expiry').value=exp;
-      st.className='text-xs mt-1.5 text-green-700 font-semibold';
-      st.textContent=`✓ ประมวลผลเสร็จแล้ว: ${result.name||'สินค้า'} · เหลือ ${result.remainingQuantity??result.totalQuantity??'ไม่แน่ชัด'} ${result.unit||''}${exp?` · หมดอายุ ${exp}`:''} (ความมั่นใจ: ${result.confidence||'ต่ำ'})${result.notes?` · ${result.notes}`:''}`;
-    }catch(err){
-      st.className='text-xs mt-1.5 text-rose-600 font-medium';
-      st.textContent=explainGeminiError(err);
-    }
-    return;
-  }
-
-  st.textContent=`กำลังประมวลผล ${files.length} รูปพร้อมกัน (0/${files.length})…`;
-  try{
-    const { results, errors } = await estimateStockFromPhotos(files, (done, total) => {
-      if (st.isConnected) st.textContent = `กำลังประมวลผลภาพ (${done}/${total})…`;
+  try {
+    const { results, errors } = await estimateStockFromPhotos(files, (_done, _total, info) => {
+      if (st.isConnected) st.textContent = formatImageProgress('กำลังประมวลผล', info);
     });
     if (!results.length && errors.length) {
       st.className = 'text-xs mt-1.5 text-rose-600 font-medium';
       st.textContent = errors[0].message;
+      toast(errors[0].message, 'err');
       return;
     }
     st.className = 'text-xs mt-1.5 text-green-700 font-semibold';
-    st.textContent = `✓ ประมวลผลเสร็จแล้ว ${results.length}/${files.length} รูป`;
+    st.textContent = `✓ ประมวลผลครบ ${files.length}/${files.length} รูป (สำเร็จ ${results.length}) — ตรวจสอบและยืนยัน`;
     openBatchInventoryModal(results, errors);
-  }catch(err){
-    st.className='text-xs mt-1.5 text-rose-600 font-medium';
-    st.textContent=explainGeminiError(err);
+  } catch (err) {
+    st.className = 'text-xs mt-1.5 text-rose-600 font-medium';
+    st.textContent = explainGeminiError(err);
+    toast(explainGeminiError(err), 'err');
   }
 }
 function saveBlacklist(){try{setDoc(userDoc(state.uid,'ingredient_blacklist','list'),{ingredients:$r('#inv-blacklist').value.trim(),updatedAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกส่วนผสมที่ต้องการเลี่ยงแล้ว');}catch(e){toast(e.message,'err');}}

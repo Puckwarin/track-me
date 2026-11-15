@@ -23,20 +23,21 @@ import { initAuth } from './auth.js';
 import './theme.js';
 import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 import { mountHome, renderHome } from './home.js';
-import { mountFood, watchDay } from './food.js';
-import { mountPeriod, render as renderPeriod, checkReminder } from './period.js';
-import { mountSymptoms, renderList as renderSymptomList, renderSkinList } from './symptoms.js';
-import { mountCare, watchCare } from './care.js';
+import { resetPlannerToToday } from './planner.js';
+import { mountFood, watchDay, resetFoodToToday } from './food.js';
+import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
+import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
+import { mountCare, watchCare, resetCareToToday } from './care.js';
 import { mountInventory, watchInventory } from './inventory.js';
-import { mountBody, render as renderBody } from './body.js';
-import { mountWeekly, renderWeekly } from './weekly.js';
+import { mountBody, render as renderBody, resetBodyToToday } from './body.js';
+import { mountWeekly, renderWeekly, resetWeeklyToToday } from './weekly.js';
 import { render as renderLab } from './lab.js';
 import { mountRemind, renderRemind } from './remindLog.js';
 import { refreshProfile } from './profile.js';
 import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
-import { mountExpense, renderExpense, handleSharedSlipLaunch } from './expense.js';
+import { mountExpense, renderExpense, handleSharedSlipLaunch, resetExpenseToToday } from './expense.js';
 import { mountChatWidget } from './chatWidget.js';
 import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
@@ -89,11 +90,15 @@ function renderSubnav(group, name) {
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
+let reportFeature = null;
 let reportMountPromise = null;
 function ensureReportMounted() {
   if (!reportMountPromise) {
     reportMountPromise = import('./reports.js')
-      .then(({ mountReport }) => mountReport($('#tab-report')))
+      .then(module => {
+        reportFeature = module;
+        module.mountReport($('#tab-report'));
+      })
       .catch(error => {
         reportMountPromise = null;
         reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
@@ -123,7 +128,7 @@ function ensureWorkoutMounted() {
   return workoutMountPromise;
 }
 
-export function showTab(name) {
+export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
   TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== name); });
   const group = groupOf(name);
@@ -133,12 +138,22 @@ export function showTab(name) {
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
   renderSubnav(group, name);
+  if (!preserveDate) {
+    if (name === 'home') resetPlannerToToday();
+    if (name === 'food') resetFoodToToday();
+    if (name === 'weekly') resetWeeklyToToday();
+    if (name === 'period') resetPeriodToToday();
+    if (name === 'symptoms') resetSymptomsToToday();
+    if (name === 'care') resetCareToToday();
+    if (name === 'body') resetBodyToToday();
+    if (name === 'expense') resetExpenseToToday();
+  }
   if (name === 'home') renderHome();
   if (name === 'weekly') renderWeekly();
   if (name === 'expense') renderExpense();
   if (name === 'notifications') renderReminders();
-  if (name === 'report') void ensureReportMounted();
-  if (name === 'workout') void ensureWorkoutMounted();
+  if (name === 'report') void ensureReportMounted().then(() => { if (!preserveDate) reportFeature?.resetReportToToday?.(); });
+  if (name === 'workout') void ensureWorkoutMounted().then(() => { if (!preserveDate) workoutFeature?.resetToToday?.(); });
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
 }
 
@@ -379,7 +394,7 @@ $('#quick-sheet').addEventListener('click', e => {
   if (b) { closeQuick(); goTo(b.dataset.quick, b.dataset.focus); }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
-window.addEventListener('trackme:show-symptoms', () => showTab('symptoms'));
+window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
 window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); renderSummary(); });
 window.addEventListener('trackme:reminders', updateBell);
 window.addEventListener('trackme:push-change', () => renderHome());
