@@ -676,7 +676,12 @@ async function importSelectedStatementItems() {
         const index = merged.findIndex(x => String(x.keyword || '').toLowerCase() === rule.keyword.toLowerCase());
         if (index >= 0) merged[index] = rule; else merged.push(rule);
       });
-      await setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true });
+      try {
+        await setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true });
+      } catch (ruleErr) {
+        console.warn('Imported records, but could not save expense rules:', ruleErr?.code || ruleErr?.message);
+        toast('นำเข้ารายการแล้ว แต่บันทึกกฎหมวดหมู่ไม่สำเร็จ', 'err');
+      }
     }
     pendingStatement = pendingStatement.filter(x => !x.selected);
     renderPendingStatement();
@@ -709,7 +714,7 @@ function exportMonthCsv() {
     ...rows.map(x => [
       x.date || '',
       x.time || '',
-      x.type === 'income' ? 'รายรับ' : 'รายจ่าย',
+      x.type === 'income' ? 'รายรับ' : x.type === 'transfer' ? 'โอนระหว่างบัญชี' : 'รายจ่าย',
       x.category || '',
       x.merchant || '',
       x.amount ?? 0,
