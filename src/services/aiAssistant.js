@@ -2,11 +2,11 @@ import { deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from 'fireba
 import { userCol, userDoc } from '../firebase.js';
 import { state } from '../state.js';
 import { addDays, daysBetween, fmtDate, isDateStr, localDateStr, round1 } from '../util.js';
+import { explainGeminiError, lookupPer100g } from '../nutrition.js';
 import {
-  getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError, lookupPer100g,
-  discoverGroqModels, discoverOpenRouterModels, getProviderCooldownMs,
-  rememberProviderCooldown, clearProviderCooldown, getRetryAfterMs
-} from '../nutrition.js';
+  discoverOpenRouterModels, getProviderKey, requestProviderApi,
+  runProviderFallback, selectGeminiModels, selectGroqModels
+} from './aiService.js';
 import { getMeals, getTargets } from '../profile.js';
 import { getPresets } from '../food.js';
 import { EXPENSE_CATEGORIES } from '../expense.js';
@@ -14,14 +14,6 @@ import { parseSmartReminder, inferCategory, resolveRuleNextDate } from '../remin
 import { itemsForDate } from '../planner.js';
 import { trackedSources, collectReminders } from '../reminders.js';
 
-const GEMINI_CHAT_MODELS = [
-  'gemini-4-hydrogen',
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite'
-];
-const GROQ_CHAT_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 const REQUEST_TIMEOUT_MS = 35000;
 const MAX_TOOL_ROUNDS = 5;
 const WRITE_TOOLS = new Set(['addExpense', 'addFoodLog', 'updateInventory', 'addReminder']);
@@ -951,28 +943,8 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
-async function discoverFallbackGeminiModels(key) {
-  try {
-    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
-      headers: { 'x-goog-api-key': key },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!res.ok) return [];
-    const data = await res.json().catch(() => ({}));
-    return (data.models || [])
-      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-      .map(m => String(m.name || '').replace(/^models\//, ''))
-      .filter(id => id && !GEMINI_CHAT_MODELS.includes(id) &&
-        /(flash|hydrogen|lite)/i.test(id) &&
-        !/tts|live|image|audio|embedding|transcribe|thinking|1\.5|2\.0|exp/i.test(id))
-      .slice(0, 3);
-  } catch {
-    return [];
-  }
-}
-
-async function callGeminiWithTools(historyMessages, userText) {
-  const key = getGeminiKey();
+async function callGeminiWithTools(historyMessages, userText, signal) {
+  const key = getProviderKey('Gemini');
   if (!key) throw new Error('NO_KEY');
 
   const systemInstruction = { parts: [{ text: buildSystemPrompt() }] };
@@ -994,39 +966,20 @@ async function callGeminiWithTools(historyMessages, userText) {
         generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
 
-      let res;
-      try {
-        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-          body: JSON.stringify({
+      const data = await requestProviderApi('Gemini', {
+        key,
+        operation: 'generateContent',
+        model,
+        signal,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        payload: {
             systemInstruction,
             contents,
             tools: GEMINI_TOOLS,
             toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
             generationConfig
-          }),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        });
-      } catch (cause) {
-        const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
-        const err = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก Gemini (35 วินาที)' : (cause.message || 'Network error'));
-        err.timeoutError = isTimeout;
-        err.networkError = !isTimeout;
-        throw err;
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data?.error?.message || `HTTP ${res.status}`;
-        const err = new Error(msg);
-        err.status = res.status;
-        err.invalidKey = (res.status === 400 && /api.?key|invalid/i.test(msg)) || res.status === 403;
-        err.modelNotFound = res.status === 404;
-        err.quotaExceeded = res.status === 429 || /quota|resource.?exhausted/i.test(msg);
-        if (err.quotaExceeded) err.cooldownMs = getRetryAfterMs(res, data);
-        throw err;
-      }
+        }
+      });
 
       const modelContent = data?.candidates?.[0]?.content;
       const parts = modelContent?.parts || [];
@@ -1060,32 +1013,19 @@ async function callGeminiWithTools(historyMessages, userText) {
   };
 
   let lastErr = null;
-  const modelErrors = [];
-  for (const m of GEMINI_CHAT_MODELS) {
+  const models = await selectGeminiModels('chat', key, signal);
+  for (const m of models) {
     try { return await runModel(m); }
     catch (e) {
-      if (e.invalidKey) throw e;
+      if (e.invalidKey || e.quotaExceeded || e.aborted) throw e;
       lastErr = e;
-      modelErrors.push(e);
     }
   }
-  const extra = await discoverFallbackGeminiModels(key);
-  for (const m of extra) {
-    try { return await runModel(m); }
-    catch (e) {
-      if (e.invalidKey) throw e;
-      lastErr = e;
-      modelErrors.push(e);
-    }
-  }
-  const error = lastErr || new Error('Gemini ไม่พร้อมใช้งาน');
-  error.quotaExceeded = modelErrors.some(modelError => modelError.quotaExceeded);
-  error.cooldownMs = Math.max(0, ...modelErrors.map(modelError => modelError.cooldownMs || 0));
-  throw error;
+  throw lastErr || new Error('Gemini ไม่พร้อมใช้งาน');
 }
 
-async function callGroqWithTools(historyMessages, userText) {
-  const key = getGroqKey();
+async function callGroqWithTools(historyMessages, userText, signal) {
+  const key = getProviderKey('Groq');
   if (!key) throw new Error('NO_KEY');
 
   const baseMessages = [
@@ -1102,38 +1042,20 @@ async function callGroqWithTools(historyMessages, userText) {
     const turnState = { receipts: [], pendingActions: [], writesExecuted: 0 };
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      let res;
-      try {
-        res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-          body: JSON.stringify({
+      const data = await requestProviderApi('Groq', {
+        key,
+        operation: 'chat',
+        model,
+        signal,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        payload: {
             model,
             messages,
             tools: OPENAI_TOOLS,
             tool_choice: 'auto',
             temperature: 0.2
-          }),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        });
-      } catch (cause) {
-        const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
-        const err = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก Groq' : (cause.message || 'Groq network error'));
-        err.timeoutError = isTimeout;
-        err.networkError = !isTimeout;
-        throw err;
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data?.error?.message || `Groq HTTP ${res.status}`;
-        const err = new Error(msg);
-        err.status = res.status;
-        err.invalidKey = res.status === 401 || res.status === 403;
-        err.quotaExceeded = [402, 429].includes(res.status) || /quota|rate.?limit/i.test(msg);
-        if (err.quotaExceeded) err.cooldownMs = getRetryAfterMs(res, data);
-        throw err;
-      }
+        }
+      });
 
       const choiceMsg = data?.choices?.[0]?.message;
       const toolCalls = choiceMsg?.tool_calls;
@@ -1168,31 +1090,22 @@ async function callGroqWithTools(historyMessages, userText) {
     throw new Error('Groq เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
   };
 
-  const discovered = await discoverGroqModels(key);
-  const extraModels = discovered.filter(model => !/whisper|tts|guard|embed|vision|llava|pixtral/i.test(model));
-  const models = [...new Set([...GROQ_CHAT_MODELS, ...extraModels])].slice(0, 6);
+  const models = await selectGroqModels('text', key, undefined, signal);
   let lastErr = null;
-  let quotaWaitMs = 0;
   for (const m of models) {
     try { return await runModel(m); }
     catch (e) {
-      if (e.invalidKey) throw e;
+      if (e.invalidKey || e.quotaExceeded || e.aborted) throw e;
       lastErr = e;
-      if (e.quotaExceeded) quotaWaitMs = Math.max(quotaWaitMs, e.cooldownMs || 0);
     }
   }
-  const error = lastErr || new Error('Groq ไม่พร้อมใช้งาน');
-  if (quotaWaitMs) {
-    error.quotaExceeded = true;
-    error.cooldownMs = quotaWaitMs;
-  }
-  throw error;
+  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
 }
 
-async function callOpenRouterWithTools(historyMessages, userText) {
-  const key = getOpenRouterKey();
+async function callOpenRouterWithTools(historyMessages, userText, signal) {
+  const key = getProviderKey('OpenRouter');
   if (!key) throw new Error('NO_KEY');
-  const models = await discoverOpenRouterModels({ requireTools: true });
+  const models = await discoverOpenRouterModels({ requireTools: true, signal });
   if (!models.length) throw new Error('ไม่พบโมเดลฟรีของ OpenRouter ที่รองรับเครื่องมือ');
   const baseMessages = [
     { role: 'system', content: buildSystemPrompt() },
@@ -1203,52 +1116,26 @@ async function callOpenRouterWithTools(historyMessages, userText) {
     { role: 'user', content: userText }
   ];
   let lastErr = null;
-  let quotaWaitMs = 0;
 
   for (const model of models.slice(0, 6)) {
     const messages = baseMessages.map(message => ({ ...message }));
     const turnState = { receipts: [], pendingActions: [], writesExecuted: 0 };
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        let response;
-        try {
-          response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer ' + key,
-              'HTTP-Referer': window.location.origin,
-              'X-Title': 'Track Me'
-            },
-            body: JSON.stringify({
+        const data = await requestProviderApi('OpenRouter', {
+          key,
+          operation: 'chat',
+          model,
+          signal,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          payload: {
               model,
               messages,
               tools: OPENAI_TOOLS,
               tool_choice: 'auto',
               temperature: 0.2
-            }),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-          });
-        } catch (cause) {
-          const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
-          const error = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก OpenRouter' : (cause.message || 'OpenRouter network error'));
-          error.timeoutError = isTimeout;
-          error.networkError = !isTimeout;
-          throw error;
-        }
-
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
-          error.status = response.status;
-          error.invalidKey = response.status === 401 || response.status === 403;
-          error.quotaExceeded = response.status === 429 || /rate.?limit|quota/i.test(error.message);
-          if (error.quotaExceeded) {
-            error.cooldownMs = getRetryAfterMs(response, data);
-            quotaWaitMs = Math.max(quotaWaitMs, error.cooldownMs);
           }
-          throw error;
-        }
+        });
 
         const choiceMsg = data?.choices?.[0]?.message;
         const toolCalls = choiceMsg?.tool_calls;
@@ -1280,55 +1167,21 @@ async function callOpenRouterWithTools(historyMessages, userText) {
       }
       throw new Error('OpenRouter เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
     } catch (error) {
-      if (error.invalidKey) throw error;
+      if (error.invalidKey || error.quotaExceeded || error.aborted) throw error;
       lastErr = error;
-      if (error.quotaExceeded) quotaWaitMs = Math.max(quotaWaitMs, error.cooldownMs || 0);
     }
   }
 
-  const error = lastErr || new Error('OpenRouter ไม่พร้อมใช้งาน');
-  if (quotaWaitMs) {
-    error.quotaExceeded = true;
-    error.cooldownMs = quotaWaitMs;
-  }
-  throw error;
+  throw lastErr || new Error('OpenRouter ไม่พร้อมใช้งาน');
 }
 
-export async function runAssistantTurn(historyMessages, userText) {
-  const providers = [];
-  if (getGeminiKey()) providers.push(['Gemini', () => callGeminiWithTools(historyMessages, userText)]);
-  if (getGroqKey()) providers.push(['Groq', () => callGroqWithTools(historyMessages, userText)]);
-  if (getOpenRouterKey()) providers.push(['OpenRouter', () => callOpenRouterWithTools(historyMessages, userText)]);
-
-  if (!providers.length) {
-    const err = new Error('NO_KEY');
-    throw err;
-  }
-
-  const errors = [];
-  let attempted = 0;
-  let quotaExceeded = false;
-  for (const [name, fn] of providers) {
-    const cooldownMs = getProviderCooldownMs(name);
-    if (cooldownMs) {
-      errors.push(`${name}: รอโควตาอีกประมาณ ${Math.max(1, Math.ceil(cooldownMs / 60_000))} นาที`);
-      continue;
-    }
-    attempted++;
-    try {
-      const result = await fn();
-      clearProviderCooldown(name);
-      return result;
-    } catch (e) {
-      if (e.quotaExceeded) {
-        quotaExceeded = true;
-        rememberProviderCooldown(name, e.cooldownMs);
-      }
-      errors.push(`${name}: ${explainGeminiError(e)}`);
-    }
-  }
-  const combined = new Error(attempted ? errors.join(' · ') : 'AI ทุกแหล่งที่ตั้งค่าไว้กำลังรอโควตา — ' + errors.join(' · '));
-  combined.fallbackErrors = errors;
-  combined.quotaExceeded = quotaExceeded || errors.some(error => /quota|limit|รอโควตา/i.test(error));
-  throw combined;
+export async function runAssistantTurn(historyMessages, userText, { signal } = {}) {
+  const providers = [
+    ['Gemini', getProviderKey('Gemini'), () => callGeminiWithTools(historyMessages, userText, signal)],
+    ['Groq', getProviderKey('Groq'), () => callGroqWithTools(historyMessages, userText, signal)],
+    ['OpenRouter', getProviderKey('OpenRouter'), () => callOpenRouterWithTools(historyMessages, userText, signal)]
+  ];
+  return runProviderFallback(providers, {
+    errorMessage: error => explainGeminiError(error)
+  });
 }
