@@ -180,12 +180,14 @@ async function onScanLabPhoto(e) {
       const btn = $('#lbs-save', m.el);
       btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
       try {
+        const commits = [];
         for (let i = 0; i < rowsToSave.length; i += 450) {
           const batch = writeBatch(db);
           const colRef = userCol(state.uid, 'lab_records');
           rowsToSave.slice(i, i + 450).forEach(rec => batch.set(doc(colRef), rec));
-          await batch.commit();
+          commits.push(batch.commit());
         }
+        Promise.all(commits).catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
         m.close();
         toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
       } catch (err) {

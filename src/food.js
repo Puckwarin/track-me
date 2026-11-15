@@ -487,7 +487,11 @@ async function copyRecentMeal() {
       const batch = writeBatch(db), collectionRef = userCol(state.uid, 'food_records');
       const targetMealId=$('#f-meal',root).value, targetMealName=$('#f-meal',root).selectedOptions[0]?.textContent||mealName;
       selected.forEach(({ id, ...item }) => batch.set(doc(collectionRef), { ...item, date, meal:targetMealName, mealId:targetMealId, createdAt: new Date(), copiedFrom: sourceDate }));
-      try { await batch.commit(); modal.close(); toast(`คัดลอก ${selected.length} รายการแล้ว`); }
+      try {
+        batch.commit().catch(error => toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'));
+        modal.close();
+        toast(`คัดลอก ${selected.length} รายการแล้ว`);
+      }
       catch (error) { toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'); }
     });
   } catch (error) { toast('ค้นหามื้อก่อนหน้าไม่สำเร็จ: ' + error.message, 'err'); }
@@ -688,14 +692,21 @@ async function bulkMoveFoodMeal() {
   btn.disabled = true;
   try {
     const now = new Date();
+    const commits = [];
     for (let i = 0; i < targets.length; i += 450) {
       const chunk = targets.slice(i, i + 450);
       const batch = writeBatch(db);
       chunk.forEach(item => batch.update(userDoc(state.uid, 'food_records', item.id), { mealId, meal, updatedAt: now }));
-      await batch.commit();
+      commits.push(batch.commit());
     }
+    Promise.all(commits).catch(err => {
+      targets.forEach(item => selectedFoodIds.add(item.id));
+      toast('ย้ายมื้อไม่สำเร็จ: ' + err.message, 'err');
+      renderDay();
+    });
     selectedFoodIds.clear();
     toast(`ย้าย ${targets.length} รายการไป${meal}แล้ว`);
+    btn.disabled = false;
     renderDay();
   } catch (err) {
     toast('ย้ายมื้อไม่สำเร็จ: ' + err.message, 'err');
@@ -899,6 +910,7 @@ export function openLibrary(onPick) {
     btn.disabled = true;
     try {
       const now = new Date();
+      const commits = [];
       for (let i = 0; i < picked.length; i += 450) {
         const chunk = picked.slice(i, i + 450);
         const batch = writeBatch(db);
@@ -932,8 +944,9 @@ export function openLibrary(onPick) {
           if (unitNutrition.sodium !== null) rec.sodium = Math.round(unitNutrition.sodium * qty);
           batch.set(doc(colRef), rec);
         });
-        await batch.commit();
+        commits.push(batch.commit());
       }
+      Promise.all(commits).catch(err => toast('เพิ่มเมนูไม่สำเร็จ: ' + err.message, 'err'));
       if ($('#f-meal', root) && mealId) $('#f-meal', root).value = mealId;
       m.close();
       toast(`เพิ่ม ${picked.length} เมนูลง${meal}แล้ว`);
@@ -947,7 +960,23 @@ export function openLibrary(onPick) {
     const category = $('#lib-bulk-category', m.el).value, foods = state.customFoods.filter(f => selected.has(f.id));
     if (!category || !foods.length) return;
     if (!confirm(`เปลี่ยนหมวดหมู่ของ ${foods.length} เมนูที่เลือกเป็น “${category}” หรือไม่?`)) return;
-    try { for (let i = 0; i < foods.length; i += 450) { const batch = writeBatch(db); foods.slice(i, i + 450).forEach(f => batch.update(userDoc(state.uid, 'custom_foods', f.id), { category })); await batch.commit(); } selected.clear(); $('#lib-bulk-category', m.el).value = ''; toast(`เปลี่ยนหมวดหมู่ให้ ${foods.length} เมนูแล้ว`); render(); }
+    try {
+      const commits = [];
+      for (let i = 0; i < foods.length; i += 450) {
+        const batch = writeBatch(db);
+        foods.slice(i, i + 450).forEach(f => batch.update(userDoc(state.uid, 'custom_foods', f.id), { category }));
+        commits.push(batch.commit());
+      }
+      Promise.all(commits).catch(err => {
+        foods.forEach(f => selected.add(f.id));
+        toast('เปลี่ยนหมวดหมู่ไม่สำเร็จ: ' + err.message, 'err');
+        render();
+      });
+      selected.clear();
+      $('#lib-bulk-category', m.el).value = '';
+      toast(`เปลี่ยนหมวดหมู่ให้ ${foods.length} เมนูแล้ว`);
+      render();
+    }
     catch (err) { toast('เปลี่ยนหมวดหมู่ไม่สำเร็จ: ' + err.message, 'err'); }
   });
   $('#lib-delete-selected', m.el).addEventListener('click', async () => {
@@ -956,21 +985,25 @@ export function openLibrary(onPick) {
     const names = foods.slice(0, 5).map(f => `• ${f.name}`).join('\n');
     const more = foods.length > 5 ? `\nและอีก ${foods.length - 5} เมนู` : '';
     if (!confirm(`ลบเมนูที่เลือก ${foods.length} รายการออกจากคลังถาวร?\n\n${names}${more}`)) return;
-    let deleted = 0;
     try {
+      const commits = [];
       for (let i = 0; i < foods.length; i += 450) {
         const chunk = foods.slice(i, i + 450);
         const batch = writeBatch(db);
         chunk.forEach(f => batch.delete(userDoc(state.uid, 'custom_foods', f.id)));
-        await batch.commit();
+        commits.push(batch.commit());
         chunk.forEach(f => selected.delete(f.id));
-        deleted += chunk.length;
       }
+      Promise.all(commits).catch(err => {
+        foods.forEach(f => selected.add(f.id));
+        render();
+        toast('ลบเมนูไม่สำเร็จ: ' + err.message, 'err');
+      });
       toast(`ลบ ${foods.length} เมนูแล้ว`);
       render();
     } catch (err) {
       render();
-      toast(deleted ? `ลบแล้ว ${deleted} จาก ${foods.length} เมนู ที่เหลือลบไม่สำเร็จ: ${err.message}` : 'ลบเมนูไม่สำเร็จ: ' + err.message, 'err');
+      toast('ลบเมนูไม่สำเร็จ: ' + err.message, 'err');
     }
   });
   m.el.addEventListener('change', e => {
@@ -1140,7 +1173,7 @@ function openQuickBulkFoodLog() {
         });
       }
 
-      await batch.commit();
+      batch.commit().catch(error => toast('บันทึกไม่สำเร็จ: ' + error.message, 'err'));
       if ($('#f-date', root) && $('#f-date', root).value !== date) {
         $('#f-date', root).value = date;
         watchDay();

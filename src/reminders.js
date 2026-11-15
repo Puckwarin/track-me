@@ -194,7 +194,8 @@ async function onChange(e) {
     const [col, id] = single.dataset.ntRemind.split(':');
     const remindDays = Number(single.value);
     try {
-      await updateDoc(userDoc(state.uid, col, id), { remindDays, dismissedFor: null, updatedAt: new Date() });
+      updateDoc(userDoc(state.uid, col, id), { remindDays, dismissedFor: null, updatedAt: new Date() })
+        .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
       toast(`ตั้งเตือนเป็น “${remindLabel(remindDays)}”`);
     } catch (err) {
       toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
@@ -225,11 +226,17 @@ async function onClick(e) {
     if (!targets.length) return;
     const remindDays = Number($('#nt-bulk-days', root).value);
     try {
+      const commits = [];
       for (let i = 0; i < targets.length; i += 450) {
         const batch = writeBatch(db);
         targets.slice(i, i + 450).forEach(x => batch.update(userDoc(state.uid, x.col, x.id), { remindDays, dismissedFor: null, updatedAt: new Date() }));
-        await batch.commit();
+        commits.push(batch.commit());
       }
+      Promise.all(commits).catch(err => {
+        targets.forEach(item => selectedKeys.add(item.uidKey));
+        toast('ตั้งเตือนไม่สำเร็จ: ' + err.message, 'err');
+        renderReminders();
+      });
       selectedKeys.clear();
       toast(`ตั้งเตือน ${targets.length} รายการเป็น “${remindLabel(remindDays)}” แล้ว`);
       renderReminders();
@@ -253,9 +260,11 @@ async function onClick(e) {
     if (!r) return;
     try {
       if (r.kind === 'low') {
-        await updateDoc(userDoc(state.uid, r.col, r.id), { lowDismissed: true, updatedAt: new Date() });
+        updateDoc(userDoc(state.uid, r.col, r.id), { lowDismissed: true, updatedAt: new Date() })
+          .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
       } else {
-        await updateDoc(userDoc(state.uid, r.col, r.id), { dismissedFor: r.date, updatedAt: new Date() });
+        updateDoc(userDoc(state.uid, r.col, r.id), { dismissedFor: r.date, updatedAt: new Date() })
+          .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
       }
       toast('ปิดแจ้งเตือนรายการนี้สำหรับรอบนี้แล้ว');
     } catch (err) {

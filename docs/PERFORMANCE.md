@@ -22,7 +22,8 @@
 
 ## ข้อจำกัดและสิ่งที่ยังไม่วัด
 
-- JavaScript หลักยังมีขนาด 1,286.75 kB และเกินคำเตือน Vite 500 kB; source map แสดงว่า Firebase Firestore/Auth เป็น dependency ส่วนใหญ่ และยังจำเป็นกับ data listeners หลัก
+- หลัง Phase 2 JavaScript หลักยังมีขนาด 1,286.75 kB และเกินคำเตือน Vite 500 kB; source map แสดงว่า Firebase Firestore/Auth เป็น dependency ส่วนใหญ่ และยังจำเป็นกับ data listeners หลัก
+- Build ของ v4.1.0 วัดได้ 1,326.07 kB minified / 345.60 kB gzip และ precache 34 รายการ / 4,003.03 KiB; ส่วนที่เพิ่มมาจาก UI/logic การเงินรุ่นใหม่ ขนาดยังเกิน threshold และยังไม่แยก Firebase listeners ตามที่ตั้งใจให้เป็นงานใหญ่แยกต่างหาก
 - การย้าย listener หรือ refactor data architecture เพื่อแยก Firebase ออกจาก entry หลักมีผลต่อการโหลด/แสดงข้อมูลหลายหน้า จึงไม่ทำใน Phase นี้
 - ไม่ได้วัด First Contentful Paint, Largest Contentful Paint, การใช้งานบนอุปกรณ์มือถือจริง หรือการติดตั้ง PWA บนทุก browser
 - การตรวจ PWA รอบนี้ยืนยันว่า build สร้าง Service Worker และ precache manifest ได้; ไม่ได้ทดสอบ offline end-to-end กับบัญชี Firebase จริง

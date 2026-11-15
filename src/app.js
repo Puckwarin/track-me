@@ -312,6 +312,7 @@ function startData() {
     migrateLegacyExpensesIfNeeded(uid);
   });
   watch('settings', userCol(uid, 'settings'), list => {
+    state.expenseSettings = list;
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
@@ -348,7 +349,7 @@ on('auth', user => {
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.legacyExpenseDocs = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();

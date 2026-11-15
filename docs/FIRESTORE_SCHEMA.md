@@ -30,8 +30,8 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 | `workout_records` | `date`, `type`, `status`: string; `durationMin`, `estKcal`, `volumeKg`: number; `sections`: map ของ arrays; `performedSets`: array ของ maps; timestamps | แผนและผลที่ทำจริง |
 | `workout_templates` | `name`, `type`, `muscleGroup`: string; `sections`: map ของ arrays; `createdAt`: timestamp | เทมเพลตและท่าออกกำลังกาย |
 | `lab_records` | `date`, `name`, `unit`, `note`: string; `value`, `refLow`, `refHigh`: number/null; `createdAt`: timestamp | หนึ่งเอกสารต่อผลตรวจ |
-| `expense_records` | `type`, `category`, `merchant`, `note`: string; `amount`: positive number; `date`: string; `time`: string/null; `source`: string; `createdAt`: timestamp หรือ ISO string | หนึ่งเอกสารต่อรายรับ/รายจ่าย/โอน; ID เดิมคงที่เพื่อให้ migration ทำซ้ำได้ |
-| `settings` | fields ขึ้นกับ document ID; โปรไฟล์ใช้ strings/numbers/arrays; Planner ใช้ arrays/maps; Push ใช้ boolean/array/maps | ดู document IDs ด้านล่าง |
+| `expense_records` | `type`, `category`, `merchant`, `note`: string; `amount`: positive number; `date`: string; `time`: string/null; `source`: string (`manual`, `slip_ocr`, `statement`, `recurring`); `createdAt`: timestamp หรือ ISO string | หนึ่งเอกสารต่อรายรับ/รายจ่าย/โอน; ID เดิมคงที่เพื่อให้ migration ทำซ้ำได้ |
+| `settings` | fields ขึ้นกับ document ID; โปรไฟล์ใช้ strings/numbers/arrays; Planner ใช้ arrays/maps; งบ/กฎ/รายการประจำใช้เอกสารแบบมี `kind` | ดู document IDs ด้านล่าง |
 | `runtime_error_logs` | `category`, `source`, `code`: string; `occurredAt`, `receivedAt`: timestamp | เจ้าของสร้างได้เท่านั้น; แอปอ่าน/แก้ไข/ลบไม่ได้ |
 
 ### เอกสารภายใน `settings`
@@ -39,12 +39,15 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 - `profile`: เพศ ปีเกิด ส่วนสูง/น้ำหนัก เป้าหมาย และมื้ออาหาร
 - `planner`: routines, doneMap, extras และ anchor ของแผนรายสัปดาห์
 - `push`: ข้อมูล Push subscription เฉพาะเครื่อง; ห้ามส่งออกผ่าน backup
-- `expense_rules`: กฎ/หมวดรายจ่าย
+- `expense_rules`: กฎหมวดหมู่แบบ legacy; ยังอ่านได้เพื่อรองรับข้อมูลเดิม
+- `expense_rule_{hash}`: `{kind: 'expense_rule', keyword, category, updatedAt}`; กฎจาก manual expense และ Statement import แยกเอกสารต่อ keyword เพื่อหลีกเลี่ยงเขียนทับรายการอื่นจากข้อมูล stale
+- `expense_budget_{hash}`: `{kind: 'expense_budget', category, amount, updatedAt}`; งบต่อหมวดใช้เทียบกับรายจ่ายของเดือนที่เลือก
+- `expense_recurring_{hash}`: `{kind: 'expense_recurring', planId, merchant, amount, category, frequency, nextDate, dayOfMonth, note, createdAt, updatedAt}`; `frequency` เป็น `monthly` หรือ `yearly` และการสร้าง `expense_records` ต้องยืนยันจากผู้ใช้
 - `exp_YYYY-MM`: เอกสารค่าใช้จ่ายแบบเก่า เก็บไว้ระหว่าง migration และไม่ใช่ปลายทางใหม่
 
 การรวมหลายกลุ่มไว้ใน `settings` เป็นรูปแบบเดิมที่แยกด้วย document ID; ยังไม่ย้ายไป collection ใหม่ เพราะต้องมี migration/ช่วงรองรับย้อนหลังและยังไม่มีเหตุผลด้านสิทธิ์ที่จำเป็นต้องเปลี่ยน path การย้ายรายจ่ายไป `expense_records` ดำเนินการแยกแล้ว
 
-`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array, `doneMap`/`extras` เป็น map ตามวันที่ และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. `settings/expense_rules` เก็บกฎหมวดหมู่และตัวอย่างที่ใช้เรียนรู้ตามรายการ.
+`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array, `doneMap`/`extras` เป็น map ตามวันที่ และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย v4.1.0 (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
 
 สถานะ onboarding (`step`, `in_progress`/`completed`) เก็บใน `localStorage` แยกตาม UID/อุปกรณ์ ไม่ได้สร้าง collection หรือเอกสาร Firestore เพิ่ม.
 

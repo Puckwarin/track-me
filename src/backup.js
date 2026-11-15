@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { $, esc, localDateStr, downloadFile, toast } from './util.js';
 import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
 
-const APP = 'Track Me', VERSION = '1.3.0';
+const APP = 'Track Me', VERSION = '4.1.0';
 const toPlain = v => v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v;
 let parsed = null;
 

@@ -14,6 +14,7 @@ export const state = {
   pushSettings: null,
   expenses: [],
   expenseRecords: [],
+  expenseSettings: [],
   legacyExpenseDocs: [],
   skinRecords: [],
   skincareProducts: [],

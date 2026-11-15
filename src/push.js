@@ -2,6 +2,7 @@ import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { getPeriodRemindDays } from './period.js';
+import { toast } from './util.js';
 
 const VAPID_STORAGE_KEY = 'trackme-vapid-public';
 
@@ -60,10 +61,10 @@ export function getPushHideDetails() {
 export async function setPushHideDetails(hide) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
   const next = Boolean(hide);
-  await setDoc(userDoc(state.uid, 'settings', 'push'), {
+  setDoc(userDoc(state.uid, 'settings', 'push'), {
     hideDetails: next,
     updatedAt: new Date()
-  }, { merge: true });
+  }, { merge: true }).catch(err => toast('บันทึกการตั้งค่า Push ไม่สำเร็จ: ' + err.message, 'err'));
   window.dispatchEvent(new Event('trackme:push-change'));
   return next;
 }
@@ -149,22 +150,20 @@ export async function disablePushForThisDevice() {
   }
   const existing = Array.isArray(state.pushSettings?.subscriptions) ? state.pushSettings.subscriptions : [];
   const remaining = endpoint ? existing.filter(s => s.endpoint !== endpoint) : existing;
-  await setDoc(userDoc(state.uid, 'settings', 'push'), {
+  setDoc(userDoc(state.uid, 'settings', 'push'), {
     enabled: remaining.length > 0,
     subscriptions: remaining,
     updatedAt: new Date()
-  }, { merge: true });
+  }, { merge: true }).catch(err => toast('บันทึกการตั้งค่า Push ไม่สำเร็จ: ' + err.message, 'err'));
   window.dispatchEvent(new Event('trackme:push-change'));
 }
 
 export async function syncPeriodRemindToPush() {
   if (!state.uid || !state.pushSettings?.subscriptions?.length) return;
-  try {
-    await setDoc(userDoc(state.uid, 'settings', 'push'), {
-      periodRemindDays: getPeriodRemindDays(),
-      updatedAt: new Date()
-    }, { merge: true });
-  } catch (e) {}
+  setDoc(userDoc(state.uid, 'settings', 'push'), {
+    periodRemindDays: getPeriodRemindDays(),
+    updatedAt: new Date()
+  }, { merge: true }).catch(err => toast('ซิงก์การตั้งค่าแจ้งเตือน Push ไม่สำเร็จ: ' + err.message, 'err'));
 }
 
 export async function sendTestLocalNotification() {

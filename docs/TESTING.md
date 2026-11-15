@@ -15,7 +15,9 @@ Install dependencies with `npm ci`, then run:
 | `npm run test:rules` | Starts the Firestore Emulator and runs Rules integration tests |
 | `npm run build` | Builds the production site |
 
-Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. The latest local run for Track Me v4.0.0 reported 11.51% statements, 9.94% branches, 9.37% functions, and 13.80% lines. The highest-value deterministic logic tests cover parsers, schema sanitizers, TDEE calculations, cycle statistics, food validation, AI fallback/cooldown, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. On a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
+Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover parsers, schema sanitizers, expense rules/budgets/recurrence, TDEE calculations, cycle statistics, food validation, AI fallback/cooldown, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 12 active tests and no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
+
+The v4.1.0 local validation completed with 45 tests passing and 5 Firestore Rules tests skipped; ESLint reported 0 errors and the same 7 existing warnings; production build succeeded with the existing large-chunk warning (see [docs/PERFORMANCE.md](PERFORMANCE.md)). `npm run test:rules` could not run on the validation machine because no Java Runtime was installed.
 
 Run a focused test while iterating:
 

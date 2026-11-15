@@ -29,7 +29,7 @@
 | `util.js`, `style.css`, `theme.js` | utilities, shared styles และ theme |
 | `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, โภชนาการและ AI consumers |
 | `period.js`, `body.js`, `symptoms.js`, `profile.js`, `lab.js` | สุขภาพ, เป้าหมายและผลตรวจ |
-| `expense.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, Statement และ OCR สลิป |
+| `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, กฎหมวดหมู่, Statement และ OCR สลิป |
 | `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง, สต๊อก, Planner และการเตือน |
 | `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutConstants.js` | แผนและบันทึก workout |
 | `reports.js`, `weekly.js`, `summary.js`, `home.js` | หน้าสรุปและรายงาน |

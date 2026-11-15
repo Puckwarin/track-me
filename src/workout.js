@@ -376,13 +376,13 @@ async function saveEditedTemplate() {
   if (!Object.values(sections).some(r => r.length)) return toast('เพิ่มท่าอย่างน้อย 1 ท่าก่อนบันทึกเทมเพลต', 'err');
   try {
     const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
-    await updateDoc(userDoc(state.uid, 'workout_templates', editingTemplateId), {
+    updateDoc(userDoc(state.uid, 'workout_templates', editingTemplateId), {
       name,
       ...(muscleGroup && { muscleGroup }),
       type: $('#w-type', root).value,
       sections,
       updatedAt: new Date()
-    });
+    }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
     toast('บันทึกการแก้ไขเทมเพลตแล้ว');
     exitTemplateEdit();
   } catch (e) {
@@ -607,9 +607,11 @@ async function startActiveWorkout() {
         sections, performedSets, completedSetCount: performedSets.length, volumeKg, note: $('#w-note', root).value.trim().slice(0, 500)
       };
       if (editingId) {
-        await updateDoc(userDoc(state.uid, 'workout_records', editingId), { ...payload, updatedAt: new Date() });
+        updateDoc(userDoc(state.uid, 'workout_records', editingId), { ...payload, updatedAt: new Date() })
+          .catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
       } else {
-        await addDoc(userCol(state.uid, 'workout_records'), { ...payload, createdAt: new Date() });
+        addDoc(userCol(state.uid, 'workout_records'), { ...payload, createdAt: new Date() })
+          .catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
       }
       toast('บันทึกแล้ว · ' + performedSets.length + ' เซต · ' + Math.round(volumeKg) + ' kg รวม');
       clearForm();
@@ -636,10 +638,12 @@ async function save() {
   };
   try {
     if (editingId) {
-      await updateDoc(userDoc(state.uid, 'workout_records', editingId), { ...payload, updatedAt: new Date() });
+      updateDoc(userDoc(state.uid, 'workout_records', editingId), { ...payload, updatedAt: new Date() })
+        .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
       toast('อัปเดตบันทึกการออกกำลังกายแล้ว 💪');
     } else {
-      await addDoc(userCol(state.uid, 'workout_records'), { ...payload, createdAt: new Date() });
+      addDoc(userCol(state.uid, 'workout_records'), { ...payload, createdAt: new Date() })
+        .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
       toast(status === 'planned' ? 'บันทึกแผนออกกำลังกายแล้ว 📅' : 'บันทึกการออกกำลังกายแล้ว 💪');
     }
     clearForm();
@@ -671,13 +675,13 @@ function saveTemplatePrompt() {
     if (!name) return toast('กรุณาตั้งชื่อเทมเพลต', 'err');
     const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
     try {
-      await addDoc(userCol(state.uid, 'workout_templates'), {
+      addDoc(userCol(state.uid, 'workout_templates'), {
         name,
         ...(muscleGroup && { muscleGroup }),
         type: $('#w-type', root).value,
         sections,
         createdAt: new Date()
-      });
+      }).catch(e => toast('บันทึกเทมเพลตไม่สำเร็จ: ' + e.message, 'err'));
       toast('บันทึกเทมเพลตแล้ว');
       close();
     } catch (e) { toast(e.message, 'err'); }

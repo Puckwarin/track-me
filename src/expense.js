@@ -1,10 +1,11 @@
 // บันทึกรายรับ-รายจ่าย + สแกนสลิปอัตโนมัติ (OCR ในเครื่องเท่านั้น ไม่เก็บรูปภาพลง Firebase)
-import { deleteDoc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
+import { advanceRecurringDate, calculateExpenseBudgets, expenseSettingDocId, normalizeExpenseKeyword, suggestExpenseCategory } from './expenseLogic.js';
 
 export const EXPENSE_CATEGORIES = [
   'อาหาร',
@@ -49,6 +50,10 @@ let txType = 'expense';
 let editing = null; // { id, oldMonth } | null
 let selectedMonth = localDateStr().slice(0, 7);
 let pendingStatement = [];
+let expenseRules = [];
+let expenseBudgets = {};
+let recurringExpenses = [];
+let manualCategoryTouched = false;
 
 const $r = s => $(s, root);
 const fmtMoney = n => (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -62,6 +67,60 @@ function monthItems(monthStr) {
   return (state.expenses || []).filter(x => (x.date || '').slice(0, 7) === monthStr);
 }
 
+function syncExpenseSettings() {
+  const settings = Array.isArray(state.expenseSettings) ? state.expenseSettings : [];
+  const legacyRules = settings.find(item => item.id === 'expense_rules')?.rules || [];
+  expenseRules = [
+    ...legacyRules,
+    ...settings.filter(item => item.kind === 'expense_rule' && typeof item.keyword === 'string' && typeof item.category === 'string')
+      .map(({ keyword, category }) => ({ keyword, category }))
+  ];
+  expenseBudgets = Object.fromEntries(settings
+    .filter(item => item.kind === 'expense_budget' && EXPENSE_CATEGORIES.includes(item.category)
+      && Number.isFinite(Number(item.amount)) && Number(item.amount) > 0 && Number(item.amount) <= 100000000)
+    .map(item => [item.category, Number(item.amount)]));
+  recurringExpenses = settings
+    .filter(item => item.kind === 'expense_recurring' && /^[\w-]{1,80}$/.test(item.planId || '')
+      && typeof item.merchant === 'string' && item.merchant.trim() && EXPENSE_CATEGORIES.includes(item.category)
+      && Number.isFinite(Number(item.amount)) && Number(item.amount) > 0 && Number(item.amount) <= 100000000
+      && ['monthly', 'yearly'].includes(item.frequency) && isValidExpenseDate(item.nextDate)
+      && Number.isInteger(item.dayOfMonth) && item.dayOfMonth >= 1 && item.dayOfMonth <= 31)
+    .sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+}
+
+function updateExpenseSetting(id, data) {
+  const settings = Array.isArray(state.expenseSettings) ? [...state.expenseSettings] : [];
+  const index = settings.findIndex(item => item.id === id);
+  const updated = { id, ...data };
+  if (index >= 0) settings[index] = updated;
+  else settings.push(updated);
+  state.expenseSettings = settings;
+  syncExpenseSettings();
+}
+
+function removeExpenseSetting(id) {
+  state.expenseSettings = (state.expenseSettings || []).filter(item => item.id !== id);
+  syncExpenseSettings();
+}
+
+function rememberExpenseRules(rules) {
+  if (!state.uid) return;
+  const latest = new Map();
+  rules.forEach(rule => {
+    const keyword = normalizeExpenseKeyword(rule.keyword);
+    if (keyword && rule.category && (EXPENSE_CATEGORIES.includes(rule.category) || INCOME_CATEGORIES.includes(rule.category))) {
+      latest.set(keyword, { keyword, category: rule.category });
+    }
+  });
+  for (const [keyword, rule] of latest.entries()) {
+    const id = expenseSettingDocId('expense_rule', keyword);
+    const data = { kind: 'expense_rule', keyword: rule.keyword, category: rule.category, updatedAt: new Date().toISOString() };
+    updateExpenseSetting(id, data);
+    setDoc(userDoc(state.uid, 'settings', id), data)
+      .catch(err => toast(`บันทึกกฎหมวดหมู่ไม่สำเร็จ: ${err.message || 'เกิดข้อผิดพลาด'}`, 'err'));
+  }
+}
+
 function buildExpensePayload(record) {
   return {
     type: ['income', 'transfer'].includes(record.type) ? record.type : 'expense',
@@ -71,7 +130,7 @@ function buildExpensePayload(record) {
     ...(record.time && { time: String(record.time).slice(0, 5) }),
     merchant: String(record.merchant || '').slice(0, 120),
     note: String(record.note || '').slice(0, 200),
-    source: ['slip_ocr', 'statement'].includes(record.source) ? record.source : 'manual',
+    source: ['slip_ocr', 'statement', 'recurring'].includes(record.source) ? record.source : 'manual',
     createdAt: record.createdAt || new Date().toISOString()
   };
 }
@@ -79,7 +138,7 @@ function buildExpensePayload(record) {
 function explainExpenseWriteError(err) {
   const msg = String(err?.code || err?.message || '');
   if (/permission-denied/i.test(msg)) {
-    return 'ยังไม่ได้เผยแพร่ Firestore Rules สำหรับ expense_records — กรุณาอัปเดต Rules ตาม docs/SETUP.md';
+    return 'ยังไม่ได้เผยแพร่ Firestore Rules สำหรับ expense_records/settings — กรุณาอัปเดต Rules ตาม docs/SETUP.md';
   }
   return err?.message || 'ไม่สามารถบันทึกข้อมูลได้';
 }
@@ -132,6 +191,10 @@ async function deleteTransactionRecord(id, dateStr) {
 
 export function mountExpense(el) {
   root = el;
+  txType = 'expense';
+  editing = null;
+  manualCategoryTouched = false;
+  pendingStatement = [];
   const today = localDateStr();
   root.innerHTML = `
   <div class="lg:col-span-1 space-y-4">
@@ -194,6 +257,18 @@ export function mountExpense(el) {
       </div>
       <div id="ex-summary" class="grid grid-cols-3 gap-2.5"></div>
       <div id="ex-breakdown" class="space-y-1.5 pt-1"></div>
+      <div class="border-t border-slate-100 pt-3 space-y-2">
+        <div class="flex items-center justify-between gap-2"><h4 class="text-sm font-bold text-slate-700">งบรายจ่ายตามหมวด</h4><button type="button" id="ex-budget-edit" class="btn btn-soft !py-1.5 !px-3 !min-h-8 text-xs">ตั้งงบ</button></div>
+        <div id="ex-budget-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <section class="card space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div><h3 class="font-bold text-slate-800">🔁 รายจ่ายประจำ</h3><p class="text-xs text-slate-500">ถึงกำหนดแล้วจะรอให้คุณยืนยันก่อนบันทึก</p></div>
+        <button type="button" id="ex-recurring-add" class="btn btn-primary !py-1.5 !px-3 text-xs">เพิ่มรายการ</button>
+      </div>
+      <div id="ex-recurring-list" class="space-y-2"></div>
     </section>
 
     <section id="ex-pending-card" class="card space-y-3 hidden">
@@ -231,7 +306,37 @@ export function mountExpense(el) {
     const typeBtn = e.target.closest('[data-ex-type]');
     if (typeBtn) {
       txType = typeBtn.dataset.exType === 'income' ? 'income' : 'expense';
+      manualCategoryTouched = false;
       updateTypeUi();
+      applyManualCategorySuggestion();
+      return;
+    }
+    if (e.target.closest('#ex-budget-edit')) {
+      openExpenseBudgetEditor();
+      return;
+    }
+    if (e.target.closest('#ex-recurring-add')) {
+      openRecurringEditor();
+      return;
+    }
+    const recurringEdit = e.target.closest('[data-recurring-edit]');
+    if (recurringEdit) {
+      const plan = recurringExpenses.find(item => item.planId === recurringEdit.dataset.recurringEdit);
+      if (plan) openRecurringEditor(plan);
+      return;
+    }
+    const recurringDelete = e.target.closest('[data-recurring-delete]');
+    if (recurringDelete) {
+      const plan = recurringExpenses.find(item => item.planId === recurringDelete.dataset.recurringDelete);
+      if (plan && confirm(`ลบรายการประจำ “${plan.merchant}” หรือไม่? รายการที่บันทึกไปแล้วจะไม่ถูกลบ`)) deleteRecurringPlan(plan);
+      return;
+    }
+    const recurringRecord = e.target.closest('[data-recurring-record]');
+    if (recurringRecord) {
+      const plan = recurringExpenses.find(item => item.planId === recurringRecord.dataset.recurringRecord);
+      if (plan && confirm(`ยืนยันบันทึกรายจ่าย “${plan.merchant}” จำนวน ${fmtMoney(plan.amount)} ฿ สำหรับวันที่ ${fmtDate(plan.nextDate)} หรือไม่?`)) {
+        recordRecurringExpense(plan);
+      }
       return;
     }
     const editBtn = e.target.closest('[data-ex-edit]');
@@ -265,6 +370,9 @@ export function mountExpense(el) {
   });
 
   $r('#ex-save').addEventListener('click', saveManualForm);
+  $r('#ex-category').addEventListener('change', () => { manualCategoryTouched = true; });
+  $r('#ex-merchant').addEventListener('input', applyManualCategorySuggestion);
+  $r('#ex-note').addEventListener('input', applyManualCategorySuggestion);
   $r('#ex-statement-parse').addEventListener('click', processStatementPaste);
   $r('#ex-pending-import').addEventListener('click', importSelectedStatementItems);
   $r('#ex-pending-list').addEventListener('change', e => {
@@ -302,9 +410,19 @@ function updateTypeUi() {
   if (cats.includes(cur)) $r('#ex-category').value = cur;
 }
 
+function applyManualCategorySuggestion() {
+  const category = $r('#ex-category');
+  const merchant = $r('#ex-merchant')?.value.trim();
+  const note = $r('#ex-note')?.value.trim();
+  if (!category || manualCategoryTouched || (!merchant && !note)) return;
+  const suggestion = suggestExpenseCategory({ type: txType, merchant, note }, expenseRules, EXPENSE_CATEGORIES, INCOME_CATEGORIES);
+  if (suggestion && [...category.options].some(option => option.value === suggestion)) category.value = suggestion;
+}
+
 function resetForm() {
   editing = null;
   txType = 'expense';
+  manualCategoryTouched = false;
   updateTypeUi();
   $r('#ex-amount').value = '';
   $r('#ex-date').value = localDateStr();
@@ -318,6 +436,7 @@ function resetForm() {
 function startEdit(item) {
   editing = { id: item.id, oldMonth: (item.date || localDateStr()).slice(0, 7) };
   txType = item.type === 'income' ? 'income' : 'expense';
+  manualCategoryTouched = true;
   updateTypeUi();
   $r('#ex-amount').value = item.amount ?? '';
   $r('#ex-category').value = item.category || (txType === 'income' ? 'อื่น ๆ' : 'อาหาร');
@@ -330,7 +449,7 @@ function startEdit(item) {
   root.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function saveManualForm() {
+function saveManualForm() {
   const amount = Number($r('#ex-amount').value);
   const date = $r('#ex-date').value;
   if (!Number.isFinite(amount) || amount <= 0) return toast('กรอกจำนวนเงินให้ถูกต้องก่อนค่ะ', 'err');
@@ -351,6 +470,9 @@ async function saveManualForm() {
 
   try {
     saveTransactionRecord(record, editing);
+    if (record.type === 'expense' && record.merchant) {
+      rememberExpenseRules([{ keyword: record.merchant, category: record.category }]);
+    }
     toast(editing ? 'อัปเดตรายการแล้ว' : (txType === 'income' ? 'บันทึกรายรับแล้ว 💰' : 'บันทึกรายจ่ายแล้ว 💸'));
     resetForm();
     if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
@@ -591,22 +713,14 @@ export async function handleSharedSlipLaunch(showTabFn) {
 }
 
 
-async function loadExpenseRules() {
-  if (!state.uid) return [];
-  try {
-    const snap = await getDoc(userDoc(state.uid, 'settings', 'expense_rules'));
-    return snap.exists() && Array.isArray(snap.data().rules) ? snap.data().rules : [];
-  } catch (err) { console.warn('Could not load expense rules:', err?.code || err?.message); return []; }
+function loadExpenseRules() {
+  syncExpenseSettings();
+  return expenseRules;
 }
 
 function suggestStatementCategory(item, rules) {
-  const text = (item.merchant || '').toLocaleLowerCase();
-  const hit = rules.find(rule => rule && rule.keyword && text.includes(String(rule.keyword).toLocaleLowerCase()));
-  if (hit?.category) return hit.category;
-  if (/dlt|กรมการขนส่ง|ภาษีรถ/i.test(text)) return 'รถยนต์/ภาษี';
-  if (/เอไอเอส|ais|เติมเงินมือถือ|ค่าโทรศัพท์/i.test(text)) return 'ค่าโทรศัพท์';
-  if (item.type === 'income' && /เงินเดือน|payroll/i.test(text)) return 'เงินเดือน';
-  return item.type === 'income' ? 'โอนเข้า/คืนเงิน' : 'อื่น ๆ';
+  return suggestExpenseCategory(item, rules, EXPENSE_CATEGORIES, INCOME_CATEGORIES)
+    || (item.type === 'transfer' ? 'โอนระหว่างบัญชี' : 'อื่น ๆ');
 }
 
 function statementDuplicate(item) {
@@ -626,7 +740,7 @@ async function processStatementPaste() {
   const { items, errors } = parseStatementText(input.value);
   input.value = ''; // discard raw statement immediately; only sanitized fields remain in the review queue
   if (!items.length) { status.textContent = 'อ่านไม่พบรายการที่รองรับ (' + errors.length + ' บรรทัด)'; return; }
-  const rules = await loadExpenseRules();
+  const rules = loadExpenseRules();
   pendingStatement = items.map((item, index) => {
     const next = { ...item, id: 'st' + Date.now().toString(36) + index.toString(36), selected: true, rememberRule: false };
     next.category = suggestStatementCategory(next, rules);
@@ -665,21 +779,7 @@ async function importSelectedStatementItems() {
   try {
     await saveBatchExpenseRecords(records);
     if (rulesToSave.length && state.uid) {
-      const merged = [...await loadExpenseRules()];
-      rulesToSave.forEach(rule => {
-        const index = merged.findIndex(x => String(x.keyword || '').toLowerCase() === rule.keyword.toLowerCase());
-        if (index >= 0) merged[index] = rule; else merged.push(rule);
-      });
-      try {
-        setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true })
-          .catch(ruleErr => {
-            console.warn('Imported records, but could not save expense rules:', ruleErr?.code || ruleErr?.message);
-            toast('นำเข้ารายการแล้ว แต่บันทึกกฎหมวดหมู่ไม่สำเร็จ', 'err');
-          });
-      } catch (ruleErr) {
-        console.warn('Imported records, but could not save expense rules:', ruleErr?.code || ruleErr?.message);
-        toast('นำเข้ารายการแล้ว แต่บันทึกกฎหมวดหมู่ไม่สำเร็จ', 'err');
-      }
+      rememberExpenseRules(rulesToSave);
     }
     pendingStatement = pendingStatement.filter(x => !x.selected);
     renderPendingStatement();
@@ -687,6 +787,176 @@ async function importSelectedStatementItems() {
     toast('นำเข้า ' + records.length + ' รายการแล้ว');
   } catch (err) { toast('นำเข้าไม่สำเร็จ: ' + err.message, 'err'); }
   finally { btn.disabled = false; }
+}
+
+function renderExpenseBudgets(month) {
+  const progress = calculateExpenseBudgets(state.expenses || [], expenseBudgets, month);
+  $r('#ex-budget-list').innerHTML = progress.length ? progress.map(item => {
+    const over = item.status === 'over';
+    const near = item.status === 'near';
+    const percent = Math.round((item.spent / item.amount) * 100);
+    const tone = over ? 'text-rose-700 bg-rose-500' : near ? 'text-amber-700 bg-amber-500' : 'text-slate-600 bg-brand';
+    const message = over ? `เกินงบ ${fmtMoney(item.spent - item.amount)} ฿`
+      : near ? `ใกล้ถึงงบ · เหลือ ${fmtMoney(item.remaining)} ฿`
+        : `ใช้ไป ${fmtMoney(item.spent)} / ${fmtMoney(item.amount)} ฿`;
+    return `<div class="space-y-1">
+      <div class="flex justify-between gap-2 text-xs"><b class="text-slate-700">${CAT_ICONS[item.category] || '💸'} ${esc(item.category)}</b><span class="${tone.split(' ')[0]}">${esc(message)}</span></div>
+      <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${tone.split(' ')[1]}" style="width:${Math.min(100, percent)}%"></div></div>
+    </div>`;
+  }).join('') : '<p class="text-xs text-slate-400">ยังไม่ได้ตั้งงบรายหมวดสำหรับเดือนนี้</p>';
+}
+
+function openExpenseBudgetEditor() {
+  const fields = EXPENSE_CATEGORIES.map((category, index) => `
+    <div><label class="lbl">${CAT_ICONS[category] || '💸'} ${esc(category)}</label>
+      <input id="ex-budget-${index}" type="number" min="0" max="100000000" step="0.01" inputmode="decimal" class="input" value="${expenseBudgets[category] ?? ''}" placeholder="ไม่ตั้งงบ"></div>`).join('');
+  const modal = openModal(`
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตั้งงบรายเดือน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-xs text-slate-500 mb-3">งบใช้กับเดือนที่เลือกในหน้ารายจ่าย และจะแจ้งเตือนเมื่อใช้ถึง 80% หรือเกินงบ</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${fields}</div>
+    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="ex-budget-save" class="btn btn-primary">บันทึกงบ</button></div>`, { wide: true });
+
+  $('#ex-budget-save', modal.el).addEventListener('click', () => {
+    if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+    const next = {};
+    for (const [index, category] of EXPENSE_CATEGORIES.entries()) {
+      const raw = $(`#ex-budget-${index}`, modal.el).value.trim();
+      if (!raw) continue;
+      const amount = Number(raw);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return toast(`กรุณาตรวจสอบงบของหมวด ${category}`, 'err');
+      next[category] = Math.round(amount * 100) / 100;
+    }
+
+    const batch = writeBatch(db);
+    let writes = 0;
+    for (const category of EXPENSE_CATEGORIES) {
+      const id = expenseSettingDocId('expense_budget', category);
+      if (next[category] && next[category] !== expenseBudgets[category]) {
+        const data = { kind: 'expense_budget', category, amount: next[category], updatedAt: new Date().toISOString() };
+        batch.set(userDoc(state.uid, 'settings', id), data);
+        updateExpenseSetting(id, data);
+        writes++;
+      } else if (!next[category] && expenseBudgets[category]) {
+        batch.delete(userDoc(state.uid, 'settings', id));
+        removeExpenseSetting(id);
+        writes++;
+      }
+    }
+    modal.close();
+    renderExpense();
+    if (writes) {
+      try {
+        batch.commit().catch(err => toast(`บันทึกงบไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err'));
+      } catch (err) {
+        return toast(`บันทึกงบไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err');
+      }
+    }
+    toast('บันทึกงบรายเดือนแล้ว');
+  });
+}
+
+function isValidExpenseDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return false;
+  const [year, month, day] = date.split('-').map(Number);
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function openRecurringEditor(plan = null) {
+  const planId = plan?.planId || `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  const categoryOptions = EXPENSE_CATEGORIES.map(category =>
+    `<option value="${esc(category)}"${category === plan?.category ? ' selected' : ''}>${esc(category)}</option>`
+  ).join('');
+  const modal = openModal(`
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${plan ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="space-y-3">
+      <div><label class="lbl">ร้านค้า / รายการ *</label><input id="ex-recurring-merchant" class="input" maxlength="120" value="${esc(plan?.merchant || '')}" placeholder="เช่น ค่าเช่าบ้าน"></div>
+      <div class="grid grid-cols-2 gap-2"><div><label class="lbl">จำนวนเงิน (บาท) *</label><input id="ex-recurring-amount" type="number" min="0" max="100000000" step="0.01" class="input" value="${plan?.amount ?? ''}"></div>
+      <div><label class="lbl">หมวดหมู่</label><select id="ex-recurring-category" class="input">${categoryOptions}</select></div></div>
+      <div class="grid grid-cols-2 gap-2"><div><label class="lbl">รอบ</label><select id="ex-recurring-frequency" class="input"><option value="monthly"${plan?.frequency !== 'yearly' ? ' selected' : ''}>รายเดือน</option><option value="yearly"${plan?.frequency === 'yearly' ? ' selected' : ''}>รายปี</option></select></div>
+      <div><label class="lbl">วันครบกำหนดถัดไป</label><input id="ex-recurring-date" type="date" class="input" value="${esc(plan?.nextDate || localDateStr())}"></div></div>
+      <div><label class="lbl">หมายเหตุ (ไม่บังคับ)</label><input id="ex-recurring-note" maxlength="200" class="input" value="${esc(plan?.note || '')}"></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="ex-recurring-save" class="btn btn-primary">บันทึกรายการ</button></div>`);
+
+  $('#ex-recurring-save', modal.el).addEventListener('click', () => {
+    if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+    const merchant = $('#ex-recurring-merchant', modal.el).value.trim();
+    const amount = Number($('#ex-recurring-amount', modal.el).value);
+    const category = $('#ex-recurring-category', modal.el).value;
+    const frequency = $('#ex-recurring-frequency', modal.el).value;
+    const nextDate = $('#ex-recurring-date', modal.el).value;
+    if (!merchant) return toast('กรุณากรอกชื่อร้านค้าหรือรายการ', 'err');
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return toast('กรุณากรอกจำนวนเงินให้ถูกต้อง', 'err');
+    if (!EXPENSE_CATEGORIES.includes(category) || !['monthly', 'yearly'].includes(frequency) || !isValidExpenseDate(nextDate)) {
+      return toast('กรุณาตรวจสอบหมวดหมู่ รอบ และวันที่ครบกำหนด', 'err');
+    }
+    const dayOfMonth = plan?.nextDate === nextDate && Number.isInteger(plan.dayOfMonth)
+      ? plan.dayOfMonth
+      : Number(nextDate.slice(-2));
+    const data = {
+      kind: 'expense_recurring', planId, merchant: merchant.slice(0, 120),
+      amount: Math.round(amount * 100) / 100, category, frequency, nextDate, dayOfMonth,
+      note: $('#ex-recurring-note', modal.el).value.trim().slice(0, 200),
+      createdAt: plan?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    const id = expenseSettingDocId('expense_recurring', planId);
+    updateExpenseSetting(id, data);
+    setDoc(userDoc(state.uid, 'settings', id), data)
+      .catch(err => toast(`บันทึกประจำไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err'));
+    modal.close();
+    renderExpense();
+    toast(plan ? 'อัปเดตรายการประจำแล้ว' : 'เพิ่มรายการประจำแล้ว');
+  });
+}
+
+function deleteRecurringPlan(plan) {
+  if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+  const id = expenseSettingDocId('expense_recurring', plan.planId);
+  removeExpenseSetting(id);
+  deleteDoc(userDoc(state.uid, 'settings', id))
+    .catch(err => toast(`ลบรายการประจำไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err'));
+  renderExpense();
+  toast('ลบรายการประจำแล้ว');
+}
+
+function recordRecurringExpense(plan) {
+  if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+  const today = localDateStr();
+  if (plan.nextDate > today) return toast('รายการนี้ยังไม่ถึงกำหนด', 'err');
+  let nextDate = advanceRecurringDate(plan.nextDate, plan.frequency, plan.dayOfMonth);
+  let advances = 0;
+  while (nextDate && nextDate <= today && advances < 1200) {
+    nextDate = advanceRecurringDate(nextDate, plan.frequency, plan.dayOfMonth);
+    advances++;
+  }
+  if (!nextDate || nextDate <= today) return toast('วันที่หรือรอบของรายการประจำไม่ถูกต้อง', 'err');
+  const settingId = expenseSettingDocId('expense_recurring', plan.planId);
+  const recordId = expenseSettingDocId('expense_recurring', `${plan.planId}_${plan.nextDate}`).replace('expense_recurring_', 'exr_');
+  const record = {
+    id: recordId, type: 'expense', amount: plan.amount, category: plan.category,
+    date: plan.nextDate, merchant: plan.merchant, note: plan.note || '',
+    source: 'recurring', createdAt: new Date().toISOString()
+  };
+  const updatedPlan = { ...plan, nextDate, updatedAt: new Date().toISOString() };
+  const updatedPlanData = {
+    kind: 'expense_recurring', planId: updatedPlan.planId, merchant: updatedPlan.merchant,
+    amount: updatedPlan.amount, category: updatedPlan.category, frequency: updatedPlan.frequency,
+    nextDate: updatedPlan.nextDate, dayOfMonth: updatedPlan.dayOfMonth, note: updatedPlan.note || '',
+    createdAt: updatedPlan.createdAt, updatedAt: updatedPlan.updatedAt
+  };
+  const batch = writeBatch(db);
+  batch.set(userDoc(state.uid, 'expense_records', recordId), buildExpensePayload(record));
+  batch.set(userDoc(state.uid, 'settings', settingId), updatedPlanData);
+  updateExpenseSetting(settingId, updatedPlanData);
+  renderExpense();
+  try {
+    batch.commit().catch(err => toast(`บันทึกรายจ่ายประจำไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err'));
+  } catch (err) {
+    toast(`บันทึกรายจ่ายประจำไม่สำเร็จ: ${explainExpenseWriteError(err)}`, 'err');
+    return;
+  }
+  toast(`ยืนยันและบันทึกรายจ่าย ${plan.merchant} แล้ว`);
 }
 
 function getFilteredMonthItems(curMonth) {
@@ -716,7 +986,7 @@ function exportMonthCsv() {
       x.category || '',
       x.merchant || '',
       x.amount ?? 0,
-      x.source === 'slip_ocr' ? 'สแกนสลิป' : 'จดเอง',
+      x.source === 'slip_ocr' ? 'สแกนสลิป' : x.source === 'statement' ? 'Statement' : x.source === 'recurring' ? 'รายการประจำ' : 'จดเอง',
       x.note || ''
     ])
   ];
@@ -727,6 +997,8 @@ function exportMonthCsv() {
 export function renderExpense() {
   if (!root?.isConnected) return;
 
+  syncExpenseSettings();
+  applyManualCategorySuggestion();
   const curMonth = $r('#ex-month')?.value || selectedMonth;
   const inMonth = monthItems(curMonth);
 
@@ -764,6 +1036,22 @@ export function renderExpense() {
         </div>`;
       }).join('')
     : '<p class="text-xs text-slate-400">ยังไม่มีรายจ่ายในเดือนนี้</p>';
+  renderExpenseBudgets(curMonth);
+  const today = localDateStr();
+  $r('#ex-recurring-list').innerHTML = recurringExpenses.length ? recurringExpenses.map(plan => {
+      const due = plan.nextDate <= today;
+      return `<article class="rounded-xl border ${due ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'} p-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="min-w-0"><b class="text-sm text-slate-800">${esc(plan.merchant)}</b>
+          <p class="text-xs text-slate-500">${esc(plan.category)} · ${fmtMoney(plan.amount)} ฿ · ${plan.frequency === 'yearly' ? 'รายปี' : 'รายเดือน'} · ครบกำหนด ${esc(fmtDate(plan.nextDate))}</p>
+          ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !py-1.5 !px-2.5 text-xs">ยืนยันและบันทึกรายจ่าย</button>` : ''}
+          <button type="button" data-recurring-edit="${esc(plan.planId)}" class="btn btn-soft !py-1.5 !px-2.5 text-xs">แก้ไข</button>
+          <button type="button" data-recurring-delete="${esc(plan.planId)}" class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-rose-600">ลบ</button>
+        </div>
+      </article>`;
+  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีรายการประจำ</p>';
 
   // อัปเดตตัวเลือกหมวดหมู่ในตัวกรอง
   const filterCatSel = $r('#ex-filter-cat');
@@ -795,6 +1083,7 @@ export function renderExpense() {
             <b class="text-sm text-slate-800 truncate">${esc(x.merchant || x.category)}</b>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">${esc(x.category)}</span>
             ${x.source === 'slip_ocr' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">สลิป</span>' : ''}
+            ${x.source === 'recurring' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">ประจำ</span>' : ''}
           </div>
           <p class="text-[11px] text-slate-500">${esc(fmtDate(x.date))}${x.time ? ` · ${esc(x.time)} น.` : ''}${x.note ? ` · ${esc(x.note)}` : ''}</p>
         </div>

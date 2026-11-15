@@ -1,6 +1,8 @@
-# Project Setup — ตั้งค่า Track Me v4.0.0
+# Project Setup — ตั้งค่า Track Me v4.1.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
+
+v4.1.0 เพิ่มงบรายเดือนตามหมวด กฎแนะนำหมวดที่เรียนรู้จากรายจ่ายที่บันทึก/แก้ไข และรายการรายจ่ายประจำที่ต้องยืนยันก่อนบันทึกจริง ข้อมูลเหล่านี้อยู่ใน `users/{uid}/settings` และรวมอยู่ใน backup โดยไม่รวม Push subscription
 
 สำหรับ workflow ปัจจุบัน ใช้ `.github/workflows/build.yml` ตรวจ lint/tests/Rules Emulator/build และ deploy GitHub Pages จาก `main` หลัง checks ผ่าน; ไม่มี `pages.yml` แยกแล้ว
 

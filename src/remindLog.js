@@ -1,4 +1,4 @@
-import { addDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
@@ -365,14 +365,19 @@ async function saveForm() {
 
   try {
     if (editing && editing.col === targetCol) {
-      await updateDoc(userDoc(state.uid, targetCol, editing.id), { ...payload, updatedAt: new Date() });
+      updateDoc(userDoc(state.uid, targetCol, editing.id), { ...payload, updatedAt: new Date() })
+        .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
       toast('อัปเดตรายการแล้ว');
+    } else if (editing && editing.col !== targetCol) {
+      const batch = writeBatch(db);
+      batch.set(doc(userCol(state.uid, targetCol)), { ...payload, createdAt: new Date() });
+      batch.delete(userDoc(state.uid, editing.col, editing.id));
+      batch.commit().catch(e => toast('ย้ายหมวดไม่สำเร็จ: ' + e.message, 'err'));
+      toast('ย้ายหมวดและบันทึกแล้ว');
     } else {
-      await addDoc(userCol(state.uid, targetCol), { ...payload, createdAt: new Date() });
-      if (editing && editing.col !== targetCol) {
-        await deleteDoc(userDoc(state.uid, editing.col, editing.id));
-      }
-      toast(editing ? 'ย้ายหมวดและบันทึกแล้ว' : 'บันทึกแจ้งเตือนแล้ว ✓');
+      addDoc(userCol(state.uid, targetCol), { ...payload, createdAt: new Date() })
+        .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
+      toast('บันทึกแจ้งเตือนแล้ว ✓');
     }
     resetForm();
   } catch (e) {
@@ -385,11 +390,17 @@ async function applyBulkRemind() {
   if (!items.length) return;
   const remindDays = Number($r('#rm-bulk-remind').value);
   try {
+    const commits = [];
     for (let i = 0; i < items.length; i += 450) {
       const batch = writeBatch(db);
       items.slice(i, i + 450).forEach(x => batch.update(userDoc(state.uid, x.col, x.id), { remindDays, dismissedFor: null, updatedAt: new Date() }));
-      await batch.commit();
+      commits.push(batch.commit());
     }
+    Promise.all(commits).catch(e => {
+      items.forEach(item => selectedKeys.add(item.uidKey));
+      toast('ตั้งเตือนไม่สำเร็จ: ' + e.message, 'err');
+      renderRemind();
+    });
     selectedKeys.clear();
     toast(`ตั้งเตือน ${items.length} รายการเป็น “${remindLabel(remindDays)}” แล้ว`);
     renderRemind();
@@ -411,7 +422,8 @@ async function onListChange(e) {
     const [col, id] = rem.dataset.rmRemind.split(':');
     const remindDays = Number(rem.value);
     try {
-      await updateDoc(userDoc(state.uid, col, id), { remindDays, dismissedFor: null, updatedAt: new Date() });
+      updateDoc(userDoc(state.uid, col, id), { remindDays, dismissedFor: null, updatedAt: new Date() })
+        .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
       toast(`ตั้งเตือนเป็น “${remindLabel(remindDays)}”`);
     } catch (err) {
       toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
@@ -459,10 +471,12 @@ async function onListClick(e) {
     const next = computeNextForItem(item, baseDate);
     try {
       if (next) {
-        await updateDoc(userDoc(state.uid, item.col, item.id), { date: today, nextDate: next, done: false, dismissedFor: null, updatedAt: new Date() });
+        updateDoc(userDoc(state.uid, item.col, item.id), { date: today, nextDate: next, done: false, dismissedFor: null, updatedAt: new Date() })
+          .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
         toast(`บันทึกเรียบร้อย · เลื่อนรอบถัดไปเป็น ${fmtDate(next)}`);
       } else {
-        await updateDoc(userDoc(state.uid, item.col, item.id), { done: !item.done, dismissedFor: item.nextDate || today, updatedAt: new Date() });
+        updateDoc(userDoc(state.uid, item.col, item.id), { done: !item.done, dismissedFor: item.nextDate || today, updatedAt: new Date() })
+          .catch(err => toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err'));
         toast(item.done ? 'เปิดรายการกลับมาอีกครั้งแล้ว' : 'ทำเครื่องหมายเสร็จสิ้นแล้ว');
       }
     } catch (err) {
@@ -474,7 +488,7 @@ async function onListClick(e) {
   if (btn.dataset.del && confirm(`ลบรายการ “${item.title}”?`)) {
     selectedKeys.delete(item.uidKey);
     try {
-      await deleteDoc(userDoc(state.uid, item.col, item.id));
+      deleteDoc(userDoc(state.uid, item.col, item.id)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
       if (editing?.id === item.id) resetForm();
       toast('ลบรายการแล้ว');
     } catch (err) {

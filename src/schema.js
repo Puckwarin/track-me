@@ -6,6 +6,12 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1
 const moneyNum = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 100000000 ? Math.round(v * 100) / 100 : null);
 const int = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
 const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new Date() : d; };
+const validCalendarDate = value => {
+  if (!isDateStr(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(`${value}T00:00:00Z`);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
 const sanitizeReminderRule = r => ({
   kind: ['once', 'interval', 'monthly', 'yearly', 'nth_weekday', 'last_weekday', 'same_as', 'weekly_except_linked'].includes(r.kind) ? r.kind : 'once',
   ...(Number.isInteger(r.weekday) && r.weekday >= 0 && r.weekday <= 6 && { weekday: r.weekday }),
@@ -118,7 +124,7 @@ export const SANITIZERS = {
     ...(typeof o.time === 'string' && /^\d{2}:\d{2}$/.test(o.time) && { time: o.time }),
     merchant: str(o.merchant, 120),
     note: str(o.note, 200),
-    source: o.source === 'slip_ocr' ? 'slip_ocr' : 'manual',
+    source: ['slip_ocr', 'statement', 'recurring'].includes(o.source) ? o.source : 'manual',
     createdAt: typeof o.createdAt === 'string' && o.createdAt ? str(o.createdAt, 40) : new Date(ts(o.createdAt)).toISOString()
   } : null,
   settings: o => {
@@ -146,6 +152,32 @@ export const SANITIZERS = {
       // โครงสร้างรายจ่ายแบบเก่า (expense_month) จะถูกแตกเป็น expense_records แทนใน backup.js
       return null;
     }
+    if (o?.kind === 'expense_budget') {
+      const category = str(o.category, 60), amount = moneyNum(o.amount);
+      return category && amount !== null ? { kind: 'expense_budget', category, amount, updatedAt: ts(o.updatedAt) } : null;
+    }
+    if (o?.kind === 'expense_rule') {
+      const keyword = str(o.keyword, 80).trim(), category = str(o.category, 60);
+      return keyword && category ? { kind: 'expense_rule', keyword, category, updatedAt: ts(o.updatedAt) } : null;
+    }
+    if (o?.kind === 'expense_recurring') {
+      const planId = str(o.planId, 80), merchant = str(o.merchant, 120), category = str(o.category, 60);
+      const amount = moneyNum(o.amount);
+      return /^[\w-]{1,80}$/.test(planId) && merchant && category && amount !== null
+        && ['monthly', 'yearly'].includes(o.frequency) && validCalendarDate(o.nextDate)
+        && int(o.dayOfMonth, 1, 31) !== null
+        ? {
+          kind: 'expense_recurring', planId, merchant, category, amount,
+          frequency: o.frequency, nextDate: o.nextDate, dayOfMonth: o.dayOfMonth,
+          note: str(o.note, 200), createdAt: ts(o.createdAt), updatedAt: ts(o.updatedAt)
+        }
+        : null;
+    }
+    if (o?.id === 'expense_rules' && Array.isArray(o.rules)) {
+      const rules = o.rules.slice(0, 200).filter(rule => rule && str(rule.keyword, 80).trim() && str(rule.category, 60))
+        .map(rule => ({ keyword: str(rule.keyword, 80).trim(), category: str(rule.category, 60) }));
+      return { rules, updatedAt: ts(o.updatedAt) };
+    }
     return {
       sex: o.sex === 'male' ? 'male' : 'female', birthYear: int(o.birthYear, 1900, 2100), heightCm: num(o.heightCm), weightKg: num(o.weightKg),
       activity: ['sedentary', 'light', 'moderate', 'active', 'very'].includes(o.activity) ? o.activity : 'light',
@@ -158,18 +190,25 @@ export const SANITIZERS = {
 };
 export const COLLECTION_LABELS = {
   food_records: 'อาหารที่บันทึก', period_records: 'ประจำเดือน', body_records: 'น้ำหนัก/สัดส่วน',
-  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', expense_records:'รายรับ-รายจ่าย', settings:'เป้าหมาย มื้ออาหาร และ Planner', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
+  symptom_records: 'อาการรายวัน', custom_foods: 'คลังอาหารของฉัน', workout_records:'บันทึกการออกกำลังกาย', lab_records:'ผลตรวจ', workout_templates:'เทมเพลตออกกำลังกาย', expense_records:'รายรับ-รายจ่าย',   settings:'เป้าหมาย, Planner และการตั้งค่ารายจ่าย', skincare_products:'ผลิตภัณฑ์สกินแคร์เดิม', skin_records:'ผลและอาการผิว', ingredient_blacklist:'ส่วนผสมที่หลีกเลี่ยง', pet_profiles:'โปรไฟล์สัตว์เลี้ยง', pet_care_records:'นัดและการดูแลสัตว์เลี้ยง', pet_food_records:'อาหารสัตว์เลี้ยง', tracked_products:'ของใช้และสต๊อก', replacement_records:'ประวัติเปลี่ยนของ'
 };
 export const isSensitivePushSettingsDoc = (o, docId = '') =>
   docId === 'push' || o?.id === 'push' || Array.isArray(o?.subscriptions) || (typeof o?.enabled === 'boolean' && !Array.isArray(o?.routines));
 export const isLegacyExpenseMonthDoc = (o, docId = '') =>
   o?.kind === 'expense_month' || /^exp_\d{4}-\d{2}$/.test(docId || o?.id || '');
 
-// symptom_records และ skin_records ใช้วันที่เป็น doc id; expense_records ใช้ id เดิมของรายการ
-export const docIdFor = (col, o, fallback) => ['symptom_records', 'skin_records'].includes(col)
-  ? o.date
-  : col === 'expense_records'
-    ? (/^[\w-]{1,80}$/.test(o?.id || '') ? o.id : fallback)
-    : col === 'settings'
-      ? (o?.id === 'planner' || Array.isArray(o?.routines) || o?.doneMap ? 'planner' : 'profile')
-      : fallback;
+// symptom_records and skin_records use the date as their document ID.
+export const docIdFor = (col, o, fallback) => {
+  if (['symptom_records', 'skin_records'].includes(col)) return o.date;
+  if (col === 'expense_records') return /^[\w-]{1,80}$/.test(o?.id || '') ? o.id : fallback;
+  if (col !== 'settings') return fallback;
+  if (o?.id === 'planner' || Array.isArray(o?.routines) || o?.doneMap) return 'planner';
+  const prefix = o?.kind === 'expense_budget' ? /^expense_budget_/
+    : o?.kind === 'expense_rule' ? /^expense_rule_/
+      : o?.kind === 'expense_recurring' ? /^expense_recurring_/
+        : null;
+  if (prefix) return /^[\w-]{1,80}$/.test(o.id || '') && prefix.test(o.id) ? o.id : fallback;
+  if (o?.id === 'expense_rules') return 'expense_rules';
+  if (o?.id === 'profile' || !o?.id) return 'profile';
+  return fallback;
+};

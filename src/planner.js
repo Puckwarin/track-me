@@ -79,7 +79,8 @@ async function savePlanner(next) {
   state.planner = { id: 'planner', ...payload };
   renderPlanner();
   try {
-    await setDoc(userDoc(state.uid, 'settings', 'planner'), payload);
+    setDoc(userDoc(state.uid, 'settings', 'planner'), payload)
+      .catch(e => toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err'));
   } catch (e) {
     toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err');
   }
@@ -214,9 +215,12 @@ export function mountPlanner(el, navigate) {
 
     if (kind === 'workout') {
       try {
-        await updateDoc(userDoc(state.uid, 'workout_records', id), {
+        updateDoc(userDoc(state.uid, 'workout_records', id), {
           status: checked ? 'done' : 'planned',
           updatedAt: new Date()
+        }).catch(err => {
+          chk.checked = !checked;
+          toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
         });
         toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว 💪' : 'เปลี่ยนกลับเป็นวางแผนไว้');
       } catch (err) {
