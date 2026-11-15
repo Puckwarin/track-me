@@ -84,15 +84,12 @@ function explainExpenseWriteError(err) {
   return err?.message || 'ไม่สามารถบันทึกข้อมูลได้';
 }
 
-async function saveTransactionRecord(record, prevEdit = null) {
+function saveTransactionRecord(record, prevEdit = null) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
   const targetMonth = record.date.slice(0, 7);
   const docId = prevEdit?.id || record.id;
-  try {
-    await setDoc(userDoc(state.uid, 'expense_records', docId), buildExpensePayload(record));
-  } catch (err) {
-    throw new Error(explainExpenseWriteError(err));
-  }
+  setDoc(userDoc(state.uid, 'expense_records', docId), buildExpensePayload(record))
+    .catch(err => toast(explainExpenseWriteError(err), 'err'));
   selectedMonth = targetMonth;
 }
 
@@ -104,7 +101,7 @@ async function saveBatchExpenseRecords(records) {
       records.slice(i, i + 400).forEach(r => {
         batch.set(userDoc(state.uid, 'expense_records', r.id), buildExpensePayload(r));
       });
-      await batch.commit();
+      batch.commit().catch(err => toast(explainExpenseWriteError(err), 'err'));
     }
   } catch (err) {
     throw new Error(explainExpenseWriteError(err));
@@ -114,25 +111,22 @@ async function saveBatchExpenseRecords(records) {
 async function deleteTransactionRecord(id, dateStr) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
   try {
-    await deleteDoc(userDoc(state.uid, 'expense_records', id));
+    deleteDoc(userDoc(state.uid, 'expense_records', id))
+      .catch(err => toast(explainExpenseWriteError(err), 'err'));
   } catch (err) {
     throw new Error(explainExpenseWriteError(err));
   }
   // หากรายการนี้ยังค้างอยู่ในเอกสารเก่า settings/exp_YYYY-MM ให้เอาออกด้วยเพื่อกันเด้งกลับ
   const m = (dateStr || localDateStr()).slice(0, 7);
-  const legacyDoc = (state.legacyExpenseDocs || []).find(d => d.id === `exp_${m}` || d.month === m);
+  const legacyDoc = (state.legacyExpenseDocs || []).find(d => !d.migratedAt && (d.id === `exp_${m}` || d.month === m));
   if (legacyDoc && Array.isArray(legacyDoc.items) && legacyDoc.items.some(x => x.id === id)) {
     const remaining = legacyDoc.items.filter(x => x.id !== id);
-    if (remaining.length) {
-      await setDoc(userDoc(state.uid, 'settings', legacyDoc.id), {
-        kind: 'expense_month',
-        month: m,
-        items: remaining,
-        updatedAt: new Date()
-      });
-    } else {
-      await deleteDoc(userDoc(state.uid, 'settings', legacyDoc.id));
-    }
+    setDoc(userDoc(state.uid, 'settings', legacyDoc.id), {
+      kind: 'expense_month',
+      month: m,
+      items: remaining,
+      updatedAt: new Date()
+    }, { merge: true }).catch(err => toast(explainExpenseWriteError(err), 'err'));
   }
 }
 
@@ -356,7 +350,7 @@ async function saveManualForm() {
   };
 
   try {
-    await saveTransactionRecord(record, editing);
+    saveTransactionRecord(record, editing);
     toast(editing ? 'อัปเดตรายการแล้ว' : (txType === 'income' ? 'บันทึกรายรับแล้ว 💰' : 'บันทึกรายจ่ายแล้ว 💸'));
     resetForm();
     if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
@@ -677,7 +671,11 @@ async function importSelectedStatementItems() {
         if (index >= 0) merged[index] = rule; else merged.push(rule);
       });
       try {
-        await setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true });
+        setDoc(userDoc(state.uid, 'settings', 'expense_rules'), { rules: merged, updatedAt: new Date().toISOString() }, { merge: true })
+          .catch(ruleErr => {
+            console.warn('Imported records, but could not save expense rules:', ruleErr?.code || ruleErr?.message);
+            toast('นำเข้ารายการแล้ว แต่บันทึกกฎหมวดหมู่ไม่สำเร็จ', 'err');
+          });
       } catch (ruleErr) {
         console.warn('Imported records, but could not save expense rules:', ruleErr?.code || ruleErr?.message);
         toast('นำเข้ารายการแล้ว แต่บันทึกกฎหมวดหมู่ไม่สำเร็จ', 'err');

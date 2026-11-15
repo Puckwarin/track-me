@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
-import { getGeminiKey, getGroqKey, parseReminderWithAI, explainGeminiError } from './nutrition.js';
+import { getGeminiKey, getGroqKey, getOpenRouterKey, parseReminderWithAI, explainGeminiError } from './nutrition.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -158,7 +158,7 @@ export function mountRemind(el) {
   </div>`;
 
   const syncAiBtn = () => {
-    const hasKey = Boolean(getGeminiKey() || getGroqKey());
+    const hasKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
     $r('#rm-ai-btn')?.classList.toggle('hidden', !hasKey);
   };
   syncAiBtn();

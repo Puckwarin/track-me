@@ -1,20 +1,62 @@
 import { $, esc, toNum, round1, openModal, toast } from './util.js';
-import { lookupPer100gWithProvider, getGeminiKey, getGroqKey, explainGeminiError } from './nutrition.js';
+import {
+  lookupPer100gWithProvider, getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError
+} from './nutrition.js';
 import { state } from './state.js';
 
 // แหล่งข้อมูลโภชนาการ (ทุกแหล่งใช้ฟรี ไม่ต้องผูกบัตร)
-//  all    = ค้นตามลำดับ: คลังในเครื่อง → USDA → Open Food Facts → AI (Groq → Gemini)
+//  all    = ค้นตามลำดับ: คลังในเครื่อง → USDA → Open Food Facts → AI (Gemini → Groq → OpenRouter)
 //  off    = Open Food Facts: สินค้าบรรจุภัณฑ์ทั่วโลกรวมของไทย + ค้นด้วยบาร์โค้ด (ไม่ต้องใช้คีย์, จำกัด ~10 ครั้ง/นาที)
-//  usda   = USDA FoodData Central: อาหารทั่วไป/วัตถุดิบ ค้นด้วยชื่อภาษาอังกฤษ (ต้องมีคีย์ฟรี)
-//  gemini = AI (Groq → Gemini): อาหารไทย/เมนูทั่วไป (ประมาณค่า)
+//  usda   = USDA FoodData Central: อาหารทั่วไป/วัตถุดิบ ค้นด้วยชื่อภาษาอังกฤษ (มี DEMO_KEY ให้ใช้)
+//  gemini = AI (Gemini → Groq → OpenRouter): อาหารไทย/เมนูทั่วไป (ประมาณค่า)
 export const SOURCES = {
   off: 'Open Food Facts — สินค้า/ขนมซอง/บาร์โค้ด (ไม่ต้องใช้คีย์)',
-  usda: 'USDA — วัตถุดิบทั่วไป พิมพ์ชื่ออังกฤษ (ใช้คีย์ฟรี)',
-  gemini: 'AI (Groq → Gemini) — อาหารไทย/เมนูทั่วไป (ประมาณค่า)'
+  usda: 'USDA — วัตถุดิบทั่วไป (DEMO_KEY พร้อมใช้)',
+  gemini: 'AI (Gemini → Groq → OpenRouter) — อาหารไทย/เมนูทั่วไป (ประมาณค่า)'
 };
-const K_USDA = 'usda_key', K_SRC = 'food_src';
-export const getUsdaKey = () => localStorage.getItem(K_USDA) || '';
-export const setUsdaKey = k => k ? localStorage.setItem(K_USDA, k.trim()) : localStorage.removeItem(K_USDA);
+const K_USDA = 'usda_key', K_SRC = 'food_src', USDA_DEMO_KEY = 'DEMO_KEY';
+export const getUsdaKey = () => localStorage.getItem(K_USDA) || USDA_DEMO_KEY;
+export const setUsdaKey = k => k && k.trim() !== USDA_DEMO_KEY
+  ? localStorage.setItem(K_USDA, k.trim())
+  : localStorage.removeItem(K_USDA);
+
+const THAI_FOOD_TRANSLATIONS = {
+  'ข้าวมันไก่': 'chicken rice', 'ข้าวผัด': 'fried rice', 'ข้าวเหนียว': 'sticky rice',
+  'ข้าวกล้อง': 'brown rice', 'ข้าวสวย': 'cooked white rice', 'ข้าวโอ๊ต': 'oats',
+  'ข้าวต้ม': 'rice porridge', 'ข้าวโพด': 'corn',
+  'ต้มยำกุ้ง': 'tom yum shrimp soup', 'ผัดไทย': 'pad thai', 'ส้มตำ': 'papaya salad',
+  'ก๋วยเตี๋ยว': 'rice noodles', 'หมูปิ้ง': 'grilled pork', 'หมูย่าง': 'grilled pork',
+  'หมูสับ': 'ground pork', 'หมูทอด': 'fried pork', 'ไก่ทอด': 'fried chicken',
+  'ไก่ต้ม': 'boiled chicken', 'น่องไก่': 'chicken drumstick', 'อกไก่': 'chicken breast',
+  'ไข่ต้ม': 'boiled egg', 'ไข่ดาว': 'fried egg', 'ไข่เจียว': 'omelet',
+  'ไข่ลวก': 'soft-boiled egg', 'ไข่ขาว': 'egg white', 'ไข่แดง': 'egg yolk',
+  'นมถั่วเหลือง': 'soy milk', 'มันฝรั่ง': 'potato', 'มันเทศ': 'sweet potato',
+  'มันบด': 'mashed potato', 'ผักโขม': 'spinach', 'บรอกโคลี': 'broccoli',
+  'กะหล่ำปลี': 'cabbage', 'ผักบุ้ง': 'water spinach', 'ถั่วลิสง': 'peanut',
+  'เนื้อวัว': 'beef', 'ปลากระป๋อง': 'canned fish', 'ปลาทู': 'mackerel',
+  'ทูน่า': 'tuna', 'แซลมอน': 'salmon', 'โยเกิร์ต': 'yogurt',
+  'อะโวคาโด': 'avocado', 'แอปเปิ้ล': 'apple', 'แอปเปิล': 'apple',
+  'สับปะรด': 'pineapple', 'แตงโม': 'watermelon', 'มะม่วง': 'mango',
+  'น้ำส้ม': 'orange juice', 'น้ำมะพร้าว': 'coconut water',
+  'น้ำตาล': 'sugar', 'น้ำปลา': 'fish sauce', 'น้ำมัน': 'cooking oil',
+  'ขนมปัง': 'bread', 'เต้าหู้': 'tofu', 'มะพร้าว': 'coconut',
+  'น้ำผึ้ง': 'honey', 'ฟักทอง': 'pumpkin', 'เห็ด': 'mushroom',
+  'กาแฟ': 'coffee', 'ชา': 'tea', 'โกโก้': 'cocoa',
+  'ไก่': 'chicken', 'หมู': 'pork', 'เนื้อ': 'beef', 'ปลา': 'fish',
+  'กุ้ง': 'shrimp', 'ไข่': 'egg', 'นม': 'milk', 'ชีส': 'cheese', 'ส้ม': 'orange',
+  'ข้าว': 'cooked rice', 'น้ำ': 'water', 'และ': 'and', 'กับ': 'and',
+  'มัน': 'potato', 'ถั่ว': 'beans', 'แครอท': 'carrot', 'แตงกวา': 'cucumber',
+  'มะเขือเทศ': 'tomato', 'หอมหัวใหญ่': 'onion', 'กระเทียม': 'garlic'
+};
+const thaiFoodTerms = Object.keys(THAI_FOOD_TRANSLATIONS)
+  .sort((a, b) => b.length - a.length)
+  .map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+const thaiFoodTermPattern = new RegExp(thaiFoodTerms.join('|'), 'g');
+
+export function translateThaiFoodQuery(query) {
+  return String(query || '').replace(thaiFoodTermPattern, term => ` ${THAI_FOOD_TRANSLATIONS[term]} `)
+    .replace(/\s+/g, ' ').trim();
+}
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : (typeof x === 'string' && x.trim() !== '' && Number.isFinite(+x) ? +x : null));
 const r1 = x => (x === null ? null : round1(x));
@@ -93,8 +135,8 @@ export async function testUsdaConnection() {
 }
 async function searchUsda(q) {
   const key = getUsdaKey();
-  if (!key) throw new Error('ยังไม่ได้ใส่ USDA API Key — ไปที่ ตั้งค่า (ขอฟรีที่ fdc.nal.usda.gov/api-key-signup)');
-  const u = new URLSearchParams({ api_key: key, query: q, pageSize: '12', dataType: 'Foundation,SR Legacy' });
+  const translatedQuery = translateThaiFoodQuery(q);
+  const u = new URLSearchParams({ api_key: key, query: translatedQuery, pageSize: '12', dataType: 'Foundation,SR Legacy' });
   const d = await getJson('https://api.nal.usda.gov/fdc/v1/foods/search?' + u);
   return (d.foods || []).map(f => {
     const get = no => num((f.foodNutrients || []).find(n => String(n.nutrientNumber) === no)?.value);
@@ -104,10 +146,28 @@ async function searchUsda(q) {
   }).filter(Boolean);
 }
 
+export async function testFoodSearchConnections() {
+  const usdaParams = new URLSearchParams({ api_key: getUsdaKey(), query: 'apple', pageSize: '1' });
+  const offQuery = encodeURIComponent('apple');
+  const checks = [
+    ['USDA FoodData Central', () => getJson(`https://api.nal.usda.gov/fdc/v1/foods/search?${usdaParams}`, 12000)],
+    ['Open Food Facts search', () => getJson(`https://search.openfoodfacts.org/search?q=${offQuery}&page_size=1&fields=code,product_name`)],
+    ['Open Food Facts fallback', () => getJson(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${offQuery}&search_simple=1&action=process&json=1&page_size=1&fields=code,product_name`)]
+  ];
+  return Promise.all(checks.map(async ([label, check]) => {
+    try {
+      await check();
+      return { label, ok: true, message: 'เชื่อมต่อได้' };
+    } catch (error) {
+      return { label, ok: false, message: error?.message || 'เชื่อมต่อไม่สำเร็จ' };
+    }
+  }));
+}
+
 async function searchAI(q) {
-  if (!getGroqKey() && !getGeminiKey()) throw new Error('NO_KEY');
+  if (!getGroqKey() && !getGeminiKey() && !getOpenRouterKey()) throw new Error('NO_KEY');
   const { result: r, provider } = await lookupPer100gWithProvider(q);
-  const srcKey = provider === 'Groq' ? 'groq' : 'gemini';
+  const srcKey = provider === 'Groq' ? 'groq' : provider === 'OpenRouter' ? 'openrouter' : 'gemini';
   return [{
     source: srcKey,
     name: r.name || q,
@@ -185,8 +245,9 @@ export async function detectBarcode(file) {
 export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, onSaveLibrary }) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 p-1"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="flex gap-2"><input id="os-q" class="input" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button></div>
-    <p id="os-hint" class="text-xs text-slate-500 mt-2">ค้นหาอัตโนมัติตามลำดับ: คลังอาหารในเครื่อง → USDA → Open Food Facts → AI (Groq → Gemini)</p>
+    <div class="flex flex-wrap gap-2"><input id="os-q" class="input min-w-[12rem] flex-1" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button><button id="os-test-connections" type="button" class="btn btn-soft shrink-0">ตรวจการเชื่อมต่อ</button></div>
+    <p id="os-hint" class="text-xs text-slate-500 mt-2">ค้นหาอัตโนมัติตามลำดับ: คลังอาหารในเครื่อง → USDA (DEMO_KEY) → Open Food Facts → AI (Gemini → Groq → OpenRouter)</p>
+    <p id="os-connection-status" class="text-xs text-slate-500" aria-live="polite"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
     <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-forward"></i> ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
     <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
@@ -211,7 +272,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       $('#os-out', m.el).textContent = `${Math.round(p.calories * k)} kcal · P ${round1((p.protein || 0) * k)} · C ${round1((p.carbs || 0) * k)} · F ${round1((p.fat || 0) * k)}`;
     }
   };
-  const sourceLabel = src => ({ local: 'คลังอาหารของฉัน', off: 'Open Food Facts', usda: 'USDA', groq: 'Groq AI', gemini: 'Gemini AI' })[src] || src;
+  const sourceLabel = src => ({ local: 'คลังอาหารของฉัน', off: 'Open Food Facts', usda: 'USDA', groq: 'Groq AI', gemini: 'Gemini AI', openrouter: 'OpenRouter AI' })[src] || src;
   const renderResults = (errors = [], canContinue = false) => {
     const warnings = errors.map(x => `<p class="text-xs ${x.missing ? 'text-amber-700' : 'text-rose-600'} py-1"><b>${esc(x.label)}:</b> ${esc(x.message)}</p>`).join('');
     const doneBanner = results.length ? `<p class="text-xs text-green-700 font-semibold py-1">✓ พบ ${results.length} รายการ (ค้นหาเสร็จสิ้น)</p>` : '';
@@ -277,18 +338,18 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       }
     }
 
-    // Stage 3: AI Fallback (Groq -> Gemini multi-model)
+    // Stage 3: AI fallback (Gemini -> Groq -> OpenRouter)
     if (startStage <= 3 && !isBarcode) {
-      if (getGroqKey() || getGeminiKey()) {
-        setStatus('ยังไม่พบในฐานข้อมูล กำลังประมาณค่าด้วย AI (Groq → Gemini)...');
+      if (getGroqKey() || getGeminiKey() || getOpenRouterKey()) {
+        setStatus('ยังไม่พบในฐานข้อมูล กำลังประมาณค่าด้วย AI (Gemini → Groq → OpenRouter)...');
         try {
           const aiHits = await searchAI(q);
           if (aiHits.length) results.push(...aiHits);
         } catch (e) {
-          errors.push({ label: 'AI (Groq / Gemini)', message: e?.message === 'NO_KEY' ? explainGeminiError(e) : (e?.message || 'ค้นหาไม่สำเร็จ'), missing: e?.message === 'NO_KEY' });
+          errors.push({ label: 'AI', message: e?.message === 'NO_KEY' ? explainGeminiError(e) : (e?.message || 'ค้นหาไม่สำเร็จ'), missing: e?.message === 'NO_KEY' });
         }
       } else {
-        errors.push({ label: 'AI', message: 'ยังไม่พบในคลัง/USDA/OFF — ใส่คีย์ Groq หรือ Gemini ใน ตั้งค่า เพื่อเปิดค้นหาอัตโนมัติด้วย AI', missing: true });
+        errors.push({ label: 'AI', message: 'ยังไม่พบในคลัง/USDA/OFF — ใส่คีย์ Gemini, Groq หรือ OpenRouter ใน ตั้งค่า เพื่อเปิดค้นหาอัตโนมัติด้วย AI', missing: true });
       }
     }
 
@@ -306,6 +367,20 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
     await runPipelineFromStage(q, 0, false);
   };
   $('#os-go', m.el).addEventListener('click', run);
+  $('#os-test-connections', m.el).addEventListener('click', async event => {
+    const btn = event.currentTarget, status = $('#os-connection-status', m.el);
+    btn.disabled = true;
+    status.className = 'text-xs text-slate-500';
+    status.textContent = 'กำลังตรวจ USDA และ Open Food Facts (ไม่เรียก AI)...';
+    try {
+      const checks = await testFoodSearchConnections();
+      const failed = checks.filter(check => !check.ok);
+      status.className = failed.length ? 'text-xs text-amber-700' : 'text-xs text-green-700';
+      status.textContent = checks.map(check => `${check.ok ? '✓' : '✕'} ${check.label}: ${check.message}`).join(' · ');
+    } finally {
+      btn.disabled = false;
+    }
+  });
   $('#os-next', m.el).addEventListener('click', () => {
     if (activeQuery && pipelineStage < 4) runPipelineFromStage(activeQuery, pipelineStage, true);
   });

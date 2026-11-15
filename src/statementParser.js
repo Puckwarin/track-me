@@ -1,5 +1,5 @@
 // Thai bank statement parser. Raw balance/account columns are discarded.
-const MONEY = '\\d{1,3}(?:,\\d{3})*\\.\\d{2}';
+const MONEY = '\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?';
 
 function cleanMerchant(value) {
   return String(value || '').replace(/\b(?:เลขที่บัญชี|บัญชีเลขที่)\s*\d{8,15}\b/gi, '')
@@ -8,16 +8,29 @@ function cleanMerchant(value) {
 
 export function parseStatementLine(rawLine, lineNumber = 1) {
   const line = String(rawLine || '').replace(/\s+/g, ' ').trim();
-  const re = new RegExp('^(\\d{2})-(\\d{2})-(\\d{2})\\s+(\\d{2}:\\d{2})\\s+(.+?)\\s+(' + MONEY + ')\\s+(' + MONEY + ')(?:\\s+(.*))?$');
+  const re = new RegExp('^(\\d{2})[\\/-](\\d{2})[\\/-](\\d{2,4})\\s+(\\d{2}:\\d{2})\\s+(.+?)\\s+(' + MONEY + ')\\s+(' + MONEY + ')(?:\\s+(.*))?$');
   const m = line.match(re);
   if (!m) return { lineNumber, error: 'ไม่รู้จักรูปแบบบรรทัด Statement' };
-  const [, dd, mm, yy, time, description, amountText, _balance, tail = ''] = m;
-  const year = Number(yy) >= 70 ? 1900 + Number(yy) : 2000 + Number(yy);
+  const [, dd, mm, yearText, time, description, amountText, _balance, tail = ''] = m;
+  const yy = yearText.slice(-2);
+  const shortYear = Number(yy);
+  const year = shortYear >= 55 ? 2500 + shortYear - 543 : 2000 + shortYear;
+  const dateObj = new Date(year, Number(mm) - 1, Number(dd));
+  const isValidDate = dateObj.getFullYear() === year
+    && dateObj.getMonth() === Number(mm) - 1
+    && dateObj.getDate() === Number(dd);
+  if (!isValidDate) return { lineNumber, error: `วันที่ไม่มีอยู่จริง: ${dd}-${mm}-${yearText}` };
+  const [hh, min] = time.split(':').map(Number);
+  if (hh > 23 || min > 59) return { lineNumber, error: `เวลาไม่ถูกต้อง: ${time}` };
+  const futureLimit = new Date();
+  futureLimit.setDate(futureLimit.getDate() + 7);
+  if (dateObj > futureLimit) return { lineNumber, error: `วันที่เป็นอนาคตเกินไป: ${dd}-${mm}-${yearText}` };
   const date = String(year) + '-' + mm + '-' + dd;
   const amount = Number(amountText.replace(/,/g, ''));
   if (!Number.isFinite(amount) || amount <= 0) return { lineNumber, error: 'ยอดเงินไม่ถูกต้อง' };
   const detail = (description + ' ' + tail).trim();
-  const isIncome = /รับเงินเดือน|รับโอน|โอนเข้า|เงินเข้า|ดอกเบี้ย|คืนเงิน/i.test(detail);
+  const isRefund = /คืนเงิน|โอนคืน|เงินคืน|refund|cashback|เติมเงิน.*(?:true\s*money|truemoney|wallet|rabbit|shopeepay|linepay|wepay)|โอนเข้ากระเป๋า/i.test(detail);
+  const isIncome = isRefund || /รับเงินเดือน|รับโอน|โอนเข้า|เงินเข้า|ดอกเบี้ย/i.test(detail);
   const isTransfer = /โอนเงิน|โอนไป|โอนออก|โอนระหว่าง/i.test(detail);
   const ownTransfer = isTransfer && /บัญชีตัวเอง|บัญชีของตนเอง|บัญชีตนเอง|ระหว่างบัญชี|บัญชีของฉัน/i.test(detail);
   const type = ownTransfer ? 'transfer' : (isIncome ? 'income' : 'expense');

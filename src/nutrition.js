@@ -3,11 +3,137 @@ const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash
 const GEMINI_TIMEOUT_MS = 35000;
 const KEY_NAME = 'gemini_key';
 const GROQ_KEY = 'groq_key';
+const OPENROUTER_KEY = 'openrouter_key';
+const COOLDOWN_KEY_PREFIX = 'trackme_ai_cooldown_';
+const DEFAULT_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const MODEL_CACHE_MS = 5 * 60 * 1000;
+const cooldowns = new Map();
+let groqModelsCache = { key: '', until: 0, models: [] };
+let openRouterModelsCache = { key: '', until: 0, models: [] };
+
 export const getGroqKey = () => localStorage.getItem(GROQ_KEY) || '';
 export const setGroqKey = k => k ? localStorage.setItem(GROQ_KEY, k.trim()) : localStorage.removeItem(GROQ_KEY);
-
 export const getGeminiKey = () => localStorage.getItem(KEY_NAME) || '';
 export const setGeminiKey = k => k ? localStorage.setItem(KEY_NAME, k.trim()) : localStorage.removeItem(KEY_NAME);
+export const getOpenRouterKey = () => localStorage.getItem(OPENROUTER_KEY) || '';
+export const setOpenRouterKey = k => k ? localStorage.setItem(OPENROUTER_KEY, k.trim()) : localStorage.removeItem(OPENROUTER_KEY);
+
+export function getProviderCooldownMs(provider) {
+  const key = COOLDOWN_KEY_PREFIX + provider.toLowerCase();
+  let until = cooldowns.get(key) || 0;
+  try {
+    until = Math.max(until, Number(localStorage.getItem(key)) || 0);
+  } catch (error) {
+    console.warn('Could not read AI quota wait:', error?.message);
+  }
+  const remaining = Math.max(0, until - Date.now());
+  if (!remaining) {
+    cooldowns.delete(key);
+    try { localStorage.removeItem(key); } catch (error) {
+      console.warn('Could not clear expired AI quota wait:', error?.message);
+    }
+  }
+  return remaining;
+}
+
+export function rememberProviderCooldown(provider, cooldownMs = DEFAULT_COOLDOWN_MS) {
+  const key = COOLDOWN_KEY_PREFIX + provider.toLowerCase();
+  const until = Date.now() + Math.min(MAX_COOLDOWN_MS, Math.max(1000, Number(cooldownMs) || DEFAULT_COOLDOWN_MS));
+  cooldowns.set(key, until);
+  try {
+    localStorage.setItem(key, String(until));
+  } catch (error) {
+    console.warn('Could not persist AI quota wait:', error?.message);
+  }
+}
+
+export function clearProviderCooldown(provider) {
+  const key = COOLDOWN_KEY_PREFIX + provider.toLowerCase();
+  cooldowns.delete(key);
+  try { localStorage.removeItem(key); } catch (error) {
+    console.warn('Could not clear AI quota wait:', error?.message);
+  }
+}
+
+export function getRetryAfterMs(response, data = {}) {
+  const retryAfter = response?.headers?.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.min(MAX_COOLDOWN_MS, Math.max(1000, seconds * 1000));
+    const dateDelay = Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(dateDelay) && dateDelay > 0) return Math.min(MAX_COOLDOWN_MS, dateDelay);
+  }
+
+  const details = Array.isArray(data?.error?.details) ? data.error.details : [];
+  const retryInfo = details.find(detail =>
+    String(detail?.['@type'] || '').includes('RetryInfo')
+  )?.retryDelay;
+  const retryInfoText = String(retryInfo || '').match(/^(\d+(?:\.\d+)?)(ms|s|m|h)$/i);
+  if (retryInfoText) {
+    const multiplier = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[retryInfoText[2].toLowerCase()];
+    return Math.min(MAX_COOLDOWN_MS, Math.max(1000, Number(retryInfoText[1]) * multiplier));
+  }
+  const retryText = String(retryInfo || data?.error?.message || '').match(/(?:retry|try again)[^0-9]{0,20}(\d+(?:\.\d+)?)\s*(ms|s|m|h)/i);
+  if (retryText) {
+    const multiplier = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[retryText[2].toLowerCase()];
+    return Math.min(MAX_COOLDOWN_MS, Math.max(1000, Number(retryText[1]) * multiplier));
+  }
+  return DEFAULT_COOLDOWN_MS;
+}
+
+export async function discoverGroqModels(key = getGroqKey()) {
+  if (!key) return [];
+  if (groqModelsCache.key === key && groqModelsCache.until > Date.now()) return groqModelsCache.models;
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    const models = (data.data || []).map(model => String(model.id || '')).filter(Boolean);
+    groqModelsCache = { key, until: Date.now() + MODEL_CACHE_MS, models };
+    return models;
+  } catch (error) {
+    console.warn('Could not discover Groq models:', error?.message);
+    return [];
+  }
+}
+
+export async function discoverOpenRouterModels({ requireTools = false, requireImage = false } = {}) {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('NO_KEY');
+  if (openRouterModelsCache.key !== key || openRouterModelsCache.until <= Date.now()) {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+      error.status = response.status;
+      error.invalidKey = response.status === 401 || response.status === 403;
+      error.quotaExceeded = response.status === 429;
+      error.cooldownMs = getRetryAfterMs(response, data);
+      if (error.quotaExceeded) rememberProviderCooldown('OpenRouter', error.cooldownMs);
+      throw error;
+    }
+    const models = (data.data || []).filter(model => {
+      const hasPricing = model.pricing?.prompt != null && model.pricing?.completion != null;
+      const isFree = String(model.id || '').endsWith(':free')
+        || (hasPricing && Number(model.pricing.prompt) === 0 && Number(model.pricing.completion) === 0);
+      const modality = String(model.architecture?.modality || '');
+      const inputModality = modality.split('->')[0];
+      return model.id && isFree && (!modality || /(^|[+])text($|[+])/i.test(inputModality));
+    });
+    openRouterModelsCache = { key, until: Date.now() + MODEL_CACHE_MS, models };
+  }
+  return openRouterModelsCache.models
+    .filter(model => !requireTools || (model.supported_parameters || []).includes('tools'))
+    .filter(model => !requireImage || /image/i.test(model.architecture?.modality || ''))
+    .map(model => model.id);
+}
 
 async function discoverFallbackGeminiModels(key) {
   try {
@@ -68,6 +194,7 @@ async function requestGeminiModel(model, key, parts, schema) {
       err.invalidKey = (res.status === 400 && /api.?key|invalid/i.test(message)) || res.status === 403;
       err.modelNotFound = res.status === 404;
       err.quotaExceeded = res.status === 429 || /quota|resource.?exhausted/i.test(message);
+      if (err.quotaExceeded) err.cooldownMs = getRetryAfterMs(res, data);
       err.serverBusy = res.status === 503 || /high demand|temporarily unavailable|overloaded/i.test(message);
       err.retryable = [500, 502, 503, 504].includes(res.status) || /high demand|temporarily unavailable|overloaded/i.test(message);
       if (err.retryable && attempt < 1) {
@@ -118,7 +245,8 @@ async function callGeminiProvider(parts, schema) {
   const last = tried[tried.length - 1]?.error;
   const summary = tried.map(x => `${x.model}: ${x.error.status || ''} ${x.error.message}`).join(' | ');
   const err = new Error(summary || last?.message || 'Gemini ไม่พร้อมใช้งาน');
-  err.quotaExceeded = tried.length > 0 && tried.every(x => x.error.quotaExceeded);
+  err.quotaExceeded = tried.some(x => x.error.quotaExceeded);
+  err.cooldownMs = Math.max(0, ...tried.map(x => x.error.cooldownMs || 0));
   err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
   err.timeoutError = tried.length > 0 && tried.every(x => x.error.timeoutError);
   err.networkError = tried.length > 0 && tried.every(x => x.error.networkError);
@@ -138,25 +266,16 @@ function schemaSummary(schema) {
   }).join(', ');
 }
 
-async function fetchGroqModels(key) {
-  try {
-    const mRes = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: { Authorization: 'Bearer ' + key },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!mRes.ok) return [];
-    const mData = await mRes.json().catch(() => ({}));
-    return (mData.data || []).map(x => x.id).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 async function callGroq(parts, schema) {
   const key = getGroqKey();
   if (!key) throw new Error('NO_KEY');
   const hasImage = parts.some(p => p.inline_data);
-  let models = [...(hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS)];
+  const discovered = await discoverGroqModels(key);
+  const fallbackModels = hasImage ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  const compatibleDiscovered = discovered.filter(id => hasImage
+    ? /vision|llava|pixtral/i.test(id)
+    : !/whisper|tts|guard|embed|vision|llava|pixtral/i.test(id));
+  let models = [...new Set([...fallbackModels, ...compatibleDiscovered])].slice(0, 6);
   const contentParts = parts.map(p => p.inline_data
     ? { type: 'image_url', image_url: { url: 'data:' + p.inline_data.mime_type + ';base64,' + p.inline_data.data } }
     : { type: 'text', text: p.text || '' });
@@ -190,7 +309,7 @@ async function callGroq(parts, schema) {
   };
 
   let lastErr = null;
-  let discovered = false;
+  let quotaWaitMs = 0;
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     let { res, data, fetchErr } = await sendReq(model, true);
@@ -233,39 +352,138 @@ async function callGroq(parts, schema) {
     e.status = res.status;
     e.invalidKey = res.status === 401 || res.status === 403;
     e.quotaExceeded = [402, 429].includes(res.status) || /quota|rate.?limit/i.test(e.message);
+    if (e.quotaExceeded) {
+      e.cooldownMs = getRetryAfterMs(res, data);
+      quotaWaitMs = Math.max(quotaWaitMs, e.cooldownMs);
+    }
     lastErr = e;
     if (e.invalidKey) throw e;
-    // ถ้าโมเดลวิชันหลักไม่มีในบัญชี ลองค้นหาโมเดลวิชันที่เปิดใช้งานอยู่จริงจากบัญชีนี้เพิ่มอีก 1 รอบ
-    if (hasImage && !discovered && i === models.length - 1) {
-      discovered = true;
-      const available = await fetchGroqModels(key);
-      const extraVision = available.filter(id => !models.includes(id) && /vision|llava|pixtral/i.test(id));
-      if (extraVision.length) models = [...models, ...extraVision];
-    }
   }
-  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  const error = lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  if (quotaWaitMs) {
+    error.quotaExceeded = true;
+    error.cooldownMs = quotaWaitMs;
+  }
+  throw error;
 }
 
-async function callAI(parts, schema, { order = 'gemini-first', includeMeta = false } = {}) {
-  const geminiEntry = ['Gemini', getGeminiKey(), () => callGeminiProvider(parts, schema)];
-  const groqEntry = ['Groq', getGroqKey(), () => callGroq(parts, schema)];
-  const providers = (order === 'groq-first' ? [groqEntry, geminiEntry] : [geminiEntry, groqEntry]).filter(x => x[1]);
+async function callOpenRouter(parts, schema) {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('NO_KEY');
+  const models = await discoverOpenRouterModels({ requireImage: parts.some(part => part.inline_data) });
+  if (!models.length) throw new Error('OpenRouter ยังไม่พบโมเดลฟรีที่ใช้งานได้');
+  const content = parts.map(part => part.inline_data
+    ? { type: 'image_url', image_url: { url: `data:${part.inline_data.mime_type};base64,${part.inline_data.data}` } }
+    : { type: 'text', text: part.text || '' });
+  const userContent = parts.some(part => part.inline_data) ? content : content.map(part => part.text).join('\n');
+  let lastError = null;
+  let quotaWaitMs = 0;
+
+  for (const model of models.slice(0, 6)) {
+    let response;
+    try {
+      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + key,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'Track Me'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: `Return only one valid JSON object matching: ${schemaSummary(schema)}` },
+            { role: 'user', content: userContent }
+          ],
+          temperature: 0,
+          max_tokens: 1200
+        }),
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
+      });
+    } catch (cause) {
+      const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
+      lastError = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก OpenRouter' : (cause.message || 'OpenRouter network error'));
+      lastError.timeoutError = isTimeout;
+      lastError.networkError = !isTimeout;
+      continue;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+      error.status = response.status;
+      error.invalidKey = response.status === 401 || response.status === 403;
+      error.quotaExceeded = response.status === 429 || /rate.?limit|quota/i.test(error.message);
+      if (error.quotaExceeded) {
+        error.cooldownMs = getRetryAfterMs(response, data);
+        quotaWaitMs = Math.max(quotaWaitMs, error.cooldownMs);
+      }
+      lastError = error;
+      if (error.invalidKey) throw error;
+      continue;
+    }
+
+    const text = data?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) {
+      lastError = new Error('OpenRouter ไม่ส่งผลลัพธ์กลับมา');
+      continue;
+    }
+    try {
+      const cleaned = text.replace(/```json|```/gi, '').trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+    } catch {
+      lastError = new Error('OpenRouter ตอบกลับไม่ใช่ JSON ที่ถูกต้อง');
+    }
+  }
+
+  const error = lastError || new Error('OpenRouter ไม่พร้อมใช้งาน');
+  if (quotaWaitMs) {
+    error.quotaExceeded = true;
+    error.cooldownMs = quotaWaitMs;
+  }
+  throw error;
+}
+
+function cooldownMessage(provider, cooldownMs) {
+  const minutes = Math.max(1, Math.ceil(cooldownMs / 60_000));
+  return `${provider}: รอโควตาอีกประมาณ ${minutes} นาที`;
+}
+
+async function callAI(parts, schema, { includeMeta = false } = {}) {
+  const providers = [
+    ['Gemini', getGeminiKey(), () => callGeminiProvider(parts, schema)],
+    ['Groq', getGroqKey(), () => callGroq(parts, schema)],
+    ['OpenRouter', getOpenRouterKey(), () => callOpenRouter(parts, schema)]
+  ].filter(provider => provider[1]);
   if (!providers.length) throw new Error('NO_KEY');
   const errors = [];
-  for (let i = 0; i < providers.length; i++) {
-    const [name, , run] = providers[i];
+  let attempted = 0;
+  let quotaExceeded = false;
+  for (const [name, , run] of providers) {
+    const cooldownMs = getProviderCooldownMs(name);
+    if (cooldownMs) {
+      errors.push(cooldownMessage(name, cooldownMs));
+      continue;
+    }
+    attempted++;
     try {
       const result = await run();
-      if (i > 0) window.dispatchEvent(new CustomEvent('trackme:ai-fallback', { detail: { provider: name, failed: errors.length } }));
+      clearProviderCooldown(name);
+      if (attempted > 1 || errors.length) window.dispatchEvent(new CustomEvent('trackme:ai-fallback', { detail: { provider: name, failed: errors.length } }));
       return includeMeta ? { result, provider: name } : result;
     } catch (e) {
-      if (providers.length === 1) throw e;
+      if (e.quotaExceeded) {
+        quotaExceeded = true;
+        rememberProviderCooldown(name, e.cooldownMs);
+      }
       errors.push(name + ': ' + (e.message || 'error'));
     }
   }
-  const err = new Error('AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — ' + errors.join(' · '));
+  const err = new Error(attempted ? 'AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — ' + errors.join(' · ') : 'AI ทุกแหล่งที่ตั้งค่าไว้กำลังรอโควตา — ' + errors.join(' · '));
   err.fallbackErrors = errors;
-  err.quotaExceeded = errors.some(x => /429|quota|limit/i.test(x));
+  err.quotaExceeded = quotaExceeded || errors.some(x => /429|quota|limit|รอโควตา/i.test(x));
   throw err;
 }
 
@@ -303,7 +521,7 @@ export function lookupPer100g(name) {
     type: 'OBJECT',
     properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
     required: ['name', 'calories', 'protein', 'carbs', 'fat']
-  }, { order: 'groq-first' });
+  });
 }
 
 export function lookupPer100gWithProvider(name) {
@@ -311,7 +529,7 @@ export function lookupPer100gWithProvider(name) {
     type: 'OBJECT',
     properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
     required: ['name', 'calories', 'protein', 'carbs', 'fat']
-  }, { order: 'groq-first', includeMeta: true });
+  }, { includeMeta: true });
 }
 
 export async function estimateFromPhoto(file) {
@@ -339,34 +557,53 @@ function labelNumber(text, patterns) {
   for(const pattern of patterns){const m=text.match(pattern);if(m){const n=Number(m[1].replace(',','.'));if(Number.isFinite(n))return n;}}
   return null;
 }
+async function readNutritionLabelLocally(file) {
+  const ocr = await tryLabelOcr(file);
+  const calories = labelNumber(ocr, [/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
+  const protein = labelNumber(ocr, [/(?:protein|โปรตีน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
+  const carbs = labelNumber(ocr, [/(?:total carbohydrate|carbohydrate|คาร์โบไฮเดรต)[^\d]{0,32}(\d+(?:[.,]\d+)?)/i]);
+  const fat = labelNumber(ocr, [/(?:total fat|fat|ไขมัน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
+  if ([calories, protein, carbs, fat].every(value => value === null)) return null;
+  return {
+    name: null,
+    basis: /100\s*(?:g|กรัม|ml|มล)/i.test(ocr) ? 'per_100g' : 'unknown',
+    servingSizeText: null,
+    servingGrams: null,
+    calories,
+    protein,
+    carbs,
+    fat,
+    sugar: null,
+    sodium: null,
+    notes: 'อ่านด้วย OCR ในเครื่อง — โปรดตรวจตัวเลขและหน่วยกับรูปฉลากก่อนบันทึก'
+  };
+}
 export async function readNutritionLabel(file) {
-  const hasAiKey = Boolean(getGeminiKey() || getGroqKey());
+  const hasAiKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
   if (!hasAiKey) {
-    const ocr = await tryLabelOcr(file);
-    const kcal = labelNumber(ocr, [/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
-    const protein = labelNumber(ocr, [/(?:protein|โปรตีน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
-    const carbs = labelNumber(ocr, [/(?:total carbohydrate|carbohydrate|คาร์โบไฮเดรต)[^\d]{0,32}(\d+(?:[.,]\d+)?)/i]);
-    const fat = labelNumber(ocr, [/(?:total fat|fat|ไขมัน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
-    if ([kcal, protein, carbs, fat].some(x => x !== null)) {
-      return {
-        name: null, basis: /100\s*(?:g|กรัม|ml|มล)/i.test(ocr) ? 'per_100g' : 'unknown',
-        servingSizeText: null, servingGrams: null, calories: kcal, protein, carbs, fat, sugar: null, sodium: null,
-        notes: 'อ่านเบื้องต้นด้วย OCR ในเครื่อง (ไม่ได้ตั้งคีย์ AI) — โปรดตรวจตัวเลขและหน่วยกับรูปฉลากก่อนบันทึก'
-      };
-    }
+    const localResult = await readNutritionLabelLocally(file);
+    if (localResult) return localResult;
     throw new Error('NO_KEY');
   }
   const image = await imageToInlineData(file, 1200, 0.82);
   const instruction = 'นี่คือฉลากโภชนาการภาษาไทยหรืออังกฤษ. อ่านเฉพาะตัวเลขที่พิมพ์จริง ห้ามประมาณหรือเดา; ค่าอ่านไม่ชัดให้เป็น null. basis เป็น per_serving, per_100g หรือ unknown; ระบุ servingSizeText/servingGrams หากชัด. ส่ง JSON ตาม schema';
-  return callAI([{ text: instruction }, { inline_data: image }], {
-    type: 'OBJECT', properties: { name: { type: 'STRING', nullable: true }, basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] }, servingSizeText: { type: 'STRING', nullable: true }, servingGrams: N, calories: N, protein: N, carbs: N, fat: N, sugar: N, sodium: N, notes: { type: 'STRING', nullable: true } },
-    required: ['basis', 'servingSizeText', 'servingGrams', 'calories', 'protein', 'carbs', 'fat', 'sugar', 'sodium']
-  });
+  try {
+    return await callAI([{ text: instruction }, { inline_data: image }], {
+      type: 'OBJECT', properties: { name: { type: 'STRING', nullable: true }, basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] }, servingSizeText: { type: 'STRING', nullable: true }, servingGrams: N, calories: N, protein: N, carbs: N, fat: N, sugar: N, sodium: N, notes: { type: 'STRING', nullable: true } },
+      required: ['basis', 'servingSizeText', 'servingGrams', 'calories', 'protein', 'carbs', 'fat', 'sugar', 'sodium']
+    });
+  } catch (error) {
+    if (!error.quotaExceeded) throw error;
+    const localResult = await readNutritionLabelLocally(file);
+    if (localResult) return localResult;
+    error.message += ' · OCR ในเครื่องอ่านตัวเลขฉลากไม่สำเร็จ';
+    throw error;
+  }
 }
 
 // วิเคราะห์รูปอาหารหรือฉลากโภชนาการในปุ่มเดียว (ลดขั้นตอนบนมือถือ)
 export async function analyzeFoodImage(file) {
-  const hasAiKey = Boolean(getGeminiKey() || getGroqKey());
+  const hasAiKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
   if (!hasAiKey) {
     const label = await readNutritionLabel(file);
     return { kind: 'label', ...label };
@@ -376,24 +613,32 @@ export async function analyzeFoodImage(file) {
     '- ถ้าเป็น label: อ่านเฉพาะตัวเลขที่พิมพ์จริง ห้ามเดา (ค่าที่ไม่ชัดให้ null), basis เป็น per_serving | per_100g | unknown, ระบุ servingSizeText/servingGrams ถ้าชัด\n' +
     '- ถ้าเป็น dish: ประมาณชื่อเมนู และค่า kcal, protein, carbs, fat ของทั้งจาน (basis="per_serving")\n' +
     'ตอบเป็น JSON ตาม schema เท่านั้น';
-  return callAI([{ text: instruction }, { inline_data: image }], {
-    type: 'OBJECT',
-    properties: {
-      kind: { type: 'STRING', enum: ['dish', 'label'] },
-      name: { type: 'STRING', nullable: true },
-      basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] },
-      servingSizeText: { type: 'STRING', nullable: true },
-      servingGrams: N,
-      calories: N,
-      protein: N,
-      carbs: N,
-      fat: N,
-      sugar: N,
-      sodium: N,
-      notes: { type: 'STRING', nullable: true }
-    },
-    required: ['kind', 'name', 'calories', 'protein', 'carbs', 'fat']
-  });
+  try {
+    return await callAI([{ text: instruction }, { inline_data: image }], {
+      type: 'OBJECT',
+      properties: {
+        kind: { type: 'STRING', enum: ['dish', 'label'] },
+        name: { type: 'STRING', nullable: true },
+        basis: { type: 'STRING', enum: ['per_serving', 'per_100g', 'unknown'] },
+        servingSizeText: { type: 'STRING', nullable: true },
+        servingGrams: N,
+        calories: N,
+        protein: N,
+        carbs: N,
+        fat: N,
+        sugar: N,
+        sodium: N,
+        notes: { type: 'STRING', nullable: true }
+      },
+      required: ['kind', 'name', 'calories', 'protein', 'carbs', 'fat']
+    });
+  } catch (error) {
+    if (!error.quotaExceeded) throw error;
+    const localResult = await readNutritionLabelLocally(file);
+    if (localResult) return { kind: 'label', ...localResult };
+    error.message += ' · OCR ในเครื่องอ่านฉลากได้ไม่สำเร็จ';
+    throw error;
+  }
 }
 
 // วิเคราะห์ภาพในหน่วยความจำชั่วคราว ไม่บันทึกไฟล์ภาพลงแอป
@@ -466,7 +711,7 @@ export async function parseReminderWithAI(text, today, existingTitles = []) {
       note: { type: 'STRING', nullable: true }
     },
     required: ['title', 'kind', 'nextDate', 'remindDays', 'ruleKind']
-  }, { order: 'groq-first' });
+  });
 }
 
 // อ่านข้อมูลจากซองอาหารสัตว์เลี้ยง (ไม่เก็บไฟล์ภาพ)
@@ -539,9 +784,11 @@ export async function testGeminiConnection() {
         properties: { ok: { type: 'BOOLEAN' } },
         required: ['ok']
       });
+      clearProviderCooldown('Gemini');
       return { ok: true, model, details };
     } catch (e) {
       if (e.invalidKey) throw e;
+      if (e.quotaExceeded) rememberProviderCooldown('Gemini', e.cooldownMs);
       details.push(`${model}: ${e.status ? `HTTP ${e.status} ` : ''}${e.message}`);
     }
   }
@@ -563,6 +810,10 @@ export async function testGroqConnection() {
     const err = new Error(msg);
     err.invalidKey = mRes.status === 401 || mRes.status === 403;
     err.quotaExceeded = mRes.status === 429;
+    if (err.quotaExceeded) {
+      err.cooldownMs = getRetryAfterMs(mRes, mData);
+      rememberProviderCooldown('Groq', err.cooldownMs);
+    }
     throw err;
   }
   const ids = (mData.data || []).map(x => x.id);
@@ -579,14 +830,57 @@ export async function testGroqConnection() {
   const cData = await cRes.json().catch(() => ({}));
   if (!cRes.ok) {
     const err = new Error(cData?.error?.message || `HTTP ${cRes.status}`);
-    err.quotaExceeded = cRes.status === 429;
+    err.invalidKey = cRes.status === 401 || cRes.status === 403;
+    err.quotaExceeded = [402, 429].includes(cRes.status) || /quota|rate.?limit/i.test(err.message);
+    if (err.quotaExceeded) {
+      err.cooldownMs = getRetryAfterMs(cRes, cData);
+      rememberProviderCooldown('Groq', err.cooldownMs);
+    }
     throw err;
   }
+  clearProviderCooldown('Groq');
   return { ok: true, model: picked, visionModel };
 }
 
+export async function testOpenRouterConnection() {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('NO_KEY');
+  const models = await discoverOpenRouterModels();
+  if (!models.length) throw new Error('ไม่พบโมเดลฟรีของ OpenRouter');
+  const model = models[0];
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + key,
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'Track Me'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+      max_tokens: 4
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+    error.invalidKey = response.status === 401 || response.status === 403;
+    error.quotaExceeded = response.status === 429;
+    if (error.quotaExceeded) {
+      error.cooldownMs = getRetryAfterMs(response, data);
+      rememberProviderCooldown('OpenRouter', error.cooldownMs);
+    }
+    throw error;
+  }
+  if (!data?.choices?.[0]?.message?.content) throw new Error('OpenRouter ไม่ส่งข้อความทดสอบกลับมา');
+  clearProviderCooldown('OpenRouter');
+  return { ok: true, model };
+}
+
 export const explainGeminiError = e => e.message === 'NO_KEY'
-  ? 'ยังไม่ได้ใส่คีย์ AI — ตั้งค่า Gemini หรือ Groq ในหน้า Settings'
+  ? 'ยังไม่ได้ใส่คีย์ AI — ตั้งค่า Gemini, Groq หรือ OpenRouter ในหน้า Settings'
   : e.invalidKey
     ? 'คีย์ AI ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน (ตรวจคีย์ใน ตั้งค่า): ' + e.message
     : e.fallbackErrors

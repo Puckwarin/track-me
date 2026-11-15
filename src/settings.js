@@ -1,5 +1,8 @@
 import { $, toast } from './util.js';
-import { getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, testGeminiConnection, testGroqConnection, explainGeminiError } from './nutrition.js';
+import {
+  getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, getOpenRouterKey, setOpenRouterKey,
+  testGeminiConnection, testGroqConnection, testOpenRouterConnection, explainGeminiError
+} from './nutrition.js';
 import { getUsdaKey, setUsdaKey, testUsdaConnection } from './foodsearch.js';
 import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
@@ -94,11 +97,12 @@ export function mountSettings(el) {
     <div class="card space-y-3 lg:col-span-2" id="st-migrate"></div>
     <div class="card space-y-4 lg:col-span-2" id="st-api-keys">
       <header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-brand"></i> คีย์เชื่อมต่อ (ตัวเลือก)</h3><p class="text-xs text-slate-500 mt-1">จัดคีย์ที่นี่เป็นหมวดเดียวกัน · เก็บเฉพาะเบราว์เซอร์อุปกรณ์นี้ ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p></header>
-      <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · สลับโมเดลอัตโนมัติ (3.8-flash → 3.6-flash → 3.5-flash-lite, timeout 35 วิ)</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
-      <section class="rounded-xl border border-orange-100 bg-orange-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">Groq AI (ข้อความไว & สำรอง)</h4><p class="text-xs text-slate-500">ใช้ค้นหาโภชนาการด้วย Llama 3.3 / 3.1 JSON Mode ก่อนสลับไป Gemini และสำรองงานวิเคราะห์ภาพด้วย Llama 3.2 Vision</p><input type="password" id="st-groq" class="input" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
-      <p class="text-xs text-amber-700">คีย์เก็บในเบราว์เซอร์นี้เท่านั้น · ค้นหาโภชนาการเรียงจาก คลังในเครื่อง → USDA → Open Food Facts → Groq → Gemini (Fallback) · งานวิเคราะห์ภาพเรียง Gemini → Groq</p>
-      <section class="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-database text-sky-500"></i> USDA FoodData Central</h4><p class="text-xs text-slate-500">ใช้ค้นหาวัตถุดิบ · ขอ API key ฟรีที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input" placeholder="USDA API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
-      <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
+      <section class="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-wand-magic-sparkles text-violet-500"></i> Gemini</h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · ค้นหาโมเดลที่บัญชีรองรับและสลับอัตโนมัติ (timeout 35 วิ)</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
+      <section class="rounded-xl border border-orange-100 bg-orange-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">Groq AI (สำรอง)</h4><p class="text-xs text-slate-500">ระบบค้นหารุ่นข้อความ/ภาพที่บัญชีใช้งานได้ แล้วใช้เป็นแหล่งสำรองถัดจาก Gemini</p><input type="password" id="st-groq" class="input" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
+      <section class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm">OpenRouter AI (สำรองแบบเลือกโมเดลฟรี)</h4><p class="text-xs text-slate-500">ระบบค้นหาโมเดลฟรีที่รองรับเครื่องมืออัตโนมัติ · ขอคีย์ได้ที่ <a class="underline" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></p><input type="password" id="st-openrouter" class="input" placeholder="OpenRouter API Key (ไม่บังคับ)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button><button id="st-openrouter-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-openrouter-status" class="text-xs text-slate-500"></p></section>
+      <p class="text-xs text-amber-700">ลำดับสำรอง AI: Gemini → Groq → OpenRouter (เลือกเฉพาะโมเดลฟรี) · ค้นหาโภชนาการ: คลังในเครื่อง → USDA → Open Food Facts → AI · งานอ่านฉลากใช้ OCR ในเครื่องเมื่อโควตา AI เต็ม</p>
+      <section class="rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2"><h4 class="font-semibold text-sm"><i class="fa-solid fa-database text-sky-500"></i> USDA FoodData Central</h4><p class="text-xs text-slate-500">ค้นหาได้ทันทีด้วย DEMO_KEY; ใส่ API Key ฟรีของตัวเองเพื่อเพิ่มโควตาได้ที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input" placeholder="USDA API Key (เว้นว่างเพื่อใช้ DEMO_KEY)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
+      <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · OpenRouter ใช้เฉพาะโมเดลฟรี · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
     </div>
   </div>`;
   $('#st-key', el).value = getGeminiKey();
@@ -131,6 +135,22 @@ export function mountSettings(el) {
     } catch (e) {
       st.className = 'text-xs text-rose-600';
       st.textContent = e.message === 'NO_KEY' ? 'ยังไม่ได้ใส่ Groq API Key' : (e.invalidKey ? 'คีย์ Groq ไม่ถูกต้องหรือไม่มีสิทธิ์: ' + e.message : 'เชื่อมต่อ Groq ไม่สำเร็จ: ' + e.message);
+    } finally { btn.disabled = false; }
+  });
+  $('#st-openrouter', el).value = getOpenRouterKey();
+  $('#st-openrouter-save', el).addEventListener('click', () => { setOpenRouterKey($('#st-openrouter', el).value); $('#st-openrouter-status', el).textContent = ''; toast('บันทึกคีย์ OpenRouter แล้ว'); });
+  $('#st-openrouter-test', el).addEventListener('click', async () => {
+    const val = $('#st-openrouter', el).value.trim();
+    if (val) setOpenRouterKey(val);
+    const st = $('#st-openrouter-status', el), btn = $('#st-openrouter-test', el);
+    btn.disabled = true; st.className = 'text-xs text-slate-500'; st.textContent = 'กำลังค้นหาโมเดลฟรีและทดสอบ OpenRouter...';
+    try {
+      const res = await testOpenRouterConnection();
+      st.className = 'text-xs text-green-700';
+      st.textContent = `เชื่อมต่อสำเร็จ (โมเดล ${res.model})`;
+    } catch (e) {
+      st.className = 'text-xs text-rose-600';
+      st.textContent = e.message === 'NO_KEY' ? 'ยังไม่ได้ใส่ OpenRouter API Key' : (e.invalidKey ? 'คีย์ OpenRouter ไม่ถูกต้อง: ' + e.message : e.message || 'เชื่อมต่อ OpenRouter ไม่สำเร็จ');
     } finally { btn.disabled = false; }
   });
   $('#st-out', el).addEventListener('click', signOutUser);

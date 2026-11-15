@@ -1,5 +1,5 @@
 import { $, esc, toast } from './util.js';
-import { getGeminiKey, getGroqKey, explainGeminiError } from './nutrition.js';
+import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
 import { runAssistantTurn, executeConfirmedAction, undoAssistantAction } from './services/aiAssistant.js';
 
 const QUICK_PROMPTS = [
@@ -45,7 +45,7 @@ function ensureShell() {
       </header>
 
       <div id="ai-chat-nokey" class="hidden mx-3 mt-2 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2">
-        <p class="font-semibold">ยังไม่ได้ตั้งค่า Gemini หรือ Groq API Key</p>
+        <p class="font-semibold">ยังไม่ได้ตั้งค่า AI API Key</p>
         <p class="text-amber-800">ใส่คีย์ในหน้าตั้งค่าก่อน เพื่อให้ผู้ช่วย AI อ่านและบันทึกข้อมูลให้คุณบนเครื่องนี้</p>
         <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs">ไปหน้าตั้งค่า</button>
       </div>
@@ -68,11 +68,11 @@ function ensureShell() {
 }
 
 function renderKeyBanner() {
-  const hasKey = Boolean(getGeminiKey() || getGroqKey());
+  const hasKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
   $('#ai-chat-nokey')?.classList.toggle('hidden', hasKey);
   const sub = $('#ai-chat-subtitle');
   if (sub) {
-    const active = [getGeminiKey() && 'Gemini', getGroqKey() && 'Groq'].filter(Boolean);
+    const active = [getGeminiKey() && 'Gemini', getGroqKey() && 'Groq', getOpenRouterKey() && 'OpenRouter'].filter(Boolean);
     sub.textContent = active.length
       ? `ทำงานในเครื่องด้วย ${active.join(' + ')}`
       : 'ยังไม่ได้ตั้งค่า API Key';
@@ -193,9 +193,9 @@ async function handleSend(rawText) {
   const text = String(rawText || '').trim();
   if (!text || isBusy) return;
 
-  if (!getGeminiKey() && !getGroqKey()) {
+  if (!getGeminiKey() && !getGroqKey() && !getOpenRouterKey()) {
     renderKeyBanner();
-    toast('กรุณาใส่ Gemini หรือ Groq API Key ในหน้าตั้งค่าก่อน', 'err');
+    toast('กรุณาใส่ Gemini, Groq หรือ OpenRouter API Key ในหน้าตั้งค่าก่อน', 'err');
     return;
   }
 

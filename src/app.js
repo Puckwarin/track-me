@@ -11,7 +11,7 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { query, where, writeBatch } from 'firebase/firestore';
+import { getDocs, query, where, writeBatch } from 'firebase/firestore';
 
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
@@ -138,6 +138,14 @@ let expenseRecordsLoaded = false;
 let migratingLegacyExpenses = false;
 let legacyMigrationBlocked = false;
 
+function stableLegacyExpenseId(docId, index) {
+  const hash = Array.from(`${docId}_${index}`).reduce(
+    (acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0,
+    0
+  );
+  return 'lg' + Math.abs(hash).toString(36).padStart(8, '0');
+}
+
 function mergeExpenses() {
   const byId = new Map();
   // ให้ expense_records เป็นแหล่งข้อมูลหลักเสมอ (กันข้อมูลเก่าทับการแก้/ลบใหม่)
@@ -145,6 +153,7 @@ function mergeExpenses() {
     if (r?.id) byId.set(r.id, r);
   }
   for (const doc of state.legacyExpenseDocs || []) {
+    if (doc.migratedAt) continue;
     for (const item of doc.items || []) {
       if (item?.id && !byId.has(item.id)) byId.set(item.id, item);
     }
@@ -156,21 +165,20 @@ function mergeExpenses() {
 
 async function migrateLegacyExpensesIfNeeded(uid) {
   if (migratingLegacyExpenses || legacyMigrationBlocked || !expenseRecordsLoaded || !navigator.onLine) return;
-  const legacyDocs = state.legacyExpenseDocs || [];
+  const legacyDocs = (state.legacyExpenseDocs || []).filter(doc => !doc.migratedAt);
   if (!legacyDocs.length) return;
 
   migratingLegacyExpenses = true;
   try {
-    const existingIds = new Set((state.expenseRecords || []).map(x => x.id));
+    const snapshot = await getDocs(userCol(uid, 'expense_records'));
+    const existingIds = new Set(snapshot.docs.map(doc => doc.id));
     const toWrite = new Map();
-    const docIdsToDelete = [];
 
     for (const doc of legacyDocs) {
-      docIdsToDelete.push(doc.id);
-      for (const item of doc.items || []) {
+      for (const [itemIndex, item] of (doc.items || []).entries()) {
         const itemId = item?.id && /^[\w-]{1,80}$/.test(item.id)
           ? item.id
-          : 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          : stableLegacyExpenseId(doc.id, itemIndex);
         if (existingIds.has(itemId) || toWrite.has(itemId)) continue;
         const clean = SANITIZERS.expense_records(item);
         if (clean) toWrite.set(itemId, clean);
@@ -186,15 +194,18 @@ async function migrateLegacyExpensesIfNeeded(uid) {
       await batch.commit();
     }
 
-    for (let i = 0; i < docIdsToDelete.length; i += 400) {
+    for (let i = 0; i < legacyDocs.length; i += 400) {
       const batch = writeBatch(db);
-      docIdsToDelete.slice(i, i + 400).forEach(docId => {
-        batch.delete(userDoc(uid, 'settings', docId));
+      legacyDocs.slice(i, i + 400).forEach(doc => {
+        batch.update(userDoc(uid, 'settings', doc.id), {
+          migratedAt: new Date(),
+          migratedCount: toWrite.size
+        });
       });
       await batch.commit();
     }
   } catch (err) {
-    // ถ้าสิทธิ์ Rules ยังไม่เผยแพร่หรือเครือข่ายขัดข้อง ให้หยุดย้ายรอบนี้โดยไม่ลบเอกสารเดิม
+    // ถ้าการย้ายหรือทำเครื่องหมายไม่สำเร็จ ให้รอบถัดไปทำซ้ำด้วย ID เดิม
     console.warn('Legacy expense migration deferred:', err?.code || err?.message);
     if (/permission-denied/i.test(String(err?.code || err?.message || ''))) {
       legacyMigrationBlocked = true;

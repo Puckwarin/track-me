@@ -1,8 +1,12 @@
-import { addDoc, deleteDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { userCol, userDoc } from '../firebase.js';
 import { state } from '../state.js';
 import { addDays, daysBetween, fmtDate, isDateStr, localDateStr, round1 } from '../util.js';
-import { getGeminiKey, getGroqKey, explainGeminiError, lookupPer100g } from '../nutrition.js';
+import {
+  getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError, lookupPer100g,
+  discoverGroqModels, discoverOpenRouterModels, getProviderCooldownMs,
+  rememberProviderCooldown, clearProviderCooldown, getRetryAfterMs
+} from '../nutrition.js';
 import { getMeals, getTargets } from '../profile.js';
 import { getPresets } from '../food.js';
 import { EXPENSE_CATEGORIES } from '../expense.js';
@@ -744,7 +748,8 @@ export async function executeConfirmedAction(prepared) {
   if (!wp) throw new Error('ข้อมูลรายการไม่สมบูรณ์');
 
   if (wp.kind === 'expense') {
-    await setDoc(userDoc(uid, 'expense_records', wp.docId), wp.record);
+    setDoc(userDoc(uid, 'expense_records', wp.docId), wp.record)
+      .catch(err => ({ error: err.message }));
     const receipt = {
       icon: prepared.icon,
       title: prepared.title,
@@ -758,7 +763,8 @@ export async function executeConfirmedAction(prepared) {
   }
 
   if (wp.kind === 'food') {
-    const ref = await addDoc(userCol(uid, 'food_records'), wp.rec);
+    const ref = doc(userCol(uid, 'food_records'));
+    setDoc(ref, wp.rec).catch(err => ({ error: err.message }));
     const receipt = {
       icon: prepared.icon,
       title: prepared.title,
@@ -783,11 +789,11 @@ export async function executeConfirmedAction(prepared) {
   }
 
   if (wp.kind === 'inventory') {
-    await updateDoc(userDoc(uid, 'tracked_products', wp.docId), {
+    updateDoc(userDoc(uid, 'tracked_products', wp.docId), {
       quantity: wp.nextQty,
       lowDismissed: wp.lowDismissed,
       updatedAt: new Date()
-    });
+    }).catch(err => ({ error: err.message }));
     const receipt = {
       icon: prepared.icon,
       title: prepared.title,
@@ -808,7 +814,8 @@ export async function executeConfirmedAction(prepared) {
   }
 
   if (wp.kind === 'reminder') {
-    const ref = await addDoc(userCol(uid, wp.targetCol), wp.payload);
+    const ref = doc(userCol(uid, wp.targetCol));
+    setDoc(ref, wp.payload).catch(err => ({ error: err.message }));
     window.dispatchEvent(new Event('trackme:data-change'));
     const receipt = {
       icon: prepared.icon,
@@ -902,23 +909,26 @@ export async function undoAssistantAction(undo) {
   if (!uid || !undo) throw new Error('ไม่สามารถยกเลิกรายการได้');
 
   if (undo.kind === 'expense') {
-    await deleteDoc(userDoc(uid, 'expense_records', undo.id));
+    deleteDoc(userDoc(uid, 'expense_records', undo.id))
+      .catch(err => ({ error: err.message }));
     return;
   }
   if (undo.kind === 'food') {
-    await deleteDoc(userDoc(uid, 'food_records', undo.docId));
+    deleteDoc(userDoc(uid, 'food_records', undo.docId))
+      .catch(err => ({ error: err.message }));
     return;
   }
   if (undo.kind === 'inventory') {
-    await updateDoc(userDoc(uid, 'tracked_products', undo.docId), {
+    updateDoc(userDoc(uid, 'tracked_products', undo.docId), {
       quantity: undo.prevQty,
       lowDismissed: undo.prevLowDismissed ?? false,
       updatedAt: new Date()
-    });
+    }).catch(err => ({ error: err.message }));
     return;
   }
   if (undo.kind === 'reminder') {
-    await deleteDoc(userDoc(uid, undo.col, undo.docId));
+    deleteDoc(userDoc(uid, undo.col, undo.docId))
+      .catch(err => ({ error: err.message }));
     window.dispatchEvent(new Event('trackme:data-change'));
   }
 }
@@ -1014,6 +1024,7 @@ async function callGeminiWithTools(historyMessages, userText) {
         err.invalidKey = (res.status === 400 && /api.?key|invalid/i.test(msg)) || res.status === 403;
         err.modelNotFound = res.status === 404;
         err.quotaExceeded = res.status === 429 || /quota|resource.?exhausted/i.test(msg);
+        if (err.quotaExceeded) err.cooldownMs = getRetryAfterMs(res, data);
         throw err;
       }
 
@@ -1049,11 +1060,13 @@ async function callGeminiWithTools(historyMessages, userText) {
   };
 
   let lastErr = null;
+  const modelErrors = [];
   for (const m of GEMINI_CHAT_MODELS) {
     try { return await runModel(m); }
     catch (e) {
       if (e.invalidKey) throw e;
       lastErr = e;
+      modelErrors.push(e);
     }
   }
   const extra = await discoverFallbackGeminiModels(key);
@@ -1062,9 +1075,13 @@ async function callGeminiWithTools(historyMessages, userText) {
     catch (e) {
       if (e.invalidKey) throw e;
       lastErr = e;
+      modelErrors.push(e);
     }
   }
-  throw lastErr || new Error('Gemini ไม่พร้อมใช้งาน');
+  const error = lastErr || new Error('Gemini ไม่พร้อมใช้งาน');
+  error.quotaExceeded = modelErrors.some(modelError => modelError.quotaExceeded);
+  error.cooldownMs = Math.max(0, ...modelErrors.map(modelError => modelError.cooldownMs || 0));
+  throw error;
 }
 
 async function callGroqWithTools(historyMessages, userText) {
@@ -1114,6 +1131,7 @@ async function callGroqWithTools(historyMessages, userText) {
         err.status = res.status;
         err.invalidKey = res.status === 401 || res.status === 403;
         err.quotaExceeded = [402, 429].includes(res.status) || /quota|rate.?limit/i.test(msg);
+        if (err.quotaExceeded) err.cooldownMs = getRetryAfterMs(res, data);
         throw err;
       }
 
@@ -1150,21 +1168,137 @@ async function callGroqWithTools(historyMessages, userText) {
     throw new Error('Groq เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
   };
 
+  const discovered = await discoverGroqModels(key);
+  const extraModels = discovered.filter(model => !/whisper|tts|guard|embed|vision|llava|pixtral/i.test(model));
+  const models = [...new Set([...GROQ_CHAT_MODELS, ...extraModels])].slice(0, 6);
   let lastErr = null;
-  for (const m of GROQ_CHAT_MODELS) {
+  let quotaWaitMs = 0;
+  for (const m of models) {
     try { return await runModel(m); }
     catch (e) {
       if (e.invalidKey) throw e;
       lastErr = e;
+      if (e.quotaExceeded) quotaWaitMs = Math.max(quotaWaitMs, e.cooldownMs || 0);
     }
   }
-  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  const error = lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  if (quotaWaitMs) {
+    error.quotaExceeded = true;
+    error.cooldownMs = quotaWaitMs;
+  }
+  throw error;
+}
+
+async function callOpenRouterWithTools(historyMessages, userText) {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('NO_KEY');
+  const models = await discoverOpenRouterModels({ requireTools: true });
+  if (!models.length) throw new Error('ไม่พบโมเดลฟรีของ OpenRouter ที่รองรับเครื่องมือ');
+  const baseMessages = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...historyMessages.slice(-8).map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.text
+    })),
+    { role: 'user', content: userText }
+  ];
+  let lastErr = null;
+  let quotaWaitMs = 0;
+
+  for (const model of models.slice(0, 6)) {
+    const messages = baseMessages.map(message => ({ ...message }));
+    const turnState = { receipts: [], pendingActions: [], writesExecuted: 0 };
+    try {
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        let response;
+        try {
+          response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + key,
+              'HTTP-Referer': window.location.origin,
+              'X-Title': 'Track Me'
+            },
+            body: JSON.stringify({
+              model,
+              messages,
+              tools: OPENAI_TOOLS,
+              tool_choice: 'auto',
+              temperature: 0.2
+            }),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+          });
+        } catch (cause) {
+          const isTimeout = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
+          const error = new Error(isTimeout ? 'หมดเวลารอคำตอบจาก OpenRouter' : (cause.message || 'OpenRouter network error'));
+          error.timeoutError = isTimeout;
+          error.networkError = !isTimeout;
+          throw error;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+          error.status = response.status;
+          error.invalidKey = response.status === 401 || response.status === 403;
+          error.quotaExceeded = response.status === 429 || /rate.?limit|quota/i.test(error.message);
+          if (error.quotaExceeded) {
+            error.cooldownMs = getRetryAfterMs(response, data);
+            quotaWaitMs = Math.max(quotaWaitMs, error.cooldownMs);
+          }
+          throw error;
+        }
+
+        const choiceMsg = data?.choices?.[0]?.message;
+        const toolCalls = choiceMsg?.tool_calls;
+        if (Array.isArray(toolCalls) && toolCalls.length) {
+          messages.push({
+            role: 'assistant',
+            content: choiceMsg.content || null,
+            tool_calls: toolCalls
+          });
+          const batchCalls = toolCalls.map(toolCall => {
+            let args = {};
+            try { args = JSON.parse(toolCall.function?.arguments || '{}'); } catch { args = {}; }
+            return { id: toolCall.id, name: toolCall.function?.name, args };
+          });
+          const outcomes = await processToolBatch(batchCalls, turnState);
+          batchCalls.forEach((call, index) => {
+            messages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify(outcomes[index])
+            });
+          });
+          continue;
+        }
+
+        const reply = String(choiceMsg?.content || '').trim();
+        if (!reply) throw new Error('OpenRouter ไม่ส่งข้อความตอบกลับ');
+        return { text: reply, receipts: turnState.receipts, pendingActions: turnState.pendingActions, provider: 'OpenRouter', model };
+      }
+      throw new Error('OpenRouter เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
+    } catch (error) {
+      if (error.invalidKey) throw error;
+      lastErr = error;
+      if (error.quotaExceeded) quotaWaitMs = Math.max(quotaWaitMs, error.cooldownMs || 0);
+    }
+  }
+
+  const error = lastErr || new Error('OpenRouter ไม่พร้อมใช้งาน');
+  if (quotaWaitMs) {
+    error.quotaExceeded = true;
+    error.cooldownMs = quotaWaitMs;
+  }
+  throw error;
 }
 
 export async function runAssistantTurn(historyMessages, userText) {
   const providers = [];
   if (getGeminiKey()) providers.push(['Gemini', () => callGeminiWithTools(historyMessages, userText)]);
   if (getGroqKey()) providers.push(['Groq', () => callGroqWithTools(historyMessages, userText)]);
+  if (getOpenRouterKey()) providers.push(['OpenRouter', () => callOpenRouterWithTools(historyMessages, userText)]);
 
   if (!providers.length) {
     const err = new Error('NO_KEY');
@@ -1172,16 +1306,29 @@ export async function runAssistantTurn(historyMessages, userText) {
   }
 
   const errors = [];
-  for (let i = 0; i < providers.length; i++) {
-    const [name, fn] = providers[i];
+  let attempted = 0;
+  let quotaExceeded = false;
+  for (const [name, fn] of providers) {
+    const cooldownMs = getProviderCooldownMs(name);
+    if (cooldownMs) {
+      errors.push(`${name}: รอโควตาอีกประมาณ ${Math.max(1, Math.ceil(cooldownMs / 60_000))} นาที`);
+      continue;
+    }
+    attempted++;
     try {
-      return await fn();
+      const result = await fn();
+      clearProviderCooldown(name);
+      return result;
     } catch (e) {
-      if (providers.length === 1) throw e;
+      if (e.quotaExceeded) {
+        quotaExceeded = true;
+        rememberProviderCooldown(name, e.cooldownMs);
+      }
       errors.push(`${name}: ${explainGeminiError(e)}`);
     }
   }
-  const combined = new Error(errors.join(' · '));
+  const combined = new Error(attempted ? errors.join(' · ') : 'AI ทุกแหล่งที่ตั้งค่าไว้กำลังรอโควตา — ' + errors.join(' · '));
   combined.fallbackErrors = errors;
+  combined.quotaExceeded = quotaExceeded || errors.some(error => /quota|limit|รอโควตา/i.test(error));
   throw combined;
 }
