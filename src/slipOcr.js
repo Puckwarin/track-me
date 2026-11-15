@@ -1,6 +1,5 @@
 // อ่านสลิปโอนเงินและใบเสร็จด้วย tesseract.js (tha+eng) ในเครื่องผู้ใช้เท่านั้น
 // Strict Privacy: ไม่ส่ง/ไม่อัปโหลด/ไม่บันทึกรูปภาพลง Firebase หรือที่ใดทั้งสิ้น และล้างไฟล์ออกจากหน่วยความจำทันทีหลังอ่านเสร็จ
-import { createWorker } from 'tesseract.js';
 import { localDateStr } from './util.js';
 
 const SHARE_CACHE = 'trackme-share-tmp';
@@ -91,6 +90,7 @@ export async function ocrSlipInBrowser(file, onProgress = () => {}) {
     }
 
     onProgress('กำลังโหลดตัวอ่านภาษาไทย/อังกฤษ (ครั้งแรกอาจใช้เวลาสักครู่)…');
+    const { createWorker } = await import('tesseract.js');
     worker = await createWorker('tha+eng', 1, {
       logger: m => {
         if (m?.status === 'recognizing text' && typeof m.progress === 'number') {
@@ -122,6 +122,7 @@ export async function ocrMultipleSlipsInBrowser(files, onProgress = () => {}) {
 
   try {
     onProgress('กำลังเตรียมตัวอ่านสลิปภาษาไทย/อังกฤษในเครื่อง…');
+    const { createWorker } = await import('tesseract.js');
     worker = await createWorker('tha+eng', 1, {
       logger: m => {
         if (m?.status === 'recognizing text' && typeof m.progress === 'number') {

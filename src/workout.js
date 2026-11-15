@@ -3,15 +3,11 @@ import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { bodyLatest } from './body.js';
 import { findExerciseImage } from './exerciseMedia.js';
-import { runActiveWorkout } from './workoutActive.js';
+import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { parseWorkoutText, safeHttpUrl } from './workoutParser.js';
 import { $, $$, esc, fmtDate, localDateStr, parseLocal, addDays, toNum, toast, openModal } from './util.js';
 
-export const TYPES = {
-  walk: 'เดิน (Walk)', upper: 'Upper body', lower: 'Lower body', full: 'Full body',
-  pilates: 'พิลาทิส (Pilates)', stretch: 'ยืดเหยียด (Stretching)', other: 'อื่น ๆ'
-};
-export const SECTIONS = [['warmup', 'วอร์มอัพ (Warm-up)', 'fa-fire'], ['main', 'ท่าหลัก (Main workout)', 'fa-dumbbell'], ['cooldown', 'คูลดาวน์ (Cool-down)', 'fa-snowflake']];
+export { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 // ค่า MET (Compendium of Physical Activities, ปัดเป็นช่วงโดยประมาณ) ตามประเภทและความหนัก
@@ -24,8 +20,6 @@ export function estimateBurn(type, intensity, minutes, weightKg) {
   const idx = Math.max(0, INTENSITY.findIndex(i => i[0] === intensity));
   return Math.round(((MET[type] || MET.other)[idx < 0 ? 1 : idx] - 1) * weightKg * minutes / 60);
 }
-export const repLabel = u => (u === 'sec' ? 'วินาที' : u === 'min' ? 'นาที' : 'ครั้ง');
-
 let root, draft = emptyDraft();
 let weekStart = '';
 let editingId = null;
@@ -601,6 +595,7 @@ async function startActiveWorkout() {
   if (!rows.length) return toast('เพิ่มท่าอย่างน้อย 1 ท่าก่อนเริ่ม', 'err');
   const type = $('#w-type', root).value, intensity = $('#w-int', root).value;
   try {
+    const { runActiveWorkout } = await import('./workoutActive.js');
     await runActiveWorkout(rows, async (performedSets, actualMinutes) => {
       const duration = toNum($('#w-dur', root).value) || actualMinutes, volumeKg = performedSets.reduce((sum, x) => sum + (x.weightKg || 0) * (x.reps || 0), 0);
       const title = $('#w-title', root).value.trim().slice(0, 100);

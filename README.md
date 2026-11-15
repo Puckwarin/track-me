@@ -2,8 +2,16 @@
 
 เว็บแอปจัดการชีวิตและบันทึกสุขภาพส่วนตัว ครอบคลุมอาหาร การออกกำลังกาย รายรับ-รายจ่าย ประจำเดือน อาการและผิว น้ำหนักและสัดส่วน สัตว์เลี้ยงและผลตรวจ บันทึกแจ้งเตือน และของใช้ ซิงค์ข้อมูลส่วนตัวผ่าน Google Sign-in และ Firebase Firestore พร้อมใช้งานแบบ PWA
 
+- **เวอร์ชัน:** v4.0.0
+- **เทคโนโลยี:** Vanilla JavaScript (ES modules), Vite, Tailwind CSS, Firebase Authentication/Firestore, Vitest และ Vite PWA/Workbox
 - **ใช้งานแอป:** https://puckwarin.github.io/track-me/
 - **คู่มือการตั้งค่า (Setup Guide):** [docs/SETUP.md](docs/SETUP.md)
+- **สถาปัตยกรรม:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **โครงสร้างโปรเจกต์:** [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+- **Build และ Deployment:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- **การทดสอบ, CI และ Error Monitoring:** [docs/TESTING.md](docs/TESTING.md)
+- **โครงสร้าง Firestore:** [docs/FIRESTORE_SCHEMA.md](docs/FIRESTORE_SCHEMA.md)
+- **รายงานประสิทธิภาพ:** [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - **ประวัติการพัฒนา (Changelog):** [CHANGELOG.md](CHANGELOG.md)
 - **Release และ Tag:** [GitHub Releases](https://github.com/Puckwarin/track-me/releases)
 
@@ -27,6 +35,7 @@
 - **ผลตรวจสุขภาพ:** บันทึกผลตรวจพร้อมกรองดูเฉพาะ **ค่าเลือดผิดปกติ (Abnormal)** และสแกนใบผลเลือดหลายรายการด้วย AI
 
 ### 4. การตั้งค่า & ประสบการณ์ใช้งาน
+- **เริ่มต้นใช้งานสำหรับบัญชีใหม่:** แนะนำโปรไฟล์พื้นฐาน, คีย์ AI และการแจ้งเตือนแบบเลือกทำได้; ผู้ใช้เดิมไม่ถูกบังคับผ่านขั้นตอนนี้ และความคืบหน้าจะกลับมาต่อได้บนอุปกรณ์เดิม
 - **AI Chat Assistant (ผู้ช่วยส่วนตัวมุมขวาล่าง):** พูดคุยหรือสั่งงานด้วยภาษาธรรมชาติ เช่น ถามค่าใช้จ่าย/สต๊อกใกล้หมด/นัดวันนี้ หรือสั่งจดค่ากาแฟ บันทึกอาหาร ปรับสต๊อก เพิ่มนัดเตือน พร้อมการ์ดยืนยันก่อนบันทึกสำหรับรายการยอดสูง/หลายรายการ, ปุ่มยกเลิกรายการ, และระบบป้องกัน Prompt Injection จากข้อมูลที่เก็บไว้ (ทำงานฝั่ง Client ด้วยคีย์ Gemini, Groq หรือ OpenRouter ที่ตั้งค่าไว้)
 - ธีมแอป 3 แบบ (**Cozy**, **Pastel**, **Dark mode**) พร้อมปุ่มลอยเลื่อนขึ้นบนสุด/ลงล่างสุด (`↑`/`↓`) ทุกหน้า, สำรองและกู้คืนข้อมูล (ไม่ส่งออก Push Token ของเครื่อง), ทดสอบคีย์ API (**Gemini**, **Groq**, **OpenRouter**, **USDA**) ได้ในหน้าตั้งค่า (คีย์ AI เก็บในเบราว์เซอร์ของอุปกรณ์นั้นเท่านั้น)
 - ใช้ได้แบบ PWA และออฟไลน์สำหรับหน้าที่แคชไว้; การค้นหาออนไลน์และ AI ยังต้องใช้อินเทอร์เน็ต
@@ -49,14 +58,14 @@
 
 ## โครงสร้างโปรเจกต์สำคัญ
 
-- github/workflows/build.yml — ตรวจ build สำหรับ pull request และ push ไป main
-- github/workflows/pages.yml — build และ deploy GitHub Pages เมื่อมีการ push ไป main
+- github/workflows/build.yml — lint, tests, Firestore Emulator, build และ deploy GitHub Pages หลัง checks ผ่านบน main
 - github/workflows/daily-push.yml — ส่ง Web Push Notification สรุปแผนวันนี้และแจ้งเตือนอัตโนมัติเวลา 08:00 น. (UTC+7)
 - scripts/daily-push.mjs — สคริปต์ Node.js อ่าน Firestore และส่ง Web Push (VAPID)
 - firestore.rules — Firestore Rules สำหรับข้อมูลของผู้ใช้
 - firestore.rules.migration — Rules ชั่วคราวสำหรับขั้นตอนย้ายข้อมูลเก่า
 - public/ — ไอคอน, push-sw.js และไฟล์สาธารณะที่ Vite/PWA ใช้
 - src/ — โมดูลหลักของแอป
+- src/food.js และโมดูล `food*` — หน้าบันทึกอาหาร, parser, การคำนวณ, validation, Firestore service และ UI ย่อย (ดู [docs/FOOD_MODULES.md](docs/FOOD_MODULES.md))
 
 > **การย้อนเวอร์ชันเว็บ (Rollback):** ให้สร้าง revert commit/PR จาก commit ที่ต้องการย้อน แล้ว merge เพื่อให้ GitHub Pages deploy จาก main อีกครั้ง (Tag เป็นเพียงจุดอ้างอิงเวอร์ชัน ไม่ได้ย้อน production ให้อัตโนมัติ และการเปลี่ยน Firestore Rules ต้องพิจารณาแยกจากการย้อนเว็บ)
 
@@ -64,10 +73,14 @@
 
 ## การพัฒนาในเครื่อง (Local Development)
 
-ต้องใช้ **Node.js 22** ขึ้นไป
+ต้องใช้ **Node.js 24.12** ขึ้นไป; การรัน Firestore Emulator tests ต้องมี **Java 21** ขึ้นไป
 
 ```bash
 npm ci
 npm run dev
+npm run lint
+npm test
+npm run test:coverage
+npm run test:rules
 npm run build
 ```

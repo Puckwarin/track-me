@@ -3,7 +3,19 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
-## [v3.2.0]
+## [v4.0.0] - 2026-11-15
+
+### อัปเดตใหญ่
+- ลด JavaScript entry หลักด้วย lazy loading สำหรับ OCR, AI Assistant, รายงานสุขภาพ และโหมดออกกำลังกายจริง; ดูตัวเลขก่อน/หลังใน `docs/PERFORMANCE.md`
+- เพิ่มการกู้คืนเมื่อ dynamic chunk เก่าหายหลัง deploy โดยรีเฟรชอัตโนมัติแบบจำกัดจำนวนครั้ง และคง precache ของทุก chunk สำหรับ offline
+- แยกความรับผิดชอบอาหารเป็น catalog, calculations, validation, Firestore service, parser และ UI โมดูลย่อย พร้อม tests และ `docs/FOOD_MODULES.md`
+- เพิ่ม Firestore ownership/type validation และ write-only runtime error rules พร้อม Emulator tests; Rules ต้องเผยแพร่แยกจากเว็บ
+- เพิ่ม Vitest tests สำหรับ parsers, schema sanitizers, TDEE, cycle stats, AI, onboarding และ runtime error monitoring; เพิ่ม ESLint, coverage floors และ GitHub Actions checks ก่อน deploy Pages
+- เพิ่ม runtime error reports แบบ minimal metadata, client-side deduplication/rate limit/batching; ไม่ส่งข้อความ/stack หรือข้อมูลสุขภาพ/การเงิน
+- เพิ่ม onboarding 5 ขั้นสำหรับบัญชีใหม่ พร้อม progress ที่กลับมาทำต่อได้บนอุปกรณ์เดิม; ผู้ใช้เดิมไม่ถูกบังคับ, โปรไฟล์/AI/แจ้งเตือนเลือกข้ามได้ และขอสิทธิ์แจ้งเตือนหลังผู้ใช้กดเท่านั้น
+- เพิ่มเอกสารสถาปัตยกรรม, โครงสร้างโปรเจกต์ และขั้นตอน deployment; อัปเดต schema, testing, setup และ AI service docs
+
+## [v3.2.0] - 2026-11-15
 
 ### AI Service Centralization
 - รวม API transport, model discovery/selection, error normalization, timeout, bounded retry, request deduplication, cooldown และ provider fallback ไว้ใน `src/services/aiService.js`

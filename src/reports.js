@@ -7,7 +7,7 @@ import { periodStats } from './period.js';
 import { sortBodyDesc, weightChartSvg } from './body.js';
 import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
 import { syncLineText } from './sync.js';
-import { TYPES, SECTIONS, repLabel } from './workout.js';
+import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { labFlag, refText } from './lab.js';
 
 let root, data = null;

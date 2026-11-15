@@ -75,6 +75,15 @@ describe('AI service', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('expires persisted provider cooldowns at their recorded deadline', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    rememberProviderCooldown('Gemini', 5_000);
+    expect(getProviderCooldownMs('Gemini')).toBe(5_000);
+
+    Date.now.mockReturnValue(6_001);
+    expect(getProviderCooldownMs('Gemini')).toBe(0);
+  });
+
   it('normalizes invalid credentials without retrying the same provider', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ error: { message: 'unauthorized' } }),

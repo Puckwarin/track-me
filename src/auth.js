@@ -4,6 +4,7 @@ import { state, emit } from './state.js';
 import { $, toast } from './util.js';
 import { clearSummaryCache } from './summary.js';
 import { hasDevicePin, showDeviceLock, removeDevicePin } from './local-lock.js';
+import { reportRuntimeError, setRuntimeErrorUser } from './runtimeErrorMonitor.js';
 
 let signedInUser = null;
 
@@ -26,6 +27,9 @@ export function initAuth() {
     $('#login-error').textContent = '';
     try { await signInWithPopup(auth, provider); }
     catch (e) {
+      if (e.code !== 'auth/popup-closed-by-user') {
+        reportRuntimeError(e, { category: 'firebase', source: 'auth' });
+      }
       const msg = {
         'auth/popup-blocked': 'เบราว์เซอร์บล็อกหน้าต่างล็อกอิน — อนุญาต pop-up แล้วลองใหม่',
         'auth/unauthorized-domain': 'โดเมนนี้ยังไม่ได้เพิ่มใน Firebase → Authentication → Settings → Authorized domains (ดู docs/SETUP.md)',
@@ -39,6 +43,7 @@ export function initAuth() {
   });
   // Firebase เก็บ session ในเครื่อง → เปิดแอปตอนออฟไลน์ก็ยังถือว่าล็อกอินอยู่
   onAuthStateChanged(auth, user => {
+    setRuntimeErrorUser(user?.uid || null);
     signedInUser = user;
     state.user = user;
     state.uid = user ? user.uid : null;
@@ -59,11 +64,16 @@ export function initAuth() {
     $('#app-lock').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
     emit('auth', user);
+  }, error => {
+    reportRuntimeError(error, { category: 'firebase', source: 'auth' });
   });
 }
 
 export async function signOutUser() {
   if (!confirm('ออกจากระบบ?')) return;
   clearSummaryCache();
-  try { await signOut(auth); } catch (e) { toast(e.message, 'err'); }
+  try { await signOut(auth); } catch (e) {
+    reportRuntimeError(e, { category: 'firebase', source: 'auth' });
+    toast(e.message, 'err');
+  }
 }

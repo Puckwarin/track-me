@@ -1,3 +1,5 @@
+import { reportRuntimeError } from './runtimeErrorMonitor.js';
+
 let catalogue;
 const STOP_WORDS = new Set(['in','on','of','with','and','to','from','the','a','an','at','by']);
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ก-๙]+/g,' ').trim();
@@ -18,7 +20,11 @@ export async function findExerciseImage(name) {
   if (!catalogue) catalogue = fetch('https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json').then(r => {
     if (!r.ok) throw new Error('โหลดคลังท่าไม่สำเร็จ');
     return r.json();
-  }).catch(err => { catalogue = null; throw err; });
+  }).catch(err => {
+    catalogue = null;
+    reportRuntimeError(err, { category: 'api', source: 'exercise-media' });
+    throw err;
+  });
   const list = await catalogue;
   const ranked = list.map(x => ({ item:x, score:scoreName(name, x.name) }))
     .filter(x => x.score > 0)

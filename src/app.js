@@ -11,12 +11,13 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 
 import { db, userCol, userDoc } from './firebase.js';
+import { initRuntimeErrorMonitoring, reportRuntimeError, setRuntimeErrorSink } from './runtimeErrorMonitor.js';
 import { state, on, emit } from './state.js';
 import { SANITIZERS } from './schema.js';
-import { $, localDateStr, addDays } from './util.js';
+import { $, localDateStr, addDays, toast } from './util.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import './theme.js';
@@ -28,8 +29,6 @@ import { mountSymptoms, renderList as renderSymptomList, renderSkinList } from '
 import { mountCare, watchCare } from './care.js';
 import { mountInventory, watchInventory } from './inventory.js';
 import { mountBody, render as renderBody } from './body.js';
-import { mountReport } from './reports.js';
-import { mountWorkout, render as renderWorkout } from './workout.js';
 import { mountWeekly, renderWeekly } from './weekly.js';
 import { render as renderLab } from './lab.js';
 import { mountRemind, renderRemind } from './remindLog.js';
@@ -39,8 +38,44 @@ import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
 import { mountExpense, renderExpense, handleSharedSlipLaunch } from './expense.js';
 import { mountChatWidget } from './chatWidget.js';
+import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
+setRuntimeErrorSink((uid, reports) => {
+  const batch = writeBatch(db);
+  reports.forEach(report => {
+    batch.set(doc(userCol(uid, 'runtime_error_logs')), {
+      ...report,
+      receivedAt: serverTimestamp()
+    });
+  });
+  return batch.commit();
+});
+initRuntimeErrorMonitoring();
 registerSW({ immediate: true });
+
+const CHUNK_RELOAD_KEY = 'trackme-chunk-reloaded';
+try {
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+    setTimeout(() => sessionStorage.removeItem(CHUNK_RELOAD_KEY), 30_000);
+  }
+} catch (error) {
+  console.warn('Could not access session storage for chunk recovery:', error?.message);
+}
+window.addEventListener('vite:preloadError', event => {
+  event.preventDefault();
+  reportRuntimeError(event.payload, { category: 'chunk', source: 'chunk-recovery' });
+  try {
+    if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+      toast('โหลดส่วนนี้ไม่สำเร็จหลังรีเฟรช กรุณาลองรีเฟรชหน้าอีกครั้ง', 'err');
+      return;
+    }
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+    window.location.reload();
+  } catch (error) {
+    console.error('Could not recover from a stale application chunk:', error);
+    toast('โหลดส่วนของแอปไม่สำเร็จ กรุณารีเฟรชหน้าอีกครั้ง', 'err');
+  }
+});
 
 const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
@@ -52,6 +87,40 @@ function renderSubnav(group, name) {
   if (tabs.length < 2) { nav.innerHTML = ''; return; }
   nav.innerHTML = `<div class="subnav-row">${tabs.map(t => { const x = SUBTABS[t]; return `<button data-sub="${t}" class="sub-chip ${x.cat} ${t === name ? 'is-active' : ''}" ${t === name ? 'aria-current="page"' : ''}><span>${x.emoji}</span>${x.label}</button>`; }).join('')}</div>`;
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+let reportMountPromise = null;
+function ensureReportMounted() {
+  if (!reportMountPromise) {
+    reportMountPromise = import('./reports.js')
+      .then(({ mountReport }) => mountReport($('#tab-report')))
+      .catch(error => {
+        reportMountPromise = null;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+        console.error('Could not load health report:', error);
+        toast('เปิดรายงานสุขภาพไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+      });
+  }
+  return reportMountPromise;
+}
+
+let workoutFeature = null;
+let workoutMountPromise = null;
+function ensureWorkoutMounted() {
+  if (!workoutMountPromise) {
+    workoutMountPromise = import('./workout.js')
+      .then(module => {
+        workoutFeature = module;
+        module.mountWorkout($('#tab-workout'));
+      })
+      .catch(error => {
+        workoutMountPromise = null;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+        console.error('Could not load workout feature:', error);
+        toast('เปิดหน้าออกกำลังกายไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+      });
+  }
+  return workoutMountPromise;
 }
 
 export function showTab(name) {
@@ -68,6 +137,8 @@ export function showTab(name) {
   if (name === 'weekly') renderWeekly();
   if (name === 'expense') renderExpense();
   if (name === 'notifications') renderReminders();
+  if (name === 'report') void ensureReportMounted();
+  if (name === 'workout') void ensureWorkoutMounted();
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
 }
 
@@ -119,7 +190,6 @@ function mountAll() {
   mounted = true;
   mountHome(goTo);
   mountFood($('#tab-food'));
-  mountWorkout($('#tab-workout'));
   mountWeekly($('#tab-weekly'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
@@ -128,7 +198,6 @@ function mountAll() {
   mountExpense($('#tab-expense'));
   mountInventory($('#tab-inventory'));
   mountBody($('#tab-body'));
-  mountReport($('#tab-report'));
   mountSettings($('#tab-settings'));
   mountReminders($('#tab-notifications'));
   mountChatWidget(goTo);
@@ -137,6 +206,7 @@ function mountAll() {
 let expenseRecordsLoaded = false;
 let migratingLegacyExpenses = false;
 let legacyMigrationBlocked = false;
+let onboardingCheckedUid = null;
 
 function stableLegacyExpenseId(docId, index) {
   const hash = Array.from(`${docId}_${index}`).reduce(
@@ -206,6 +276,7 @@ async function migrateLegacyExpensesIfNeeded(uid) {
     }
   } catch (err) {
     // ถ้าการย้ายหรือทำเครื่องหมายไม่สำเร็จ ให้รอบถัดไปทำซ้ำด้วย ID เดิม
+    reportRuntimeError(err, { category: 'firebase', source: 'sync' });
     console.warn('Legacy expense migration deferred:', err?.code || err?.message);
     if (/permission-denied/i.test(String(err?.code || err?.message || ''))) {
       legacyMigrationBlocked = true;
@@ -227,9 +298,9 @@ function startData() {
   watchInventory(uid);
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; renderWorkout(); renderWeekly(); renderHome(); renderSummary(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutFeature?.render(); renderWeekly(); renderHome(); renderSummary(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
-  watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; renderWorkout(); });
+  watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutFeature?.render(); });
   watch('expense_records', userCol(uid, 'expense_records'), list => {
     state.expenseRecords = list;
     expenseRecordsLoaded = true;
@@ -244,6 +315,10 @@ function startData() {
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
+    if (state.uid === uid && onboardingCheckedUid !== uid) {
+      onboardingCheckedUid = uid;
+      mountOnboarding(state.user, state.profile);
+    }
     state.legacyExpenseDocs = list.filter(x => x.kind === 'expense_month' && Array.isArray(x.items));
     mergeExpenses();
     refreshProfile();
@@ -271,6 +346,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
+  onboardingCheckedUid = null;
+  unmountOnboarding();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {

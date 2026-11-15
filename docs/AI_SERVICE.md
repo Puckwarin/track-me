@@ -21,7 +21,7 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 - **OpenRouter**: เลือกเฉพาะโมเดลฟรีที่รับข้อความ และกรองเพิ่มตามความต้องการ เช่น ภาพหรือ `tools`
 - รายชื่อโมเดลถูก cache ในหน่วยความจำ 5 นาที; ไม่ cache ผลลัพธ์ส่วนตัวจาก AI
 
-ลำดับ fallback ของงานที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ งานค้นหาโภชนาการภายนอกยังมี pipeline ของตัวเองก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
+ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง งานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
 
 ## Quota, retry และ cooldown
 
@@ -42,7 +42,9 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 
 ## การตั้งค่าและความเป็นส่วนตัว
 
-ใส่คีย์ Gemini, Groq หรือ OpenRouter ได้ที่ **ตั้งค่า** ในแอป คีย์เก็บใน `localStorage` ของ browser/อุปกรณ์นั้น ไม่ซิงค์ผ่าน Firestore และไม่รวมในไฟล์สำรอง; ต้องตั้งค่าใหม่ในแต่ละอุปกรณ์
+ใส่คีย์ Gemini, Groq หรือ OpenRouter ได้ใน onboarding หรือหน้า **ตั้งค่า → คีย์เชื่อมต่อ**; USDA key เป็นตัวเลือกแยกในหน้าเดียวกัน ปุ่ม **ทดสอบการเชื่อมต่อ** ส่งคำขอไปยัง provider จริง จึงควรกดเมื่อยอมให้ทดสอบเท่านั้น คีย์เก็บใน `localStorage` ของ browser/อุปกรณ์นั้น ไม่ซิงค์ผ่าน Firestore และไม่รวมในไฟล์สำรอง; ต้องตั้งค่าใหม่ในแต่ละอุปกรณ์ การล้าง site data อาจลบคีย์และ cooldown ที่จำไว้
+
+โควตาฟรี, model access และราคาเปลี่ยนได้ตาม provider; การทดสอบหรือใช้งานอาจใช้โควตาและอาจมีค่าใช้จ่ายตามบัญชี/เงื่อนไขบริการ ตรวจราคาและนโยบาย data usage ของ provider เองก่อนใช้งาน แอปไม่มีการควบคุม billing หรือสร้างคีย์ให้แทนผู้ใช้
 
 ปัจจุบัน browser เรียก API ของ provider โดยตรง ดังนั้นคีย์ที่เก็บฝั่ง client **ไม่ใช่ secret ที่ปลอดภัยจากผู้ใช้เครื่องหรือ script ที่ทำงานใน origin เดียวกัน**. Prompt, รูปภาพที่ส่งวิเคราะห์ และผลจาก tools ที่จำเป็นต่อคำถามจะถูกส่งไปยัง provider ที่กำลังทำงาน โปรดตรวจนโยบายของ provider และอย่าใส่ข้อมูลที่ไม่ต้องการส่งออกภายนอก
 
@@ -50,13 +52,14 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 
 ## การทดสอบ
 
-ทดสอบแบบ unit ด้วย mock API โดยไม่เรียกบริการ AI จริง:
+ทดสอบแบบ unit ด้วย mock API โดยไม่เรียกบริการ AI จริง; ค่า API keys จริงไม่จำเป็น:
 
 ```bash
 npm test
+npm run test:coverage
 ```
 
-build เพื่อตรวจ production bundle:
+คำสั่งเหล่านี้รวม tests ใน `src/services/aiService.test.js`; `npm run test:rules` แยกทดสอบ Firestore Emulator ไม่ได้เรียก AI. Build เพื่อตรวจ production bundle:
 
 ```bash
 npm run build

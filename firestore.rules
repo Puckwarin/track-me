@@ -10,10 +10,66 @@ service cloud.firestore {
     function knownCollection(c) {
       return c in ['food_records', 'period_records', 'body_records', 'symptom_records', 'custom_foods', 'skincare_products', 'skin_records', 'ingredient_blacklist', 'pet_profiles', 'pet_care_records', 'pet_food_records', 'tracked_products', 'replacement_records', 'workout_records', 'workout_templates', 'expense_records', 'settings', 'lab_records'];
     }
+    function optionalString(data, field) {
+      return !(field in data) || data[field] == null || data[field] is string;
+    }
+    function optionalStringOrTimestamp(data, field) {
+      return !(field in data) || data[field] == null
+             || data[field] is string || data[field] is timestamp;
+    }
+    function optionalNumber(data, field) {
+      return !(field in data) || data[field] == null
+             || data[field] is int || data[field] is float;
+    }
+    function optionalBoolean(data, field) {
+      return !(field in data) || data[field] == null || data[field] is bool;
+    }
+    function optionalMap(data, field) {
+      return !(field in data) || data[field] == null || data[field] is map;
+    }
+    function validCommonFieldTypes(data, uid) {
+      return (!('uid' in data) || data.uid == uid)
+        && optionalString(data, 'date')
+        && optionalString(data, 'start')
+        && optionalString(data, 'end')
+        && optionalString(data, 'nextDate')
+        && optionalStringOrTimestamp(data, 'createdAt')
+        && optionalStringOrTimestamp(data, 'updatedAt')
+        && optionalString(data, 'name')
+        && optionalString(data, 'category')
+        && optionalString(data, 'type')
+        && optionalString(data, 'note')
+        && optionalString(data, 'source')
+        && optionalString(data, 'status')
+        && optionalString(data, 'dueTime')
+        && optionalNumber(data, 'amount')
+        && optionalNumber(data, 'calories')
+        && optionalNumber(data, 'value')
+        && optionalNumber(data, 'weight')
+        && optionalBoolean(data, 'done')
+        && optionalMap(data, 'symptoms');
+    }
+    function validRuntimeError(data) {
+      return data.keys().hasOnly(['category', 'code', 'source', 'occurredAt', 'receivedAt'])
+        && data.keys().hasAll(['category', 'code', 'source', 'occurredAt', 'receivedAt'])
+        && data.category in ['global', 'unhandled_rejection', 'api', 'ai', 'firebase', 'chunk']
+        && data.source in ['window', 'sync', 'auth', 'ai-service', 'food-search', 'exercise-media', 'chunk-recovery', 'feature-load']
+        && data.code is string
+        && data.code.size() > 0
+        && data.code.size() <= 64
+        && data.code.matches('^[A-Za-z0-9_./-]+$')
+        && data.occurredAt is timestamp
+        && data.receivedAt == request.time;
+    }
+    match /users/{uid}/runtime_error_logs/{logId} {
+      allow create: if isOwner(uid) && validRuntimeError(request.resource.data);
+      allow read, update, delete: if false;
+    }
     match /users/{uid}/{collection}/{recordId} {
-      allow read, delete: if isOwner(uid) && knownCollection(collection);
-      allow create, update: if isOwner(uid) && knownCollection(collection)
-                            && request.resource.data.keys().size() <= 30;
+      allow read, delete: if isOwner(uid) && knownCollection(collection) && collection != 'runtime_error_logs';
+      allow create, update: if isOwner(uid) && knownCollection(collection) && collection != 'runtime_error_logs'
+                            && request.resource.data.keys().size() <= 30
+                            && validCommonFieldTypes(request.resource.data, uid);
     }
   }
 }
