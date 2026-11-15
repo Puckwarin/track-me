@@ -112,7 +112,7 @@ export const SANITIZERS = {
     note:str(o.note,500), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,
   workout_templates: o => str(o.name,60) && ['walk','upper','lower','full','pilates','stretch','other'].includes(o.type) ? {
-    name:str(o.name,60), ...(str(o.muscleGroup,100)&&{muscleGroup:str(o.muscleGroup,100)}), type:o.type,
+    name:str(o.name,60), ...(str(o.muscleGroup,100)&&{muscleGroup:str(o.muscleGroup,100)}), ...(num(o.durationMin)!==null&&{durationMin:num(o.durationMin)}), type:o.type,
     sections:Object.fromEntries(['warmup','main','cooldown'].map(k=>[k,(Array.isArray(o.sections?.[k])?o.sections[k]:[]).slice(0,40).filter(r=>r&&str(r.name,80)).map(r=>({name:str(r.name,80),imageUrl:str(r.imageUrl,1000),...(str(r.refTitle,200)&&{refTitle:str(r.refTitle,200)}),...(str(r.refUrl,1000)&&{refUrl:str(r.refUrl,1000)}),weightKg:num(r.weightKg),perSide:r.perSide===true,sets:int(r.sets,1,99),reps:num(r.reps),repUnit:['sec','min'].includes(r.repUnit)?r.repUnit:'reps',note:str(r.note,400)}))])),
     createdAt:ts(o.createdAt)
   } : null,

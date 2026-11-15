@@ -28,7 +28,7 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 | `tracked_products` | `name`, `category`, `unit`: string; `quantity`, `lowAt`: number; วันที่เปิด/หมดอายุ: string/null; `lowDismissed`: boolean; timestamps | สต๊อก/ของใช้และการเตือน |
 | `replacement_records` | `name`, `category`: string; `date`, `nextDate`: string/null; `repeatMonths`, `intervalDays`, `remindDays`: number; `done`: boolean; `rule`: map; timestamps | ประวัติเปลี่ยนของและนัดหมาย |
 | `workout_records` | `date`, `type`, `status`: string; `durationMin`, `estKcal`, `volumeKg`: number; `sections`: map ของ arrays; `performedSets`: array ของ maps; timestamps | แผนและผลที่ทำจริง |
-| `workout_templates` | `name`, `type`, `muscleGroup`: string; `sections`: map ของ arrays; `createdAt`: timestamp | เทมเพลตและท่าออกกำลังกาย |
+| `workout_templates` | `name`, `type`, `muscleGroup`: string; `durationMin`: number/null; `sections`: map ของ arrays; `createdAt`: timestamp | เทมเพลตและท่าออกกำลังกาย |
 | `lab_records` | `date`, `name`, `unit`, `note`: string; `value`, `refLow`, `refHigh`: number/null; `createdAt`: timestamp | หนึ่งเอกสารต่อผลตรวจ |
 | `expense_records` | `type`, `category`, `merchant`, `note`: string; `amount`: positive number; `date`: string; `time`: string/null; `source`: string (`manual`, `slip_ocr`, `statement`, `recurring`); `createdAt`: timestamp หรือ ISO string | หนึ่งเอกสารต่อรายรับ/รายจ่าย/โอน; ID เดิมคงที่เพื่อให้ migration ทำซ้ำได้ |
 | `settings` | fields ขึ้นกับ document ID; โปรไฟล์ใช้ strings/numbers/arrays; Planner ใช้ arrays/maps; งบ/กฎ/รายการประจำใช้เอกสารแบบมี `kind` | ดู document IDs ด้านล่าง |
@@ -49,7 +49,7 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 
 `settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array, `doneMap`/`extras` เป็น map ตามวันที่ และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย v4.1.0 (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
 
-สถานะ onboarding (`step`, `in_progress`/`completed`) เก็บใน `localStorage` แยกตาม UID/อุปกรณ์ ไม่ได้สร้าง collection หรือเอกสาร Firestore เพิ่ม.
+สถานะ onboarding (`step`, `in_progress`/`completed`) และประวัติ/บทบาทของ AI Chat (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) เก็บใน `localStorage` เฉพาะเบราว์เซอร์/อุปกรณ์นั้น ไม่ได้สร้าง collection หรือเอกสาร Firestore เพิ่ม.
 
 ## ความสัมพันธ์ระหว่างเอกสาร
 

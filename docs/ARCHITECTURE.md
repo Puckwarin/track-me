@@ -47,8 +47,8 @@ index.html
 
 ## โมดูลและ service layer
 
-- `src/services/aiService.js` จัดการ transport ของ Gemini, Groq และ OpenRouter, model discovery, retry, timeout, cancellation, cooldown, error normalization และ fallback
-- `src/services/aiAssistant.js` กำหนด read/write tools และขอบเขตข้อมูลของ AI Assistant; `nutrition.js` เป็น consumer สำหรับโภชนาการและงาน AI ที่เกี่ยวข้อง
+- `src/services/aiService.js` จัดการ transport ของ Gemini, Groq และ OpenRouter, model discovery/selection (`nutrition`, `chat`, `fast`, `complex`, `deep`), retry, timeout, cancellation, cooldown, error normalization และ fallback
+- `src/services/aiAssistant.js` และ `src/services/chatRoles.js` กำหนดบทบาทแชท, การสนทนาทั่วไป, read/write tools (6 Read + 4 Write) และขอบเขตความปลอดภัยของ AI Assistant; `nutrition.js` เป็น consumer สำหรับโภชนาการ, จัดโครงสร้างแผนออกกำลังกาย และงาน AI ที่เกี่ยวข้อง
 - `food*` แยก catalog/constants, parser, calculations, validation, Firestore service, editor/history และ UI
 - `backup.js`, `migrate.js` และ `schema.js` ดูแลสำรอง/กู้คืน, ย้าย Room Code เดิม และ sanitize ข้อมูล
 - `push.js` จัดการ Web Push ใน browser; `scripts/daily-push.mjs` เป็นงานฝั่ง server ที่ GitHub Actions เรียกตามเวลาโดยใช้ secrets

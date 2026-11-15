@@ -218,4 +218,42 @@ describe('AI service', () => {
     await expect(selectGroqModels('vision', 'groq-test')).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(3);
   });
+
+  it('routes chat, fast, complex, and deep features to Gemini 4 and 3.1 models', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      models: [
+        { name: 'models/gemini-4-carbon', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-4-argon', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-4-hydrogen', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-3.1-flash-lite', supportedGenerationMethods: ['generateContent'] }
+      ]
+    })));
+
+    await expect(selectGeminiModels('deep', 'gemini-routing-key')).resolves.toEqual([
+      'gemini-4-carbon',
+      'gemini-4-argon',
+      'gemini-4-hydrogen',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite'
+    ]);
+    await expect(selectGeminiModels('complex', 'gemini-routing-key')).resolves.toEqual([
+      'gemini-4-argon',
+      'gemini-4-hydrogen',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite'
+    ]);
+    await expect(selectGeminiModels('chat', 'gemini-routing-key')).resolves.toEqual([
+      'gemini-4-hydrogen',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite'
+    ]);
+    await expect(selectGeminiModels('fast', 'gemini-routing-key')).resolves.toEqual([
+      'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-4-hydrogen'
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
+

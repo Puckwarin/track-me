@@ -16,12 +16,24 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 
 ## Provider และการเลือกโมเดล
 
-- **Gemini**: เรียก model-list endpoint แล้วเลือกเฉพาะโมเดลที่รองรับ `generateContent` และตรงกับประเภทงาน หากค้นหารายชื่อไม่ได้เพราะปัญหาเครือข่าย จะใช้ candidate ที่กำหนดไว้ใน service; หากเป็นคีย์ผิดหรือโควตาเต็ม จะส่ง error ต่อเพื่อหยุดเรียก Gemini และไป provider ถัดไป
+- **Gemini**: เรียก model-list endpoint แล้วเลือกเฉพาะโมเดลที่รองรับ `generateContent` และตรงกับประเภทงาน (`nutrition`, `chat`, `fast`, `complex`, `deep`) โดยจับคู่บทบาทแชทกับ candidate ดังนี้:
+  - `chat` (คุยทั่วไป): `gemini-4-hydrogen` → `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`
+  - `fast` (ตอบไว): `gemini-3.1-flash-lite` → `gemini-3.8-flash` → `gemini-4-hydrogen` → `gemini-3.5-flash-lite`
+  - `complex` (โค้ชสุขภาพ / วางแผน & เงิน): `gemini-4-argon` → `gemini-4-hydrogen` → `gemini-3.8-flash` → `gemini-3.6-flash`
+  - `deep` (วิเคราะห์ลึก): `gemini-4-carbon` → `gemini-4-argon` → `gemini-4-hydrogen` → `gemini-3.8-flash`
+  - สำหรับโมเดลตระกูล `gemini-4-*` ระบบจะไม่ส่งพารามิเตอร์ที่โมเดลไม่รองรับ (`temperature`, `thinkingBudget`) และหากโมเดลระดับสูง (`gemini-4-carbon` / `gemini-4-argon`) ตอบกลับ 403/404 จากข้อจำกัดสิทธิ์ของคีย์ จะ fallback ไปยังโมเดลถัดไปอย่าง `gemini-4-hydrogen` อัตโนมัติ (หากค้นหารายชื่อไม่ได้เพราะปัญหาเครือข่าย จะใช้ candidate ที่กำหนดไว้; หากคีย์ผิดหรือโควตาเต็ม จะไป provider ถัดไป)
 - **Groq**: ค้นรายชื่อโมเดลจาก API แล้วเลือกโมเดลข้อความหรือ vision ที่เข้ากันได้ โดยมี candidate สำรองเมื่อค้นรายชื่อไม่ได้เพราะเครือข่าย
 - **OpenRouter**: เลือกเฉพาะโมเดลฟรีที่รับข้อความ และกรองเพิ่มตามความต้องการ เช่น ภาพหรือ `tools`
 - รายชื่อโมเดลถูก cache ในหน่วยความจำ 5 นาที; ไม่ cache ผลลัพธ์ส่วนตัวจาก AI
 
 ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง งานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
+
+## AI Chat Assistant (`src/services/aiAssistant.js`, `src/services/chatRoles.js`, `src/chatWidget.js`)
+
+- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me (Read Tools 6 ตัว: `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness`; Write Tools 4 ตัว: `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`)
+- เก็บหน้าต่างสนทนาต่อเนื่องย้อนหลังสูงสุด 20 ข้อความต่อคำขอ (`HISTORY_LIMIT = 20`) พร้อมบทบาทที่เลือกและคำสั่งเพิ่มเติมที่ผู้ใช้กำหนด
+- ป้องกัน Prompt Injection ด้วย `sanitizeDataText()` และ `wrapUntrustedToolData()` รอบผลลัพธ์จาก Read Tools รวมถึงบังคับการ์ดยืนยันจากผู้ใช้สำหรับรายการยอดสูงหรือการเขียนหลายรายการพร้อมกัน
+- บันทึกประวัติแชทล่าสุด (สูงสุด 30 ข้อความ), บทบาทที่เลือก และคำสั่งเพิ่มเติมไว้ใน `localStorage` ของเบราว์เซอร์เครื่องนั้น (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) โดยไม่ซิงค์ลง Firestore และล้างออกได้ด้วยปุ่มเริ่มบทสนทนาใหม่
 
 ## Quota, retry และ cooldown
 
@@ -59,7 +71,7 @@ npm test
 npm run test:coverage
 ```
 
-คำสั่งเหล่านี้รวม tests ใน `src/services/aiService.test.js`; `npm run test:rules` แยกทดสอบ Firestore Emulator ไม่ได้เรียก AI. Build เพื่อตรวจ production bundle:
+คำสั่งเหล่านี้รวม tests ใน `src/services/aiService.test.js` และ `src/services/aiAssistant.test.js`; `npm run test:rules` แยกทดสอบ Firestore Emulator ไม่ได้เรียก AI. Build เพื่อตรวจ production bundle:
 
 ```bash
 npm run build

@@ -14,7 +14,10 @@ const MAX_RETRY_DELAY_MS = 2000;
 const MAX_RETRY_AFTER_DELAY_MS = 30_000;
 const GEMINI_MODELS = {
   nutrition: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'],
-  chat: ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+  chat: ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+  fast: ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash-lite'],
+  complex: ['gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash'],
+  deep: ['gemini-4-carbon', 'gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash']
 };
 const GROQ_MODELS = {
   text: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
@@ -279,9 +282,16 @@ export async function selectGeminiModels(feature = 'nutrition', key = getProvide
     if (error.invalidKey || error.quotaExceeded || error.aborted) throw error;
     console.warn('Could not discover Gemini models:', error?.message);
   }
+  const featurePattern = {
+    nutrition: /(flash|lite)/i,
+    fast: /(lite|flash|hydrogen)/i,
+    chat: /(flash|hydrogen|lite)/i,
+    complex: /(argon|hydrogen|flash|lite)/i,
+    deep: /(carbon|argon|hydrogen|flash|lite)/i
+  }[feature] || /(flash|lite)/i;
   const eligible = discovered.filter(id =>
-    (feature === 'chat' ? /(flash|hydrogen|lite)/i : /(flash|lite)/i).test(id) &&
-    !/tts|live|image|audio|embedding|transcribe|thinking|1\.5|2\.0|exp/i.test(id))
+    featurePattern.test(id) &&
+    !/tts|live|image|audio|embedding|transcribe|thinking|1\.5|2\.0|exp/i.test(id));
   const selectedPrimary = discovered.length
     ? primary.filter(id => eligible.includes(id))
     : primary;

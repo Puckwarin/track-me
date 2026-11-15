@@ -31,11 +31,12 @@
 | `period.js`, `body.js`, `symptoms.js`, `profile.js`, `lab.js` | สุขภาพ, เป้าหมายและผลตรวจ |
 | `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, กฎหมวดหมู่, Statement และ OCR สลิป |
 | `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง, สต๊อก, Planner และการเตือน |
-| `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutConstants.js` | แผนและบันทึก workout |
+| `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutConstants.js` | แผน/บันทึก workout, ตัวแปลงข้อความและตาราง, กรอบภาพ และโหมดจับเวลาพัก |
 | `reports.js`, `weekly.js`, `summary.js`, `home.js` | หน้าสรุปและรายงาน |
 | `settings.js`, `backup.js`, `migrate.js`, `onboarding.js` | ตั้งค่า, backup/restore, migration และ first-run UX |
 | `services/aiService.js` | AI provider transport/model selection/retry/cooldown/fallback |
-| `services/aiAssistant.js`, `chatWidget.js` | AI tools และหน้าต่างแชท |
+| `services/chatRoles.js` | นิยาม 5 บทบาทแชทและการจับคู่ model preset แบบ lightweight สำหรับ UI |
+| `services/aiAssistant.js`, `chatWidget.js` | AI Read/Write tools, system prompt, Markdown renderer และหน้าต่างแชท |
 | `runtimeErrorMonitor.js` | error report ที่จำกัด metadata และปริมาณ |
 | `*.test.js` | Vitest tests วางข้างโมดูลที่ทดสอบ |
 

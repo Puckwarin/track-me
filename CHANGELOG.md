@@ -3,6 +3,23 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v4.2.0] - 2026-11-15
+
+### ผู้ช่วยแชท AI (AI Chat Assistant Expansion)
+- **เปิดกว้างคุยได้ทุกหัวข้อ & 5 บทบาทเฉพาะทาง (`src/services/chatRoles.js`, `src/services/aiAssistant.js`, `src/services/aiService.js`)**:
+  - ปรับ `buildSystemPrompt` ให้สนทนาเรื่องทั่วไปได้อิสระ (ความรู้ทั่วไป ร่างข้อความ แปลภาษา ระดมสมอง) ควบคู่กับการเรียกเครื่องมือของ Track Me เฉพาะเมื่อจำเป็น พร้อมขยายหน้าต่างสนทนาต่อเนื่องเป็น **20 ข้อความ** (`HISTORY_LIMIT = 20`)
+  - เพิ่มแถบสลับ **5 บทบาท** และจับคู่โมเดลอัตโนมัติ: `คุยทั่วไป` (`gemini-4-hydrogen`), `โค้ชสุขภาพ` / `วางแผน & เงิน` (`gemini-4-argon`), `วิเคราะห์ลึก` (`gemini-4-carbon`) และ `ตอบไว` (`gemini-3.1-flash-lite`) พร้อม fallback ไปยัง `gemini-4-hydrogen` / `Groq` / `OpenRouter` เมื่อคีย์ไม่มีสิทธิ์หรือเกิดข้อจำกัด และงดส่งพารามิเตอร์ที่ตระกูล `gemini-4-*` ไม่รองรับ (`temperature`, `thinkingBudget`)
+  - เพิ่ม Read Tools ใหม่ 2 ตัว: `getWorkouts` (ประวัติออกกำลังกายและเทมเพลต) และ `getBodyAndWellness` (น้ำหนัก/สัดส่วน รอบเดือน อาการ และผลตรวจสุขภาพ) พร้อมกรอบ `wrapUntrustedToolData` และ `sanitizeDataText`
+- **Chat UI/UX & Markdown (`src/chatWidget.js`, `src/style.css`)**:
+  - รองรับแสดงผล Markdown (หัวข้อ ตัวหนา/เอียง รายการข้อย่อย โค้ดบล็อก) แบบ Escape HTML ก่อนจัดรูปแบบเพื่อความปลอดภัย (XSS-safe)
+  - เปลี่ยนเป็นช่องพิมพ์หลายบรรทัดขยายความสูงอัตโนมัติ, เพิ่มปุ่ม **หยุดการตอบ (`#ai-chat-stop`)**, ช่องตั้งคำสั่งบุคลิก/หัวข้อเพิ่มเติม, Quick Prompts ตามบทบาท และบันทึกประวัติแชท/บทบาทใน `localStorage` ข้ามการรีเฟรช รองรับครบ 3 ธีม (`Cozy`, `Pastel`, `Dark`)
+  - เพิ่ม Unit Tests ใน `src/services/aiService.test.js` และ `src/services/aiAssistant.test.js`
+
+### ออกกำลังกาย (Workout Hub & Active Workout)
+- **อัปเกรดตัวแปลงแผนออกกำลังกายและกรอบภาพ (`src/workoutParser.js`, `src/workout.js`, `src/workoutActive.js`, `src/nutrition.js`, `src/schema.js`)**:
+  - รองรับทั้งข้อความดิบ (มี/ไม่มีเลขลำดับ), Markdown/TSV table และปุ่มจัดโครงสร้างด้วย AI (`formatWorkoutPlanWithAi`) ให้เป็นรูปแบบมาตรฐาน 3 ส่วน (`1. Warm-up`, `2. Main Workout`, `3. Cool-down`) พร้อมค่าเริ่มต้นแบบ Beginner-Friendly และปุ่มเปิดโหมดเริ่มตามแผนทันที
+  - แยก `imageUrl` กับ `refUrl` พร้อมตรวจจับลิงก์ภาพที่ไม่สมบูรณ์ (`imageHint`), แสดงภาพประกอบในกรอบ `object-contain` พร้อม `referrerpolicy="no-referrer"` และการแตะเพื่อขยายดู, เพิ่มตัวจับเวลาพัก `30 / 60 / 90` วินาทีในโหมด Active Workout และรองรับ `durationMin` ใน `workout_templates`
+
 ## [v4.1.0] - 2026-11-15
 
 ### การเงินและความน่าเชื่อถือ
