@@ -58,6 +58,7 @@
 - firestore.rules.migration — Rules ชั่วคราวสำหรับขั้นตอนย้ายข้อมูลเก่า
 - public/ — ไอคอน, push-sw.js และไฟล์สาธารณะที่ Vite/PWA ใช้
 - src/ — โมดูลหลักของแอป
+- src/food.js และโมดูล `food*` — หน้าบันทึกอาหาร, parser, การคำนวณ, validation, Firestore service และ UI ย่อย (ดู [docs/FOOD_MODULES.md](docs/FOOD_MODULES.md))
 
 > **การย้อนเวอร์ชันเว็บ (Rollback):** ให้สร้าง revert commit/PR จาก commit ที่ต้องการย้อน แล้ว merge เพื่อให้ GitHub Pages deploy จาก main อีกครั้ง (Tag เป็นเพียงจุดอ้างอิงเวอร์ชัน ไม่ได้ย้อน production ให้อัตโนมัติ และการเปลี่ยน Firestore Rules ต้องพิจารณาแยกจากการย้อนเว็บ)
 

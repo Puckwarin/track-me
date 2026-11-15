@@ -1,74 +1,21 @@
-import { addDoc, setDoc, updateDoc, deleteDoc, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
-import { watch } from './sync.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { lookupPer100g, analyzeFoodImage, explainGeminiError } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
 import { guessFoodCategory, parseBulkFoodText } from './foodParser.js';
+import { DEFAULT_PRESETS, MEAL_ORDER, MEAL_COLORS, BUILTIN_FAV_KEY, HIDDEN_BUILTINS_KEY, builtinFavorites, categoryNames, getPresets, gramsInUnit, hiddenBuiltins, label } from './foodConstants.js';
+import { canWeigh, foodLogName, foodLogPortion, foodLogQuantity, foodQuantityFromInput, fmtAmount, unitNutritionFor } from './foodCalculations.js';
+import { validateFoodLog } from './foodValidation.js';
+import { addCustomFood, addFoodRecord, deleteCustomFood, deleteFoodRecord, updateCustomFood, updateFoodRecord, watchFoodRecords } from './foodService.js';
+import { openFoodEditor } from './foodEditor.js';
+import { openFoodHistorySearch } from './foodHistory.js';
 export { guessFoodCategory };
-
-const GOALS = { cal: 2000, protein: 100, carbs: 200, fat: 60 };
-const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
-const MEAL_COLORS = {
-  'มื้อเช้า': { header: 'bg-amber-100 text-amber-900', row: 'bg-amber-50/60', icon: 'fa-sun' },
-  'มื้อกลางวัน': { header: 'bg-sky-100 text-sky-900', row: 'bg-sky-50/60', icon: 'fa-cloud-sun' },
-  'มื้อเย็น': { header: 'bg-violet-100 text-violet-900', row: 'bg-violet-50/60', icon: 'fa-moon' },
-  'ของว่าง/เครื่องดื่ม': { header: 'bg-pink-100 text-pink-900', row: 'bg-pink-50/60', icon: 'fa-mug-hot' }
-};
-const DEFAULT_PRESETS = [
-  { id: 'builtin-rice', name: 'ข้าวสวย', unit: '100 g', gramsPerUnit: 100, calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
-  { id: 'builtin-egg', name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
-  { id: 'builtin-guava', name: 'ฝรั่ง', unit: '120 g', gramsPerUnit: 120, calories: 82, protein: 3.1, carbs: 17.2, fat: 1.2 }
-];
-const FOOD_IMPORT_ROWS = [
-  ['Alpen Muesli', '40.0', 'g', '148', '4.4', '29.2', '2.2'],
-  ['Daily Me Granola (Dark Choc)', '35.0', 'g', '170', '4.0', '22.0', '7.0'],
-  ['Grainey Grain Bar Chocolate Banana', '1.0', 'piece(s)', '80', '0.0', '18.0', '0.0'],
-  ['Granola Crunchy Honey', '35.0', 'g', '150', '3.0', '28.0', '3.5'],
-  ['Granola Walt Choco', '35.0', 'g', '150', '4.0', '25.0', '4.0'],
-  ['Granovibes Granola (Choc)', '35.0', 'g', '160', '5.0', '24.0', '4.5'],
-  ['Granovibes Granola (Matcha)', '35.0', 'g', '150', '4.0', '26.0', '3.5'],
-  ['Granovibes Granola (Original)', '35.0', 'g', '160', '5.0', '23.0', '5.0'],
-  ['Misura Firrextra Wholemeal', '1.0', 'serving', '120', '4.0', '22.0', '2.0'],
-  ['Sourdough Bread', '100.0', 'g', '240', '10.5', '45.0', '1.5'],
-  ['Whole Wheat Biscuits', '2.0', 'piece(s)', '136', '5.0', '26.0', '1.0'],
-  ['Whole Wheat Bread (Cocoa)', '1.0', 'piece(s)', '80', '2.5', '13.0', '1.5'],
-  ['Whole Wheat Bread (Original)', '1.0', 'piece(s)', '75', '2.5', '13.0', '1.0'],
-  ['Younger Farm Protein Granola (Choc)', '40.0', 'g', '170', '9.0', '20.0', '6.0']
-];
-
-const label = p => `${p.name}${p.brand ? ' · ' + p.brand : ''} (${p.unit})`;
-const HIDDEN_BUILTINS_KEY = 'trackme-hidden-builtins';
-const hiddenBuiltins = () => { try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_BUILTINS_KEY) || '[]')); } catch { return new Set(); } };
-const BUILTIN_FAV_KEY = 'trackme-builtin-favorites';
-const builtinFavorites = () => { try { return new Set(JSON.parse(localStorage.getItem(BUILTIN_FAV_KEY) || '[]')); } catch { return new Set(); } };
-const categoryNames = ['ข้าว/เส้น', 'โปรตีน', 'ผลไม้', 'ผัก', 'ซีเรียล/กราโนลา', 'ขนม/ของว่าง', 'ขนมปัง/เบเกอรี่', 'เครื่องดื่ม/นม', 'อาหารคลีน/Hiwpinto', 'อื่น ๆ'];
-const gramsInUnit = unit => {
-  const matches = [...String(unit || '').matchAll(/(\d+(?:\.\d+)?)\s*(?:g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)(?![a-z])/gi)];
-  return matches.length ? Number(matches[matches.length - 1][1]) : null;
-};
-const normalizedStoredPreset = p => {
-  const row = FOOD_IMPORT_ROWS.find(r => r[0].toLowerCase() === String(p.name).toLowerCase());
-  if (row && !p.defaultQuantity) {
-    const amount = Number(row[1]), unit = row[2];
-    if (String(p.unit).toLowerCase() === (String(amount) + ' ' + unit).toLowerCase()) {
-      const by = /^(g|gram|grams|กรัม)$/i.test(unit) ? amount : 1;
-      return { ...p, unit: /^(g|gram|grams|กรัม)$/i.test(unit) ? 'g' : unit, gramsPerUnit: by === amount ? 1 : p.gramsPerUnit,
-        calories: p.calories / by, protein: p.protein / by, carbs: p.carbs / by, fat: p.fat / by,
-        defaultQuantity: amount, category: p.category || guessFoodCategory(p.name), _normalizedImport: true };
-    }
-  }
-  // Older custom foods may store the portion weight in the unit text but lack gramsPerUnit.
-  const parsed = gramsInUnit(p.unit);
-  return p.gramsPerUnit > 0 || !parsed ? p : { ...p, gramsPerUnit: parsed };
-};
-export const getPresets = () => [
-  ...state.customFoods.map(normalizedStoredPreset).map(p => ({ ...p, category: p.category || (p.hiwpinto ? 'อาหารคลีน/Hiwpinto' : guessFoodCategory(p.name)), custom: true })).sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || a.name.localeCompare(b.name, 'th')),
-  ...DEFAULT_PRESETS.filter(p => !hiddenBuiltins().has(p.id)).map(p => ({ ...p, category: guessFoodCategory(p.name), favorite: builtinFavorites().has(p.id) }))
-];
+export { openFoodEditor, openFoodHistorySearch };
+export { getPresets } from './foodConstants.js';
 
 let root, items = [], base = null;   // base = ค่าต่อ 1 หน่วยของเมนูที่เลือกจากคลัง
 const selectedFoodIds = new Set();
@@ -221,7 +168,7 @@ export function mountFood(el) {
     const b = e.target.closest('[data-del]');
     if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) {
       selectedFoodIds.delete(b.dataset.del);
-      deleteDoc(userDoc(state.uid, 'food_records', b.dataset.del)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
+      deleteFoodRecord(state.uid, b.dataset.del).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
     }
   });
   on('customFoods', refreshDatalist);
@@ -368,7 +315,7 @@ function openHiwpintoCalculator(saved = null) {
 export function watchDay() {
   if (!state.uid || !root) return;
   const date = $('#f-date', root).value;
-  watch('food', query(userCol(state.uid, 'food_records'), where('date', '==', date)), list => { items = list; renderDay(); });
+  watchFoodRecords(state.uid, date, list => { items = list; renderDay(); });
 }
 
 function fillMealSelect() {
@@ -382,7 +329,6 @@ function fillMealSelect() {
     if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
   });
 }
-
 function refreshDatalist() {
   if (!root) return;
   $('#f-datalist', root).innerHTML = getPresets().map(p => `<option value="${esc(label(p))}"></option>`).join('');
@@ -442,58 +388,10 @@ function clearFoodForm() {
   updateFoodPreview();
 }
 
-function foodLogQuantity(item) {
-  if (Number.isFinite(item.quantity) && item.quantity > 0) return item.quantity;
-  const legacy = String(item.name || '').match(/\s×\s*(\d+(?:\.\d+)?)$/);
-  return legacy ? Number(legacy[1]) : 1;
-}
-
-const foodLogName = name => String(name || '').replace(/\s×\s*\d+(?:\.\d+)?$/, '');
-const fmtAmount = value => String(Number(Number(value).toFixed(2)));
-const foodLogPortion = item => {
-  if (Number.isFinite(item.weighedGrams) && Number.isFinite(item.edibleFraction)) {
-    const edibleGrams = Number.isFinite(item.edibleGrams) ? item.edibleGrams : item.weighedGrams * item.edibleFraction;
-    return `ชั่ง ${fmtAmount(item.weighedGrams)} g · ${fmtAmount(item.edibleFraction * 100)}% ≈ ${fmtAmount(edibleGrams)} g ที่กินได้`;
-  }
-  const quantity = foodLogQuantity(item);
-  if (item.portionUnit === 'g') return `${fmtAmount(quantity)} g`;
-  if (item.portionUnit === 'ml') return `${fmtAmount(quantity)} ml`;
-  const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
-  if (inferredGrams > 0) return `${fmtAmount(quantity * inferredGrams)} g`;
-  if (item.portionUnit && item.portionUnit !== 'หน่วย') {
-    if (/^\d/.test(item.portionUnit)) return quantity === 1 ? item.portionUnit : `×${fmtAmount(quantity)} (${item.portionUnit})`;
-    return `${fmtAmount(quantity)} ${item.portionUnit}`;
-  }
-  return quantity === 1 ? '' : `จำนวน ×${fmtAmount(quantity)} หน่วย`;
-};
-
-function unitNutritionFor(item, quantity = foodLogQuantity(item)) {
-  const perUnit = key => quantity > 0 ? num(item[key]) / quantity : num(item[key]);
-  if (item.unitNutrition && Number.isFinite(item.unitNutrition.calories)) return {
-    calories: item.unitNutrition.calories,
-    protein: item.unitNutrition.protein ?? perUnit('protein'), carbs: item.unitNutrition.carbs ?? perUnit('carbs'),
-    fat: item.unitNutrition.fat ?? perUnit('fat'),
-    sugar: item.unitNutrition.sugar ?? (item.sugar == null ? null : perUnit('sugar')),
-    sodium: item.unitNutrition.sodium ?? (item.sodium == null ? null : perUnit('sodium'))
-  };
-  return {
-    calories: perUnit('calories'), protein: perUnit('protein'), carbs: perUnit('carbs'), fat: perUnit('fat'),
-    sugar: item.sugar == null ? null : perUnit('sugar'), sodium: item.sodium == null ? null : perUnit('sodium')
-  };
-}
-
 // ถ้าเมนูรู้น้ำหนักต่อหน่วย ผู้ใช้จะกรอกเป็นกรัมหรือจำนวนหน่วยก็ได้: ระบบใช้ขนาดของตัวเลขเดาโหมดเอง — เลข ≥ น้ำหนัก 1 หน่วย × 0.9 ถือเป็นกรัม เลขน้อยกว่านั้นถือเป็นจำนวนหน่วย
 let qtyMode = 'auto';
-const isWeightUnit = u => /^\s*\d+(\.\d+)?\s*(g|gram|grams|กรัม|ml|มล\.?|มิลลิลิตร)\s*$/i.test(u || '');
-const canWeigh = () => Boolean(base && base.gramsPerUnit > 0 && !base.edibleFraction && !(base.unit === 'g' && base.gramsPerUnit === 1));
 // จำนวนหน่วยจริงที่จะบันทึก: ถ้าเมนูชั่งได้และค่าที่กรอกน่าจะเป็นกรัม ให้แปลงกลับเป็นหน่วย
-const formQty = () => {
-  const raw = numField(root, 'f-qty');
-  if (raw === null || !canWeigh()) return raw;
-  const gramThreshold = base.gramsPerUnit * 0.9;
-  const looksLikeGrams = base.gramsPerUnit >= 15 ? raw >= gramThreshold : raw >= 10;
-  return looksLikeGrams ? raw / base.gramsPerUnit : raw;
-};
+const formQty = () => foodQuantityFromInput(numField(root, 'f-qty'), base);
 
 function syncFoodWeightForm() {
   if (!root) return;
@@ -501,7 +399,7 @@ function syncFoodWeightForm() {
   const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
   $('#f-qty-label', root).textContent = gramMode ? 'น้ำหนักที่กิน (กรัม)'
-    : canWeigh() ? `จำนวน หรือน้ำหนัก (กรัม)` : 'จำนวน (หน่วย)';
+    : canWeigh(base) ? `จำนวน หรือน้ำหนัก (กรัม)` : 'จำนวน (หน่วย)';
   $('#f-qty', root).step = gramMode ? '1' : '0.01';
   $('#f-preview', root).textContent = gramMode ? 'สารอาหารในคลังคิดต่อ 1 กรัม · ยอดรวมปรับตามน้ำหนักที่กรอก' : '';
   $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
@@ -521,13 +419,12 @@ function updateEdibleEstimate() {
 function saveFood() {
   const name = $('#f-name', root).value.trim();
   const cal = numField(root, 'f-cal');
-  if (!name || cal === null) return toast('กรุณากรอกชื่อเมนูและแคลอรี่', 'err');
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
   const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
-  if (grossMode && (!weighedGrams || weighedGrams <= 0 || !ediblePercent || ediblePercent > 100)) return toast('กรุณาระบุน้ำหนักที่ชั่งและสัดส่วนที่กินได้ 1–100%', 'err');
   const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (formQty() ?? 1);
-  if (qty <= 0) return toast('จำนวนต้องมากกว่า 0', 'err');
+  const validationError = validateFoodLog({ name, calories: cal, grossMode, weighedGrams, ediblePercent, quantity: qty });
+  if (validationError) return toast(validationError, 'err');
   const m = v => (v === null ? 0 : round1(v * qty));
   const unitNutrition = {
     calories: cal, protein: numField(root, 'f-pro') ?? 0, carbs: numField(root, 'f-carb') ?? 0,
@@ -555,7 +452,7 @@ function saveFood() {
     rec.edibleFractionSource = base.edibleFractionSource || null;
   }
   // ไม่ await: ตอนออฟไลน์ promise จะไม่จบจนกว่าจะซิงค์ แต่ข้อมูลถูกเก็บในเครื่องและแสดงทันที
-  addDoc(userCol(state.uid, 'food_records'), rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
+  addFoodRecord(state.uid, rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   clearFoodForm();
 }
 
@@ -604,7 +501,7 @@ function moveFoodMeal(id) {
   const modal=openModal(`<h3 class="font-bold text-lg mb-3">ย้ายไปมื้ออื่น</h3><p class="text-sm text-slate-600 mb-3">${esc(foodLogName(item.name))}</p><label class="lbl">มื้อใหม่</label><select id="move-food-meal" class="input">${options}</select><div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="move-food-confirm" class="btn btn-primary">ย้ายมื้อ</button></div>`);
   $('#move-food-confirm',modal.el).addEventListener('click',()=>{
     const select=$('#move-food-meal',modal.el), meal=select.selectedOptions[0]?.textContent||'';
-    updateDoc(userDoc(state.uid,'food_records',id),{mealId:select.value,meal,updatedAt:new Date()})
+    updateFoodRecord(state.uid, id, {mealId:select.value,meal,updatedAt:new Date()})
       .then(()=>toast(`ย้ายไป${meal}แล้ว`)).catch(e=>toast('ย้ายมื้อไม่สำเร็จ: '+e.message,'err'));
     modal.close();
   });
@@ -657,7 +554,7 @@ function editFoodQuantity(id) {
       updates.weighedGrams = amount; updates.edibleFraction = edibleFraction;
       updates.edibleGrams = amount * edibleFraction; updates.edibleUnitGrams = item.edibleUnitGrams;
     }
-    const saving = updateDoc(userDoc(state.uid, 'food_records', id), updates);
+    const saving = updateFoodRecord(state.uid, id, updates);
     m.close();
     saving.then(() => toast('ปรับจำนวนและสารอาหารแล้ว'))
       .catch(err => toast('แก้จำนวนไม่สำเร็จ: ' + err.message, 'err'));
@@ -691,7 +588,7 @@ function renderDay() {
     </th></tr>` + rows.map(i => `
       <tr class="${tone.row} hover:bg-white/80">
       <td class="p-2 text-center align-middle"><input type="checkbox" data-food-sel="${esc(i.id)}" class="accent-violet-500" aria-label="เลือก ${esc(foodLogName(i.name))}" ${selectedFoodIds.has(i.id) ? 'checked' : ''}></td>
-      <td class="p-2 sm:p-2.5 min-w-0 max-w-0 font-medium text-slate-800" title="${esc(foodLogName(i.name))}"><span class="block truncate">${esc(foodLogName(i.name))}</span>${foodLogPortion(i) ? `<span class="block truncate text-[11px] font-normal text-slate-500">${esc(foodLogPortion(i))}</span>` : ''}</td>
+      <td class="p-2 sm:p-2.5 min-w-0 max-w-0 font-medium text-slate-800" title="${esc(foodLogName(i.name))}"><span class="block truncate">${esc(foodLogName(i.name))}</span>${foodLogPortion(i, getPresets()) ? `<span class="block truncate text-[11px] font-normal text-slate-500">${esc(foodLogPortion(i, getPresets()))}</span>` : ''}</td>
       <td class="p-2 text-right font-bold text-slate-700 whitespace-nowrap">${esc(i.calories)}</td>
       <td class="p-2 text-right text-slate-600 whitespace-nowrap">${esc(i.protein)}g</td>
       <td class="p-1.5 text-center"><div class="flex justify-center gap-1"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-move-log="${esc(i.id)}" class="text-sky-600 hover:text-sky-800 p-1" aria-label="ย้ายมื้อ ${esc(foodLogName(i.name))}" title="ย้ายไปมื้ออื่น"><i class="fa-solid fa-right-left text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
@@ -773,7 +670,7 @@ function openFoodSearchModal(initialQuery = '') {
       $('#f-sodium-wrap', root)?.classList.toggle('hidden', food.sodium == null);
       updateFoodPreview();
     },
-    onSaveLibrary: food => addDoc(userCol(state.uid, 'custom_foods'), {
+    onSaveLibrary: food => addCustomFood(state.uid, {
       name: food.name, brand: food.brand || '', unit: food.unit || '100 กรัม', gramsPerUnit: food.gramsPerUnit ?? 100,
       category: guessFoodCategory(food.name), calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat,
       sugar: food.sugar, sodium: food.sodium, favorite: false, createdAt: new Date()
@@ -907,54 +804,6 @@ async function onUnifiedScan(e) {
 }
 
 // ---------- Custom food library ----------
-export function openFoodHistorySearch() {
-  const today = localDateStr();
-  const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg"><i class="fa-solid fa-magnifying-glass text-brand mr-1"></i> ค้นหาประวัติอาหารที่บันทึก</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-      <input id="fh-q" class="input" placeholder="🔍 ชื่อเมนู (เว้นว่าง = ดูทั้งหมด)">
-      <input id="fh-from" type="date" class="input" value="${addDays(today, -30)}">
-      <input id="fh-to" type="date" class="input" value="${today}">
-    </div>
-    <div class="flex justify-end mb-3"><button id="fh-go" type="button" class="btn btn-primary text-xs">ค้นหา</button></div>
-    <div id="fh-res" class="space-y-2 max-h-80 overflow-y-auto text-sm text-slate-500">กดปุ่ม "ค้นหา" เพื่อดูรายการในช่วงวันที่เลือก</div>
-  `, { wide: true });
-
-  const search = async () => {
-    const q = $('#fh-q', m.el).value.trim().toLowerCase();
-    const from = $('#fh-from', m.el).value;
-    const to = $('#fh-to', m.el).value;
-    if (!from || !to || from > to) return toast('ช่วงวันที่ไม่ถูกต้อง', 'err');
-    const out = $('#fh-res', m.el);
-    out.textContent = 'กำลังค้นหา...';
-    try {
-      const snap = await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', from), where('date', '<=', to)));
-      const rows = snap.docs
-        .map(d => d.data())
-        .filter(r => !q || String(r.name || '').toLowerCase().includes(q) || String(r.meal || '').toLowerCase().includes(q))
-        .sort((a, b) => b.date.localeCompare(a.date));
-      out.innerHTML = rows.length
-        ? `<p class="text-xs text-slate-500 mb-2">พบ ${rows.length} รายการ</p>` + rows.slice(0, 100).map(r => `
-          <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <div class="min-w-0">
-              <p class="font-semibold text-slate-800 truncate">${esc(r.name)}</p>
-              <p class="text-xs text-slate-500">${esc(r.date)} · ${esc(r.meal || '-')}</p>
-            </div>
-            <div class="text-right shrink-0">
-              <p class="font-bold text-slate-800 text-xs">${Math.round(r.calories || 0)} kcal</p>
-              <p class="text-[11px] text-slate-500">P ${round1(r.protein || 0)} · C ${round1(r.carbs || 0)} · F ${round1(r.fat || 0)}</p>
-            </div>
-          </div>`).join('')
-        : '<p class="text-center text-xs text-slate-400 py-4">ไม่พบรายการที่ตรงกันในช่วงวันที่นี้</p>';
-    } catch (err) {
-      out.textContent = 'ค้นหาไม่สำเร็จ: ' + err.message;
-    }
-  };
-  $('#fh-go', m.el).addEventListener('click', search);
-  $('#fh-q', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
-  search();
-}
-
 export function openLibrary(onPick) {
   const meals = getMeals();
   const currentMealId = $('#f-meal', root)?.value || meals[0]?.id || '';
@@ -1145,10 +994,10 @@ export function openLibrary(onPick) {
       localStorage.setItem(BUILTIN_FAV_KEY, JSON.stringify([...favorites])); render();
     }
     else if (b.dataset.edit) openFoodEditor({ id: b.dataset.edit, prefill: state.customFoods.find(f => f.id === b.dataset.edit) });
-    else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateDoc(userDoc(state.uid, 'custom_foods', f.id), { favorite: !f.favorite }); }
+    else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateCustomFood(state.uid, f.id, { favorite: !f.favorite }); }
     else if (b.dataset.rm && confirm('ลบเมนูนี้ออกจากคลัง?')) {
       selected.delete(b.dataset.rm);
-      deleteDoc(userDoc(state.uid, 'custom_foods', b.dataset.rm))
+      deleteCustomFood(state.uid, b.dataset.rm)
         .then(render)
         .catch(err => toast('ลบเมนูไม่สำเร็จ: ' + err.message, 'err'));
     }
@@ -1303,65 +1152,5 @@ function openQuickBulkFoodLog() {
       saveBtn.textContent = `บันทึก ${parsed.items.length} รายการเข้ามื้อ`;
       toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
     }
-  });
-}
-
-
-
-const EDIT_FIELDS = [['calories', 'แคลอรี่ (kcal)'], ['protein', 'โปรตีน (g)'], ['carbs', 'คาร์โบไฮเดรต (g)'], ['fat', 'ไขมัน (g)'], ['sugar', 'น้ำตาล (g)'], ['sodium', 'โซเดียม (mg)']];
-
-export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
-  const v = prefill;
-  const warn = k => scan && (v[k] === null || v[k] === undefined) ? 'border-amber-400 bg-amber-50' : '';
-  const basisMsg = !scan ? '' : scan.basis === 'unknown'
-    ? '⚠️ ระบบไม่แน่ใจว่าตัวเลขบนฉลากเป็น "ต่อหน่วยบริโภค" หรือ "ต่อ 100 กรัม" — ดูที่ฉลากแล้วระบุหน่วยด้านล่าง'
-    : scan.basis === 'per_100g' ? 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 100 กรัม/มล.</b>' : 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 1 หน่วยบริโภค</b>';
-  const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${id ? 'แก้ไขเมนู' : scan ? 'ตรวจสอบข้อมูลจากฉลาก' : 'เพิ่มเมนูของฉัน'}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
-    ${scan ? `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1 mb-3">
-      <p>${basisMsg}${scan.servingSizeText ? ` · หน่วยบริโภคบนฉลาก: ${esc(scan.servingSizeText)}` : ''}</p>
-      <p>ช่องสีเหลืองคือค่าที่ AI อ่านไม่ชัดหรือไม่พบ — กรุณากรอกเองจากฉลาก (ระบบไม่เดาให้)</p>
-      ${scan.notes ? `<p>หมายเหตุ: ${esc(scan.notes)}</p>` : ''}</div>` : ''}
-    <div class="grid grid-cols-2 gap-3">
-      <div class="col-span-2"><label class="lbl">ชื่ออาหาร *</label><input id="e-name" class="input" value="${esc(v.name || '')}"></div>
-      <div class="col-span-2"><label class="lbl">หมวดหมู่ (ประเมินอัตโนมัติ ปรับได้)</label><select id="e-category" class="input">${categoryNames.map(c => `<option ${((v.category || guessFoodCategory(v.name || '')) === c) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
-      <div><label class="lbl">ยี่ห้อ</label><input id="e-brand" class="input" value="${esc(v.brand || '')}"></div>
-      <div><label class="lbl">หน่วยบริโภค * (เช่น 1 ซอง, 100 กรัม)</label><input id="e-unit" class="input ${scan && !v.unit ? 'border-amber-400 bg-amber-50' : ''}" value="${esc(v.unit || '')}"></div>
-      <div><label class="lbl">น้ำหนักต่อ 1 หน่วย (กรัม/มล.)</label><input id="e-grams" type="number" class="input" value="${v.gramsPerUnit ?? ''}"></div>
-      <div><label class="lbl">สัดส่วนที่กินได้ (%) (ไม่บังคับ)</label><input id="e-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Number.isFinite(v.edibleFraction) ? Math.round(v.edibleFraction * 100) : ''}" placeholder="เช่น 54"></div>
-      <p class="col-span-2 text-xs text-slate-500">ถ้าชั่งรวมเปลือกหรือซัง ให้ใส่สัดส่วนโดยประมาณของส่วนที่กินได้ ระบบจะให้ชั่งน้ำหนักรวมเพียงครั้งเดียว และใช้โภชนาการต่อหน่วยของส่วนที่กินได้</p>
-      ${EDIT_FIELDS.map(([k, t]) => `<div><label class="lbl">${t}${k === 'calories' ? ' *' : ''}</label><input id="e-${k}" type="number" step="0.1" inputmode="decimal" class="input ${warn(k)}" value="${v[k] ?? ''}"></div>`).join('')}
-    </div>
-    <label class="flex items-center gap-2 mt-3 text-sm"><input id="e-fav" type="checkbox" ${v.favorite ? 'checked' : ''}> ⭐ เมนูโปรด</label>
-    ${scan && scan.basis === 'per_100g' && scan.servingGrams ? `<button id="e-convert" class="btn btn-soft mt-3 text-xs">แปลงเป็นค่าต่อ 1 หน่วยบริโภค (${scan.servingGrams} g)</button>` : ''}
-    ${scan ? `<label class="flex items-start gap-2 mt-3 text-sm bg-ok-soft/60 rounded-lg p-2"><input id="e-confirm" type="checkbox" class="mt-1"> ฉันตรวจตัวเลขกับฉลากจริงแล้ว และถูกต้อง</label>` : ''}
-    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="e-save" class="btn btn-primary">บันทึกเมนู</button></div>`, { wide: true });
-
-  const g = k => $('#e-' + k, m.el);
-  let categoryTouched = !!v.category;
-  g('category').addEventListener('change', () => { categoryTouched = true; });
-  g('name').addEventListener('input', () => { if (!categoryTouched) g('category').value = guessFoodCategory(g('name').value); });
-  const conv = $('#e-convert', m.el);
-  if (conv) conv.addEventListener('click', () => {
-    const k = scan.servingGrams / 100;
-    ['calories', 'protein', 'carbs', 'fat', 'sugar', 'sodium'].forEach(f => { const n = toNum(g(f).value); if (n !== null) g(f).value = round1(n * k); });
-    g('unit').value = scan.servingSizeText || `${scan.servingGrams} กรัม`; g('grams').value = scan.servingGrams;
-    conv.remove();
-  });
-  $('#e-save', m.el).addEventListener('click', () => {
-    const name = g('name').value.trim(), unit = g('unit').value.trim(), cal = toNum(g('calories').value);
-    if (!name || !unit || cal === null || cal < 0) return toast('กรุณากรอกชื่อ หน่วยบริโภค และแคลอรี่', 'err');
-    const ediblePercent = toNum(g('edible').value), gramsPerUnit = toNum(g('grams').value);
-    if (ediblePercent !== null && (ediblePercent <= 0 || ediblePercent > 100 || !gramsPerUnit || gramsPerUnit <= 0)) return toast('สัดส่วนที่กินได้ต้องอยู่ระหว่าง 1–100% และต้องระบุน้ำหนักต่อหน่วยด้วย', 'err');
-    if (scan && !$('#e-confirm', m.el).checked) return toast('กรุณาติ๊กยืนยันว่าตรวจสอบกับฉลากแล้ว', 'err');
-    const key = value => String(value).trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
-    const duplicate = [...state.customFoods.filter(f => f.id !== id), ...DEFAULT_PRESETS].find(f => key(f.name) === key(name));
-    if (duplicate) return toast(`มีเมนู “${duplicate.name}” อยู่ในคลังแล้ว`, 'err');
-    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, category: g('category').value, ...(v.defaultQuantity ? { defaultQuantity: v.defaultQuantity } : {}), edibleFraction: ediblePercent === null ? null : ediblePercent / 100, favorite: g('fav').checked };
-    EDIT_FIELDS.forEach(([k]) => { rec[k] = toNum(g(k).value); });
-    const done = ref => { toast('บันทึกเมนูแล้ว'); if (onSaved) onSaved({ ...rec, id: ref?.id || id }); };
-    if (id) { updateDoc(userDoc(state.uid, 'custom_foods', id), { ...rec, updatedAt: new Date() }).catch(e => toast(e.message, 'err')); done(); }
-    else { addDoc(userCol(state.uid, 'custom_foods'), { ...rec, createdAt: new Date() }).catch(e => toast(e.message, 'err')); done(); }
-    m.close();
   });
 }
