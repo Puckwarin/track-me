@@ -3,7 +3,7 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
-## [v3.2.0] - Unreleased
+## [v3.2.0]
 
 ### AI Service Centralization
 - รวม API transport, model discovery/selection, error normalization, timeout, bounded retry, request deduplication, cooldown และ provider fallback ไว้ใน `src/services/aiService.js`
