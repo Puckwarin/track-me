@@ -2,8 +2,8 @@ name: Daily Push Notifications (08:00 ICT)
 
 on:
   schedule:
-    # 01:00 UTC = 08:00 น. เวลาประเทศไทย (UTC+7)
-    - cron: '0 1 * * *'
+    # 05:15 UTC = 12:15 น. เวลาประเทศไทย (UTC+7)
+    - cron: '15 5 * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
