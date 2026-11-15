@@ -1,7 +1,7 @@
 import { setDoc, updateDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { TYPES } from './workout.js';
+import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal } from './util.js';
 

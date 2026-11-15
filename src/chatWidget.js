@@ -1,6 +1,5 @@
 import { $, esc, toast } from './util.js';
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
-import { runAssistantTurn, executeConfirmedAction, undoAssistantAction } from './services/aiAssistant.js';
 
 const QUICK_PROMPTS = [
   '💸 เดือนนี้ค่ากินเท่าไหร่?',
@@ -218,6 +217,7 @@ async function handleSend(rawText) {
   renderMessages();
 
   try {
+    const { runAssistantTurn } = await import('./services/aiAssistant.js');
     const res = await runAssistantTurn(historySnapshot, text, { signal: activeRequestController.signal });
     pendingMsg.pending = false;
     pendingMsg.text = res.text;
@@ -279,6 +279,7 @@ export function mountChatWidget(goTo) {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'กำลังบันทึก…';
       try {
+        const { executeConfirmedAction } = await import('./services/aiAssistant.js');
         const out = await executeConfirmedAction(action);
         action.status = 'confirmed';
         if (out.receipt) {
@@ -314,6 +315,7 @@ export function mountChatWidget(goTo) {
       confirmAllBtn.textContent = 'กำลังบันทึกทั้งหมด…';
       let savedCount = 0;
       try {
+        const { executeConfirmedAction } = await import('./services/aiAssistant.js');
         for (const action of pendingItems) {
           const out = await executeConfirmedAction(action);
           action.status = 'confirmed';
@@ -351,6 +353,7 @@ export function mountChatWidget(goTo) {
     undoBtn.disabled = true;
     undoBtn.textContent = 'กำลังยกเลิก…';
     try {
+      const { undoAssistantAction } = await import('./services/aiAssistant.js');
       await undoAssistantAction(rec.undo);
       rec.undone = true;
       renderMessages();

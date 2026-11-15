@@ -4,6 +4,7 @@
 
 - **ใช้งานแอป:** https://puckwarin.github.io/track-me/
 - **คู่มือการตั้งค่า (Setup Guide):** [docs/SETUP.md](docs/SETUP.md)
+- **รายงานประสิทธิภาพ:** [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - **ประวัติการพัฒนา (Changelog):** [CHANGELOG.md](CHANGELOG.md)
 - **Release และ Tag:** [GitHub Releases](https://github.com/Puckwarin/track-me/releases)
 

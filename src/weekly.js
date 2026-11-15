@@ -3,7 +3,7 @@ import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, daysBetween, round1 } from './util.js';
 import { getTargets } from './profile.js';
-import { TYPES } from './workout.js';
+import { TYPES } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
 
 let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
