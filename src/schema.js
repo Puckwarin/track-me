@@ -111,7 +111,7 @@ export const SANITIZERS = {
     createdAt:ts(o.createdAt)
   } : null,
   expense_records: o => isDateStr(o?.date) && moneyNum(Number(o?.amount)) !== null ? {
-    type: o.type === 'income' ? 'income' : 'expense',
+    type: ['income', 'transfer'].includes(o.type) ? o.type : 'expense',
     amount: moneyNum(Number(o.amount)),
     category: str(o.category, 60) || 'อื่น ๆ',
     date: o.date,
