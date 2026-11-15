@@ -621,7 +621,7 @@ function statementDuplicate(item) {
     if (Number(old.amount) !== Number(item.amount) || old.type !== item.type) return false;
     const dayDiff = Math.abs(new Date(old.date + 'T00:00:00').getTime() - new Date(item.date + 'T00:00:00').getTime());
     if (dayDiff > 86400000) return false;
-    if (!old.time) return dayDiff === 0;
+    if (!old.time) return false;
     return Math.abs(new Date(old.date + 'T' + old.time + ':00').getTime() - target) <= 15 * 60000;
   });
 }
@@ -630,6 +630,7 @@ async function processStatementPaste() {
   const input = $r('#ex-statement-text'), status = $r('#ex-statement-status');
   if (!input.value.trim()) return toast('กรุณาวางข้อความ Statement ก่อนค่ะ', 'err');
   const { items, errors } = parseStatementText(input.value);
+  input.value = ''; // discard raw statement immediately; only sanitized fields remain in the review queue
   if (!items.length) { status.textContent = 'อ่านไม่พบรายการที่รองรับ (' + errors.length + ' บรรทัด)'; return; }
   const rules = await loadExpenseRules();
   pendingStatement = items.map((item, index) => {
