@@ -3,6 +3,15 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v3.2.0] - Unreleased
+
+### AI Service Centralization
+- รวม API transport, model discovery/selection, error normalization, timeout, bounded retry, request deduplication, cooldown และ provider fallback ไว้ใน `src/services/aiService.js`
+- ย้าย Nutrition และ AI Assistant ให้ใช้ service กลาง โดยคง prompts, schemas และรูปแบบผลลัพธ์ของแต่ละฟีเจอร์
+- หยุดลองโมเดลซ้ำภายใน provider เมื่อโควตาเต็ม แล้วข้ามไป provider ถัดไปตามลำดับ Gemini → Groq → OpenRouter
+- เพิ่ม Vitest tests สำหรับ quota/cooldown, fallback, model selection, retry delay, cancellation, deduplication และ invalid credentials
+- เพิ่มคู่มือ `docs/AI_SERVICE.md`; คีย์ยังใช้ client-side storage ตามเดิม ไม่มีการย้าย backend หรือ production configuration
+
 ## [v3.1.0] - 2026-11-15
 
 ### ไฟล์	การเปลี่ยนแปลง

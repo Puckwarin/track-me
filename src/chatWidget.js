@@ -11,6 +11,7 @@ const QUICK_PROMPTS = [
 
 let isOpen = false;
 let isBusy = false;
+let activeRequestController = null;
 let goToFn = () => {};
 const messages = []; // { role: 'user'|'assistant', text, receipts?: [{ icon, title, subtitle, undo, undone }] }
 
@@ -175,6 +176,7 @@ function renderMessages() {
 
 function setOpen(next) {
   isOpen = next;
+  if (!next) activeRequestController?.abort();
   const drawer = $('#ai-chat-drawer');
   const fab = $('#ai-chat-fab');
   if (!drawer || !fab) return;
@@ -211,20 +213,24 @@ async function handleSend(rawText) {
   const pendingMsg = { role: 'assistant', text: '', pending: true };
   messages.push(pendingMsg);
   isBusy = true;
+  activeRequestController = new AbortController();
   if (sendBtn) sendBtn.disabled = true;
   renderMessages();
 
   try {
-    const res = await runAssistantTurn(historySnapshot, text);
+    const res = await runAssistantTurn(historySnapshot, text, { signal: activeRequestController.signal });
     pendingMsg.pending = false;
     pendingMsg.text = res.text;
     pendingMsg.receipts = (res.receipts || []).map(r => ({ ...r, undone: false }));
     pendingMsg.pendingActions = (res.pendingActions || []).map(a => ({ ...a, status: a.status || 'pending' }));
   } catch (err) {
     pendingMsg.pending = false;
-    pendingMsg.text = `ขออภัยค่ะ เกิดข้อผิดพลาด: ${explainGeminiError(err)}`;
+    pendingMsg.text = err.aborted
+      ? 'ยกเลิกคำขอแล้ว'
+      : `ขออภัยค่ะ เกิดข้อผิดพลาด: ${explainGeminiError(err)}`;
   } finally {
     isBusy = false;
+    activeRequestController = null;
     if (sendBtn) sendBtn.disabled = false;
     renderMessages();
   }
