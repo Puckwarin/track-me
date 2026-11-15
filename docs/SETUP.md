@@ -1,6 +1,8 @@
-# Project Setup — ตั้งค่า Track Me v3.0.0
+# Project Setup — ตั้งค่า Track Me v4.0.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
+
+สำหรับ workflow ปัจจุบัน ใช้ `.github/workflows/build.yml` ตรวจ lint/tests/Rules Emulator/build และ deploy GitHub Pages จาก `main` หลัง checks ผ่าน; ไม่มี `pages.yml` แยกแล้ว
 
 > ⚠️ **ลำดับสำคัญ:** ทำตามเลขข้อต่อกันไป โดยเฉพาะข้อ 4–6 (ย้ายข้อมูลเดิม) — ถ้าเปลี่ยน Rules เป็นแบบสุดท้ายก่อนย้ายข้อมูล ข้อมูลเดิมจะอ่านไม่ได้
 
@@ -9,7 +11,7 @@
 ## 0) สิ่งที่ต้องมี
 - บัญชี Google (ใช้ทั้ง Firebase และล็อกอินในแอป)
 - บัญชี GitHub และ repo `Puckwarin/track-me` (ตั้งเป็น **Public** — GitHub Pages ฟรีใช้กับ repo สาธารณะ; repo ส่วนตัวต้องใช้แผนเสียเงิน)
-- (ถ้าจะพัฒนาบนเครื่อง) Node.js 22 ขึ้นไป
+- (ถ้าจะพัฒนา/ทดสอบบนเครื่อง) Node.js 24.12 ขึ้นไป; Firestore Emulator ต้องใช้ Java 21 ขึ้นไป
 
 ## 1) Firebase: ตรวจแผนและเปิด Google Sign-in
 เปิด [Firebase Console](https://console.firebase.google.com) → เลือกโปรเจกต์ `trackme-2829`
@@ -24,7 +26,7 @@
 1. อัปโหลด/push โค้ดทั้งโฟลเดอร์ขึ้น branch `main` (รวมโฟลเดอร์ `.github/workflows/` และ `package-lock.json`)
 2. ใน GitHub: **Settings → Pages → Build and deployment → Source** เลือก **GitHub Actions**
    (ของเดิมน่าจะเป็น "Deploy from a branch" — ต้องเปลี่ยน ไม่เช่นนั้นจะเห็นหน้าเปล่า)
-3. ดูแท็บ **Actions** ให้ workflow "Deploy to GitHub Pages" ขึ้นเขียว (ใช้เวลา 1–2 นาที)
+3. ดูแท็บ **Actions** ให้ workflow "Quality checks and deploy" ขึ้นเขียว (ใช้เวลา 1–2 นาที)
 4. เว็บอยู่ที่ `https://puckwarin.github.io/track-me/`
 
 ## 3) Firestore Rules ชุดย้ายข้อมูล (ชั่วคราว)
@@ -73,6 +75,15 @@ Firebase Console → **Firestore Database → Rules**
 - **USDA**: ขอคีย์ฟรีที่ [FoodData Central](https://fdc.nal.usda.gov/api-key-signup/) แล้วบันทึกในช่อง USDA API Key พร้อมปุ่ม **ทดสอบการเชื่อมต่อ** เพื่อเช็กคีย์ การค้นหาปกติใช้คลังในเครื่องก่อน แล้ว USDA และ Open Food Facts ก่อนส่งต่อ AI เมื่อไม่พบข้อมูล
 
 > คีย์ฝั่ง browser ไม่ได้เข้ารหัสเป็น secret และผู้ให้บริการจะได้รับ prompt/รูปภาพที่ส่งวิเคราะห์; ตั้งค่าใหม่แยกในแต่ละอุปกรณ์ และตรวจข้อกำหนดการใช้ข้อมูลของ provider ก่อนใช้งาน ดูรายละเอียด cooldown, retry และ privacy ได้ที่ [docs/AI_SERVICE.md](AI_SERVICE.md)
+
+## 6.2) เริ่มต้นใช้งานครั้งแรก (ตัวเลือก)
+
+บัญชี Google ที่เพิ่งสร้างใน Firebase และยังไม่มีโปรไฟล์จะแสดงขั้นตอนแนะนำ 5 ขั้น: แนะนำแอป, โปรไฟล์พื้นฐาน, AI, การแจ้งเตือน และพร้อมใช้งาน ผู้ใช้เดิมหรือบัญชีที่มีโปรไฟล์จะไม่ถูกบังคับผ่าน onboarding
+
+- กรอกข้อมูลโปรไฟล์ครบจึงจะบันทึกเพื่อใช้คำนวณ BMI/BMR/เป้าหมายได้; หากยังไม่สะดวกให้ข้ามได้ และเพิ่มหรือแก้ไขภายหลังที่ **ตั้งค่า → เป้าหมายพลังงาน**
+- การตั้งค่า AI และการแจ้งเตือนเป็นทางเลือก การทดสอบคีย์จะเรียก API เมื่อกดปุ่มเองเท่านั้น; provider อาจมีโควตาหรือค่าใช้จ่าย โปรดตรวจเงื่อนไขก่อนใช้งาน
+- ความคืบหน้า onboarding เก็บใน `localStorage` แยกตามบัญชีและอุปกรณ์เพื่อกลับมาทำต่อหลังเปิดแอปใหม่; การตั้งค่าคีย์ AI ยังคงเก็บเฉพาะเบราว์เซอร์ ส่วนโปรไฟล์ที่บันทึกจะซิงค์ผ่าน Firestore
+- การแจ้งเตือนจะขอสิทธิ์จากเบราว์เซอร์หลังผู้ใช้กด **เปิดการแจ้งเตือน** เท่านั้น; ปฏิเสธหรือข้ามได้โดยไม่กระทบการใช้ฟีเจอร์หลัก
 
 ## Hiwpinto Sync Helper (ทำครั้งเดียว)
 
@@ -143,7 +154,6 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 - ค้นหาแบบ “ทุกแหล่ง” จะเรียก Open Food Facts, USDA และ Gemini พร้อมกัน; แหล่งที่ยังไม่มี API key หรือถูกจำกัดโควตาจะแสดงสถานะ ส่วนแหล่งอื่นยังค้นหาต่อ
 - Google และ ChatGPT เป็นลิงก์ค้นหาแยกภายนอกเพื่อไม่ใช้ API ที่ต้องมีคีย์/อาจมีค่าใช้จ่าย; ผลจากสองเว็บนี้ไม่ถูกรวมในรายการโภชนาการ
 - หน้าตั้งค่ารวมคีย์ Gemini และ USDA ไว้หมวดเดียวท้ายหน้า คีย์ยังคงอยู่เฉพาะเบราว์เซอร์อุปกรณ์นั้น
-- GitHub Actions workflow สำหรับ build คือ `.github/workflows/build.yml`; workflow deploy Pages คือ `.github/workflows/pages.yml`
 
 ### D) ตั้งเป้าแคลอรี่และมื้ออาหาร
 ตั้งค่า → **เป้าหมายพลังงาน (BMI / TDEE)** กรอกเพศ ปีเกิด ส่วนสูง น้ำหนัก ระดับกิจกรรม และเป้าหมาย → **บันทึก** (น้ำหนักจะใช้ค่าล่าสุดจากแท็บน้ำหนักก่อนเสมอ)
@@ -202,7 +212,7 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `VAPID_SUBJECT` → ใส่อีเมลติดต่อในรูปแบบ `mailto:your-email@gmail.com`
    - `FIREBASE_SERVICE_ACCOUNT` → วางข้อความ JSON ทั้งหมดจากข้อ 3
 5. **Deploy ใหม่ & เปิดรับการแจ้งเตือนบนมือถือ**:
-   - เมื่อ push โค้ดหรือกด **Run workflow** ใน `Deploy to GitHub Pages` แล้ว เว็บจะฝัง `VITE_VAPID_PUBLIC_KEY` ให้อัตโนมัติ
+   - เมื่อ workflow **Quality checks and deploy** build บน `main` เว็บจะฝัง `VITE_VAPID_PUBLIC_KEY` ให้อัตโนมัติ; การกด Run workflow จาก branch อื่นไม่ deploy Pages
    - เปิดแอป Track Me → กดปุ่ม **"🔔 เปิดรับการแจ้งเตือน"** ที่หน้า Home หรือใน **ตั้งค่า**
    - **หมายเหตุ iPhone / iPad (iOS 16.4+):** ต้องกดปุ่ม **แชร์ (Share) → เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)** แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับแจ้งเตือนได้
    - ทดสอบส่งได้ทันทีใน GitHub → **Actions → Daily Push Notifications (08:00 ICT) → Run workflow** (ปกติระบบจะทำงานอัตโนมัติทุกวันเวลา **08:00 น. เวลาประเทศไทย**)
@@ -215,7 +225,7 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 
 - **ไม่ต้องอัปเดต Firestore Rules เพิ่มเติม**: ฟีเจอร์ **นำเข้าตารางออกกำลังกายจากข้อความ (Quick Import)** และลิงก์อ้างอิงต่อท่า (`refTitle`, `refUrl`, `title`, `muscleGroup`) ใช้ collection `workout_records` และ `workout_templates` ที่มีอยู่แล้วใน `firestore.rules` (จำนวนฟิลด์ไม่เกินข้อกำหนด 30 keys)
 - **ทำงานในเครื่อง 100% ไม่ต้องตั้งค่า API Key**: ตัวแปลงข้อความ Quick Import ทำงานฝั่งเบราว์เซอร์ทันทีโดยไม่เรียก AI ภายนอก
-- **GitHub Actions Deploy**: หากมีการติดตั้งแพ็กเกจใหม่ใน `package.json` ให้ push `package-lock.json` ขึ้น GitHub พร้อมกันทุกครั้ง; Workflow `pages.yml` ตั้งค่า `cancel-in-progress: false` เพื่อเข้าคิว deploy ต่อกันเมื่อ push หลาย commit ติดต่อกัน
+- **GitHub Actions Deploy**: หากมีการติดตั้งแพ็กเกจใหม่ใน `package.json` ให้อัปเดตและ commit `package-lock.json` พร้อมกัน; workflow `build.yml` ตรวจ lint/tests/Rules Emulator/build แล้วจึง deploy Pages จาก `main`
 
 ---
 

@@ -11,9 +11,10 @@ import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 
 import { db, userCol, userDoc } from './firebase.js';
+import { initRuntimeErrorMonitoring, reportRuntimeError, setRuntimeErrorSink } from './runtimeErrorMonitor.js';
 import { state, on, emit } from './state.js';
 import { SANITIZERS } from './schema.js';
 import { $, localDateStr, addDays, toast } from './util.js';
@@ -37,7 +38,19 @@ import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
 import { mountExpense, renderExpense, handleSharedSlipLaunch } from './expense.js';
 import { mountChatWidget } from './chatWidget.js';
+import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
+setRuntimeErrorSink((uid, reports) => {
+  const batch = writeBatch(db);
+  reports.forEach(report => {
+    batch.set(doc(userCol(uid, 'runtime_error_logs')), {
+      ...report,
+      receivedAt: serverTimestamp()
+    });
+  });
+  return batch.commit();
+});
+initRuntimeErrorMonitoring();
 registerSW({ immediate: true });
 
 const CHUNK_RELOAD_KEY = 'trackme-chunk-reloaded';
@@ -50,6 +63,7 @@ try {
 }
 window.addEventListener('vite:preloadError', event => {
   event.preventDefault();
+  reportRuntimeError(event.payload, { category: 'chunk', source: 'chunk-recovery' });
   try {
     if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
       toast('โหลดส่วนนี้ไม่สำเร็จหลังรีเฟรช กรุณาลองรีเฟรชหน้าอีกครั้ง', 'err');
@@ -82,6 +96,7 @@ function ensureReportMounted() {
       .then(({ mountReport }) => mountReport($('#tab-report')))
       .catch(error => {
         reportMountPromise = null;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
         console.error('Could not load health report:', error);
         toast('เปิดรายงานสุขภาพไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
       });
@@ -100,6 +115,7 @@ function ensureWorkoutMounted() {
       })
       .catch(error => {
         workoutMountPromise = null;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
         console.error('Could not load workout feature:', error);
         toast('เปิดหน้าออกกำลังกายไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
       });
@@ -190,6 +206,7 @@ function mountAll() {
 let expenseRecordsLoaded = false;
 let migratingLegacyExpenses = false;
 let legacyMigrationBlocked = false;
+let onboardingCheckedUid = null;
 
 function stableLegacyExpenseId(docId, index) {
   const hash = Array.from(`${docId}_${index}`).reduce(
@@ -259,6 +276,7 @@ async function migrateLegacyExpensesIfNeeded(uid) {
     }
   } catch (err) {
     // ถ้าการย้ายหรือทำเครื่องหมายไม่สำเร็จ ให้รอบถัดไปทำซ้ำด้วย ID เดิม
+    reportRuntimeError(err, { category: 'firebase', source: 'sync' });
     console.warn('Legacy expense migration deferred:', err?.code || err?.message);
     if (/permission-denied/i.test(String(err?.code || err?.message || ''))) {
       legacyMigrationBlocked = true;
@@ -297,6 +315,10 @@ function startData() {
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
+    if (state.uid === uid && onboardingCheckedUid !== uid) {
+      onboardingCheckedUid = uid;
+      mountOnboarding(state.user, state.profile);
+    }
     state.legacyExpenseDocs = list.filter(x => x.kind === 'expense_month' && Array.isArray(x.items));
     mergeExpenses();
     refreshProfile();
@@ -324,6 +346,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
+  onboardingCheckedUid = null;
+  unmountOnboarding();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
   if (user) {

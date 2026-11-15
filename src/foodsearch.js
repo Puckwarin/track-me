@@ -3,6 +3,7 @@ import {
   lookupPer100gWithProvider, getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError
 } from './nutrition.js';
 import { state } from './state.js';
+import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
 // แหล่งข้อมูลโภชนาการ (ทุกแหล่งใช้ฟรี ไม่ต้องผูกบัตร)
 //  all    = ค้นตามลำดับ: คลังในเครื่อง → USDA → Open Food Facts → AI (Gemini → Groq → OpenRouter)
@@ -318,6 +319,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
           return;
         }
       } catch (e) {
+        reportRuntimeError(e, { category: 'api', source: 'food-search' });
         errors.push({ label: 'USDA', message: e?.message || 'ค้นหาไม่สำเร็จ', missing: false });
       }
     }
@@ -334,6 +336,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
           return;
         }
       } catch (e) {
+        reportRuntimeError(e, { category: 'api', source: 'food-search' });
         errors.push({ label: 'Open Food Facts', message: e?.message || 'ค้นหาไม่สำเร็จ', missing: false });
       }
     }

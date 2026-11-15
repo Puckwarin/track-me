@@ -1,3 +1,5 @@
+import { reportRuntimeError } from '../runtimeErrorMonitor.js';
+
 const KEY_NAMES = {
   Gemini: 'gemini_key',
   Groq: 'groq_key',
@@ -380,8 +382,10 @@ export async function runProviderFallback(providers, {
   const message = attempted
     ? 'AI ทุกแหล่งที่ตั้งค่าไว้ไม่พร้อมใช้งาน — ' + errors.join(' · ')
     : 'AI ทุกแหล่งที่ตั้งค่าไว้กำลังรอโควตา — ' + errors.join(' · ');
-  throw new AiServiceError(message, {
+  const finalError = new AiServiceError(message, {
     fallbackErrors: errors,
     quotaExceeded: quotaExceeded || errors.some(error => /429|quota|limit|รอโควตา/i.test(error))
   });
+  reportRuntimeError(finalError, { category: 'ai', source: 'ai-service' });
+  throw finalError;
 }

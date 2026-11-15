@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 const rulesTest = describe.skipIf(!emulatorAvailable);
@@ -63,6 +63,35 @@ rulesTest('production Firestore rules', () => {
       date: '2026-03-01',
       name: 'Lunch',
       ...Object.fromEntries(Array.from({ length: 29 }, (_, i) => [`extra${i}`, i]))
+    }));
+  });
+
+  it('allows only minimal owner-created runtime errors and denies later access', async () => {
+    const db = productionEnv.authenticatedContext('alice').firestore();
+    const bobDb = productionEnv.authenticatedContext('bob').firestore();
+    const anonymousDb = productionEnv.unauthenticatedContext().firestore();
+    const record = doc(db, 'users/alice/runtime_error_logs/error-1');
+    const safeReport = {
+      category: 'firebase',
+      code: 'permission-denied',
+      source: 'sync',
+      occurredAt: new Date('2026-04-10T12:00:00Z'),
+      receivedAt: serverTimestamp()
+    };
+
+    await assertSucceeds(setDoc(record, safeReport));
+    await assertFails(setDoc(doc(bobDb, 'users/alice/runtime_error_logs/cross-user'), safeReport));
+    await assertFails(setDoc(doc(anonymousDb, 'users/alice/runtime_error_logs/anonymous'), safeReport));
+    await assertFails(getDoc(record));
+    await assertFails(updateDoc(record, { code: 'unavailable' }));
+    await assertFails(deleteDoc(record));
+    await assertFails(setDoc(doc(db, 'users/alice/runtime_error_logs/extra'), {
+      ...safeReport,
+      message: 'must not be stored'
+    }));
+    await assertFails(setDoc(doc(db, 'users/alice/runtime_error_logs/invalid'), {
+      ...safeReport,
+      category: 'health-data'
     }));
   });
 });

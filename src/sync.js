@@ -1,5 +1,6 @@
 import { onSnapshot } from 'firebase/firestore';
 import { $, fmtDateTime } from './util.js';
+import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
 export const syncState = { pending: {}, error: null, lastSync: Number(localStorage.getItem('last_sync') || 0) };
 const unsubs = new Map();
@@ -27,8 +28,8 @@ function reportSnapshot(key, snap) {
   renderSyncStatus();
 }
 function onSyncError(err) {
-  console.error('Firestore error:', err);
-  syncState.error = err.code || err.message;
+  reportRuntimeError(err, { category: 'firebase', source: 'sync' });
+  syncState.error = err.code || err.message || 'unknown';
   renderSyncStatus();
 }
 
