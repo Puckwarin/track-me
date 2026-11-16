@@ -332,7 +332,7 @@ function ensureShell() {
 
       <div id="ai-chat-nokey" class="hidden mx-3 mt-2 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2">
         <p class="font-semibold">ยังไม่ได้ตั้งค่า AI API Key</p>
-        <p class="text-amber-800">ยังใช้โหมด <b>⚡ แพตเทิร์น (0 โทเค็น)</b> จดและเช็กข้อมูลได้ทันที หรือใส่คีย์ในตั้งค่าเพื่อคุยถาม-ตอบอิสระ</p>
+        <p class="text-amber-800">จดและเช็กข้อมูลได้ทันที หรือใส่คีย์ในตั้งค่าเพื่อคุยถาม-ตอบอิสระ</p>
         <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs">ไปหน้าตั้งค่า</button>
       </div>
 
