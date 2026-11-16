@@ -3,12 +3,13 @@ import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, openModal, toast } from './util.js';
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
-import { CHAT_ROLES, getChatRole } from './services/chatRoles.js';
+import { CHAT_ROLES, LOCAL_ROLE, LOCAL_HELP_TEXT, getAnyChatRole } from './services/chatRoles.js';
 
 const STORAGE_KEYS = {
   history: 'trackme_ai_chat_history',
   role: 'trackme_ai_chat_role',
-  customRole: 'trackme_ai_chat_custom_role'
+  customRole: 'trackme_ai_chat_custom_role',
+  preferLocal: 'trackme_ai_chat_prefer_local'
 };
 const MAX_SAVED_MESSAGES = 30;
 
@@ -19,6 +20,7 @@ let activeRequestController = null;
 let goToFn = () => {};
 let activeRoleId = loadStoredString(STORAGE_KEYS.role, 'general');
 let customInstruction = loadStoredString(STORAGE_KEYS.customRole, '');
+let preferLocalPatterns = loadStoredString(STORAGE_KEYS.preferLocal, '1') !== '0';
 const messages = loadStoredHistory();
 
 function loadStoredString(key, fallback = '') {
@@ -245,9 +247,10 @@ function updateBusyUi() {
 
 function renderRolesBar() {
   const bar = $('#ai-chat-roles');
-  const current = getChatRole(activeRoleId);
+  const current = getAnyChatRole(activeRoleId);
+  const allRoles = [LOCAL_ROLE, ...CHAT_ROLES];
   if (bar) {
-    bar.innerHTML = CHAT_ROLES.map(r => {
+    bar.innerHTML = allRoles.map(r => {
       const isActive = r.id === current.id;
       return `<button type="button" data-ai-role="${esc(r.id)}" aria-pressed="${isActive}" class="ai-role-btn whitespace-nowrap shrink-0 ${isActive ? 'is-active' : ''}">${r.icon} ${esc(r.label)}</button>`;
     }).join('');
@@ -257,6 +260,9 @@ function renderRolesBar() {
   if (desc) {
     desc.textContent = `${current.icon} ${current.label} — ${current.description}`;
   }
+
+  const preferChk = $('#ai-chat-prefer-local');
+  if (preferChk) preferChk.checked = preferLocalPatterns;
 
   const roleToggle = $('#ai-chat-role-toggle');
   if (roleToggle) {
@@ -312,7 +318,11 @@ function ensureShell() {
 
       <div id="ai-chat-role-panel" class="ai-chat-role-panel hidden">
         <p id="ai-chat-role-desc" class="text-[11px] font-medium text-slate-600"></p>
-        <label for="ai-chat-custom-input" class="block text-[11px] font-semibold text-slate-700 mt-1.5">คำสั่งบุคลิกหรือหัวข้อเฉพาะ (ไม่บังคับ)</label>
+        <label class="flex items-center gap-2 text-[11px] font-medium text-slate-700 mt-2 cursor-pointer">
+          <input id="ai-chat-prefer-local" type="checkbox" class="accent-violet-600">
+          <span>ใช้แพตเทิร์นในเครื่องก่อนเรียก AI (ประหยัด 0 โทเค็นสำหรับจดและเช็กสรุป)</span>
+        </label>
+        <label for="ai-chat-custom-input" class="block text-[11px] font-semibold text-slate-700 mt-2">คำสั่งบุคลิกหรือหัวข้อเฉพาะสำหรับโหมด AI (ไม่บังคับ)</label>
         <textarea id="ai-chat-custom-input" rows="2" maxlength="500" class="input text-xs mt-1 w-full resize-none" placeholder="เช่น ตอบแบบเพื่อนสนิท เป็นกันเอง, ช่วยฝึกคุยภาษาอังกฤษพร้อมคำแปล, โฟกัสอาหารคลีน"></textarea>
         <div class="flex items-center justify-end gap-1.5 mt-1.5">
           <button id="ai-chat-custom-clear" type="button" class="btn btn-ghost !py-1 !px-2.5 !min-h-8 text-xs">ล้าง</button>
@@ -322,7 +332,7 @@ function ensureShell() {
 
       <div id="ai-chat-nokey" class="hidden mx-3 mt-2 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2">
         <p class="font-semibold">ยังไม่ได้ตั้งค่า AI API Key</p>
-        <p class="text-amber-800">ใส่คีย์ในหน้าตั้งค่าก่อน เพื่อให้ผู้ช่วย AI ตอบคำถามและช่วยบันทึกข้อมูลบนเครื่องนี้</p>
+        <p class="text-amber-800">จดและเช็กข้อมูลได้ทันที หรือใส่คีย์ในตั้งค่าเพื่อคุยถาม-ตอบอิสระ</p>
         <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs">ไปหน้าตั้งค่า</button>
       </div>
 
@@ -345,19 +355,26 @@ function ensureShell() {
 
   const customInput = $('#ai-chat-custom-input');
   if (customInput) customInput.value = customInstruction;
+  const preferChk = $('#ai-chat-prefer-local');
+  if (preferChk) preferChk.checked = preferLocalPatterns;
 }
 
 function renderKeyBanner() {
   const hasKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
-  $('#ai-chat-nokey')?.classList.toggle('hidden', hasKey);
+  const isLocalOnly = activeRoleId === LOCAL_ROLE.id;
+  $('#ai-chat-nokey')?.classList.toggle('hidden', hasKey || isLocalOnly);
   const sub = $('#ai-chat-subtitle');
   if (sub) {
-    const role = getChatRole(activeRoleId);
+    const role = getAnyChatRole(activeRoleId);
+    if (isLocalOnly) {
+      sub.textContent = `${role.icon} ${role.label} · ฟรี ไม่ใช้ AI`;
+      return;
+    }
     const active = [getGeminiKey() && 'Gemini', getGroqKey() && 'Groq', getOpenRouterKey() && 'OpenRouter'].filter(Boolean);
     const customMark = customInstruction.trim() ? ' · มีคำสั่งเฉพาะ' : '';
     sub.textContent = active.length
       ? `${role.icon} ${role.label}${customMark} · ${active.join(' + ')}`
-      : 'ยังไม่ได้ตั้งค่า API Key';
+      : `${role.icon} ${role.label} · โหมดแพตเทิร์นพร้อมใช้ (ยังไม่มี AI Key)`;
   }
 }
 
@@ -366,12 +383,14 @@ function renderMessages() {
   if (!box) return;
 
   if (!messages.length) {
-    const role = getChatRole(activeRoleId);
+    const role = getAnyChatRole(activeRoleId);
     box.innerHTML = `
       <div class="ai-msg-empty">
         <p class="text-sm font-semibold text-slate-700">${role.icon} โหมด${esc(role.label)} — สวัสดีค่ะ คุยเรื่องอะไรดีคะ?</p>
         <p class="text-xs text-slate-500 mt-1">${esc(role.description)}</p>
-        <p class="text-[11px] text-slate-400 mt-1.5">ถามเรื่องทั่วไป ระดมไอเดีย ร่างข้อความ แปลภาษา หรือถาม/สั่งจดข้อมูล Track Me ได้เลยค่ะ</p>
+        <p class="text-[11px] text-slate-400 mt-1.5">${activeRoleId === LOCAL_ROLE.id
+          ? 'พิมพ์คำสั่งจดหรือเช็กสรุปได้เลย 0 โทเค็น เช่น จดค่ากาแฟ 60 บาท หรือ สรุปค่าใช้จ่ายเดือนนี้'
+          : 'คำสั่งจดและเช็กสรุปพื้นฐานจะทำงานในเครื่องก่อนอัตโนมัติ (0 โทเค็น) และเรียก AI เฉพาะคำถามอิสระ'}</p>
       </div>
     `;
     return;
@@ -533,9 +552,12 @@ async function handleSend(rawText) {
   const text = String(rawText || '').trim();
   if (!text || isBusy) return;
 
-  if (!getGeminiKey() && !getGroqKey() && !getOpenRouterKey()) {
+  const hasKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
+  const tryLocalFirst = activeRoleId === LOCAL_ROLE.id || preferLocalPatterns;
+
+  if (!hasKey && !tryLocalFirst) {
     renderKeyBanner();
-    toast('กรุณาใส่ Gemini, Groq หรือ OpenRouter API Key ในหน้าตั้งค่าก่อน', 'err');
+    toast('กรุณาใส่ Gemini, Groq หรือ OpenRouter API Key หรือสลับเป็นโหมดแพตเทิร์น', 'err');
     return;
   }
 
@@ -557,13 +579,7 @@ async function handleSend(rawText) {
   updateBusyUi();
   renderMessages();
 
-  try {
-    const { runAssistantTurn } = await import('./services/aiAssistant.js');
-    const res = await runAssistantTurn(historySnapshot, text, {
-      signal: activeRequestController.signal,
-      role: activeRoleId,
-      customInstruction
-    });
+  const applyAssistantResult = res => {
     pendingMsg.pending = false;
     pendingMsg.text = res.text;
     pendingMsg.provider = res.provider || '';
@@ -577,6 +593,50 @@ async function handleSend(rawText) {
       return receipt;
     });
     pendingMsg.pendingActions = (res.pendingActions || []).map(a => ({ ...a, status: a.status || 'pending' }));
+  };
+
+  try {
+    if (tryLocalFirst) {
+      const { runLocalAssistantCommand } = await import('./services/localAssistant.js');
+      const localRes = await runLocalAssistantCommand(text);
+      if (localRes?.handled) {
+        applyAssistantResult(localRes);
+        return;
+      }
+    }
+
+    if (activeRoleId === LOCAL_ROLE.id) {
+      applyAssistantResult({
+        text: `ยังไม่ตรงกับแพตเทิร์นคำสั่งด่วนค่ะ ลองเลือกใช้ตามตัวอย่างด้านล่าง หรือสลับเป็นโหมด **💬 คุยทั่วไป / ⚡ ตอบไว** เพื่อให้ AI ช่วยตอบ:\n\n${LOCAL_HELP_TEXT}`,
+        provider: 'แพตเทิร์นในเครื่อง',
+        model: '0 โทเค็น',
+        role: LOCAL_ROLE.id,
+        receipts: [],
+        pendingActions: []
+      });
+      return;
+    }
+
+    if (!hasKey) {
+      renderKeyBanner();
+      applyAssistantResult({
+        text: `คำถามนี้ยังไม่ตรงกับแพตเทิร์นในเครื่อง และยังไม่ได้ตั้งค่า AI API Key ค่ะ\n- ใส่คีย์ในหน้า **ตั้งค่า** เพื่อถาม-ตอบอิสระกับ AI\n- หรือใช้คำสั่งแพตเทิร์น 0 โทเค็นด้านล่างได้ทันที:\n\n${LOCAL_HELP_TEXT}`,
+        provider: 'แพตเทิร์นในเครื่อง',
+        model: '0 โทเค็น',
+        role: activeRoleId,
+        receipts: [],
+        pendingActions: []
+      });
+      return;
+    }
+
+    const { runAssistantTurn } = await import('./services/aiAssistant.js');
+    const res = await runAssistantTurn(historySnapshot, text, {
+      signal: activeRequestController.signal,
+      role: activeRoleId,
+      customInstruction
+    });
+    applyAssistantResult(res);
   } catch (err) {
     pendingMsg.pending = false;
     pendingMsg.text = err.aborted
@@ -648,10 +708,16 @@ export function mountChatWidget(goTo) {
     toast('ล้างคำสั่งเพิ่มเติมแล้ว');
   });
 
+  $('#ai-chat-prefer-local')?.addEventListener('change', e => {
+    preferLocalPatterns = e.target.checked;
+    saveStoredString(STORAGE_KEYS.preferLocal, preferLocalPatterns ? '1' : '0');
+    toast(preferLocalPatterns ? 'เปิดใช้แพตเทิร์นในเครื่องก่อนเรียก AI แล้ว' : 'ปิดการเช็กแพตเทิร์นก่อนเรียก AI');
+  });
+
   $('#ai-chat-roles').addEventListener('click', e => {
     const btn = e.target.closest('[data-ai-role]');
     if (!btn) return;
-    const role = getChatRole(btn.dataset.aiRole);
+    const role = getAnyChatRole(btn.dataset.aiRole);
     activeRoleId = role.id;
     saveStoredString(STORAGE_KEYS.role, role.id);
     renderKeyBanner();
@@ -662,7 +728,7 @@ export function mountChatWidget(goTo) {
   $('#ai-chat-quick').addEventListener('click', e => {
     const btn = e.target.closest('[data-ai-prompt]');
     if (!btn) return;
-    const prompts = getChatRole(activeRoleId).quickPrompts || [];
+    const prompts = getAnyChatRole(activeRoleId).quickPrompts || [];
     const prompt = prompts[Number(btn.dataset.aiPrompt)];
     if (prompt) handleSend(prompt);
   });

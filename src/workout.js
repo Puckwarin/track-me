@@ -5,6 +5,7 @@ import { bodyLatest } from './body.js';
 import { findExerciseImage } from './exerciseMedia.js';
 import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl } from './workoutParser.js';
+import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutActive.js';
@@ -150,6 +151,10 @@ export function mountWorkout(el) {
             <button type="button" id="w-import-close" class="text-slate-400 hover:text-slate-600 px-1.5" aria-label="ปิดหน้าต่างนำเข้า"><i class="fa-solid fa-xmark"></i></button>
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-[11px] font-medium text-slate-500">เทมเพลตสำเร็จรูป (0 โทเค็น):</span>
+          ${WORKOUT_PRESET_TEMPLATES.map((p, i) => `<button type="button" data-w-preset="${i}" class="chip bg-white border border-slate-200 hover:border-brand/50 hover:bg-lav-soft/60 text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
+        </div>
         <textarea id="w-import-text" rows="7" class="input text-xs leading-relaxed font-sans" placeholder="วางข้อความดิบหรือตารางออกกำลังกายที่นี่... เช่น&#10;Day A — Lower Body&#10;ขาและสะโพก&#10;ประมาณ 20–30 นาที&#10;Warm-up&#10;https://...&#10;March in Place&#10;60 วินาที&#10;เดินยกเข่าสลับซ้ายขวา..."></textarea>
         <div class="flex flex-wrap items-center justify-between gap-2">
           <button type="button" id="w-import-clear" class="btn btn-ghost !py-1.5 !px-3 text-xs">ล้างข้อความ</button>
@@ -254,6 +259,15 @@ export function mountWorkout(el) {
   $('#w-import-sample', root).addEventListener('click', () => {
     $('#w-import-text', root).value = SAMPLE_IMPORT_TEXT;
     runImportPreview();
+  });
+  $('#w-import-panel', root).addEventListener('click', e => {
+    const presetBtn = e.target.closest('[data-w-preset]');
+    if (!presetBtn) return;
+    const preset = WORKOUT_PRESET_TEMPLATES[Number(presetBtn.dataset.wPreset)];
+    if (!preset) return;
+    $('#w-import-text', root).value = preset.text;
+    runImportPreview();
+    toast(`โหลดเทมเพลต "${preset.label}" แล้ว (0 โทเค็น)`);
   });
   $('#w-import-clear', root).addEventListener('click', () => clearImportBox({ keepOpen: true }));
   $('#w-import-parse', root).addEventListener('click', () => runImportPreview());

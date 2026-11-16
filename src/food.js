@@ -2,7 +2,7 @@ import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'fireb
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
-import { analyzeFoodImage, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
+import { analyzeFoodImage, readNutritionLabelLocally, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
@@ -56,7 +56,7 @@ export function mountFood(el) {
           <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
           <i class="fa-solid fa-camera-retro text-xl text-brand"></i>
           <span class="block text-sm font-semibold text-slate-800 mt-1">📷 ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
-          <span class="block text-xs text-slate-500">สแกน 1 ปุ่มเดียว — แสดงความคืบหน้าและเปิดหน้าต่างตรวจยืนยันก่อนบันทึก</span>
+          <span class="block text-xs text-slate-500">ปุ่มเดียวครบ — ลองอ่านบาร์โค้ดและ OCR ฉลากในเครื่องก่อน (ฟรี) ใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
         </label>
         <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
       </div>
@@ -770,7 +770,29 @@ async function scanSingleFoodFile(file, { signal } = {}) {
     }
   }
 
-  const r = await analyzeFoodImage(file, { signal });
+  const localLabel = await readNutritionLabelLocally(file);
+  const localMacroCount = localLabel
+    ? [localLabel.protein, localLabel.carbs, localLabel.fat].filter(v => v !== null).length
+    : 0;
+  if (localLabel && localLabel.calories !== null && localMacroCount >= 1) {
+    const per100 = localLabel.basis === 'per_100g';
+    return {
+      sourceType: 'label',
+      basis: localLabel.basis || 'unknown',
+      name: 'สินค้าจากฉลาก',
+      unit: per100 ? '100 กรัม' : 'หน่วย',
+      gramsPerUnit: per100 ? 100 : null,
+      calories: Math.round(localLabel.calories),
+      protein: localLabel.protein != null ? round1(localLabel.protein) : '',
+      carbs: localLabel.carbs != null ? round1(localLabel.carbs) : '',
+      fat: localLabel.fat != null ? round1(localLabel.fat) : '',
+      sugar: localLabel.sugar != null ? round1(localLabel.sugar) : '',
+      sodium: localLabel.sodium != null ? Math.round(localLabel.sodium) : '',
+      notes: localLabel.notes || 'อ่านด้วย OCR ในเครื่อง (0 โทเค็น)'
+    };
+  }
+
+  const r = await analyzeFoodImage(file, { signal, precheckedLocalLabel: localLabel });
   const isLabel = r.kind === 'label';
   const per100 = r.basis === 'per_100g';
   const unit = isLabel
@@ -990,6 +1012,7 @@ async function onUnifiedScan(e) {
     toast(msg, 'err');
   }
 }
+
 
 // ---------- Custom food library ----------
 export function openLibrary(onPick) {

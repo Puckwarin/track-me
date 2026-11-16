@@ -1,7 +1,23 @@
-import { describe, expect, it } from 'vitest';
-import { formatImageProgress, runImageBatch } from './nutrition.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { analyzeFoodImage, formatImageProgress, runImageBatch } from './nutrition.js';
 
 describe('image batch progress helpers', () => {
+  beforeEach(() => {
+    if (!globalThis.localStorage) {
+      const store = new Map();
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: {
+          getItem: k => store.get(k) ?? null,
+          setItem: (k, v) => store.set(k, String(v)),
+          removeItem: k => store.delete(k),
+          clear: () => store.clear()
+        }
+      });
+    }
+    localStorage.clear();
+  });
+
   it('formats uploaded count, active step, and percentage clearly', () => {
     expect(formatImageProgress('กำลังประมวลผล', { total: 10, activeIndex: 7, completed: 6, percent: 60 }))
       .toBe('อัปโหลด 10 รูป · กำลังประมวลผล 7/10 (60%)…');
@@ -31,4 +47,19 @@ describe('image batch progress helpers', () => {
     expect(progressEvents[0]).toMatchObject({ total: 3, completed: 0, percent: 0 });
     expect(progressEvents[progressEvents.length - 1]).toMatchObject({ total: 3, completed: 3, percent: 100 });
   });
+
+  it('reuses precheckedLocalLabel in analyzeFoodImage without API keys or duplicate OCR', async () => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+    const file = { name: 'label.jpg' };
+
+    const partial = await analyzeFoodImage(file, {
+      precheckedLocalLabel: { basis: 'per_serving', calories: 140, protein: null, carbs: 20, fat: 3 }
+    });
+    expect(partial).toMatchObject({ kind: 'label', basis: 'per_serving', calories: 140, carbs: 20, fat: 3 });
+
+    await expect(analyzeFoodImage(file, { precheckedLocalLabel: null })).rejects.toThrow('NO_KEY');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
+
