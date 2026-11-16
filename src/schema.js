@@ -1,4 +1,4 @@
-import { isDateStr } from './util.js';
+import { isDateStr, isValidCalendarDate, localDateStr } from './util.js';
 
 // ตรวจและคัดกรองข้อมูลก่อนเขียนลง Firestore (ใช้ตอนกู้คืน/ย้ายข้อมูล) — เก็บเฉพาะฟิลด์ที่รู้จัก
 const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -6,12 +6,7 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1
 const moneyNum = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 100000000 ? Math.round(v * 100) / 100 : null);
 const int = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
 const ts = v => { const d = new Date(v); return Number.isNaN(d.getTime()) ? new Date() : d; };
-const validCalendarDate = value => {
-  if (!isDateStr(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(`${value}T00:00:00Z`);
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-};
+const validCalendarDate = isValidCalendarDate;
 const sanitizeReminderRule = r => ({
   kind: ['once', 'interval', 'monthly', 'yearly', 'nth_weekday', 'last_weekday', 'same_as', 'weekly_except_linked'].includes(r.kind) ? r.kind : 'once',
   ...(Number.isInteger(r.weekday) && r.weekday >= 0 && r.weekday <= 6 && { weekday: r.weekday }),
@@ -44,8 +39,22 @@ export const SANITIZERS = {
   period_records: o => isDateStr(o.start) && (o.end == null || isDateStr(o.end)) && (!o.end || o.end >= o.start) ? {
     start: o.start, end: o.end || null, flow: str(o.flow, 20), note: str(o.note), createdAt: ts(o.createdAt || o.timestamp)
   } : null,
-  body_records: o => isDateStr(o.date) && ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'].some(k => num(o[k]) !== null) ? {
-    date: o.date, weight: num(o.weight), bust: num(o.bust), waist: num(o.waist), hip: num(o.hip), arm: num(o.arm), thigh: num(o.thigh), note: str(o.note), createdAt: ts(o.createdAt || o.timestamp)
+  body_records: o => validCalendarDate(o.date) && ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh', 'sleepHours', 'sleepMinutes', 'steps'].some(k => num(o[k]) !== null || (k === 'steps' && int(o[k], 0, 500000) !== null)) ? {
+    date: o.date,
+    weight: num(o.weight), bust: num(o.bust), waist: num(o.waist), hip: num(o.hip), arm: num(o.arm), thigh: num(o.thigh),
+    ...(num(o.sleepHours) !== null && o.sleepHours <= 24 && { sleepHours: o.sleepHours }),
+    ...(int(o.sleepMinutes, 0, 1440) !== null && { sleepMinutes: o.sleepMinutes }),
+    ...(int(o.deepSleepMin, 0, 1440) !== null && { deepSleepMin: o.deepSleepMin }),
+    ...(int(o.lightSleepMin, 0, 1440) !== null && { lightSleepMin: o.lightSleepMin }),
+    ...(int(o.remSleepMin, 0, 1440) !== null && { remSleepMin: o.remSleepMin }),
+    ...(typeof o.bedTime === 'string' && /^\d{2}:\d{2}$/.test(o.bedTime) && { bedTime: o.bedTime }),
+    ...(typeof o.wakeTime === 'string' && /^\d{2}:\d{2}$/.test(o.wakeTime) && { wakeTime: o.wakeTime }),
+    ...(int(o.steps, 0, 500000) !== null && { steps: o.steps }),
+    ...(num(o.distanceKm) !== null && o.distanceKm <= 500 && { distanceKm: o.distanceKm }),
+    ...(int(o.activeKcal, 0, 30000) !== null && { activeKcal: o.activeKcal }),
+    ...(['manual', 'zepp', 'zepp_csv', 'zepp_ai', 'zepp_scan'].includes(o.source) && { source: o.source }),
+    note: str(o.note), createdAt: ts(o.createdAt || o.timestamp),
+    ...(o.updatedAt && { updatedAt: ts(o.updatedAt) })
   } : null,
   symptom_records: o => isDateStr(o.date) ? {
     date: o.date,
@@ -77,6 +86,11 @@ export const SANITIZERS = {
   pet_profiles: o => str(o.name) && num(o.weightKg) !== null ? { name:str(o.name), kind:str(o.kind,120), birthDate:isDateStr(o.birthDate)?o.birthDate:null, weightKg:num(o.weightKg), weightHistory:Array.isArray(o.weightHistory)?o.weightHistory.filter(x=>isDateStr(x?.date)&&num(x?.weightKg)!==null).slice(-365).map(x=>({date:x.date,weightKg:num(x.weightKg)})):[], lifeStage:['neutered','intact','inactive','puppy-young','puppy-old'].includes(o.lifeStage)?o.lifeStage:'neutered', createdAt:ts(o.createdAt), updatedAt:ts(o.updatedAt) } : null,
   pet_care_records: o => str(o.type,80) && isDateStr(o.date) ? {
     petId:str(o.petId,80), category:str(o.category,60)||'สัตว์เลี้ยง', type:str(o.type,80), date:o.date, nextDate:isDateStr(o.nextDate)?o.nextDate:null,
+    ...(o.recordKind === 'symptom' && { recordKind: 'symptom' }),
+    ...(o.symptoms && typeof o.symptoms === 'object' && {
+      symptoms: Object.fromEntries(['appetite', 'energy', 'stool', 'vomit', 'skin', 'cough'].map(k => [k, int(o.symptoms?.[k], 0, 3) ?? 0]))
+    }),
+    ...(num(o.value) !== null && o.value >= 30 && o.value <= 45 && { value: o.value }),
     ...(typeof o.dueTime === 'string' && /^\d{2}:\d{2}$/.test(o.dueTime) && { dueTime: o.dueTime }),
     repeatMonths:int(o.repeatMonths,0,120), intervalDays:int(o.intervalDays,0,3650), remindDays:int(o.remindDays,-1,365),
     ...(str(o.rawText, 300) && { rawText: str(o.rawText, 300) }),
@@ -137,11 +151,12 @@ export const SANITIZERS = {
     }
     if (Array.isArray(o?.routines) || (o?.doneMap && typeof o.doneMap === 'object') || (o?.extras && typeof o.extras === 'object')) {
       return {
-        routines: (Array.isArray(o.routines) ? o.routines : []).slice(0, 60).filter(r => r && str(r.title, 80)).map(r => ({
+        routines: (Array.isArray(o.routines) ? o.routines : []).slice(0, 80).filter(r => r && str(r.title, 80)).map(r => ({
           id: /^[\w-]{1,40}$/.test(r.id || '') ? r.id : 'r' + Math.random().toString(36).slice(2, 9),
           title: str(r.title, 80),
           days: (Array.isArray(r.days) ? r.days : []).filter(d => Number.isInteger(d) && d >= 0 && d <= 6),
-          ...( ['every', 'A', 'B'].includes(r.weekPattern) && r.weekPattern !== 'every' && { weekPattern: r.weekPattern }),
+          ...(['every', 'A', 'B', 'once'].includes(r.weekPattern) && r.weekPattern !== 'every' && { weekPattern: r.weekPattern }),
+          ...(r.weekPattern === 'once' && isDateStr(r.date) && { date: r.date }),
           ...(str(r.time, 10) && { time: str(r.time, 10) }),
           ...(str(r.icon, 8) && { icon: str(r.icon, 8) })
         })),
@@ -189,6 +204,36 @@ export const SANITIZERS = {
         .map(rule => ({ keyword: str(rule.keyword, 80).trim(), category: str(rule.category, 60) }));
       return { rules, updatedAt: ts(o.updatedAt) };
     }
+    if (o?.kind === 'assistant_note') {
+      const name = str(o.name || o.title, 120).trim();
+      const note = str(o.note, 2000).trim();
+      return (name || note) ? {
+        kind: 'assistant_note',
+        name: name || note.slice(0, 60),
+        category: str(o.category, 60) || 'ทั่วไป',
+        note,
+        date: isDateStr(o.date) ? o.date : localDateStr(),
+        source: o.source === 'manual' ? 'manual' : 'assistant',
+        createdAt: ts(o.createdAt),
+        updatedAt: ts(o.updatedAt)
+      } : null;
+    }
+    if (o?.kind === 'user_feedback') {
+      const note = str(o.note || o.message, 2000).trim();
+      if (!note) return null;
+      return {
+        kind: 'user_feedback',
+        category: ['bug', 'feature', 'ux', 'praise', 'other'].includes(o.category) ? o.category : 'other',
+        ...(int(o.value, 1, 5) !== null && { value: o.value }),
+        note,
+        ...(str(o.type, 80) && { type: str(o.type, 80) }),
+        date: isDateStr(o.date) ? o.date : localDateStr(),
+        status: o.status === 'noted' ? 'noted' : 'new',
+        source: o.source === 'assistant' ? 'assistant' : 'ui',
+        createdAt: ts(o.createdAt),
+        updatedAt: ts(o.updatedAt)
+      };
+    }
     return {
       sex: o.sex === 'male' ? 'male' : 'female', birthYear: int(o.birthYear, 1900, 2100), heightCm: num(o.heightCm), weightKg: num(o.weightKg),
       activity: ['sedentary', 'light', 'moderate', 'active', 'very'].includes(o.activity) ? o.activity : 'light',
@@ -217,7 +262,9 @@ export const docIdFor = (col, o, fallback) => {
   const prefix = o?.kind === 'expense_budget' ? /^expense_budget_/
     : o?.kind === 'expense_rule' ? /^expense_rule_/
       : o?.kind === 'expense_recurring' ? /^expense_recurring_/
-        : null;
+        : o?.kind === 'assistant_note' ? /^note_/
+          : o?.kind === 'user_feedback' ? /^feedback_/
+            : null;
   if (prefix) return /^[\w-]{1,80}$/.test(o.id || '') && prefix.test(o.id) ? o.id : fallback;
   if (o?.id === 'expense_rules') return 'expense_rules';
   if (o?.id === 'profile' || !o?.id) return 'profile';

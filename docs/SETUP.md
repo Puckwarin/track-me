@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v4.3.0
+# Project Setup — ตั้งค่า Track Me v4.4.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -100,10 +100,15 @@ Firebase Console → **Firestore Database → Rules**
 
 ## 7) พัฒนาบนเครื่อง (ตัวเลือก)
 ```bash
-npm install
-npm run dev        # เปิด http://localhost:3000/
-npm run build      # ผลลัพธ์ที่ dist/
+npm ci               # ใช้ npm ci เพื่อไม่อัปเดต package-lock.json โดยไม่ตั้งใจ
+npm run lock:check   # ตรวจว่าไม่ขาด optional platform packages ใน package-lock.json
+npm run dev          # เปิด http://localhost:3000/
+npm run build        # ผลลัพธ์ที่ dist/
 ```
+
+> **หมายเหตุเรื่อง `package-lock.json` บน Linux container:** หลีกเลี่ยงการรัน `npm install` (แบบไม่ใส่ `--no-save` / `npm ci`) บนสภาพแวดล้อม Linux container แล้ว commit `package-lock.json` ทับ เพราะ npm อาจตัด `optionalDependencies` ของ macOS/Windows (เช่น `@tailwindcss/oxide-*`, `@esbuild/*`, `rollup`) ออกจนทำให้ CI (`npm ci`) ล้มได้ ให้ตรวจด้วย `npm run lock:check` ก่อน commit เสมอ
+>
+> **หมายเหตุเรื่องข้อมูล Zepp (การนอนหลับ & ก้าวเดิน):** Track Me เป็นเว็บแอป (PWA) ฝั่งเบราว์เซอร์ จึงไม่สามารถเข้าถึงฐานข้อมูลภายในแอป Zepp บนมือถือโดยตรงหรือล็อกอิน Zepp OAuth แบบไม่ผ่าน API สาธารณะได้ แอปจึงรองรับการบันทึก 3 วิธีในเมนู **ร่างกาย (`น้ำหนัก · นอน/ก้าว`)**: (1) กรอกเอง, (2) นำเข้าไฟล์ CSV Export จากแอป Zepp (`ACTIVITY*.csv` + `SLEEP*.csv` เลือกพร้อมกันได้ ระบบรวมตามวันที่และให้ตรวจยืนยันก่อนบันทึก), และ (3) สแกนภาพหน้าจอแอป Zepp ด้วย AI Vision
 
 ## 8) ติดตั้งเป็นแอปบนมือถือ + ทดสอบออฟไลน์
 1. เปิด `https://puckwarin.github.io/track-me/` ตอนออนไลน์ ล็อกอิน แล้วรอให้ข้อมูลโหลด **1–2 ครั้ง**
@@ -195,7 +200,7 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 
 ---
 
-## อัปเดต v2.6 (ตั้งค่าการแจ้งเตือนอัตโนมัติ Push Notification 08:00 น. ฟรี)
+## อัปเดต v2.6 (ตั้งค่าการแจ้งเตือนอัตโนมัติ Push Notification 12:15 น. ฟรี)
 
 ระบบแจ้งเตือนโดยไม่ต้องเปิดแอปค้างไว้ ใช้ **Web Push (VAPID) + GitHub Actions** ฟรีทั้งหมด ไม่ต้องผูกบัตรเครดิต:
 
@@ -217,7 +222,7 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - เมื่อ workflow **Quality checks and deploy** build บน `main` เว็บจะฝัง `VITE_VAPID_PUBLIC_KEY` ให้อัตโนมัติ; การกด Run workflow จาก branch อื่นไม่ deploy Pages
    - เปิดแอป Track Me → กดปุ่ม **"🔔 เปิดรับการแจ้งเตือน"** ที่หน้า Home หรือใน **ตั้งค่า**
    - **หมายเหตุ iPhone / iPad (iOS 16.4+):** ต้องกดปุ่ม **แชร์ (Share) → เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)** แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับแจ้งเตือนได้
-   - ทดสอบส่งได้ทันทีใน GitHub → **Actions → Daily Push Notifications (08:00 ICT) → Run workflow** (ปกติระบบจะทำงานอัตโนมัติทุกวันเวลา **08:00 น. เวลาประเทศไทย**)
+   - ทดสอบส่งได้ทันทีใน GitHub → **Actions → Daily Push Notifications (12:15 ICT) → Run workflow** (ปกติระบบจะทำงานอัตโนมัติทุกวันเวลา **12:15 น. เวลาประเทศไทย**)
 
     - ไม่ต้องสร้าง Firestore Collection Group Index ด้วยมือแล้ว เพราะสคริปต์อ่านตรงจาก `users` → `settings/push` และเติม `mailto:` หน้า `VAPID_SUBJECT` ให้อัตโนมัติ
 
@@ -254,8 +259,8 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 - **ความปลอดภัยและความเป็นส่วนตัวของการสแกนหลายภาพ (Multi-Slip & Multi-Image)**:
   - **สแกนสลิปหลายใบพร้อมกัน (`tesseract.js`)**: ประมวลผลในเบราว์เซอร์ 100% ใช้ Worker เดียวต่อเนื่อง และล้าง Canvas/Bitmap/หน่วยความจำทันทีหลังอ่านเสร็จ ไม่มีการอัปโหลดรูปลง Firebase Storage หรือ Firestore
   - **สแกนอาหารปุ่มเดียว & สต๊อกหลายรูป**: ย่อภาพฝั่งเครื่อง (`maxDim=1024`) แล้วตรวจบาร์โค้ดในเครื่องก่อนส่งวิเคราะห์เมื่อจำเป็น พร้อมปิด ImageBitmap ทันทีหลังใช้งาน
-- **Weekly Planner Week A / Week B & Daily Push (08:00 ICT)**:
-  - สคริปต์ `scripts/daily-push.mjs` ซิงค์สูตรคำนวณรอบสัปดาห์ `A / B` และค่า `altAnchor` จาก `settings/planner` รวมถึงคำนวณวันนัดหมายแบบเชื่อมโยง (`same_as` และ `weekly_except_linked`) ให้อัตโนมัติ ทำให้การแจ้งเตือนตอน 08:00 น. ตรงกับหน้า Planner ในแอปทุกวัน
+- **Weekly Planner Week A / Week B & Daily Push (12:15 ICT)**:
+  - สคริปต์ `scripts/daily-push.mjs` ซิงค์สูตรคำนวณรอบสัปดาห์ `A / B` และค่า `altAnchor` จาก `settings/planner` รวมถึงคำนวณวันนัดหมายแบบเชื่อมโยง (`same_as` และ `weekly_except_linked`) ให้อัตโนมัติ ทำให้การแจ้งเตือนตอน 12:15 น. ตรงกับหน้า Planner ในแอปทุกวัน
 
 ---
 
@@ -278,7 +283,7 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 - **การย้ายข้อมูลเดิมอัตโนมัติ:** หลัง Publish Rules แล้ว เมื่อเปิดแอปและออนไลน์ แอปจะย้ายรายการเก่าจาก `settings/exp_YYYY-MM` เข้าสู่ `expense_records` ให้อัตโนมัติแบบ Idempotent (ไม่เกิดรายการซ้ำ และไม่ลบของเดิมจนกว่าจะย้ายสำเร็จ) ส่วนไฟล์สำรอง JSON เวอร์ชันเก่าก็ยังกู้คืนได้ปกติ
 
 ### 2) การตั้งค่า Push Privacy & Backup
-- **หน้าจอล็อกส่วนตัว (ค่าเริ่มต้นเปิด):** ในหน้า **ตั้งค่า → การแจ้งเตือนอัตโนมัติ (08:00 น.)** มีตัวเลือก **"🔒 ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)"** ซึ่งจะส่งเฉพาะสรุปจำนวนรายการรวม (ไม่แสดงชื่อรอบเดือน ยา หรือรายการนัดบนหน้าจอล็อก) หากต้องการให้แสดงรายชื่อหัวข้อบนแจ้งเตือน สามารถติ๊กออกได้เอง
+- **หน้าจอล็อกส่วนตัว (ค่าเริ่มต้นเปิด):** ในหน้า **ตั้งค่า → การแจ้งเตือนอัตโนมัติ (12:15 น.)** มีตัวเลือก **"🔒 ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)"** ซึ่งจะส่งเฉพาะสรุปจำนวนรายการรวม (ไม่แสดงชื่อรอบเดือน ยา หรือรายการนัดบนหน้าจอล็อก) หากต้องการให้แสดงรายชื่อหัวข้อบนแจ้งเตือน สามารถติ๊กออกได้เอง
 - **ไฟล์สำรองข้อมูล (Backup JSON):** ระบบตัดเอกสาร `settings/push` (Subscription Endpoint และ Keys ของเครื่อง) ออกจากการส่งออกและนำเข้าโดยอัตโนมัติ
 
 ### 3) จำกัดสิทธิ์ `FIREBASE_SERVICE_ACCOUNT` ตามหลัก Least-Privilege (แนะนำ)
@@ -290,4 +295,11 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
 
+---
 
+## อัปเดต v4.4.0 (อาการน้องหมา, โน้ต/Feedback, Zepp, Cooldown รายโมเดล & Daily Push 12:15 น.)
+
+- **ไม่ต้องอัปเดต `firestore.rules` เพิ่มเติม**: บันทึกอาการน้องหมา (`pet_care_records` แบบ `recordKind: 'symptom'`), ข้อมูลการนอน/ก้าวเดิน (`body_records` เช่น `zepp_YYYY-MM-DD`), โน้ตผู้ช่วย (`settings/note_*`) และ Feedback (`settings/feedback_*`) ใช้ collection เดิมและอยู่ภายใต้ข้อจำกัดของ `firestore.rules` ชุดปัจจุบันแล้ว
+- **Daily Push (`12:15 ICT`)**: ใช้ GitHub Secrets ชุดเดิม (`FIREBASE_SERVICE_ACCOUNT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) โดย workflow ชื่อ **`Daily Push Notifications (12:15 ICT)`** และรันอัตโนมัติตาม cron `15 5 * * *` (12:15 น. เวลาประเทศไทย)
+- **Zepp (การนอน & ก้าวเดิน)**: เนื่องจาก Track Me เป็นเว็บแอป (PWA) ฝั่งเบราว์เซอร์ จึงนำเข้าข้อมูลผ่านการกรอกเอง, นำเข้าไฟล์ Zepp CSV (`ACTIVITY*.csv` + `SLEEP*.csv`), หรือสแกนภาพหน้าจอแอป Zepp ด้วย AI Vision (ใช้คีย์ AI ที่ตั้งไว้ในอุปกรณ์)
+- **AI Key & Lockfile**: แยก cooldown รายโมเดลใน `localStorage` เพื่อยังสลับใช้โมเดลสำรองใน provider เดียวกันได้เมื่อโมเดลหนึ่งเต็มโควตา; สำหรับนักพัฒนาที่ติดตั้งบนเครื่อง ควรใช้ `npm ci` และรัน `npm run lock:check` ก่อน commit เสมอ

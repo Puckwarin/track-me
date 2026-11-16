@@ -1,12 +1,24 @@
-import { addDoc, setDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
+import { addDoc, setDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, localDateStr, toast, openModal } from './util.js';
+import { $, esc, fmtDate, localDateStr, toast, openModal } from './util.js';
 import { watch } from './sync.js';
 import { readPetFoodLabel, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { mountLab, render as renderLab, resetLabToToday } from './lab.js';
 
-let root, petFormDirty = false;
+const PET_SYMPTOMS = [
+  ['appetite', 'เบื่ออาหาร / กินน้อย'],
+  ['energy', 'ซึม / อ่อนเพลีย'],
+  ['stool', 'ท้องเสีย / ถ่ายเหลว'],
+  ['vomit', 'อาเจียน / ขย้อน'],
+  ['skin', 'คัน / เกา / ผื่น'],
+  ['cough', 'ไอ / จาม / น้ำมูก']
+];
+const PET_SX_LEVELS = ['ปกติ', 'เล็กน้อย', 'ปานกลาง', 'มาก'];
+const PET_SX_COLORS = ['bg-slate-100 text-slate-600', 'bg-amber-100 text-amber-800', 'bg-orange-100 text-orange-800', 'bg-rose-100 text-rose-700 font-semibold'];
+
+let root, petFormDirty = false, editingSxId = null;
+let petSxDraft = Object.fromEntries(PET_SYMPTOMS.map(([k]) => [k, 0]));
 const $r = s => $(s, root);
 const d = s => s ? new Date(`${s}T00:00:00`) : null;
 const num = id => { const v = $r('#' + id).value; return v === '' ? null : Number(v); };
@@ -41,6 +53,30 @@ export function mountCare(el) {
     </div>
     <p class="text-xs text-slate-400">ค่าพลังงานเป็นเพียงจุดเริ่มต้นโดยประมาณ ควรปรับตามสภาพร่างกายและคำแนะนำสัตวแพทย์</p>
   </section>
+
+  <section id="pet-sx-card" class="card space-y-4 lg:col-span-2">
+    <header class="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <h3 class="text-base sm:text-lg font-bold text-slate-800">🐶 บันทึกอาการน้องหมา</h3>
+        <p class="text-xs text-slate-500">ติดตามความผิดปกติรายวัน เช่น กินอาหาร การขับถ่าย ซึม คัน อาเจียน และอุณหภูมิ</p>
+      </div>
+    </header>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <div><label class="lbl">วันที่</label><input id="pet-sx-date" type="date" class="input"></div>
+      <div><label class="lbl">อุณหภูมิร่างกาย °C (ไม่บังคับ)</label><input id="pet-sx-temp" type="number" min="34" max="43" step="0.1" inputmode="decimal" class="input" placeholder="เช่น 38.5 (ปกติ ~38–39 °C)"></div>
+    </div>
+    <div id="pet-sx-grid" class="grid sm:grid-cols-2 gap-2.5"></div>
+    <div><label class="lbl">รายละเอียดเพิ่มเติม</label><input id="pet-sx-note" class="input" placeholder="เช่น ถ่ายเหลว 2 รอบ, กินยาแล้วดีขึ้น, คันบริเวณหู"></div>
+    <div class="flex flex-wrap justify-end gap-2">
+      <button type="button" id="pet-sx-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
+      <button type="button" id="pet-sx-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกอาการน้องหมา</button>
+    </div>
+    <div class="border-t pt-3 space-y-2">
+      <h4 class="font-semibold text-sm text-slate-700">ประวัติอาการล่าสุด</h4>
+      <div id="pet-sx-list" class="space-y-2 text-sm"></div>
+    </div>
+  </section>
+
   <div id="care-lab" class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-3 gap-6"></div>`;
 
   $r('#pet-save').onclick = savePet;
@@ -48,11 +84,24 @@ export function mountCare(el) {
   $r('#pet-food-scan').addEventListener('change', onScanPetFood);
   ['#pet-name', '#pet-kind', '#pet-birth', '#pet-weight', '#pet-life'].forEach(sel => $r(sel).addEventListener('input', () => { petFormDirty = true; renderPetEstimate(); }));
   $r('#pet-food-kcal').addEventListener('input', renderPetEstimate);
+  $r('#pet-sx-date').value = localDateStr();
+  $r('#pet-sx-save').addEventListener('click', savePetSymptom);
+  $r('#pet-sx-cancel').addEventListener('click', resetPetSymptomForm);
+  $r('#pet-sx-grid').addEventListener('click', e => {
+    const btn = e.target.closest('[data-psx-key]');
+    if (!btn) return;
+    petSxDraft[btn.dataset.psxKey] = Number(btn.dataset.psxLv) || 0;
+    renderPetSymptomGrid();
+  });
+  $r('#pet-sx-list').addEventListener('click', onPetSymptomListClick);
   mountLab($r('#care-lab'));
   renderAll();
 }
 
 export function resetCareToToday() {
+  if (root && $r('#pet-sx-date') && !editingSxId) {
+    $r('#pet-sx-date').value = localDateStr();
+  }
   resetLabToToday();
 }
 
@@ -64,7 +113,7 @@ export function watchCare(uid) {
 
 function renderAll() {
   if (!root?.isConnected) return;
-  renderPet(); renderPetWeight(); renderPetFoods(); renderLab();
+  renderPet(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList(); renderLab();
 }
 
 function openPetFoodScanModal(results, errors) {
@@ -217,7 +266,137 @@ async function onScanPetFood(e) {
 function savePet(){const name=$r('#pet-name').value.trim(),weight=num('pet-weight');if(!name||!weight)return toast('กรอกชื่อน้องและน้ำหนักก่อนค่ะ','err');const old=(state.petProfiles||[])[0],today=localDateStr(),history=(old?.weightHistory||[]).filter(x=>x&&typeof x.date==='string'&&Number.isFinite(Number(x.weightKg))).map(x=>({date:x.date,weightKg:Number(x.weightKg)}));const sameDay=history.findIndex(x=>x.date===today);if(sameDay>=0)history[sameDay]={date:today,weightKg:weight};else history.push({date:today,weightKg:weight});history.sort((a,b)=>a.date.localeCompare(b.date));const data={name,kind:$r('#pet-kind').value.trim(),birthDate:$r('#pet-birth').value||null,weightKg:weight,weightHistory:history.slice(-365),lifeStage:$r('#pet-life').value,updatedAt:new Date()};try{const write=old?setDoc(userDoc(state.uid,'pet_profiles',old.id),data,{merge:true}):addDoc(userCol(state.uid,'pet_profiles'),{...data,createdAt:new Date()});write.catch(e=>toast(e.message,'err'));petFormDirty=false;toast('บันทึกข้อมูลและน้ำหนักแล้ว');}catch(e){toast(e.message,'err');}}
 const ageText=birthDate=>{if(!birthDate)return 'ไม่ระบุวันเกิด';const b=d(birthDate),now=d(localDateStr());if(b>now)return 'วันเกิดอยู่ในอนาคต';let years=now.getFullYear()-b.getFullYear(),months=now.getMonth()-b.getMonth();if(now.getDate()<b.getDate())months--;if(months<0){years--;months+=12;}return years?`${years} ปี ${months} เดือน`:`${Math.max(0,months)} เดือน`;};
 function renderPet(){const p=(state.petProfiles||[])[0];if(p&&!petFormDirty){$r('#pet-name').value=p.name||'';$r('#pet-kind').value=p.kind||'';$r('#pet-birth').value=p.birthDate||'';$r('#pet-weight').value=p.weightKg||'';$r('#pet-life').value=p.lifeStage||'neutered';}renderPetEstimate();}
-function renderPetWeight(){const p=(state.petProfiles||[])[0],chart=$r('#pet-weight-chart');if(!p){chart.innerHTML='<p class="text-xs text-slate-500">เพิ่มข้อมูลน้องก่อนเพื่อเริ่มบันทึกน้ำหนัก</p>';return;}let rows=(p.weightHistory||[]).filter(x=>x&&typeof x.date==='string'&&Number.isFinite(Number(x.weightKg))).map(x=>({date:x.date,weightKg:Number(x.weightKg)}));if(!rows.length&&Number(p.weightKg)>0){const stamp=p.updatedAt?.toDate?.()||p.updatedAt;const date=stamp instanceof Date&&!Number.isNaN(stamp.getTime())?stamp.toISOString().slice(0,10):localDateStr();rows=[{date,weightKg:Number(p.weightKg)}];}rows.sort((a,b)=>a.date.localeCompare(b.date));if(!rows.length){chart.innerHTML='<p class="text-xs text-slate-500">ยังไม่มีข้อมูลน้ำหนัก</p>';return;}const w=Math.max(360,rows.length*74),h=190,pad={l:42,r:14,t:16,b:34},vals=rows.map(x=>x.weightKg),lo=Math.min(...vals),hi=Math.max(...vals),span=Math.max(1,hi-lo),x=i=>pad.l+(rows.length===1?(w-pad.l-pad.r)/2:i*(w-pad.l-pad.r)/(rows.length-1)),y=v=>pad.t+(hi-v+span*.12)/(span*1.24)*(h-pad.t-pad.b),points=rows.map((r,i)=>`${x(i)},${y(r.weightKg)}`).join(' ');chart.innerHTML=`<svg role="img" aria-label="กราฟแนวโน้มน้ำหนัก ${esc(p.name)}" viewBox="0 0 ${w} ${h}" class="block w-full max-w-3xl"><title>แนวโน้มน้ำหนัก ${esc(p.name)}</title><line x1="${pad.l}" y1="${h-pad.b}" x2="${w-pad.r}" y2="${h-pad.b}" stroke="currentColor" opacity=".25"/><polyline points="${points}" fill="none" stroke="#8b5e3c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${rows.map((r,i)=>`<circle cx="${x(i)}" cy="${y(r.weightKg)}" r="4" fill="#8b5e3c"><title>${esc(r.date)} · ${r.weightKg} kg</title></circle><text x="${x(i)}" y="${h-10}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".75">${esc(r.date.slice(5))}</text>`).join('')}<text x="${pad.l-6}" y="${pad.t+8}" text-anchor="end" font-size="11" fill="currentColor">${hi.toFixed(1)} kg</text><text x="${pad.l-6}" y="${h-pad.b-2}" text-anchor="end" font-size="11" fill="currentColor">${lo.toFixed(1)} kg</text></svg>`;}
+function renderPetWeight(){const p=(state.petProfiles||[])[0],chart=$r('#pet-weight-chart');if(!p){chart.innerHTML='<p class="text-xs text-slate-500">เพิ่มข้อมูลน้องก่อนเพื่อเริ่มบันทึกน้ำหนัก</p>';return;}let rows=(p.weightHistory||[]).filter(x=>x&&typeof x.date==='string'&&Number.isFinite(Number(x.weightKg))).map(x=>({date:x.date,weightKg:Number(x.weightKg)}));if(!rows.length&&Number(p.weightKg)>0){const stamp=p.updatedAt?.toDate?.()||p.updatedAt;const date=stamp instanceof Date&&!Number.isNaN(stamp.getTime())?localDateStr(stamp):localDateStr();rows=[{date,weightKg:Number(p.weightKg)}];}rows.sort((a,b)=>a.date.localeCompare(b.date));if(!rows.length){chart.innerHTML='<p class="text-xs text-slate-500">ยังไม่มีข้อมูลน้ำหนัก</p>';return;}const w=Math.max(360,rows.length*74),h=190,pad={l:42,r:14,t:16,b:34},vals=rows.map(x=>x.weightKg),lo=Math.min(...vals),hi=Math.max(...vals),span=Math.max(1,hi-lo),x=i=>pad.l+(rows.length===1?(w-pad.l-pad.r)/2:i*(w-pad.l-pad.r)/(rows.length-1)),y=v=>pad.t+(hi-v+span*.12)/(span*1.24)*(h-pad.t-pad.b),points=rows.map((r,i)=>`${x(i)},${y(r.weightKg)}`).join(' ');chart.innerHTML=`<svg role="img" aria-label="กราฟแนวโน้มน้ำหนัก ${esc(p.name)}" viewBox="0 0 ${w} ${h}" class="block w-full max-w-3xl"><title>แนวโน้มน้ำหนัก ${esc(p.name)}</title><line x1="${pad.l}" y1="${h-pad.b}" x2="${w-pad.r}" y2="${h-pad.b}" stroke="currentColor" opacity=".25"/><polyline points="${points}" fill="none" stroke="#8b5e3c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${rows.map((r,i)=>`<circle cx="${x(i)}" cy="${y(r.weightKg)}" r="4" fill="#8b5e3c"><title>${esc(r.date)} · ${r.weightKg} kg</title></circle><text x="${x(i)}" y="${h-10}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".75">${esc(r.date.slice(5))}</text>`).join('')}<text x="${pad.l-6}" y="${pad.t+8}" text-anchor="end" font-size="11" fill="currentColor">${hi.toFixed(1)} kg</text><text x="${pad.l-6}" y="${h-pad.b-2}" text-anchor="end" font-size="11" fill="currentColor">${lo.toFixed(1)} kg</text></svg>`;}
 function renderPetEstimate(){const p=(state.petProfiles||[])[0],weight=num('pet-weight')??p?.weightKg;if(!weight){$r('#pet-profile').textContent='เพิ่มข้อมูลน้องและน้ำหนักเพื่อประเมินพลังงานต่อวัน';$r('#pet-calorie-estimate').textContent='';return;}const name=$r('#pet-name').value.trim()||p?.name||'น้อง',kind=$r('#pet-kind').value.trim()||p?.kind||'ไม่ระบุพันธุ์',birth=$r('#pet-birth').value||p?.birthDate||null;const factors={neutered:1.5,intact:1.7,inactive:1.1,'puppy-young':3,'puppy-old':2};const factor=factors[$r('#pet-life').value]||1.5,rer=70*Math.pow(weight,.75),min=Math.round(rer*factor*.9),max=Math.round(rer*factor*1.1),kcal100=num('pet-food-kcal');const grams=kcal100>0?` · เมื่ออาหารนี้ให้ ${kcal100} kcal/100g: ประมาณ ${Math.round(min*100/kcal100)}–${Math.round(max*100/kcal100)} g/วัน`:'';$r('#pet-profile').textContent=`${name} · ${kind} · วันเกิด ${birth||'ไม่ระบุ'} (${ageText(birth)}) · ${weight} kg`;$r('#pet-calorie-estimate').textContent=`พลังงานเริ่มต้นประเมิน ${min}–${max} kcal/วัน (RER ${Math.round(rer)} × ปัจจัย ${factor}; ปรับตามคำแนะนำสัตวแพทย์)${grams}`;}
 function savePetFood(){const p=(state.petProfiles||[])[0],name=$r('#pet-food-name').value.trim(),grams=num('pet-food-grams'),kcal=num('pet-food-kcal');if(!p||!name||grams===null)return toast('กรอกข้อมูลน้อง ชื่ออาหาร และปริมาณก่อนค่ะ','err');try{addDoc(userCol(state.uid,'pet_food_records'),{petId:p.id,date:localDateStr(),name,grams,kcalPer100:kcal,allergy:$r('#pet-food-allergy').value,note:$r('#pet-food-notes').value.trim(),createdAt:new Date()}).catch(e=>toast(e.message,'err'));['#pet-food-name','#pet-food-grams','#pet-food-kcal','#pet-food-notes'].forEach(sel=>{if($r(sel))$r(sel).value='';});if($r('#pet-food-allergy'))$r('#pet-food-allergy').value='unknown';const st=$r('#pet-food-scan-status');if(st){st.textContent='';st.classList.add('hidden');}renderPetEstimate();toast('บันทึกอาหารน้องแล้ว');}catch(e){toast(e.message,'err');}}
 function renderPetFoods(){const rows=(state.petFoods||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);$r('#pet-food-list').innerHTML=rows.map(x=>`<div class="rounded-lg bg-slate-50 p-2 flex justify-between items-start gap-2"><div>${esc(x.date)} · <b>${esc(x.name)}</b> ${esc(x.grams)} g${x.kcalPer100!=null?` · ${Math.round(x.kcalPer100*x.grams/100)} kcal`:''} · ${x.allergy==='yes'?'⚠️ สงสัยแพ้':x.allergy==='no'?'ไม่พบอาการแพ้':'ยังไม่ทราบ'}<small class="block text-slate-500">${esc(x.note||'')}</small></div><button data-del-pet-food="${esc(x.id)}" class="text-rose-400 text-xs p-1">ลบ</button></div>`).join('')||'<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาหาร</p>';$r('#pet-food-list').onclick=e=>{const b=e.target.closest('[data-del-pet-food]');if(b&&confirm('ลบบันทึกอาหารน้องนี้?'))deleteDoc(userDoc(state.uid,'pet_food_records',b.dataset.delPetFood)).catch(err=>toast(err.message,'err'));};}
+
+function renderPetSymptomGrid() {
+  const grid = $r('#pet-sx-grid');
+  if (!grid) return;
+  grid.innerHTML = PET_SYMPTOMS.map(([key, label]) => {
+    const cur = petSxDraft[key] ?? 0;
+    return `
+      <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 space-y-1.5">
+        <p class="text-xs font-semibold text-slate-700">${esc(label)}</p>
+        <div class="grid grid-cols-4 gap-1">
+          ${PET_SX_LEVELS.map((lvText, lv) => `
+            <button type="button" data-psx-key="${key}" data-psx-lv="${lv}" class="py-1 px-1 rounded-lg text-[11px] border transition ${cur === lv ? `${PET_SX_COLORS[lv]} border-slate-300 shadow-xs` : 'bg-white border-slate-200 text-slate-500'}">${lvText}</button>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function resetPetSymptomForm() {
+  editingSxId = null;
+  petSxDraft = Object.fromEntries(PET_SYMPTOMS.map(([k]) => [k, 0]));
+  $r('#pet-sx-date').value = localDateStr();
+  $r('#pet-sx-temp').value = '';
+  $r('#pet-sx-note').value = '';
+  $r('#pet-sx-save').innerHTML = '<i class="fa-solid fa-plus"></i> บันทึกอาการน้องหมา';
+  $r('#pet-sx-cancel').classList.add('hidden');
+  renderPetSymptomGrid();
+}
+
+function savePetSymptom() {
+  const date = $r('#pet-sx-date').value;
+  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  const tempRaw = $r('#pet-sx-temp').value;
+  const tempC = tempRaw === '' ? null : Number(tempRaw);
+  if (tempC !== null && (!Number.isFinite(tempC) || tempC < 34 || tempC > 43)) {
+    return toast('อุณหภูมิควรอยู่ระหว่าง 34.0 – 43.0 °C', 'err');
+  }
+  const note = $r('#pet-sx-note').value.trim().slice(0, 2000);
+  const hasAnySymptom = Object.values(petSxDraft).some(v => v > 0);
+  if (!hasAnySymptom && tempC === null && !note) {
+    // อนุญาตให้บันทึกวัน "ปกติทุกด้าน" ได้หากตั้งใจ แต่ถ้าจะชัดเจนให้ระบุหรือยืนยันผ่าน note ก็ได้ — ยอมให้บันทึกปกติทุกด้านได้!
+  }
+  const pet = (state.petProfiles || [])[0];
+  const payload = {
+    petId: pet?.id || '',
+    recordKind: 'symptom',
+    type: 'บันทึกอาการน้องหมา',
+    category: 'อาการน้องหมา',
+    date,
+    nextDate: null,
+    done: true,
+    symptoms: { ...petSxDraft },
+    ...(tempC !== null && { value: Math.round(tempC * 10) / 10 }),
+    note,
+    updatedAt: new Date()
+  };
+  try {
+    if (editingSxId) {
+      updateDoc(userDoc(state.uid, 'pet_care_records', editingSxId), payload)
+        .catch(e => toast('แก้ไขไม่สำเร็จ: ' + e.message, 'err'));
+      toast('อัปเดตบันทึกอาการน้องหมาแล้ว');
+    } else {
+      addDoc(userCol(state.uid, 'pet_care_records'), { ...payload, createdAt: new Date() })
+        .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
+      toast('บันทึกอาการน้องหมาแล้ว 🐶');
+    }
+    resetPetSymptomForm();
+  } catch (e) {
+    toast('บันทึกไม่สำเร็จ: ' + e.message, 'err');
+  }
+}
+
+function onPetSymptomListClick(e) {
+  const editBtn = e.target.closest('[data-edit-pet-sx]');
+  if (editBtn) {
+    const rec = (state.petCare || []).find(x => x.id === editBtn.dataset.editPetSx && x.recordKind === 'symptom');
+    if (!rec) return;
+    editingSxId = rec.id;
+    petSxDraft = Object.fromEntries(PET_SYMPTOMS.map(([k]) => [k, Number(rec.symptoms?.[k]) || 0]));
+    $r('#pet-sx-date').value = rec.date || localDateStr();
+    $r('#pet-sx-temp').value = rec.value != null ? String(rec.value) : '';
+    $r('#pet-sx-note').value = rec.note || '';
+    $r('#pet-sx-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกการแก้ไข';
+    $r('#pet-sx-cancel').classList.remove('hidden');
+    renderPetSymptomGrid();
+    $r('#pet-sx-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const delBtn = e.target.closest('[data-del-pet-sx]');
+  if (delBtn && confirm('ลบบันทึกอาการน้องหมานี้?')) {
+    deleteDoc(userDoc(state.uid, 'pet_care_records', delBtn.dataset.delPetSx))
+      .catch(err => toast(err.message, 'err'));
+    if (editingSxId === delBtn.dataset.delPetSx) resetPetSymptomForm();
+  }
+}
+
+function renderPetSymptomsList() {
+  const box = $r('#pet-sx-list');
+  if (!box) return;
+  const rows = (state.petCare || [])
+    .filter(x => x.recordKind === 'symptom')
+    .slice()
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  if (!rows.length) {
+    box.innerHTML = '<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาการน้องหมา</p>';
+    return;
+  }
+  box.innerHTML = rows.slice(0, 20).map(r => {
+    const badges = PET_SYMPTOMS
+      .map(([k, lbl]) => [lbl, Number(r.symptoms?.[k]) || 0])
+      .filter(([, lv]) => lv > 0)
+      .map(([lbl, lv]) => `<span class="rounded-lg px-2 py-0.5 text-[11px] ${PET_SX_COLORS[lv]}">${esc(lbl.split(' / ')[0])}: ${PET_SX_LEVELS[lv]}</span>`)
+      .join('');
+    return `
+      <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 flex items-start justify-between gap-2">
+        <div class="min-w-0 space-y-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="font-semibold text-slate-800">${esc(fmtDate(r.date))}</span>
+            ${r.value != null ? `<span class="rounded-lg bg-sky-soft text-blue-800 px-2 py-0.5 text-[11px]">🌡️ ${r.value} °C</span>` : ''}
+            ${badges || '<span class="rounded-lg bg-ok-soft text-green-800 px-2 py-0.5 text-[11px]">ปกติทุกด้าน ✓</span>'}
+          </div>
+          ${r.note ? `<p class="text-xs text-slate-600">${esc(r.note)}</p>` : ''}
+        </div>
+        <div class="flex gap-1.5 shrink-0">
+          <button type="button" data-edit-pet-sx="${esc(r.id)}" class="chip bg-sky-soft text-blue-700 text-xs">แก้</button>
+          <button type="button" data-del-pet-sx="${esc(r.id)}" class="chip bg-pink-soft text-rose-600 text-xs">ลบ</button>
+        </div>
+      </div>`;
+  }).join('');
+}

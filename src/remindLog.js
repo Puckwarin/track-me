@@ -30,7 +30,7 @@ const $r = s => $(s, root);
 
 function rawItems() {
   const petName = id => (state.petProfiles || []).find(p => p.id === id)?.name || '';
-  const fromPet = (state.petCare || []).map(x => ({
+  const fromPet = (state.petCare || []).filter(x => x.recordKind !== 'symptom').map(x => ({
     ...x,
     col: 'pet_care_records',
     uidKey: `pet_care_records:${x.id}`,

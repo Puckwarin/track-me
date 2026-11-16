@@ -72,7 +72,7 @@ CI ใช้ Emulator เท่านั้นและไม่ deploy Producti
 
 Vite PWA สร้าง manifest และ Service Worker ใน build; Workbox precache assets ที่ตรง `globPatterns`, ใช้ content-hashed filenames และ `registerType: 'autoUpdate'`. ปกติไม่ต้อง bump cache name ด้วยมือเมื่อปล่อย build ใหม่ ผู้ใช้ควรเปิด/รีโหลดแอปเมื่อได้รับ update; stale dynamic chunk มีการ refresh อัตโนมัติแบบจำกัดเพื่อเลี่ยง reload loop. ไม่ควรลบ browser data เพื่อแก้ทุกกรณี เพราะอาจลบข้อมูลใน local cache ที่ยังไม่ซิงค์
 
-หลังเปิดใช้ Web Push ต้องให้ผู้ใช้กดอนุญาตจากหน้าแอป; iOS/iPadOS ต้องเพิ่มแอปลง Home Screen ก่อนตามข้อจำกัด platform. Daily Push ทำงานเวลา 08:00 น. ไทยผ่าน workflow schedule หาก secrets ถูกต้องและ GitHub Actions ทำงานสำเร็จ
+หลังเปิดใช้ Web Push ต้องให้ผู้ใช้กดอนุญาตจากหน้าแอป; iOS/iPadOS ต้องเพิ่มแอปลง Home Screen ก่อนตามข้อจำกัด platform. Daily Push ทำงานเวลา 12:15 น. ไทยผ่าน workflow schedule หาก secrets ถูกต้องและ GitHub Actions ทำงานสำเร็จ
 
 ## Rollback และขอบเขต
 

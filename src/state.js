@@ -24,6 +24,8 @@ export const state = {
   petProfiles: [],
   petCare: [],
   petFoods: [],
+  assistantNotes: [],
+  userFeedback: [],
   loaded: { period: false, body: false }
 };
 const bus = new EventTarget();

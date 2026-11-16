@@ -1,26 +1,19 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, parseLocal, addDays, daysBetween, round1 } from './util.js';
+import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
 import { TYPES } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
 
 let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
-function mondayOf(ds) { const d = parseLocal(ds); return addDays(ds, -((d.getDay() + 6) % 7)); }
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const fmtMoney = n => Math.round(n || 0).toLocaleString();
-function monthsAfter(date, months) {
-  const d = new Date(date + 'T00:00:00'), day = d.getDate();
-  d.setDate(1); d.setMonth(d.getMonth() + months);
-  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-  return d.toISOString().slice(0, 10);
-}
 function inventoryAndReminderSummary(today) {
   const products = state.trackedProducts || [];
   const lowCount = products.filter(p => p.quantity != null && p.lowAt != null && Number(p.quantity) <= Number(p.lowAt)).length;
   const expiringCount = products.filter(p => {
-    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? monthsAfter(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
+    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? addMonthsLocal(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
     return exp && daysBetween(today, exp) <= 30;
   }).length;
   const active = collectReminders();
@@ -94,11 +87,18 @@ export async function renderWeekly() {
   }).join('');
   const chart = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#ec4899" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#ec4899">เป้า ${T.kcal}</text></svg>`;
 
-  // น้ำหนัก: เทียบค่าเฉลี่ยสัปดาห์นี้กับสัปดาห์ก่อน
+  // น้ำหนัก + การนอน/ก้าวเดิน: เทียบค่าเฉลี่ยสัปดาห์นี้กับสัปดาห์ก่อน
   const wOf = (a, b) => state.body.filter(r => typeof r.weight === 'number' && r.date >= a && r.date <= b).sort((p, q) => p.date.localeCompare(q.date));
   const wk = wOf(weekStart, end), prev = wOf(addDays(weekStart, -7), addDays(weekStart, -1));
   const wAvg = avg(wk.map(r => r.weight)), pAvg = avg(prev.map(r => r.weight));
   const wDelta = wAvg !== null && pAvg !== null ? round1(wAvg - pAvg) : null;
+
+  const ssRange = state.body.filter(r => r.date >= weekStart && r.date <= end);
+  const sleepVals = ssRange.map(r => typeof r.sleepHours === 'number' ? r.sleepHours : (typeof r.sleepMinutes === 'number' ? r.sleepMinutes / 60 : null)).filter(v => v !== null);
+  const stepVals = ssRange.map(r => typeof r.steps === 'number' ? r.steps : null).filter(v => v !== null);
+  const sleepAvg = avg(sleepVals);
+  const stepsAvg = avg(stepVals);
+  const stepsTotal = stepVals.reduce((a, b) => a + b, 0);
 
   // ออกกำลังกาย
   const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end && w.status !== 'planned');
@@ -117,6 +117,7 @@ export async function renderWeekly() {
   if (ws.length === 0 && end < today) tips.push('สัปดาห์นี้ไม่ได้ออกกำลังกายตามที่บันทึก');
   if (ws.length >= 3) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก 💪`);
   if (wDelta !== null && Math.abs(wDelta) >= 1) tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. จากสัปดาห์ก่อน (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
+  if (sleepAvg !== null && sleepAvg < 6) tips.push(`สัปดาห์นี้นอนเฉลี่ย ${round1(sleepAvg)} ชม./คืน — ลองพักผ่อนให้ใกล้เคียง 7–8 ชม. จะช่วยการฟื้นตัวและความอยากอาหารได้`);
 
   const fin = financeRangeSummary(weekStart, end);
   const invRem = inventoryAndReminderSummary(today);
@@ -131,10 +132,14 @@ export async function renderWeekly() {
         ${stat('เกิน / ต่ำกว่าเป้า', `${over} / ${under} วัน`, 'เกิน >110% · ต่ำ <80%')}
       </div>${chart}</div>
     <div class="space-y-6">
-      <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนัก</h3>
+      <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนัก · การนอน · ก้าวเดิน</h3>
         ${wAvg === null ? '<p class="text-xs text-slate-400">ไม่มีการชั่งน้ำหนักในสัปดาห์นี้</p>' : `<p class="text-lg font-bold">${round1(wAvg)} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${wk.length} ครั้ง)</span></p>
         <p class="text-xs text-slate-600">${wk.length > 1 ? `ต้นสัปดาห์ ${wk[0].weight} → ปลาย ${wk[wk.length - 1].weight} กก.` : ''}</p>
-        <p class="text-xs ${wDelta === null ? 'text-slate-400' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}</div>
+        <p class="text-xs ${wDelta === null ? 'text-slate-400' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}
+        ${(sleepAvg !== null || stepsAvg !== null) ? `<div class="border-t border-slate-100 pt-2 text-xs text-slate-600 space-y-1">
+          ${sleepAvg !== null ? `<p>😴 นอนเฉลี่ย <b>${round1(sleepAvg)}</b> ชม./คืน (${sleepVals.length} วัน)</p>` : ''}
+          ${stepsAvg !== null ? `<p>👣 ก้าวเดินเฉลี่ย <b>${Math.round(stepsAvg).toLocaleString()}</b> ก้าว/วัน (รวม ${Math.round(stepsTotal).toLocaleString()})</p>` : ''}
+        </div>` : ''}</div>
       <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-dumbbell text-brand"></i> ออกกำลังกาย</h3>
         <p class="text-lg font-bold">${ws.length} ครั้ง <span class="text-xs font-normal text-slate-500">${mins ? `· ${mins} นาที` : ''}${burn ? ` · เผาผลาญ ~${burn} kcal` : ''}</span></p>
         ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
@@ -151,9 +156,8 @@ export async function renderWeekly() {
       <p class="text-[11px] text-slate-400 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
 }
 
-function shiftMonth(ym,delta){const [y,m]=ym.split('-').map(Number);return new Date(y,m-1+delta,1).toISOString().slice(0,7);}
 async function renderMonthly(){
-  const my=++seq,[y,m]=selectedMonth.split('-').map(Number),start=selectedMonth+'-01',end=new Date(y,m,0).toISOString().slice(0,10),today=localDateStr();
+  const my=++seq,[y,m]=selectedMonth.split('-').map(Number),start=selectedMonth+'-01',end=monthEndDate(selectedMonth),today=localDateStr();
   $('#wk-range',root).textContent=new Date(y,m-1,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   $('#wk-next',root).disabled=selectedMonth>=today.slice(0,7);
   let food=[];try{food=(await getDocs(query(userCol(state.uid,'food_records'),where('date','>=',start),where('date','<=',end)))).docs.map(d=>d.data());}catch{}
@@ -174,12 +178,16 @@ async function renderMonthly(){
       +(i%5===0||i===daysInMonth.length-1?`<text x="${x}" y="${H-8}" font-size="9" text-anchor="middle" fill="#64748b">${i+1}</text>`:'');
   }).join('');
   const chart=`<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">${bars}</svg><p class="text-[11px] text-slate-400">แท่งกราฟ = แคลอรี่รวมต่อวัน (กดดูแต่ละแท่งเพื่อดูตัวเลข)</p>`;
+  const ssMonth=state.body.filter(x=>x.date>=start&&x.date<=end);
+  const mSleep=ssMonth.map(r=>typeof r.sleepHours==='number'?r.sleepHours:(typeof r.sleepMinutes==='number'?r.sleepMinutes/60:null)).filter(v=>v!==null);
+  const mSteps=ssMonth.map(r=>typeof r.steps==='number'?r.steps:null).filter(v=>v!==null);
   const fin = financeRangeSummary(start, end);
   const invRem = inventoryAndReminderSummary(today);
   $('#wk-body',root).innerHTML=`<div class="card space-y-3 lg:col-span-2"><h3 class="font-bold">สรุปรายเดือน</h3><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
     ${stat('วันที่บันทึกอาหาร',`${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก',avgCal===null?'-':Math.round(avgCal)+' kcal',`เป้า ${targets.kcal} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก',avgP===null?'-':round1(avgP)+' g',`เป้า ${targets.protein} g`)}
     ${stat('น้ำหนัก',weights.length?round1(weights[weights.length-1].weight)+' กก.':'-',weights.length?`เปลี่ยนจากครั้งแรก ${round1(weights[weights.length-1].weight-weights[0].weight)} กก.`:'ไม่มีบันทึกเดือนนี้')}
     ${stat('ออกกำลังกาย',`${workouts.length} ครั้ง`,minutes?`${minutes} นาทีรวม`:'')}${stat('วันที่มีบันทึกอาการ',`${symptoms} วัน`)}
+    ${(mSleep.length || mSteps.length) ? stat('การนอน / ก้าวเดิน', mSleep.length ? `${round1(avg(mSleep))} ชม.` : `${Math.round(avg(mSteps)).toLocaleString()} ก้าว`, `${mSleep.length ? `นอน ${mSleep.length} คืน` : ''}${mSleep.length && mSteps.length ? ' · ' : ''}${mSteps.length ? `เดินเฉลี่ย ${Math.round(avg(mSteps)).toLocaleString()} ก้าว/วัน` : ''}`) : ''}
   </div>${chart}<p class="text-xs text-slate-400">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
   <div class="space-y-6">
     <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-wallet text-emerald-600"></i> การเงินเดือนนี้</h3>

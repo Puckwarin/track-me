@@ -42,19 +42,19 @@ index.html
 - `state.js` เก็บข้อมูลที่โหลดใน session ปัจจุบันและส่ง event ผ่าน `EventTarget`; ไม่ใช่ฐานข้อมูลถาวร
 - `sync.js` สร้าง/หยุด `onSnapshot` listeners, สรุป pending writes, สถานะ offline และเวลาที่ซิงค์กับ server ล่าสุด
 - Firebase helpers ใน `firebase.js` สร้าง path ใต้ `users/{uid}` ผ่าน `userCol()` และ `userDoc()`
-- เมื่อผู้ใช้เขียนขณะ offline Firestore อาจเก็บการเปลี่ยนแปลงใน local cache และซิงค์ภายหลัง; flow บางรายการยังรอ server response ตามความต้องการของงานนั้น
+- เมื่อผู้ใช้เขียนขณะ offline Firestore อาจเก็บการเปลี่ยนแปลงใน local cache และซิงค์ภายหลัง; โดย `executeConfirmedAction()` และ `undoAssistantAction()` ใน `aiAssistant.js` จะรอผลการเขียนเมื่อออนไลน์, แยกสถานะรอซิงค์เมื่อออฟไลน์ และ rollback state หากเขียนไม่สำเร็จ ส่วนโมดูล UI บางส่วนยังอาศัย local cache/async write ของ Firestore
 - `schema.js` กรอง/ปรับรูปข้อมูลในขั้น backup, restore และ migration; Firestore Rules ตรวจ ownership, ขนาดเอกสาร และชนิดข้อมูลบางส่วน ไม่ใช่ schema validator ครบทุกฟิลด์
 
 ## โมดูลและ service layer
 
 - `src/services/aiService.js` จัดการ transport ของ Gemini, Groq และ OpenRouter, model discovery/selection (`nutrition`, `chat`, `fast`, `complex`, `deep`), retry, timeout, cancellation, cooldown, error normalization และ fallback
-- `src/services/aiAssistant.js` และ `src/services/chatRoles.js` กำหนดบทบาทแชท, การสนทนาทั่วไป, read/write tools (6 Read + 4 Write) และขอบเขตความปลอดภัยของ AI Assistant; `nutrition.js` เป็น consumer สำหรับโภชนาการ, จัดโครงสร้างแผนออกกำลังกาย และงาน AI ที่เกี่ยวข้อง
+- `src/services/aiAssistant.js` และ `src/services/chatRoles.js` กำหนดบทบาทแชท, การสนทนาทั่วไป, read/write tools (7 Read + 6 Write) และขอบเขตความปลอดภัยของ AI Assistant; `nutrition.js` เป็น consumer สำหรับโภชนาการ, จัดโครงสร้างแผนออกกำลังกาย, อ่านภาพ Zepp และงาน AI ที่เกี่ยวข้อง
 - `food*` แยก catalog/constants, parser, calculations, validation, Firestore service, editor/history และ UI
 - `backup.js`, `migrate.js` และ `schema.js` ดูแลสำรอง/กู้คืน, ย้าย Room Code เดิม และ sanitize ข้อมูล
 - `push.js` จัดการ Web Push ใน browser; `scripts/daily-push.mjs` เป็นงานฝั่ง server ที่ GitHub Actions เรียกตามเวลาโดยใช้ secrets
 - `runtimeErrorMonitor.js` คัดกรอง metadata, deduplicate, rate-limit และ batch รายงาน error โดยไม่ส่ง stack, prompt หรือข้อมูลส่วนตัว
 - `onboarding.js` แสดง wizard; `onboardingState.js` แยกกฎการเริ่ม/บันทึกความคืบหน้าและตรวจข้อมูลที่ทดสอบได้โดยไม่ใช้ DOM
-- `util.js` รวม DOM selectors, escaping, วันที่, ตัวเลข, toast และ helpers ที่ใช้ร่วมกัน
+- `util.js` รวม DOM selectors, escaping, วันที่/เดือนตามเวลาท้องถิ่น (`localDateStr`, `localMonthStr`, `addDays`), ตัวเลข, toast และ helpers ที่ใช้ร่วมกัน
 
 ## Firebase และข้อมูล
 

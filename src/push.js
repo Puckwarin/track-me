@@ -174,7 +174,7 @@ export async function sendTestLocalNotification() {
   }
   const title = 'Track Me · ทดสอบแจ้งเตือน';
   const opts = {
-    body: 'พร้อมส่งแจ้งเตือน Planner และรายการครบกำหนดเวลา 08:00 น. แล้ว ✨',
+    body: 'พร้อมส่งแจ้งเตือน Planner และรายการครบกำหนดเวลา 12:15 น. แล้ว ✨',
     icon: './icon-192.png',
     badge: './icon-192.png',
     tag: 'trackme-test'

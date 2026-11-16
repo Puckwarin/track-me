@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateBackoffMs,
   calculateRetryDelayMs,
+  clearModelCooldown,
   clearProviderCooldown,
   dedupeInFlight,
   discoverGeminiModels,
   discoverGroqModels,
   discoverOpenRouterModels,
+  getModelCooldownMs,
   getProviderCooldownMs,
   getRetryAfterMs,
+  rememberModelCooldown,
   rememberProviderCooldown,
   requestProviderApi,
   runProviderFallback,
@@ -32,7 +35,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 describe('AI service', () => {
   beforeEach(() => {
     localStorage.clear();
-    ['Gemini', 'Groq', 'OpenRouter'].forEach(clearProviderCooldown);
+    ['Gemini', 'Groq', 'OpenRouter'].forEach(p => clearProviderCooldown(p, { includeModels: true }));
     vi.restoreAllMocks();
   });
 
@@ -254,6 +257,52 @@ describe('AI service', () => {
       'gemini-4-hydrogen'
     ]);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks per-model 429 cooldowns independently without locking the whole provider', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: { message: 'quota exceeded' } }),
+      { status: 429, headers: { 'Retry-After': '10' } }
+    ));
+
+    await expect(requestProviderApi('Gemini', {
+      key: 'test-key',
+      operation: 'generateContent',
+      model: 'gemini-3.8-flash',
+      payload: {},
+      retries: 0,
+      trackProviderCooldown: false,
+      trackModelCooldown: true
+    })).rejects.toMatchObject({ status: 429, quotaExceeded: true, cooldownMs: 10_000 });
+
+    expect(getModelCooldownMs('Gemini', 'gemini-3.8-flash')).toBeGreaterThan(0);
+    expect(getModelCooldownMs('Gemini', 'gemini-2.5-flash')).toBe(0);
+    expect(getProviderCooldownMs('Gemini')).toBe(0);
+
+    clearModelCooldown('Gemini', 'gemini-3.8-flash');
+    expect(getModelCooldownMs('Gemini', 'gemini-3.8-flash')).toBe(0);
+
+    rememberModelCooldown('Gemini', 'gemini-2.5-flash', 5000);
+    expect(getModelCooldownMs('Gemini', 'gemini-2.5-flash')).toBeGreaterThan(0);
+    clearProviderCooldown('Gemini');
+    expect(getModelCooldownMs('Gemini', 'gemini-2.5-flash')).toBeGreaterThan(0);
+    clearProviderCooldown('Gemini', { includeModels: true });
+    expect(getModelCooldownMs('Gemini', 'gemini-2.5-flash')).toBe(0);
+  });
+
+  it('recognizes Groq Llama 4 Scout and Maverick as vision models and excludes them from text-only selection', async () => {
+    const ids = [
+      'llama-3.3-70b-versatile',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+      'meta-llama/llama-4-maverick-17b-128e-instruct'
+    ];
+    await expect(selectGroqModels('vision', 'groq-v-key', ids)).resolves.toEqual([
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+      'meta-llama/llama-4-maverick-17b-128e-instruct'
+    ]);
+    await expect(selectGroqModels('text', 'groq-t-key', ids)).resolves.toEqual([
+      'llama-3.3-70b-versatile'
+    ]);
   });
 });
 

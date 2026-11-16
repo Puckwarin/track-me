@@ -5,7 +5,7 @@ import { bodyLatest } from './body.js';
 import { findExerciseImage } from './exerciseMedia.js';
 import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl } from './workoutParser.js';
-import { $, $$, esc, fmtDate, localDateStr, parseLocal, addDays, toNum, toast, openModal, confirmDialog } from './util.js';
+import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutActive.js';
 
@@ -55,11 +55,6 @@ https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet
 
 function emptyDraft() { return { warmup: [], main: [], cooldown: [] }; }
 const blankRow = () => ({ name: '', imageUrl: '', imageHint: '', refTitle: '', refUrl: '', weightKg: null, perSide: false, sets: 1, reps: null, repUnit: 'reps', note: '' });
-function mondayOf(dateStr) {
-  const dt = parseLocal(dateStr || localDateStr());
-  const offset = (dt.getDay() + 6) % 7;
-  return addDays(localDateStr(dt), -offset);
-}
 
 function renderImageFrame(r, sizeClass = 'w-16 h-16') {
   const validImg = safeHttpUrl(r.imageUrl);

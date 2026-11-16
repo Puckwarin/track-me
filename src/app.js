@@ -331,6 +331,12 @@ function startData() {
     state.profile = list.find(x => x.id === 'profile') || null;
     state.planner = list.find(x => x.id === 'planner') || null;
     state.pushSettings = list.find(x => x.id === 'push') || null;
+    state.assistantNotes = list
+      .filter(x => x.kind === 'assistant_note' || String(x.id || '').startsWith('note_'))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    state.userFeedback = list
+      .filter(x => x.kind === 'user_feedback' || String(x.id || '').startsWith('feedback_'))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     if (state.uid === uid && onboardingCheckedUid !== uid) {
       onboardingCheckedUid = uid;
       mountOnboarding(state.user, state.profile);
@@ -345,6 +351,7 @@ function startData() {
     renderWeekly();
     renderSummary();
     window.dispatchEvent(new Event('trackme:push-change'));
+    window.dispatchEvent(new Event('trackme:notes-change'));
     migrateLegacyExpensesIfNeeded(uid);
   });
   watchToday();
@@ -365,7 +372,7 @@ on('auth', user => {
   onboardingCheckedUid = null;
   unmountOnboarding();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
-  ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements'].forEach(k => { state[k] = []; });
+  ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
     refreshAccount();

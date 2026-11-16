@@ -115,7 +115,7 @@ function render() {
     </div>`,
     `<div class="space-y-4">
       <h2 id="onboarding-title" class="text-xl font-bold text-slate-800">การแจ้งเตือน (ไม่บังคับ)</h2>
-      <p class="text-sm text-slate-600">เปิด Web Push เพื่อรับการเตือน Planner และนัดหมายเวลา 08:00 น. ระบบจะขอสิทธิ์จากเบราว์เซอร์เมื่อคุณกดปุ่มด้านล่างเท่านั้น</p>
+      <p class="text-sm text-slate-600">เปิด Web Push เพื่อรับการเตือน Planner และนัดหมายเวลา 12:15 น. ระบบจะขอสิทธิ์จากเบราว์เซอร์เมื่อคุณกดปุ่มด้านล่างเท่านั้น</p>
       <div class="rounded-xl bg-sky-50 p-3 text-xs text-slate-600">ต้องใช้เบราว์เซอร์ที่รองรับและเปิดผ่าน HTTPS หากใช้ iPhone/iPad ต้องเพิ่มแอปลงหน้าจอโฮมก่อน การไม่อนุญาตยังสามารถใช้ Track Me ได้ตามปกติ</div>
       <button id="onb-push-enable" class="btn btn-primary"><i class="fa-solid fa-bell"></i> เปิดการแจ้งเตือน</button>
       <p id="onb-push-status" class="text-xs text-slate-500" aria-live="polite"></p>

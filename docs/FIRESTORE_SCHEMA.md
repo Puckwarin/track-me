@@ -16,14 +16,14 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 |---|---|---|
 | `food_records` | `date`, `meal`, `name`: string; `calories`, `protein`, `carbs`, `fat`, `quantity`: number; `unitNutrition`: map; `createdAt`: timestamp | หนึ่งเอกสารต่อรายการอาหาร; มี portion/weight optional; ค้นด้วย `date` |
 | `period_records` | `start`: string; `end`: string/null; `flow`, `note`: string; `createdAt`: timestamp | ช่วงประจำเดือนหนึ่งรายการต่อเอกสาร |
-| `body_records` | `date`: string; `weight`, `bust`, `waist`, `hip`, `arm`, `thigh`: number/null; `note`: string; `createdAt`: timestamp | ค่ารอบตัวเป็น optional |
+| `body_records` | `date`: string; `weight`, `bust`, `waist`, `hip`, `arm`, `thigh`, `sleepMinutes`, `deepMinutes`, `lightMinutes`, `remMinutes`, `sleepScore`, `steps`, `distanceKm`, `activeKcal`: number/null; `sleepBedTime`, `sleepWakeTime`, `source`, `note`: string; `createdAt`, `updatedAt`: timestamp | ใช้เก็บทั้งสัดส่วนร่างกายและการนอน/ก้าวเดิน (เช่น `zepp_YYYY-MM-DD`, `source`: `manual` / `zepp` / `zepp_csv` / `zepp_ai` / `zepp_scan`) โดยตรวจ `validCalendarDate` |
 | `symptom_records` | `date`: string; `symptoms`: map ของ integer 0–3; `mood`, `stress`: integer 1–5; `note`: string; `updatedAt`: timestamp | ใช้ `YYYY-MM-DD` เป็น document ID |
 | `custom_foods` | `name`, `brand`, `unit`, `category`: string; สารอาหาร/portion: number; `favorite`: boolean; `hiwpinto`: map; `createdAt`: timestamp | อาหารกำหนดเองและข้อมูล portion |
 | `skincare_products` | `name`, `ingredients`, `pros`, `cons`: string; `openedDate`, `expiryDate`: string/null; `paoMonths`: integer/null; `createdAt`: timestamp | หนึ่งเอกสารต่อผลิตภัณฑ์ |
 | `skin_records` | `date`: string; `symptoms`: map ของ integer 0–3; `result`: string; `updatedAt`: timestamp | ใช้วันที่เป็น document ID |
 | `ingredient_blacklist` | `ingredients`: string; `updatedAt`: timestamp | โดยทั่วไปเป็นเอกสารตั้งค่ารายการเดียว |
 | `pet_profiles` | `name`, `kind`, `lifeStage`: string; `birthDate`: string/null; `weightKg`: number; `weightHistory`: array ของ `{date: string, weightKg: number}`; timestamps | โปรไฟล์สัตว์เลี้ยงและประวัติน้ำหนัก |
-| `pet_care_records` | `petId`, `type`, `category`: string; `date`, `nextDate`: string/null; `dueTime`: string; `done`: boolean; `rule`: map; `createdAt`, `updatedAt`: timestamp | นัดและการดูแลสัตว์เลี้ยง |
+| `pet_care_records` | `petId`, `type`, `category`, `recordKind`: string; `date`, `nextDate`: string/null; `dueTime`: string; `done`: boolean; `rule`, `symptoms`: map; `value`: number/null; `createdAt`, `updatedAt`: timestamp | นัด/การดูแลสัตว์เลี้ยง และบันทึกอาการรายวัน (`recordKind: 'symptom'` พร้อม `symptoms` 0–3 และอุณหภูมิ °C `value`) |
 | `pet_food_records` | `petId`, `name`, `allergy`, `note`: string; `date`: string; `grams`, `kcalPer100`: number; `createdAt`: timestamp | หนึ่งเอกสารต่อรายการอาหารสัตว์เลี้ยง |
 | `tracked_products` | `name`, `category`, `unit`: string; `quantity`, `lowAt`: number; วันที่เปิด/หมดอายุ: string/null; `lowDismissed`: boolean; timestamps | สต๊อก/ของใช้และการเตือน |
 | `replacement_records` | `name`, `category`: string; `date`, `nextDate`: string/null; `repeatMonths`, `intervalDays`, `remindDays`: number; `done`: boolean; `rule`: map; timestamps | ประวัติเปลี่ยนของและนัดหมาย |
@@ -43,11 +43,13 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 - `expense_rule_{hash}`: `{kind: 'expense_rule', keyword, category, updatedAt}`; กฎจาก manual expense และ Statement import แยกเอกสารต่อ keyword เพื่อหลีกเลี่ยงเขียนทับรายการอื่นจากข้อมูล stale
 - `expense_budget_{hash}`: `{kind: 'expense_budget', category, amount, updatedAt}`; งบต่อหมวดใช้เทียบกับรายจ่ายของเดือนที่เลือก
 - `expense_recurring_{hash}`: `{kind: 'expense_recurring', planId, merchant, amount, category, frequency, nextDate, dayOfMonth, note, createdAt, updatedAt}`; `frequency` เป็น `monthly` หรือ `yearly` และการสร้าง `expense_records` ต้องยืนยันจากผู้ใช้
+- `note_{id}`: `{kind: 'assistant_note', title, content, tags, pinned, source, createdAt, updatedAt}`; โน้ตส่วนตัวที่จดผ่าน AI Assistant หรือหน้าต่างโน้ต
+- `feedback_{id}`: `{kind: 'user_feedback', category, message, rating, context, source, status, createdAt, updatedAt}`; ข้อเสนอแนะ/รายงานปัญหาจากผู้ใช้
 - `exp_YYYY-MM`: เอกสารค่าใช้จ่ายแบบเก่า เก็บไว้ระหว่าง migration และไม่ใช่ปลายทางใหม่
 
 การรวมหลายกลุ่มไว้ใน `settings` เป็นรูปแบบเดิมที่แยกด้วย document ID; ยังไม่ย้ายไป collection ใหม่ เพราะต้องมี migration/ช่วงรองรับย้อนหลังและยังไม่มีเหตุผลด้านสิทธิ์ที่จำเป็นต้องเปลี่ยน path การย้ายรายจ่ายไป `expense_records` ดำเนินการแยกแล้ว
 
-`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array, `doneMap`/`extras` เป็น map ตามวันที่, `recentDone` เป็น array ของกิจวัตรที่ทำล่าสุด (สูงสุด 40 รายการ สำหรับสรุป 10 รายการล่าสุดไม่ซ้ำ) และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย v4.1.0 (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
+`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array (รองรับ `weekPattern`: `'every' | 'A' | 'B' | 'once'` และ `date` สำหรับกิจวัตรวันเดียวไม่ซ้ำ), `doneMap`/`extras` เป็น map ตามวันที่, `recentDone` เป็น array ของกิจวัตรที่ทำล่าสุด (สูงสุด 40 รายการ สำหรับสรุป 10 รายการล่าสุดไม่ซ้ำ) และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) รวมถึง `note_*` และ `feedback_*` ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
 
 สถานะ onboarding (`step`, `in_progress`/`completed`) และประวัติ/บทบาทของ AI Chat (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) เก็บใน `localStorage` เฉพาะเบราว์เซอร์/อุปกรณ์นั้น ไม่ได้สร้าง collection หรือเอกสาร Firestore เพิ่ม.
 

@@ -1,4 +1,4 @@
-name: Daily Push Notifications (08:00 ICT)
+name: Daily Push Notifications (12:15 ICT)
 
 on:
   schedule:

@@ -9,15 +9,16 @@ Install dependencies with `npm ci`, then run:
 
 | Command | Purpose |
 |---|---|
+| `npm run lock:check` | Checks `package.json` vs `package-lock.json` sync and optional platform packages |
 | `npm run lint` | ESLint checks for application source |
 | `npm test` | Vitest unit tests; Firestore Rules tests are skipped unless the Emulator is running |
 | `npm run test:coverage` | Unit tests plus text, HTML, and LCOV coverage reports in `coverage/` |
 | `npm run test:rules` | Starts the Firestore Emulator and runs Rules integration tests |
 | `npm run build` | Builds the production site |
 
-Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover parsers (food, workout, reminder, statement, slip OCR), schema sanitizers, expense rules/budgets/recurrence, TDEE calculations, cycle statistics, food validation, AI fallback/cooldown/model routing, AI assistant roles/tools/markdown sanitization, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 13 active tests and `src/services/aiAssistant.test.js` has 6 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
+Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover local date helpers (`localDateStr`, `localMonthStr`, `addDays` in `src/util.test.js`), parsers (food, workout, reminder, statement, slip OCR, Zepp CSV), schema sanitizers, expense rules/budgets/recurrence, TDEE calculations, cycle statistics, food validation, AI per-model & provider fallback/cooldown/model routing, AI assistant roles/tools/notes/feedback/markdown sanitization/write rollback, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 15 active tests, `src/services/aiAssistant.test.js` has 13 active tests, `src/util.test.js` has 6 active tests, `src/zeppParser.test.js` has 5 active tests, and `src/schema.test.js` has 7 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
 
-Latest local validation completed with 55 tests passing across 15 test files and 5 Firestore Rules tests skipped (`src/firestoreRules.test.js`); ESLint reported 0 errors and the 7 existing unrelated warnings; Vite production build succeeded (`npm run build`). `npm run test:rules` could not run on the validation machine because no Java Runtime / Firebase Emulator was running.
+Latest local validation completed with 91 tests passing across 20 test files and 5 Firestore Rules tests skipped (`src/firestoreRules.test.js`). `npm run test:rules` could not run on the validation machine because no Java Runtime / Firebase Emulator was running.
 
 Run a focused test while iterating:
 

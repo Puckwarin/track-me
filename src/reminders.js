@@ -1,7 +1,7 @@
 import { updateDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, daysBetween, toast } from './util.js';
+import { $, esc, fmtDate, localDateStr, daysBetween, toast, addMonthsLocal } from './util.js';
 import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
 import { syncPeriodRemindToPush } from './push.js';
 import { resolveRuleNextDate } from './reminderParser.js';
@@ -9,11 +9,6 @@ import { resolveRuleNextDate } from './reminderParser.js';
 let root;
 const selectedKeys = new Set();
 
-const monthsAfter = (date, months) => {
-  const d = new Date(date + 'T00:00:00'), day = d.getDate();
-  d.setDate(1); d.setMonth(d.getMonth() + months); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-  return d.toISOString().slice(0, 10);
-};
 
 // รายการที่มีกำหนดการทั้งหมด (ใช้ทั้งตั้งค่าระยะเตือนรายตัว/หลายตัว และคัดกรองรายการที่ถึงเกณฑ์เตือน)
 export function trackedSources() {
@@ -21,7 +16,7 @@ export function trackedSources() {
   const rows = [];
   const today = localDateStr();
   const allReminderItems = [
-    ...(state.petCare || []).map(x => ({ ...x, title: x.type || 'ดูแลสัตว์เลี้ยง' })),
+    ...(state.petCare || []).filter(x => x.recordKind !== 'symptom').map(x => ({ ...x, title: x.type || 'ดูแลสัตว์เลี้ยง' })),
     ...(state.replacements || []).map(x => ({ ...x, title: x.name || 'รายการเตือน' }))
   ];
   const resolveDue = x => {
@@ -32,6 +27,7 @@ export function trackedSources() {
   };
 
   for (const x of state.petCare || []) {
+    if (x.recordKind === 'symptom') continue;
     const dueDate = resolveDue(x);
     if (x.done || !dueDate) continue;
     const remindDays = x.remindDays !== undefined && x.remindDays !== null ? Number(x.remindDays) : 7;
@@ -70,7 +66,7 @@ export function trackedSources() {
   }
 
   for (const p of state.trackedProducts || []) {
-    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? monthsAfter(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
+    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? addMonthsLocal(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
     if (exp) {
       const remindDays = p.remindDays !== undefined && p.remindDays !== null ? Number(p.remindDays) : 30;
       rows.push({
@@ -356,7 +352,7 @@ export function renderReminders() {
         <button id="nt-bulk-apply" type="button" class="chip bg-sky-soft text-blue-700" ${selectedKeys.size === 0 ? 'disabled' : ''}>ตั้งเตือนรายการที่เลือก</button>
       </div>
       <div class="space-y-2">${configHtml || '<p class="text-xs text-slate-400">ยังไม่มีรายการที่มีวันครบกำหนดในบันทึกเตือนหรือสต๊อก</p>'}</div>
-      <p class="text-[11px] text-slate-400">สามารถเปิดรับการแจ้งเตือนอัตโนมัติเวลา 08:00 น. แม้ไม่ได้เปิดแอปได้ที่ปุ่ม “เปิดรับการแจ้งเตือน” บนหน้า Home หรือในหน้า ตั้งค่า</p>
+      <p class="text-[11px] text-slate-400">สามารถเปิดรับการแจ้งเตือนอัตโนมัติเวลา 12:15 น. แม้ไม่ได้เปิดแอปได้ที่ปุ่ม “เปิดรับการแจ้งเตือน” บนหน้า Home หรือในหน้า ตั้งค่า</p>
     </section>
   </div>`;
 }

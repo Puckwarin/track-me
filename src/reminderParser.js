@@ -1,4 +1,4 @@
-import { localDateStr, addDays, isDateStr } from './util.js';
+import { localDateStr, addDays, isDateStr, addMonthsLocal } from './util.js';
 
 const THAI_NUM_WORDS = [
   ['สิบสอง', 12], ['สิบเอ็ด', 11], ['สิบ', 10], ['เก้า', 9], ['แปด', 8], ['เจ็ด', 7],
@@ -53,11 +53,7 @@ function parseCeYear(rawYear) {
 }
 
 export function addMonthsSafe(ymd, months) {
-  const [y, m, d] = ymd.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1 + months, 1));
-  const last = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
-  dt.setUTCDate(Math.min(d, last));
-  return dt.toISOString().slice(0, 10);
+  return addMonthsLocal(ymd, months);
 }
 
 // 0=จันทร์ ... 6=อาทิตย์

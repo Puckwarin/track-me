@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRecentCompletedRoutines, inferRoutineEmoji } from './planner.js';
+import { getRecentCompletedRoutines, inferRoutineEmoji, routineAppliesToDate } from './planner.js';
 
 describe('planner routine emoji and recent completed helpers', () => {
   it('infers matching emojis for Thai/English chores and preserves custom non-default icons', () => {
@@ -37,5 +37,21 @@ describe('planner routine emoji and recent completed helpers', () => {
     expect(result[1]).toMatchObject({ title: 'ดื่มน้ำ 2 ลิตร', icon: '💧', date: '2026-11-15' });
     const titles = result.map(item => item.title.toLowerCase());
     expect(new Set(titles).size).toBe(10);
+  });
+
+  it('matches non-repeating (once) routines only on their specific date', () => {
+    const onceRoutine = {
+      id: 'once-1',
+      title: 'ตรวจสุขภาพ',
+      weekPattern: 'once',
+      date: '2026-11-15',
+      days: []
+    };
+    expect(routineAppliesToDate(onceRoutine, '2026-11-15')).toBe(true);
+    expect(routineAppliesToDate(onceRoutine, '2026-11-16')).toBe(false);
+    expect(routineAppliesToDate(onceRoutine, '2026-11-22')).toBe(false);
+
+    const brokenOnce = { id: 'once-2', title: 'ไม่มีวันที่', weekPattern: 'once', date: 'bad-date' };
+    expect(routineAppliesToDate(brokenOnce, '2026-11-15')).toBe(false);
   });
 });

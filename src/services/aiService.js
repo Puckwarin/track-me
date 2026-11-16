@@ -6,6 +6,7 @@ const KEY_NAMES = {
   OpenRouter: 'openrouter_key'
 };
 const COOLDOWN_KEY_PREFIX = 'trackme_ai_cooldown_';
+const MODEL_COOLDOWN_KEY_PREFIX = 'trackme_ai_model_cooldown_';
 const DEFAULT_COOLDOWN_MS = 60_000;
 const MAX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const MODEL_CACHE_MS = 5 * 60 * 1000;
@@ -13,17 +14,25 @@ const MAX_RETRIES = 1;
 const MAX_RETRY_DELAY_MS = 2000;
 const MAX_RETRY_AFTER_DELAY_MS = 30_000;
 const GEMINI_MODELS = {
-  nutrition: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'],
-  chat: ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
-  fast: ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash-lite'],
-  complex: ['gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash'],
-  deep: ['gemini-4-carbon', 'gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash']
+  nutrition: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  chat: ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
+  fast: ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'],
+  complex: ['gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-2.5-flash'],
+  deep: ['gemini-4-carbon', 'gemini-4-argon', 'gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-2.5-flash']
 };
+export const GROQ_VISION_MODEL_RE = /vision|llava|pixtral|llama-4-(?:scout|maverick)/i;
+export const GROQ_NON_TEXT_MODEL_RE = /whisper|tts|guard|safeguard|embed|vision|llava|pixtral|llama-4-(?:scout|maverick)/i;
 const GROQ_MODELS = {
   text: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
-  vision: ['llama-3.2-11b-vision-preview', 'llama-3.2-90b-vision-preview']
+  vision: [
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'llama-3.2-90b-vision-preview',
+    'llama-3.2-11b-vision-preview'
+  ]
 };
 const cooldowns = new Map();
+const seenModelCooldownKeys = new Set();
 const modelCache = new Map();
 const inFlight = new Map();
 
@@ -36,9 +45,11 @@ export class AiServiceError extends Error {
 }
 
 export const getProviderKey = provider => localStorage.getItem(KEY_NAMES[provider]) || '';
-export const setProviderKey = (provider, key) => key
-  ? localStorage.setItem(KEY_NAMES[provider], key.trim())
-  : localStorage.removeItem(KEY_NAMES[provider]);
+export const setProviderKey = (provider, key) => {
+  if (key) localStorage.setItem(KEY_NAMES[provider], key.trim());
+  else localStorage.removeItem(KEY_NAMES[provider]);
+  clearProviderCooldown(provider, { includeModels: true });
+};
 
 export function getProviderCooldownMs(provider) {
   const key = COOLDOWN_KEY_PREFIX + provider.toLowerCase();
@@ -69,12 +80,77 @@ export function rememberProviderCooldown(provider, cooldownMs = DEFAULT_COOLDOWN
   }
 }
 
-export function clearProviderCooldown(provider) {
-  const key = COOLDOWN_KEY_PREFIX + provider.toLowerCase();
+export function clearProviderCooldown(provider, { includeModels = false } = {}) {
+  const lower = String(provider || '').toLowerCase();
+  const key = COOLDOWN_KEY_PREFIX + lower;
   cooldowns.delete(key);
-  try { localStorage.removeItem(key); } catch (error) {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
     console.warn('Could not clear AI quota wait:', error?.message);
   }
+  if (!includeModels) return;
+  const modelPrefix = `${MODEL_COOLDOWN_KEY_PREFIX}${lower}:`;
+  for (const k of [...cooldowns.keys()]) {
+    if (k.startsWith(modelPrefix)) cooldowns.delete(k);
+  }
+  for (const k of [...seenModelCooldownKeys]) {
+    if (k.startsWith(modelPrefix)) {
+      try { localStorage.removeItem(k); } catch {}
+      seenModelCooldownKeys.delete(k);
+    }
+  }
+  try {
+    for (let i = (localStorage.length || 0) - 1; i >= 0; i--) {
+      const k = localStorage.key?.(i);
+      if (k && k.startsWith(modelPrefix)) localStorage.removeItem(k);
+    }
+  } catch (error) {
+    console.warn('Could not clear AI model quota wait:', error?.message);
+  }
+}
+
+function modelCooldownKey(provider, model) {
+  return `${MODEL_COOLDOWN_KEY_PREFIX}${String(provider || '').toLowerCase()}:${String(model || '').toLowerCase()}`;
+}
+
+export function getModelCooldownMs(provider, model) {
+  if (!model) return 0;
+  const key = modelCooldownKey(provider, model);
+  seenModelCooldownKeys.add(key);
+  let until = cooldowns.get(key) || 0;
+  try {
+    until = Math.max(until, Number(localStorage.getItem(key)) || 0);
+  } catch {
+    // ignore storage read errors
+  }
+  const remaining = Math.max(0, until - Date.now());
+  if (!remaining) {
+    cooldowns.delete(key);
+    try { localStorage.removeItem(key); } catch {}
+  }
+  return remaining;
+}
+
+export function rememberModelCooldown(provider, model, cooldownMs = DEFAULT_COOLDOWN_MS) {
+  if (!model) return;
+  const key = modelCooldownKey(provider, model);
+  seenModelCooldownKeys.add(key);
+  const until = Date.now() + Math.min(MAX_COOLDOWN_MS, Math.max(1000, Number(cooldownMs) || DEFAULT_COOLDOWN_MS));
+  cooldowns.set(key, until);
+  try {
+    localStorage.setItem(key, String(until));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearModelCooldown(provider, model) {
+  if (!model) return;
+  const key = modelCooldownKey(provider, model);
+  cooldowns.delete(key);
+  seenModelCooldownKeys.delete(key);
+  try { localStorage.removeItem(key); } catch {}
 }
 
 export function getRetryAfterMs(response, data = {}) {
@@ -199,7 +275,9 @@ export async function requestProviderApi(provider, {
   headers = {},
   signal,
   timeoutMs = 35_000,
-  retries = MAX_RETRIES
+  retries = MAX_RETRIES,
+  trackProviderCooldown = true,
+  trackModelCooldown = false
 } = {}) {
   if (!key) throw new AiServiceError('NO_KEY', { provider, invalidKey: true });
   if (signal?.aborted) throw new AiServiceError('AI request cancelled', { provider, aborted: true });
@@ -210,6 +288,18 @@ export async function requestProviderApi(provider, {
       quotaExceeded: true,
       cooldownMs
     });
+  }
+  if (trackModelCooldown && model) {
+    const modelCooldownMs = getModelCooldownMs(provider, model);
+    if (modelCooldownMs) {
+      throw new AiServiceError(`${provider} (${model}) quota cooldown is active`, {
+        provider,
+        model,
+        quotaExceeded: true,
+        modelQuotaExceeded: true,
+        cooldownMs: modelCooldownMs
+      });
+    }
   }
   const url = providerUrl(provider, operation, model);
   const method = operation === 'models' ? 'GET' : 'POST';
@@ -239,13 +329,17 @@ export async function requestProviderApi(provider, {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = normalizeProviderError(provider, response, data);
-        if (error.quotaExceeded) rememberProviderCooldown(provider, error.cooldownMs);
+        if (error.quotaExceeded) {
+          if (trackModelCooldown && model) rememberModelCooldown(provider, model, error.cooldownMs);
+          if (trackProviderCooldown) rememberProviderCooldown(provider, error.cooldownMs);
+        }
         if (error.retryable && attempt < retries) {
           await wait(calculateRetryDelayMs(response, data, attempt), signal);
           continue;
         }
         throw error;
       }
+      if (model) clearModelCooldown(provider, model);
       return data;
     } catch (cause) {
       if (cause instanceof AiServiceError) throw cause;
@@ -295,8 +389,8 @@ export async function selectGeminiModels(feature = 'nutrition', key = getProvide
   const selectedPrimary = discovered.length
     ? primary.filter(id => eligible.includes(id))
     : primary;
-  const base = selectedPrimary.length ? selectedPrimary : eligible.slice(0, 3);
-  const extras = eligible.filter(id => !base.includes(id)).slice(0, 3);
+  const base = selectedPrimary.length ? selectedPrimary : eligible.slice(0, 4);
+  const extras = eligible.filter(id => !base.includes(id)).slice(0, 6);
   return [...new Set([...base, ...extras])];
 }
 
@@ -315,8 +409,8 @@ export async function selectGroqModels(feature = 'text', key = getProviderKey('G
   const primary = GROQ_MODELS[feature] || GROQ_MODELS.text;
   const discovered = availableModels ?? await discoverGroqModels(key, { signal });
   const eligible = discovered.filter(id => feature === 'vision'
-    ? /vision|llava|pixtral/i.test(id)
-    : !/whisper|tts|guard|embed|vision|llava|pixtral/i.test(id));
+    ? GROQ_VISION_MODEL_RE.test(id)
+    : !GROQ_NON_TEXT_MODEL_RE.test(id));
   const selectedPrimary = discovered.length
     ? primary.filter(id => eligible.includes(id))
     : primary;
@@ -347,7 +441,14 @@ function discoverRawModels(provider, key, signal) {
   const cached = modelCache.get(cacheKey);
   if (cached?.until > Date.now()) return Promise.resolve(cached.data);
   const discover = async () => {
-    const data = await requestProviderApi(provider, { key, operation: 'models', signal, timeoutMs: 10_000, retries: 0 });
+    const data = await requestProviderApi(provider, {
+      key,
+      operation: 'models',
+      signal,
+      timeoutMs: 10_000,
+      retries: 0,
+      trackProviderCooldown: false
+    });
     modelCache.set(cacheKey, { data, until: Date.now() + MODEL_CACHE_MS });
     return data;
   };

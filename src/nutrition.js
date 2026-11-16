@@ -1,6 +1,7 @@
 import {
   clearProviderCooldown, discoverGroqModels, discoverOpenRouterModels,
-  getProviderCooldownMs, getProviderKey, getRetryAfterMs, rememberProviderCooldown,
+  getModelCooldownMs, getProviderCooldownMs, getProviderKey, getRetryAfterMs,
+  GROQ_NON_TEXT_MODEL_RE, GROQ_VISION_MODEL_RE, rememberProviderCooldown,
   requestProviderApi, runProviderFallback, selectGeminiModels, selectGroqModels,
   setProviderKey, dedupeInFlight
 } from './services/aiService.js';
@@ -17,6 +18,21 @@ export const setGeminiKey = key => setProviderKey('Gemini', key);
 export const getOpenRouterKey = () => getProviderKey('OpenRouter');
 export const setOpenRouterKey = key => setProviderKey('OpenRouter', key);
 
+function aggregateModelErrors(tried, fallbackMsg) {
+  const last = tried[tried.length - 1]?.error;
+  const summary = tried.map(x => `${x.model}: ${x.error.status ? `HTTP ${x.error.status} ` : ''}${x.error.message}`).join(' | ');
+  const err = new Error(summary || last?.message || fallbackMsg);
+  const allQuota = tried.length > 0 && tried.every(x => x.error.quotaExceeded);
+  const positiveCooldowns = tried.map(x => x.error.cooldownMs || 0).filter(ms => ms > 0);
+  err.quotaExceeded = allQuota;
+  err.cooldownMs = positiveCooldowns.length ? Math.min(...positiveCooldowns) : 60_000;
+  err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
+  err.timeoutError = tried.length > 0 && tried.every(x => x.error.timeoutError);
+  err.networkError = tried.length > 0 && tried.every(x => x.error.networkError);
+  err.status = last?.status;
+  return err;
+}
+
 async function requestGeminiModel(model, key, parts, schema, signal) {
   const generationConfig = { responseMimeType: 'application/json' };
   if (schema) generationConfig.responseSchema = schema;
@@ -30,9 +46,11 @@ async function requestGeminiModel(model, key, parts, schema, signal) {
     model,
     signal,
     timeoutMs: GEMINI_TIMEOUT_MS,
+    trackProviderCooldown: false,
+    trackModelCooldown: true,
     payload: {
-    contents: [{ parts }],
-    generationConfig
+      contents: [{ parts }],
+      generationConfig
     }
   });
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -47,34 +65,32 @@ async function callGeminiProvider(parts, schema, signal) {
   if (!key) throw new Error('NO_KEY');
 
   const tried = [];
-  const tryModels = async (models) => {
-    for (const model of models) {
-      try {
-        const result = await requestGeminiModel(model, key, parts, schema, signal);
-        return { model, result };
-      } catch (e) {
-        if (e.invalidKey || e.quotaExceeded || e.aborted) throw e;
-        tried.push({ model, error: e });
-        // Model-specific failures and timeouts can fall through to the next model.
-      }
-    }
-    return null;
-  };
-
   const models = await selectGeminiModels('nutrition', key, signal);
-  const selected = await tryModels(models);
-  if (selected) return selected.result;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const hasMoreModels = i < models.length - 1;
+    const modelCd = getModelCooldownMs('Gemini', model);
+    if (modelCd) {
+      tried.push({ model, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
+    try {
+      const result = await requestGeminiModel(model, key, parts, schema, signal);
+      return result;
+    } catch (e) {
+      const isPaidModelAccessError = hasMoreModels
+        && /^gemini-4-(?:carbon|argon)/i.test(model)
+        && (e.status === 403 || e.modelNotFound || (e.status === 400 && !/api.?key/i.test(e.message || '')));
+      if (isPaidModelAccessError) {
+        tried.push({ model, error: e });
+        continue;
+      }
+      if (e.invalidKey || e.aborted) throw e;
+      tried.push({ model, error: e });
+    }
+  }
 
-  const last = tried[tried.length - 1]?.error;
-  const summary = tried.map(x => `${x.model}: ${x.error.status || ''} ${x.error.message}`).join(' | ');
-  const err = new Error(summary || last?.message || 'Gemini ไม่พร้อมใช้งาน');
-  err.quotaExceeded = tried.some(x => x.error.quotaExceeded);
-  err.cooldownMs = Math.max(0, ...tried.map(x => x.error.cooldownMs || 0));
-  err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
-  err.timeoutError = tried.length > 0 && tried.every(x => x.error.timeoutError);
-  err.networkError = tried.length > 0 && tried.every(x => x.error.networkError);
-  err.status = last?.status;
-  throw err;
+  throw aggregateModelErrors(tried, 'Gemini ไม่พร้อมใช้งาน');
 }
 
 const GROQ_TIMEOUT_MS = 35000;
@@ -92,6 +108,9 @@ async function callGroq(parts, schema, signal) {
   if (!key) throw new Error('NO_KEY');
   const hasImage = parts.some(p => p.inline_data);
   const models = await selectGroqModels(hasImage ? 'vision' : 'text', key, undefined, signal);
+  if (!models.length) {
+    throw new Error(hasImage ? 'บัญชี Groq นี้ไม่มีโมเดลอ่านรูปภาพที่รองรับ' : 'ไม่พบโมเดล Groq ที่ใช้งานได้');
+  }
   const contentParts = parts.map(p => p.inline_data
     ? { type: 'image_url', image_url: { url: 'data:' + p.inline_data.mime_type + ';base64,' + p.inline_data.data } }
     : { type: 'text', text: p.text || '' });
@@ -106,12 +125,26 @@ async function callGroq(parts, schema, signal) {
         ];
     const payload = { model, messages, temperature: 0 };
     if (useJsonFormat) payload.response_format = { type: 'json_object' };
-    return requestProviderApi('Groq', { key, operation: 'chat', model, payload, signal, timeoutMs: GROQ_TIMEOUT_MS });
+    return requestProviderApi('Groq', {
+      key,
+      operation: 'chat',
+      model,
+      payload,
+      signal,
+      timeoutMs: GROQ_TIMEOUT_MS,
+      trackProviderCooldown: false,
+      trackModelCooldown: true
+    });
   };
 
-  let lastErr = null;
+  const tried = [];
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
+    const modelCd = getModelCooldownMs('Groq', model);
+    if (modelCd) {
+      tried.push({ model, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
     let data;
     try {
       data = await sendReq(model, true, signal);
@@ -134,14 +167,14 @@ async function callGroq(parts, schema, signal) {
         }
       }
       if (!data) {
-        if (error.invalidKey || error.quotaExceeded || error.aborted) throw error;
-        lastErr = error;
+        if (error.invalidKey || error.aborted) throw error;
+        tried.push({ model, error });
         continue;
       }
     }
     const content = data?.choices?.[0]?.message?.content;
     if (!content) {
-      lastErr = new Error('Groq ไม่ส่งผลลัพธ์กลับมา');
+      tried.push({ model, error: new Error('Groq ไม่ส่งผลลัพธ์กลับมา') });
       continue;
     }
     try {
@@ -149,10 +182,10 @@ async function callGroq(parts, schema, signal) {
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
     } catch {
-      lastErr = new Error('Groq ตอบกลับไม่ใช่รูปแบบ JSON ที่ถูกต้อง');
+      tried.push({ model, error: new Error('Groq ตอบกลับไม่ใช่รูปแบบ JSON ที่ถูกต้อง') });
     }
   }
-  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  throw aggregateModelErrors(tried, 'Groq ไม่พร้อมใช้งาน');
 }
 
 async function callOpenRouter(parts, schema, signal) {
@@ -164,9 +197,14 @@ async function callOpenRouter(parts, schema, signal) {
     ? { type: 'image_url', image_url: { url: `data:${part.inline_data.mime_type};base64,${part.inline_data.data}` } }
     : { type: 'text', text: part.text || '' });
   const userContent = parts.some(part => part.inline_data) ? content : content.map(part => part.text).join('\n');
-  let lastError = null;
+  const tried = [];
 
   for (const model of models.slice(0, 6)) {
+    const modelCd = getModelCooldownMs('OpenRouter', model);
+    if (modelCd) {
+      tried.push({ model, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
     let data;
     try {
       data = await requestProviderApi('OpenRouter', {
@@ -175,6 +213,8 @@ async function callOpenRouter(parts, schema, signal) {
         model,
         signal,
         timeoutMs: GEMINI_TIMEOUT_MS,
+        trackProviderCooldown: false,
+        trackModelCooldown: true,
         payload: {
           model,
           messages: [
@@ -186,14 +226,14 @@ async function callOpenRouter(parts, schema, signal) {
         }
       });
     } catch (error) {
-      if (error.invalidKey || error.quotaExceeded || error.aborted) throw error;
-      lastError = error;
+      if (error.invalidKey || error.aborted) throw error;
+      tried.push({ model, error });
       continue;
     }
 
     const text = data?.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text.trim()) {
-      lastError = new Error('OpenRouter ไม่ส่งผลลัพธ์กลับมา');
+      tried.push({ model, error: new Error('OpenRouter ไม่ส่งผลลัพธ์กลับมา') });
       continue;
     }
     try {
@@ -201,11 +241,11 @@ async function callOpenRouter(parts, schema, signal) {
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
     } catch {
-      lastError = new Error('OpenRouter ตอบกลับไม่ใช่ JSON ที่ถูกต้อง');
+      tried.push({ model, error: new Error('OpenRouter ตอบกลับไม่ใช่ JSON ที่ถูกต้อง') });
     }
   }
 
-  throw lastError || new Error('OpenRouter ไม่พร้อมใช้งาน');
+  throw aggregateModelErrors(tried, 'OpenRouter ไม่พร้อมใช้งาน');
 }
 
 async function callAI(parts, schema, { includeMeta = false, signal } = {}) {
@@ -547,6 +587,31 @@ export async function readLabReportFromPhoto(file, { signal } = {}) {
   }, { signal });
 }
 
+// อ่านข้อมูลการนอนและก้าวเดินจากภาพแคปหน้าจอแอป Zepp / นาฬิกา (ไม่เก็บไฟล์ภาพ)
+export async function readZeppScreenshot(file, { signal } = {}) {
+  const img = await imageToInlineData(file, 1400, 0.82);
+  return callAI([
+    { text: 'นี่คือภาพหน้าจอสรุปการนอน (Sleep) หรือการเดิน/ก้าวเดิน (Steps) จากแอป Zepp / Amazfit / นาฬิกาสุขภาพ ให้อ่านเฉพาะตัวเลขที่เห็นชัดในภาพ: date (YYYY-MM-DD คริสต์ศักราช ถ้าไม่มีปีให้เว้น null), sleepHours (ชั่วโมงรวมเป็นทศนิยม เช่น 7.5), sleepMinutes (นาทีรวม), deepSleepMin (นาทีหลับลึก), lightSleepMin (นาทีหลับตื้น), remSleepMin (นาที REM), bedTime (HH:MM), wakeTime (HH:MM), steps (จำนวนก้าว), distanceKm (ระยะทาง กม.), activeKcal (แคลอรี่), note (สรุปสั้น ๆ เช่น คุณภาพการนอน) ห้ามเดาค่าที่ไม่มีในรูป ตอบเป็น JSON ตาม schema' },
+    { inline_data: img }
+  ], {
+    type: 'OBJECT',
+    properties: {
+      date: { type: 'STRING', nullable: true },
+      sleepHours: N,
+      sleepMinutes: N,
+      deepSleepMin: N,
+      lightSleepMin: N,
+      remSleepMin: N,
+      bedTime: { type: 'STRING', nullable: true },
+      wakeTime: { type: 'STRING', nullable: true },
+      steps: N,
+      distanceKm: N,
+      activeKcal: N,
+      note: { type: 'STRING', nullable: true }
+    }
+  }, { signal });
+}
+
 export async function testGeminiConnection({ signal } = {}) {
   const key = getGeminiKey();
   if (!key) throw new Error('NO_KEY');
@@ -563,13 +628,13 @@ export async function testGeminiConnection({ signal } = {}) {
       return { ok: true, model, details };
     } catch (e) {
       if (e.invalidKey || e.aborted) throw e;
-      if (e.quotaExceeded) rememberProviderCooldown('Gemini', e.cooldownMs);
       details.push(`${model}: ${e.status ? `HTTP ${e.status} ` : ''}${e.message}`);
-      if (e.quotaExceeded) break;
     }
   }
+  const allQuota = details.length > 0 && details.every(x => /429|quota|resource.?exhausted|โควตา/i.test(x));
+  if (allQuota) rememberProviderCooldown('Gemini', 60_000);
   const err = new Error(details.join(' · ') || 'ไม่พบโมเดล Gemini ที่ใช้งานได้');
-  err.quotaExceeded = details.some(x => /429|quota|resource.?exhausted/i.test(x));
+  err.quotaExceeded = details.some(x => /429|quota|resource.?exhausted|โควตา/i.test(x));
   throw err;
 }
 
@@ -582,8 +647,8 @@ export async function testGroqConnection({ signal } = {}) {
     selectGroqModels('text', key, ids),
     selectGroqModels('vision', key, ids)
   ]);
-  const availableTextModels = textModels.filter(id => ids.includes(id) && !/whisper|tts|guard|embed|vision/i.test(id));
-  const availableVisionModels = visionModels.filter(id => ids.includes(id) && /vision|llava|pixtral/i.test(id));
+  const availableTextModels = textModels.filter(id => ids.includes(id) && !GROQ_NON_TEXT_MODEL_RE.test(id));
+  const availableVisionModels = visionModels.filter(id => ids.includes(id) && GROQ_VISION_MODEL_RE.test(id));
   const textModel = availableTextModels[0];
   const visionModel = availableVisionModels[0] || null;
   const picked = textModel || visionModel;

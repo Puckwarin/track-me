@@ -3,7 +3,7 @@ import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
-import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal } from './util.js';
+import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const DEFAULT_ALT_ANCHOR = '2026-01-05'; // วันจันทร์อ้างอิงสำหรับสลับสัปดาห์ A / B
@@ -25,11 +25,6 @@ let weekOffset = 0; // 0 = สัปดาห์นี้, 1 = สัปดา�
 let viewMode = 'day'; // 'day' | 'week'
 let selectedDate = localDateStr();
 
-function mondayOf(dateStr) {
-  const dt = parseLocal(dateStr || localDateStr());
-  const offset = (dt.getDay() + 6) % 7;
-  return addDays(localDateStr(dt), -offset);
-}
 
 function weekdayIdx(dateStr) {
   return (parseLocal(dateStr).getDay() + 6) % 7; // 0 = จ ... 6 = อา
@@ -46,7 +41,11 @@ export function weekCodeForDate(dateStr, altAnchor = DEFAULT_ALT_ANCHOR) {
 }
 
 export function routineAppliesToDate(r, dateStr, altAnchor) {
-  if (!r || !Array.isArray(r.days)) return false;
+  if (!r) return false;
+  if (r.weekPattern === 'once') {
+    return isDateStr(r.date) && r.date === dateStr;
+  }
+  if (!Array.isArray(r.days)) return false;
   if (!r.days.includes(weekdayIdx(dateStr))) return false;
   if (!r.weekPattern || r.weekPattern === 'every') return true;
   return r.weekPattern === weekCodeForDate(dateStr, altAnchor);
@@ -157,7 +156,7 @@ async function savePlanner(next) {
   );
   const cur = getPlanner();
   const payload = {
-    routines: (next.routines || []).slice(0, 60),
+    routines: (next.routines || []).slice(0, 80),
     doneMap: pruneObj(next.doneMap),
     recentDone: (Array.isArray(next.recentDone) ? next.recentDone : cur.recentDone).slice(0, 40),
     altAnchor: isDateStr(next.altAnchor) ? next.altAnchor : cur.altAnchor,
@@ -203,7 +202,14 @@ export function itemsForDate(dateStr) {
       time: r.time || '',
       icon: inferRoutineEmoji(r.title, r.icon),
       weekPattern: r.weekPattern || 'every',
-      sub: r.weekPattern === 'A' ? 'สลับสัปดาห์ (รอบ A)' : r.weekPattern === 'B' ? 'สลับสัปดาห์ (รอบ B)' : 'กิจวัตรประจำสัปดาห์'
+      date: r.date || '',
+      sub: r.weekPattern === 'once'
+        ? 'เฉพาะวันนี้ (ไม่ทำซ้ำ)'
+        : r.weekPattern === 'A'
+          ? 'สลับสัปดาห์ (รอบ A)'
+          : r.weekPattern === 'B'
+            ? 'สลับสัปดาห์ (รอบ B)'
+            : 'กิจวัตรประจำสัปดาห์'
     }));
 
   return [...workouts, ...dayRoutines];
@@ -278,6 +284,11 @@ export function mountPlanner(el, navigate) {
 
     if (e.target.closest('[data-pl-routines]')) {
       openRoutinesModal();
+      return;
+    }
+
+    if (e.target.closest('[data-pl-once]')) {
+      openRoutinesModal({ initialPattern: 'once', initialDate: selectedDate });
       return;
     }
 
@@ -356,7 +367,7 @@ function renderTaskListHtml(dateStr) {
         const key = `${it.kind}:${dateStr}:${it.id}`;
         const kindBadge = it.kind === 'workout'
           ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-green-800' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
-          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
+          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.weekPattern === 'once' ? 'bg-emerald-100 text-emerald-800 font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
         return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-75' : 'border-lav-soft/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40">
           <span class="flex items-start gap-2.5 min-w-0 flex-1">
             <input type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
@@ -451,6 +462,7 @@ export function renderPlanner() {
           </div>
           ${renderTaskListHtml(selectedDate)}
           <div class="flex flex-wrap gap-1.5 pt-1">
+            <button type="button" data-pl-once class="chip bg-emerald-100 text-emerald-800 font-semibold"><i class="fa-solid fa-plus"></i> กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
             <button type="button" data-pl-routines class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> ตั้งกิจวัตร / สลับสัปดาห์</button>
             <button type="button" data-pl-go="workout" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-dumbbell"></i> วางแผนออกกำลังกาย</button>
             <button type="button" data-pl-go="remind" class="chip bg-amber-50 border border-amber-200 text-amber-900"><i class="fa-solid fa-thumbtack"></i> เพิ่มนัดหมาย</button>
@@ -514,11 +526,12 @@ export function renderPlanner() {
   </section>`;
 }
 
-function openRoutinesModal() {
+function openRoutinesModal(opts = {}) {
   let editingId = null;
   let pickedDays = new Set([0, 2, 4, 6]);
   let pickedIcon = '✨';
-  let pickedPattern = 'every';
+  let pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
+  const defaultOnceDate = isDateStr(opts.initialDate) ? opts.initialDate : (selectedDate || localDateStr());
   const curWeekCode = weekCodeForDate(localDateStr(), getPlanner().altAnchor);
 
   const recentRoutines = getRecentCompletedRoutines(getPlanner(), 10);
@@ -527,7 +540,7 @@ function openRoutinesModal() {
       <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-repeat text-brand mr-1"></i> กิจวัตร & ตารางสลับสัปดาห์</h3>
       <button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">ตั้งครั้งเดียว ระบบดึงลง Planner ให้อัตโนมัติ รองรับทั้ง<b>ทุกสัปดาห์</b> และ<b>สลับสัปดาห์ A ↔ B อัตโนมัติ</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
+    <p class="text-xs text-slate-500 mb-3">รองรับทั้ง<b>ทุกสัปดาห์</b>, <b>สลับสัปดาห์ A ↔ B</b> และ<b>เฉพาะวันเดียว (ไม่ทำซ้ำ)</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
 
     <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3 mb-4">
       <div class="flex flex-wrap gap-1.5" id="rt-presets">
@@ -545,20 +558,25 @@ function openRoutinesModal() {
           <label class="lbl">ชื่อกิจวัตร *</label>
           <div class="flex items-center gap-2">
             <span id="rt-icon-badge" class="w-10 h-10 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจวัตร">✨</span>
-            <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ล้างแก้ว">
+            <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ส่งพัสดุวันนี้">
           </div>
         </div>
         <div><label class="lbl">เวลา (ไม่บังคับ)</label><input id="rt-time" type="time" class="input"></div>
       </div>
       <div>
-        <label class="lbl">รอบสัปดาห์ที่ทำ</label>
-        <div class="grid grid-cols-3 gap-1.5" id="rt-pattern-bar">
+        <label class="lbl">รูปแบบการทำซ้ำ</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5" id="rt-pattern-bar">
           <button type="button" data-rt-pat="every" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">ทุกสัปดาห์</button>
           <button type="button" data-rt-pat="A" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ A</button>
           <button type="button" data-rt-pat="B" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ B</button>
+          <button type="button" data-rt-pat="once" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">วันเดียว (ไม่ซ้ำ)</button>
         </div>
       </div>
-      <div>
+      <div id="rt-once-wrap" class="hidden space-y-1">
+        <label class="lbl">เลือกวันที่ทำ (แสดงเฉพาะวันนี้วันเดียว ไม่ทำซ้ำ)</label>
+        <input id="rt-once-date" type="date" class="input sm:max-w-xs" value="${esc(defaultOnceDate)}">
+      </div>
+      <div id="rt-days-wrap">
         <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
           <label class="lbl !mb-0">ทำซ้ำทุกวันไหนบ้าง?</label>
           <div class="flex flex-wrap gap-2">
@@ -588,30 +606,42 @@ function openRoutinesModal() {
   };
 
   const renderPattern = () => {
+    const isOnce = pickedPattern === 'once';
     m.el.querySelectorAll('[data-rt-pat]').forEach(btn => {
       const active = btn.dataset.rtPat === pickedPattern;
       btn.className = `py-1.5 px-2 rounded-xl border text-xs font-semibold transition ${
         active
-          ? (pickedPattern === 'A' ? 'bg-sky-500 text-white border-sky-500' : pickedPattern === 'B' ? 'bg-amber-500 text-white border-amber-500' : 'bg-brand text-white border-brand')
+          ? (pickedPattern === 'A' ? 'bg-sky-500 text-white border-sky-500'
+            : pickedPattern === 'B' ? 'bg-amber-500 text-white border-amber-500'
+            : pickedPattern === 'once' ? 'bg-emerald-600 text-white border-emerald-600'
+            : 'bg-brand text-white border-brand')
           : 'bg-white border-slate-200 text-slate-600'
       }`;
     });
+    $('#rt-once-wrap', m.el)?.classList.toggle('hidden', !isOnce);
+    $('#rt-days-wrap', m.el)?.classList.toggle('hidden', isOnce);
+    $('#rt-create-pair', m.el)?.classList.toggle('hidden', isOnce || Boolean(editingId));
   };
 
   const renderList = () => {
     const list = getPlanner().routines;
     $('#rt-list', m.el).innerHTML = list.length ? list.map(r => {
       const icon = inferRoutineEmoji(r.title, r.icon);
-      const patBadge = r.weekPattern === 'A'
-        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-800 font-bold">สัปดาห์ A</span>'
-        : r.weekPattern === 'B'
-          ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">สัปดาห์ B</span>'
-          : '';
+      const patBadge = r.weekPattern === 'once'
+        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">เฉพาะวันเดียว</span>'
+        : r.weekPattern === 'A'
+          ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-800 font-bold">สัปดาห์ A</span>'
+          : r.weekPattern === 'B'
+            ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">สัปดาห์ B</span>'
+            : '';
+      const schedDesc = r.weekPattern === 'once'
+        ? `📅 ${r.date ? fmtDate(r.date) : '-'} (ไม่ทำซ้ำ)`
+        : ((r.days || []).length === 7 ? 'ทุกวัน' : (r.days || []).map(d => WEEKDAYS[d]).join(', '));
       return `
       <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
         <div class="min-w-0">
           <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded">${esc(r.time)}</span>` : ''}</p>
-          <p class="text-[11px] text-slate-500">${(r.days || []).length === 7 ? 'ทุกวัน' : (r.days || []).map(d => WEEKDAYS[d]).join(', ')}</p>
+          <p class="text-[11px] text-slate-500">${esc(schedDesc)}</p>
         </div>
         <div class="flex gap-1.5 shrink-0">
           <button type="button" data-rt-edit="${esc(r.id)}" class="chip bg-sky-soft text-blue-700 text-xs">แก้</button>
@@ -630,13 +660,13 @@ function openRoutinesModal() {
   const resetEdit = () => {
     editingId = null;
     pickedIcon = '✨';
-    pickedPattern = 'every';
+    pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
     pickedDays = new Set([0, 2, 4, 6]);
     $('#rt-title', m.el).value = '';
     $('#rt-time', m.el).value = '';
+    $('#rt-once-date', m.el).value = defaultOnceDate;
     $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-plus"></i> เพิ่มกิจวัตร';
     $('#rt-cancel-edit', m.el).classList.add('hidden');
-    $('#rt-create-pair', m.el).classList.remove('hidden');
     syncIconBadge('');
     renderPattern();
     renderDays();
@@ -698,10 +728,10 @@ function openRoutinesModal() {
       pickedDays = new Set(r.days || []);
       $('#rt-title', m.el).value = r.title;
       $('#rt-time', m.el).value = r.time || '';
+      if (isDateStr(r.date)) $('#rt-once-date', m.el).value = r.date;
       syncIconBadge(r.title);
       $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข';
       $('#rt-cancel-edit', m.el).classList.remove('hidden');
-      $('#rt-create-pair', m.el).classList.add('hidden');
       renderPattern();
       renderDays();
       return;
@@ -740,9 +770,17 @@ function openRoutinesModal() {
   $('#rt-save', m.el).addEventListener('click', async () => {
     const title = $('#rt-title', m.el).value.trim().slice(0, 80);
     const time = $('#rt-time', m.el).value.trim().slice(0, 10);
-    const days = [...pickedDays].sort((a, b) => a - b);
     if (!title) return toast('กรอกชื่อกิจวัตรก่อนค่ะ', 'err');
-    if (!days.length) return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
+
+    let days = [...pickedDays].sort((a, b) => a - b);
+    let onceDate = '';
+    if (pickedPattern === 'once') {
+      onceDate = $('#rt-once-date', m.el).value;
+      if (!isDateStr(onceDate)) return toast('กรุณาเลือกวันที่ที่ต้องการทำกิจวัตรนี้', 'err');
+      days = [weekdayIdx(onceDate)];
+    } else if (!days.length) {
+      return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
+    }
 
     const p = getPlanner();
     const icon = inferRoutineEmoji(title, pickedIcon);
@@ -752,6 +790,7 @@ function openRoutinesModal() {
       days,
       icon,
       ...(pickedPattern !== 'every' && { weekPattern: pickedPattern }),
+      ...(pickedPattern === 'once' && { date: onceDate }),
       ...(time && { time })
     };
     const routines = editingId
@@ -759,7 +798,7 @@ function openRoutinesModal() {
       : [...p.routines, rec];
 
     await savePlanner({ ...p, routines });
-    toast(editingId ? 'แก้ไขกิจวัตรแล้ว' : 'เพิ่มกิจวัตรแล้ว');
+    toast(editingId ? 'แก้ไขกิจวัตรแล้ว' : pickedPattern === 'once' ? `เพิ่มกิจวัตรเฉพาะวันที่ ${fmtDate(onceDate)} แล้ว` : 'เพิ่มกิจวัตรแล้ว');
     resetEdit();
     renderList();
   });

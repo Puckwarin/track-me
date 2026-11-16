@@ -22,26 +22,30 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
   - `complex` (โค้ชสุขภาพ / วางแผน & เงิน): `gemini-4-argon` → `gemini-4-hydrogen` → `gemini-3.8-flash` → `gemini-3.6-flash`
   - `deep` (วิเคราะห์ลึก): `gemini-4-carbon` → `gemini-4-argon` → `gemini-4-hydrogen` → `gemini-3.8-flash`
   - สำหรับโมเดลตระกูล `gemini-4-*` ระบบจะไม่ส่งพารามิเตอร์ที่โมเดลไม่รองรับ (`temperature`, `thinkingBudget`) และหากโมเดลระดับสูง (`gemini-4-carbon` / `gemini-4-argon`) ตอบกลับ 403/404 จากข้อจำกัดสิทธิ์ของคีย์ จะ fallback ไปยังโมเดลถัดไปอย่าง `gemini-4-hydrogen` อัตโนมัติ (หากค้นหารายชื่อไม่ได้เพราะปัญหาเครือข่าย จะใช้ candidate ที่กำหนดไว้; หากคีย์ผิดหรือโควตาเต็ม จะไป provider ถัดไป)
-- **Groq**: ค้นรายชื่อโมเดลจาก API แล้วเลือกโมเดลข้อความหรือ vision ที่เข้ากันได้ โดยมี candidate สำรองเมื่อค้นรายชื่อไม่ได้เพราะเครือข่าย
+- **Groq**: ค้นรายชื่อโมเดลจาก API แล้วเลือกโมเดลข้อความหรือ vision ที่เข้ากันได้ (รวมทั้งตระกูล `llama-4-scout`, `llama-4-maverick` และ `llama-3.2-*vision*`) โดยมี candidate สำรองเมื่อค้นรายชื่อไม่ได้เพราะเครือข่าย
 - **OpenRouter**: เลือกเฉพาะโมเดลฟรีที่รับข้อความ และกรองเพิ่มตามความต้องการ เช่น ภาพหรือ `tools`
 - รายชื่อโมเดลถูก cache ในหน่วยความจำ 5 นาที; ไม่ cache ผลลัพธ์ส่วนตัวจาก AI
 
-ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง งานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
+ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง (รวมถึงการสแกนภาพหน้าจอ Zepp `readZeppScreenshot` ใน `src/nutrition.js`) งานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
 
 ## AI Chat Assistant (`src/services/aiAssistant.js`, `src/services/chatRoles.js`, `src/chatWidget.js`)
 
-- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me (Read Tools 6 ตัว: `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness`; Write Tools 4 ตัว: `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`) โดย `getWorkouts` ส่งค่า `feeling`, `sessionRpe` และ `exerciseFeedback` (`rpe`, `rir`, `nextAction`) เพื่อใช้วิเคราะห์การปรับระดับครั้งถัดไป
+- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me:
+  - **Read Tools (7 ตัว):** `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness` (รวม `sleepAndStepsSummary` และ `petSymptomSummary`), `getNotes`
+  - **Write Tools (6 ตัว):** `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`, `saveNote`, `submitFeedback`
+  - โดย `getWorkouts` ส่งค่า `feeling`, `sessionRpe` และ `exerciseFeedback` (`rpe`, `rir`, `nextAction`) เพื่อใช้วิเคราะห์การปรับระดับครั้งถัดไป และโน้ต/Feedback เก็บใน `settings/note_*` กับ `settings/feedback_*` พร้อมหน้าต่างดู/จัดการผ่านปุ่ม `📝`
 - ปรับ `buildSystemPrompt()` และ `CHAT_ROLES` ให้ตอบกระชับ อ่านง่าย (สรุปคำตอบหลัก 1–2 ประโยค + ข้อย่อยสั้น ๆ 2–4 ข้อ ยกเว้นเมื่อผู้ใช้ขอรายละเอียดเชิงลึก)
 - เก็บหน้าต่างสนทนาต่อเนื่องย้อนหลังสูงสุด 20 ข้อความต่อคำขอ (`HISTORY_LIMIT = 20`) พร้อมบทบาทที่เลือกและคำสั่งเพิ่มเติมที่ผู้ใช้กำหนด
-- ป้องกัน Prompt Injection ด้วย `sanitizeDataText()` และ `wrapUntrustedToolData()` รอบผลลัพธ์จาก Read Tools รวมถึงบังคับการ์ดยืนยันจากผู้ใช้สำหรับรายการยอดสูงหรือการเขียนหลายรายการพร้อมกัน
+- ป้องกัน Prompt Injection ด้วย `sanitizeDataText()` และ `wrapUntrustedToolData()` รอบผลลัพธ์จาก Read Tools รวมถึงบังคับการ์ดยืนยันจากผู้ใช้สำหรับรายการยอดสูงหรือการเขียนหลายรายการพร้อมกัน และใน `executeConfirmedAction()` / `undoAssistantAction()` จะรอการยืนยันจาก Firestore (หรือรองรับคิวรอซิงค์เมื่อออฟไลน์) พร้อม rollback state หากเขียนไม่สำเร็จ
 - บันทึกประวัติแชทล่าสุด (สูงสุด 30 ข้อความ), บทบาทที่เลือก และคำสั่งเพิ่มเติมไว้ใน `localStorage` ของเบราว์เซอร์เครื่องนั้น (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) โดยไม่ซิงค์ลง Firestore และล้างออกได้ด้วยปุ่มเริ่มบทสนทนาใหม่
 
 ## Quota, retry และ cooldown
 
 - ตรวจจับ HTTP 429, สถานะที่สื่อถึง quota/rate limit และ Gemini `RESOURCE_EXHAUSTED`
 - อ่าน `Retry-After` และ Google `RetryInfo` ถ้ามี; หากไม่มี ใช้ค่าเริ่มต้น 60 วินาที
-- cooldown เก็บเป็น timestamp แยกตาม provider ใน `localStorage` เพื่อจำสถานะระหว่าง reload ของ browser เดิม; เวลาสูงสุดที่บันทึกคือ 24 ชั่วโมง
-- ไม่ส่งคำขอไป provider ที่ยังติด cooldown; เมื่อพบ quota ระหว่างลองโมเดลจะหยุด provider นั้นทันทีแล้ว fallback ต่อ
+- **แยก Cooldown รายโมเดลและราย Provider:** ใน flow ที่ลองหลายโมเดล (`aiService.js`, `nutrition.js`, `aiAssistant.js`) ระบบบันทึก cooldown แยกตามรายโมเดล (`rememberModelCooldown`, `getModelCooldownMs`, `clearModelCooldown`) ใน `localStorage` ดังนั้นหากโมเดลหนึ่งเต็มโควตา (เช่น `gemini-3.8-flash` ครบ 20 req/วัน) ระบบจะข้ามเฉพาะโมเดลนั้นแล้วลองโมเดลอื่นใน provider เดียวกันต่อจนกว่าทุกโมเดลของ provider นั้นจะใช้ไม่ได้จึงสลับไป provider ถัดไป และยังคงจำ cooldown ของโมเดลที่เต็มไว้แม้โมเดลสำรองใน provider เดียวกันจะตอบสำเร็จ (ล้างทั้งหมดเฉพาะเมื่อเปลี่ยน/ล้าง API key)
+- เวลาสูงสุดที่บันทึก cooldown คือ 24 ชั่วโมง
+- ไม่ส่งคำขอไป provider หรือโมเดลที่ยังติด cooldown อยู่
 - retry เฉพาะ temporary/server/network failures แบบจำกัดจำนวน (ค่าเริ่มต้นไม่เกิน 1 ครั้ง) พร้อม exponential backoff และ jitter; ไม่มี retry วนไม่สิ้นสุด
 - timeout ปกติของคำขอ AI คือ 35 วินาที; model discovery ใช้ timeout 10 วินาที
 - การยกเลิกผ่าน `AbortSignal` จะหยุดคำขอและไม่ fallback ไป provider อื่น

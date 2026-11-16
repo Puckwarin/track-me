@@ -8,13 +8,53 @@ const z = n => String(n).padStart(2, '0');
 // วันที่ท้องถิ่น (toISOString เป็น UTC ทำให้ช่วงเช้าในไทยได้วันเมื่อวาน)
 export function localDateStr(d = new Date()) { return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
 export function parseLocal(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
-export function daysBetween(a, b) { return Math.round((parseLocal(b) - parseLocal(a)) / 86400000); }
-export function addDays(s, n) { const d = parseLocal(s); d.setDate(d.getDate() + n); return localDateStr(d); }
+export function daysBetween(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+export function addDays(s, n) {
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return `${String(dt.getUTCFullYear()).padStart(4, '0')}-${z(dt.getUTCMonth() + 1)}-${z(dt.getUTCDate())}`;
+}
 export function fmtDate(s) { return s ? parseLocal(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
 export function fmtDateTime(ts) {
   return new Date(ts).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 export const isDateStr = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+export function isValidCalendarDate(s) {
+  if (!isDateStr(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+export function addMonthsLocal(ymd, months) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const total = (y * 12 + (m - 1)) + Number(months || 0);
+  const targetYear = Math.floor(total / 12);
+  const targetMonth1 = ((total % 12) + 12) % 12 + 1;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth1, 0)).getUTCDate();
+  return `${String(targetYear).padStart(4, '0')}-${z(targetMonth1)}-${z(Math.min(d, lastDay))}`;
+}
+export function mondayOf(dateStr = localDateStr()) {
+  const s = dateStr || localDateStr();
+  const [y, m, d] = s.split('-').map(Number);
+  const wd = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  return addDays(s, -wd);
+}
+export function shiftMonth(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const total = (y * 12 + (m - 1)) + Number(delta || 0);
+  const targetYear = Math.floor(total / 12);
+  const targetMonth1 = ((total % 12) + 12) % 12 + 1;
+  return `${String(targetYear).padStart(4, '0')}-${z(targetMonth1)}`;
+}
+export function monthEndDate(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${String(y).padStart(4, '0')}-${z(m)}-${z(lastDay)}`;
+}
 export const toNum = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 export const numField = (root, id) => toNum(root.querySelector('#' + id).value);
 export const round1 = n => Math.round(n * 10) / 10;

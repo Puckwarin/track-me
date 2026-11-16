@@ -12,6 +12,7 @@ import { signOutUser, lockCurrentApp } from './auth.js';
 import { state } from './state.js';
 import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
+import { openNotesAndFeedbackModal } from './chatWidget.js';
 import {
   hasEnvVapidKey,
   getVapidPublicKey,
@@ -64,8 +65,8 @@ export function mountSettings(el) {
     <div class="card space-y-3 lg:col-span-2" id="st-profile"></div>
 
     <div id="st-push-card" class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> การแจ้งเตือนอัตโนมัติ (08:00 น.) & รอบเดือน</h3>
-      <p class="text-xs text-slate-500">รับ Web Push แจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกเช้าเวลา 08:00 น. แม้ไม่ได้เปิดแอปค้างไว้ (ส่งผ่าน GitHub Actions ฟรี)</p>
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bell text-pink-500"></i> การแจ้งเตือนอัตโนมัติ (12:15 น.) & รอบเดือน</h3>
+      <p class="text-xs text-slate-500">รับ Web Push แจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกวันเวลา 12:15 น. แม้ไม่ได้เปิดแอปค้างไว้ (ส่งผ่าน GitHub Actions ฟรี)</p>
       <div>
         <label class="lbl">แจ้งเตือนรอบเดือนล่วงหน้า</label>
         <select id="st-remind" class="input">${REMIND_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
@@ -94,6 +95,15 @@ export function mountSettings(el) {
     </div>
 
     <div class="card space-y-3" id="st-backup"></div>
+    <div class="card space-y-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-note-sticky text-brand"></i> โน้ตผู้ช่วย &amp; ส่ง Feedback</h3>
+      <p class="text-xs text-slate-500">ดู แก้ไข หรือลบโน้ตที่ผู้ช่วย Track Me จดไว้ และส่งความคิดเห็นหรือแจ้งปัญหาเพื่อพัฒนาแอปต่อ</p>
+      <p id="st-nf-summary" class="text-xs text-slate-600"></p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="st-open-notes" class="btn btn-soft text-xs">📝 ดูโน้ตทั้งหมด</button>
+        <button type="button" id="st-open-feedback" class="btn btn-primary text-xs">💬 ส่ง Feedback แอป</button>
+      </div>
+    </div>
     <div class="card space-y-3 lg:col-span-2" id="st-migrate"></div>
     <div class="card space-y-4 lg:col-span-2" id="st-api-keys">
       <header><h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-brand"></i> คีย์เชื่อมต่อ (ตัวเลือก)</h3><p class="text-xs text-slate-500 mt-1">จัดคีย์ที่นี่เป็นหมวดเดียวกัน · เก็บเฉพาะเบราว์เซอร์อุปกรณ์นี้ ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p></header>
@@ -256,7 +266,7 @@ export function mountSettings(el) {
     }
     if (st.subscribedHere) {
       ns.className = 'text-xs text-green-700 font-medium';
-      ns.textContent = `✅ เปิดรับแจ้งเตือน 08:00 น. บนอุปกรณ์นี้แล้ว (ลงทะเบียนรวม ${st.totalDevices} อุปกรณ์)`;
+      ns.textContent = `✅ เปิดรับแจ้งเตือน 12:15 น. บนอุปกรณ์นี้แล้ว (ลงทะเบียนรวม ${st.totalDevices} อุปกรณ์)`;
       enableBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> อัปเดตการรับแจ้งเตือน';
       disableBtn.classList.remove('hidden');
     } else {
@@ -273,7 +283,7 @@ export function mountSettings(el) {
     try {
       const customKey = !hasEnvVapidKey() ? vapidInput?.value.trim() : '';
       await enablePushNotifications(customKey);
-      toast('เปิดรับการแจ้งเตือน 08:00 น. เรียบร้อยแล้ว 🔔');
+      toast('เปิดรับการแจ้งเตือน 12:15 น. เรียบร้อยแล้ว 🔔');
       await showPushStatus();
     } catch (err) {
       if (vapidWrap && err.message.includes('VAPID')) vapidWrap.classList.remove('hidden');
@@ -308,6 +318,19 @@ export function mountSettings(el) {
 
   window.addEventListener('trackme:push-change', showPushStatus);
   showPushStatus();
+
+  const nfSummary = $('#st-nf-summary', el);
+  const updateNfSummary = () => {
+    if (!nfSummary?.isConnected) return;
+    const nc = (state.assistantNotes || []).length;
+    const fc = (state.userFeedback || []).length;
+    nfSummary.textContent = `โน้ตที่จดไว้ ${nc} รายการ · Feedback ที่ส่งแล้ว ${fc} รายการ`;
+  };
+  $('#st-open-notes', el)?.addEventListener('click', () => openNotesAndFeedbackModal('notes'));
+  $('#st-open-feedback', el)?.addEventListener('click', () => openNotesAndFeedbackModal('feedback'));
+  window.addEventListener('trackme:notes-change', updateNfSummary);
+  updateNfSummary();
+
   mountBackup($('#st-backup', el));
   mountMigrate($('#st-migrate', el));
 }

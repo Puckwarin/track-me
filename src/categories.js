@@ -26,7 +26,7 @@ export const SUBTABS = {
   workout: { emoji: '🏃‍♀️', label: 'ออกกำลังกาย', cat: 'cat-workout' },
   period: { emoji: '🌸', label: 'ประจำเดือน', cat: 'cat-period' },
   symptoms: { emoji: '🌿', label: 'อาการ & ผิว', cat: 'cat-symptoms' },
-  body: { emoji: '⚖️', label: 'น้ำหนัก & สัดส่วน', cat: 'cat-body' },
+  body: { emoji: '⚖️', label: 'น้ำหนัก · นอน/ก้าว', cat: 'cat-body' },
   report: { emoji: '📄', label: 'รายงาน', cat: 'cat-neutral' },
   care: { emoji: '🐾', label: 'สัตว์เลี้ยง & ผลตรวจ', cat: 'cat-care' },
   remind: { emoji: '📌', label: 'บันทึกเตือน', cat: 'cat-lab' },

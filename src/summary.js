@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, parseLocal, addDays, daysBetween, round1, toast, openModal } from './util.js';
+import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, addMonthsLocal, mondayOf } from './util.js';
 import { periodStats } from './period.js';
 import { bodyLatest } from './body.js';
 import { getTargets } from './profile.js';
@@ -11,19 +11,6 @@ const cacheKey = () => 'summary_cache_' + state.uid;
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const fmtMoney = n => Math.round(n || 0).toLocaleString();
 
-function mondayOf(ds) {
-  const d = parseLocal(ds);
-  return addDays(ds, -((d.getDay() + 6) % 7));
-}
-
-function monthsAfter(date, months) {
-  const d = new Date(date + 'T00:00:00');
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-  return d.toISOString().slice(0, 10);
-}
 
 export function clearSummaryCache() { if (state.uid) localStorage.removeItem(cacheKey()); }
 
@@ -63,7 +50,7 @@ function buildLiveSummary() {
   const products = state.trackedProducts || [];
   const lowCount = products.filter(p => p.quantity != null && p.lowAt != null && Number(p.quantity) <= Number(p.lowAt)).length;
   const expiringCount = products.filter(p => {
-    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? monthsAfter(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
+    const exp = p.expiryDate || (p.openedDate && p.paoMonths ? addMonthsLocal(p.openedDate, Number(p.paoMonths)) : p.paoExpiry);
     return exp && daysBetween(today, exp) <= 30;
   }).length;
   const inventory = { total: products.length, lowCount, expiringCount };
@@ -116,7 +103,11 @@ export function renderSummary() {
 
   const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : '');
   const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip'], ['แขน', 'arm'], ['ขา', 'thigh']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
-  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วนล่าสุด (ซม.)', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-xs sm:text-sm">${m}</span>` : empty, '');
+  const sleepStepsSub = [
+    b.sleepHours ? `😴 ${round1(b.sleepHours.v)} ชม. (${esc(fmtDate(b.sleepHours.d))})` : '',
+    b.steps ? `👣 ${Math.round(b.steps.v).toLocaleString()} ก้าว` : ''
+  ].filter(Boolean).join(' · ');
+  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วน · นอน/ก้าว', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), (b.bust || b.waist || b.hip || b.arm || b.thigh) ? sleepStepsSub : '');
 
   const nut = s?.nutrition;
   const c5 = card(
@@ -173,6 +164,13 @@ export function copySummary() {
   if (b.weight) L.push(`⚖️ น้ำหนักล่าสุด: ${b.weight.v} กก. (${fmtDate(b.weight.d)})`);
   const m = [['อก', b.bust], ['เอว', b.waist], ['สะโพก', b.hip], ['แขน', b.arm], ['ขา', b.thigh]].filter(x => x[1]).map(x => `${x[0]} ${x[1].v}`);
   if (m.length) L.push(`📏 สัดส่วน: ${m.join(' / ')} ซม.`);
+  if (b.sleepHours || b.steps) {
+    const ss = [
+      b.sleepHours ? `😴 นอนล่าสุด ${round1(b.sleepHours.v)} ชม. (${fmtDate(b.sleepHours.d)})` : '',
+      b.steps ? `👣 ${Math.round(b.steps.v).toLocaleString()} ก้าว (${fmtDate(b.steps.d)})` : ''
+    ].filter(Boolean);
+    L.push(ss.join(' · '));
+  }
   if (nut) L.push(`🍙 โภชนาการวันนี้: ${nut.cal}/${nut.targetCal} kcal (P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g)`);
   if (fin && fin.count) L.push(`💰 การเงินเดือนนี้: รับ ${fmtMoney(fin.income)} · จ่าย ${fmtMoney(fin.expense)} · สุทธิ ${fin.net >= 0 ? '+' : ''}${fmtMoney(fin.net)} บาท`);
   if (wo) L.push(`💪 ออกกำลังกายสัปดาห์นี้: ${wo.doneCount} ครั้ง (${wo.minutes} นาที · ~${wo.kcal} kcal${wo.plannedCount ? ` · แผนค้าง ${wo.plannedCount}` : ''})`);

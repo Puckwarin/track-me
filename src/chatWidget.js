@@ -1,4 +1,7 @@
-import { $, esc, toast } from './util.js';
+import { deleteDoc, setDoc } from 'firebase/firestore';
+import { userDoc } from './firebase.js';
+import { state } from './state.js';
+import { $, esc, fmtDate, localDateStr, openModal, toast } from './util.js';
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
 import { CHAT_ROLES, getChatRole } from './services/chatRoles.js';
 
@@ -56,7 +59,10 @@ function loadStoredHistory() {
             icon: r.icon || '✅',
             title: String(r.title || ''),
             subtitle: String(r.subtitle || ''),
-            undone: Boolean(r.undone)
+            syncStatus: ['synced', 'pending_sync', 'failed'].includes(r.syncStatus) ? r.syncStatus : 'synced',
+            ...(r.error && { error: String(r.error) }),
+            undone: Boolean(r.undone),
+            ...(r.undoStatus && { undoStatus: String(r.undoStatus) })
           }))
         }),
         ...(Array.isArray(m.pendingActions) && m.pendingActions.length && {
@@ -65,7 +71,8 @@ function loadStoredHistory() {
             title: String(a.title || ''),
             subtitle: String(a.subtitle || ''),
             riskReason: a.riskReason ? String(a.riskReason) : '',
-            status: a.status === 'confirmed' ? 'confirmed' : 'cancelled'
+            ...(a.error && { error: String(a.error) }),
+            status: ['confirmed', 'pending_sync', 'failed', 'cancelled'].includes(a.status) ? a.status : 'cancelled'
           }))
         })
       }));
@@ -90,7 +97,10 @@ function persistHistory() {
             icon: r.icon || '✅',
             title: r.title,
             subtitle: r.subtitle,
-            undone: Boolean(r.undone)
+            ...(r.syncStatus && { syncStatus: r.syncStatus }),
+            ...(r.error && { error: r.error }),
+            undone: Boolean(r.undone),
+            ...(r.undoStatus && { undoStatus: r.undoStatus })
           }))
         }),
         ...(Array.isArray(m.pendingActions) && m.pendingActions.length && {
@@ -99,6 +109,7 @@ function persistHistory() {
             title: a.title,
             subtitle: a.subtitle,
             riskReason: a.riskReason || '',
+            ...(a.error && { error: a.error }),
             status: a.status
           }))
         })
@@ -282,6 +293,9 @@ function ensureShell() {
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0">
+          <button id="ai-chat-notes-btn" type="button" class="icon-btn !w-10 !h-10 text-xs" title="โน้ตที่จดไว้ & ส่ง Feedback" aria-label="โน้ตที่จดไว้และส่ง Feedback">
+            <i class="fa-solid fa-note-sticky"></i>
+          </button>
           <button id="ai-chat-role-toggle" type="button" class="icon-btn !w-10 !h-10 text-xs" title="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-label="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-expanded="false">
             <i class="fa-solid fa-sliders"></i>
           </button>
@@ -388,7 +402,11 @@ function renderMessages() {
                 <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost !py-1.5 !px-3 !min-h-9 text-xs text-rose-600">❌ ยกเลิก</button>
               ` : a.status === 'confirmed'
                 ? '<span class="text-[11px] text-green-700 font-semibold">✅ บันทึกแล้ว</span>'
-                : '<span class="text-[11px] text-slate-500 font-medium">❌ ยกเลิกแล้ว — ไม่ได้บันทึกลงระบบ</span>'
+                : a.status === 'pending_sync'
+                  ? '<span class="text-[11px] text-amber-700 font-semibold">⏳ บันทึกในเครื่องแล้ว · รอซิงค์เมื่อออนไลน์</span>'
+                  : a.status === 'failed'
+                    ? `<span class="text-[11px] text-rose-600 font-semibold">❌ บันทึกไม่สำเร็จ${a.error ? `: ${esc(a.error)}` : ''}</span>`
+                    : '<span class="text-[11px] text-slate-500 font-medium">❌ ยกเลิกแล้ว — ไม่ได้บันทึกลงระบบ</span>'
               }
             </div>
           </div>
@@ -402,25 +420,40 @@ function renderMessages() {
       </div>
     ` : '';
 
-    const cardsHtml = (m.receipts || []).map((r, rIdx) => `
+    const cardsHtml = (m.receipts || []).map((r, rIdx) => {
+      const iconChar = r.undone
+        ? (r.undoStatus === 'pending_sync' ? '⏳' : '↩️')
+        : r.syncStatus === 'failed'
+          ? '❌'
+          : r.syncStatus === 'pending_sync'
+            ? '⏳'
+            : '✅';
+      const statusHint = !r.undone && r.syncStatus === 'pending_sync'
+        ? '<p class="text-[10px] text-amber-700 font-semibold mt-0.5">เก็บในคิวออฟไลน์แล้ว · รอซิงค์กับเซิร์ฟเวอร์</p>'
+        : !r.undone && r.syncStatus === 'failed'
+          ? `<p class="text-[10px] text-rose-600 font-semibold mt-0.5">ซิงค์ไม่สำเร็จ${r.error ? `: ${esc(r.error)}` : ''}</p>`
+          : '';
+      return `
       <div class="ai-action-card ${r.undone ? 'is-undone' : ''}">
         <div class="flex items-start gap-2">
-          <span class="text-base leading-none mt-0.5">${r.undone ? '↩️' : '✅'}</span>
+          <span class="text-base leading-none mt-0.5">${iconChar}</span>
           <div class="min-w-0 flex-1">
             <p class="text-xs font-bold text-slate-800">${esc(r.title)}</p>
             <p class="text-[11px] text-slate-600 mt-0.5">${esc(r.subtitle)}</p>
+            ${statusHint}
           </div>
         </div>
-        ${r.undo ? `
+        ${r.undo && r.syncStatus !== 'failed' ? `
           <div class="mt-2 flex justify-end">
             ${r.undone
-              ? '<span class="text-[11px] text-slate-500 font-medium">ยกเลิก/ลบรายการนี้แล้ว</span>'
+              ? `<span class="text-[11px] ${r.undoStatus === 'pending_sync' ? 'text-amber-700' : 'text-slate-500'} font-medium">${r.undoStatus === 'pending_sync' ? '⏳ ส่งคำขอยกเลิกไว้ในคิวออฟไลน์แล้ว…' : 'ยกเลิก/ลบรายการนี้แล้ว'}</span>`
               : `<button type="button" data-undo-msg="${msgIdx}" data-undo-rec="${rIdx}" class="btn btn-ghost !py-1 !px-3 !min-h-9 text-xs text-rose-600">ยกเลิก/ลบรายการนี้</button>`
             }
           </div>
         ` : ''}
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     const metaParts = [m.provider, m.model].filter(Boolean);
     const metaHtml = !m.pending && metaParts.length
@@ -443,6 +476,38 @@ function renderMessages() {
   }).join('');
 
   box.scrollTop = box.scrollHeight;
+}
+
+function attachReceiptSyncWatcher(receipt, action = null) {
+  const syncPromise = receipt?.syncPromise;
+  if (!syncPromise || typeof syncPromise.then !== 'function') return;
+  syncPromise.then(finalRes => {
+    if (!finalRes) return;
+    if (finalRes.status === 'synced') {
+      if (receipt && !receipt.undone) {
+        receipt.syncStatus = 'synced';
+        delete receipt.error;
+      }
+      if (action && action.status === 'pending_sync') {
+        action.status = 'confirmed';
+        delete action.error;
+      }
+    } else if (finalRes.status === 'failed') {
+      const errMsg = finalRes.error || 'ซิงค์ไม่สำเร็จ';
+      if (receipt) {
+        receipt.syncStatus = 'failed';
+        receipt.error = errMsg;
+      }
+      if (action) {
+        action.status = 'failed';
+        action.error = errMsg;
+      }
+      toast('ซิงค์ข้อมูลไม่สำเร็จ: ' + errMsg, 'err');
+    }
+    if (receipt) delete receipt.syncPromise;
+    persistHistory();
+    renderMessages();
+  });
 }
 
 function setOpen(next) {
@@ -504,7 +569,13 @@ async function handleSend(rawText) {
     pendingMsg.provider = res.provider || '';
     pendingMsg.model = res.model || '';
     pendingMsg.roleId = res.role || activeRoleId;
-    pendingMsg.receipts = (res.receipts || []).map(r => ({ ...r, undone: false }));
+    pendingMsg.receipts = (res.receipts || []).map(r => {
+      const receipt = { ...r, syncStatus: r.syncStatus || 'synced', undone: false };
+      if (receipt.syncStatus === 'pending_sync' && receipt.syncPromise) {
+        attachReceiptSyncWatcher(receipt, null);
+      }
+      return receipt;
+    });
     pendingMsg.pendingActions = (res.pendingActions || []).map(a => ({ ...a, status: a.status || 'pending' }));
   } catch (err) {
     pendingMsg.pending = false;
@@ -532,6 +603,7 @@ export function mountChatWidget(goTo) {
 
   $('#ai-chat-fab').addEventListener('click', () => setOpen(!isOpen));
   $('#ai-chat-close').addEventListener('click', () => setOpen(false));
+  $('#ai-chat-notes-btn')?.addEventListener('click', () => openNotesAndFeedbackModal('notes'));
   $('#ai-chat-clear').addEventListener('click', () => {
     if (isBusy) return;
     messages.length = 0;
@@ -624,13 +696,23 @@ export function mountChatWidget(goTo) {
       try {
         const { executeConfirmedAction } = await import('./services/aiAssistant.js');
         const out = await executeConfirmedAction(action);
-        action.status = 'confirmed';
+        if (out.status === 'failed' || (!out.ok && !out.pendingSync)) {
+          toast('บันทึกไม่สำเร็จ: ' + (out.error || 'เกิดข้อผิดพลาด'), 'err');
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = '✅ ยืนยันบันทึก';
+          return;
+        }
+        action.status = out.status === 'pending_sync' ? 'pending_sync' : 'confirmed';
         if (out.receipt) {
-          m.receipts = [...(m.receipts || []), { ...out.receipt, undone: false }];
+          const receipt = { ...out.receipt, syncStatus: out.status, undone: false };
+          m.receipts = [...(m.receipts || []), receipt];
+          if (out.status === 'pending_sync') {
+            attachReceiptSyncWatcher(receipt, action);
+          }
         }
         persistHistory();
         renderMessages();
-        toast('ยืนยันและบันทึกข้อมูลแล้ว');
+        toast(out.status === 'pending_sync' ? 'บันทึกในเครื่องแล้ว รอซิงค์เมื่อออนไลน์' : 'ยืนยันและบันทึกข้อมูลแล้ว');
       } catch (err) {
         toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
         confirmBtn.disabled = false;
@@ -658,24 +740,43 @@ export function mountChatWidget(goTo) {
       if (!pendingItems.length) return;
       confirmAllBtn.disabled = true;
       confirmAllBtn.textContent = 'กำลังบันทึกทั้งหมด…';
-      let savedCount = 0;
+      let syncedCount = 0;
+      let pendingSyncCount = 0;
+      const failedErrors = [];
       try {
         const { executeConfirmedAction } = await import('./services/aiAssistant.js');
         for (const action of pendingItems) {
           const out = await executeConfirmedAction(action);
-          action.status = 'confirmed';
-          if (out.receipt) {
-            m.receipts = [...(m.receipts || []), { ...out.receipt, undone: false }];
+          if (out.status === 'failed' || (!out.ok && !out.pendingSync)) {
+            failedErrors.push(out.error || 'เกิดข้อผิดพลาด');
+            continue;
           }
-          savedCount++;
+          action.status = out.status === 'pending_sync' ? 'pending_sync' : 'confirmed';
+          if (out.receipt) {
+            const receipt = { ...out.receipt, syncStatus: out.status, undone: false };
+            m.receipts = [...(m.receipts || []), receipt];
+            if (out.status === 'pending_sync') {
+              attachReceiptSyncWatcher(receipt, action);
+            }
+          }
+          if (out.status === 'pending_sync') pendingSyncCount++;
+          else syncedCount++;
         }
         persistHistory();
         renderMessages();
-        toast(`บันทึกครบทั้ง ${savedCount} รายการแล้ว`);
+        if (failedErrors.length) {
+          toast(`สำเร็จ ${syncedCount + pendingSyncCount} รายการ · ไม่สำเร็จ ${failedErrors.length} รายการ: ${failedErrors[0]}`, 'err');
+        } else if (pendingSyncCount > 0 && syncedCount === 0) {
+          toast(`บันทึกในเครื่องครบ ${pendingSyncCount} รายการแล้ว รอซิงค์เมื่อออนไลน์`);
+        } else if (pendingSyncCount > 0) {
+          toast(`บันทึกแล้ว ${syncedCount} รายการ · รอซิงค์ ${pendingSyncCount} รายการ`);
+        } else {
+          toast(`บันทึกครบทั้ง ${syncedCount} รายการแล้ว`);
+        }
       } catch (err) {
         persistHistory();
         renderMessages();
-        toast(`บันทึกสำเร็จ ${savedCount} รายการ · เกิดข้อผิดพลาด: ${err.message}`, 'err');
+        toast(`บันทึกสำเร็จ ${syncedCount + pendingSyncCount} รายการ · เกิดข้อผิดพลาด: ${err.message}`, 'err');
       }
       return;
     }
@@ -702,8 +803,35 @@ export function mountChatWidget(goTo) {
     undoBtn.textContent = 'กำลังยกเลิก…';
     try {
       const { undoAssistantAction } = await import('./services/aiAssistant.js');
-      await undoAssistantAction(rec.undo);
+      const out = await undoAssistantAction(rec.undo);
+      if (out?.status === 'failed') {
+        toast('ยกเลิกไม่สำเร็จ: ' + (out.error || 'เกิดข้อผิดพลาด'), 'err');
+        undoBtn.disabled = false;
+        undoBtn.textContent = 'ยกเลิก/ลบรายการนี้';
+        return;
+      }
+      if (out?.status === 'pending_sync') {
+        rec.undone = true;
+        rec.undoStatus = 'pending_sync';
+        out.syncPromise?.then(finalRes => {
+          if (!finalRes) return;
+          if (finalRes.status === 'synced') {
+            rec.undoStatus = 'synced';
+          } else if (finalRes.status === 'failed') {
+            rec.undone = false;
+            delete rec.undoStatus;
+            toast('ยกเลิกไม่สำเร็จหลังซิงค์: ' + (finalRes.error || 'เกิดข้อผิดพลาด'), 'err');
+          }
+          persistHistory();
+          renderMessages();
+        });
+        persistHistory();
+        renderMessages();
+        toast('ส่งคำขอยกเลิกไว้ในคิวออฟไลน์แล้ว รอซิงค์เมื่อออนไลน์');
+        return;
+      }
       rec.undone = true;
+      rec.undoStatus = 'synced';
       persistHistory();
       renderMessages();
       toast('ยกเลิก/ลบรายการที่บันทึกแล้ว');
@@ -717,4 +845,250 @@ export function mountChatWidget(goTo) {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && isOpen) setOpen(false);
   });
+}
+
+const NOTE_CATS = ['ทั่วไป', 'สุขภาพ', 'น้องหมา', 'การงาน', 'ไอเดีย', 'การเงิน'];
+const FB_CATS = [
+  ['bug', '🐛 แจ้งปัญหา (Bug)'],
+  ['feature', '✨ ขอฟีเจอร์ใหม่'],
+  ['ux', '🎨 การใช้งาน / UI'],
+  ['praise', '💜 คำชม / ถูกใจ'],
+  ['other', '💬 อื่น ๆ']
+];
+const FB_LABEL = Object.fromEntries(FB_CATS);
+
+export function openNotesAndFeedbackModal(initialTab = 'notes') {
+  let tab = initialTab === 'feedback' ? 'feedback' : 'notes';
+  let searchQuery = '';
+  let editNoteId = null;
+  let fbRating = 5;
+
+  const box = openModal(`
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-note-sticky text-brand"></i> โน้ตผู้ช่วย &amp; Feedback</h3>
+      <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="flex gap-2 mb-3">
+      <button type="button" id="nf-tab-notes" class="chip text-xs"></button>
+      <button type="button" id="nf-tab-feedback" class="chip text-xs"></button>
+    </div>
+    <div id="nf-body" class="space-y-3"></div>
+  `);
+
+  const renderModal = () => {
+    if (!box.isConnected) return;
+    const notes = state.assistantNotes || [];
+    const feedbacks = state.userFeedback || [];
+    $('#nf-tab-notes', box).className = `chip text-xs ${tab === 'notes' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
+    $('#nf-tab-notes', box).textContent = `📝 โน้ต (${notes.length})`;
+    $('#nf-tab-feedback', box).className = `chip text-xs ${tab === 'feedback' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
+    $('#nf-tab-feedback', box).textContent = `💬 ส่ง Feedback (${feedbacks.length})`;
+
+    const body = $('#nf-body', box);
+    if (tab === 'notes') {
+      const editing = editNoteId ? notes.find(n => n.id === editNoteId) : null;
+      const q = searchQuery.trim().toLowerCase();
+      const filtered = q
+        ? notes.filter(n =>
+            String(n.name || n.title || '').toLowerCase().includes(q) ||
+            String(n.note || n.content || '').toLowerCase().includes(q) ||
+            String(n.category || '').toLowerCase().includes(q)
+          )
+        : notes;
+
+      body.innerHTML = `
+        <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+          <p class="text-xs font-semibold text-slate-700">${editing ? '✏️ แก้ไขโน้ต' : '➕ จดโน้ตใหม่'} <span class="font-normal text-slate-500">(หรือพิมพ์สั่งในแชท "จดโน้ตว่า..." ได้เลย)</span></p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input id="nf-n-title" class="input text-xs sm:col-span-2" maxlength="120" placeholder="หัวข้อโน้ต" value="${esc(editing?.name || editing?.title || '')}">
+            <select id="nf-n-cat" class="input text-xs">
+              ${NOTE_CATS.map(c => `<option value="${esc(c)}" ${(editing?.category || 'ทั่วไป') === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+          <textarea id="nf-n-content" rows="2" maxlength="1200" class="input text-xs w-full" placeholder="รายละเอียดโน้ตที่ต้องการจำ…">${esc(editing?.note || editing?.content || '')}</textarea>
+          <div class="flex justify-end gap-2">
+            ${editing ? '<button type="button" id="nf-n-cancel" class="btn btn-ghost text-xs !py-1.5">ยกเลิก</button>' : ''}
+            <button type="button" id="nf-n-save" class="btn btn-primary text-xs !py-1.5">${editing ? 'บันทึกการแก้ไข' : 'บันทึกโน้ต'}</button>
+          </div>
+        </div>
+        <input id="nf-search" class="input text-xs" placeholder="🔍 ค้นหาโน้ต..." value="${esc(searchQuery)}">
+        <div class="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+          ${filtered.length ? filtered.map(n => `
+            <div class="rounded-xl border border-slate-100 bg-white p-2.5 text-xs space-y-1">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <span class="font-bold text-slate-800">${esc(n.name || n.title || 'โน้ต')}</span>
+                  <span class="chip bg-lav-soft text-brand-dark text-[10px] ml-1">${esc(n.category || 'ทั่วไป')}</span>
+                  ${n.date ? `<span class="text-[11px] text-slate-400 ml-1">${esc(fmtDate(n.date))}</span>` : ''}
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button type="button" data-note-edit="${esc(n.id)}" class="text-slate-400 hover:text-brand p-1" aria-label="แก้ไข"><i class="fa-solid fa-pen"></i></button>
+                  <button type="button" data-note-del="${esc(n.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+              </div>
+              <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(n.note || n.content || '')}</p>
+            </div>
+          `).join('') : '<p class="text-xs text-center text-slate-400 py-4">ยังไม่มีโน้ตที่จดไว้</p>'}
+        </div>
+      `;
+
+      $('#nf-search', body)?.addEventListener('input', e => {
+        searchQuery = e.target.value;
+        const pos = e.target.selectionStart;
+        renderModal();
+        const nextSearch = $('#nf-search', box);
+        if (nextSearch) {
+          nextSearch.focus();
+          if (typeof pos === 'number') nextSearch.setSelectionRange(pos, pos);
+        }
+      });
+      $('#nf-n-cancel', body)?.addEventListener('click', () => { editNoteId = null; renderModal(); });
+      $('#nf-n-save', body)?.addEventListener('click', async () => {
+        if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+        const title = ($('#nf-n-title', body)?.value || '').trim() || 'โน้ต';
+        const category = $('#nf-n-cat', body)?.value || 'ทั่วไป';
+        const content = ($('#nf-n-content', body)?.value || '').trim();
+        if (!content) return toast('กรุณากรอกรายละเอียดโน้ต', 'err');
+        const nowIso = new Date().toISOString();
+        const docId = editNoteId || ('note_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+        const existing = editNoteId ? notes.find(n => n.id === editNoteId) : null;
+        const payload = {
+          kind: 'assistant_note',
+          name: title.slice(0, 120),
+          category,
+          note: content.slice(0, 1200),
+          date: existing?.date || localDateStr(),
+          source: existing?.source || 'manual',
+          createdAt: existing?.createdAt || nowIso,
+          updatedAt: nowIso
+        };
+        try {
+          await setDoc(userDoc(state.uid, 'settings', docId), payload);
+          state.assistantNotes = [{ id: docId, ...payload }, ...notes.filter(x => x.id !== docId)];
+          editNoteId = null;
+          window.dispatchEvent(new Event('trackme:notes-change'));
+          toast('บันทึกโน้ตแล้ว');
+          renderModal();
+        } catch (err) {
+          toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+        }
+      });
+      body.querySelectorAll('[data-note-edit]').forEach(btn => {
+        btn.addEventListener('click', () => { editNoteId = btn.dataset.noteEdit; renderModal(); });
+      });
+      body.querySelectorAll('[data-note-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('ต้องการลบโน้ตนี้?')) return;
+          const id = btn.dataset.noteDel;
+          try {
+            await deleteDoc(userDoc(state.uid, 'settings', id));
+            state.assistantNotes = (state.assistantNotes || []).filter(x => x.id !== id);
+            if (editNoteId === id) editNoteId = null;
+            window.dispatchEvent(new Event('trackme:notes-change'));
+            toast('ลบโน้ตแล้ว');
+            renderModal();
+          } catch (err) {
+            toast('ลบไม่สำเร็จ: ' + err.message, 'err');
+          }
+        });
+      });
+    } else {
+      body.innerHTML = `
+        <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
+          <p class="text-xs font-semibold text-slate-700">ส่งความคิดเห็น / แจ้งปัญหาให้ Track Me <span class="font-normal text-slate-500">(เก็บไว้ดูย้อนหลังและใช้ปรับปรุงแอป)</span></p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select id="nf-fb-cat" class="input text-xs">
+              ${FB_CATS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}
+            </select>
+            <input id="nf-fb-ctx" class="input text-xs" maxlength="80" placeholder="หน้าที่ใช้งาน (เช่น แชท AI, ออกกำลังกาย)">
+          </div>
+          <div class="flex items-center gap-1.5 text-xs">
+            <span class="text-slate-600">คะแนนความพึงพอใจ:</span>
+            ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-fb-rate="${n}" class="px-2 py-1 rounded-lg border text-xs ${fbRating === n ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}">⭐ ${n}</button>`).join('')}
+          </div>
+          <textarea id="nf-fb-msg" rows="3" maxlength="1200" class="input text-xs w-full" placeholder="เล่าปัญหาที่พบ ฟีเจอร์ที่อยากได้ หรือความประทับใจ…"></textarea>
+          <div class="flex justify-end">
+            <button type="button" id="nf-fb-save" class="btn btn-primary text-xs !py-1.5">ส่ง Feedback</button>
+          </div>
+        </div>
+        <div class="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+          ${feedbacks.length ? feedbacks.map(f => `
+            <div class="rounded-xl border border-slate-100 bg-white p-2.5 text-xs space-y-1">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <span class="chip bg-sky-soft text-slate-700 text-[10px]">${esc(FB_LABEL[f.category] || f.category || 'ทั่วไป')}</span>
+                  ${f.value != null ? `<span class="text-amber-600 font-semibold ml-1">⭐ ${f.value}/5</span>` : ''}
+                  ${f.type ? `<span class="text-[11px] text-slate-500 ml-1">· ${esc(f.type)}</span>` : ''}
+                  ${f.date ? `<span class="text-[11px] text-slate-400 ml-1">(${esc(fmtDate(f.date))})</span>` : ''}
+                </div>
+                <button type="button" data-fb-del="${esc(f.id)}" class="text-rose-400 hover:text-rose-600 p-1 shrink-0" aria-label="ลบ"><i class="fa-solid fa-trash-can"></i></button>
+              </div>
+              <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(f.note || '')}</p>
+            </div>
+          `).join('') : '<p class="text-xs text-center text-slate-400 py-4">ยังไม่มี Feedback ที่ส่งไว้</p>'}
+        </div>
+      `;
+
+      body.querySelectorAll('[data-fb-rate]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          fbRating = Number(btn.dataset.fbRate) || 5;
+          body.querySelectorAll('[data-fb-rate]').forEach(b => {
+            const on = Number(b.dataset.fbRate) === fbRating;
+            b.className = `px-2 py-1 rounded-lg border text-xs ${on ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}`;
+          });
+        });
+      });
+      $('#nf-fb-save', body)?.addEventListener('click', async () => {
+        if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+        const category = $('#nf-fb-cat', body)?.value || 'other';
+        const context = ($('#nf-fb-ctx', body)?.value || '').trim();
+        const message = ($('#nf-fb-msg', body)?.value || '').trim();
+        if (!message) return toast('กรุณากรอกข้อความ Feedback', 'err');
+        const nowIso = new Date().toISOString();
+        const docId = 'feedback_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const payload = {
+          kind: 'user_feedback',
+          category,
+          value: fbRating,
+          note: message.slice(0, 1200),
+          ...(context ? { type: context.slice(0, 80) } : {}),
+          date: localDateStr(),
+          status: 'new',
+          source: 'manual',
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+        try {
+          await setDoc(userDoc(state.uid, 'settings', docId), payload);
+          state.userFeedback = [{ id: docId, ...payload }, ...(state.userFeedback || []).filter(x => x.id !== docId)];
+          window.dispatchEvent(new Event('trackme:notes-change'));
+          toast('บันทึก Feedback ขอบคุณสำหรับความคิดเห็นค่ะ 💬');
+          renderModal();
+        } catch (err) {
+          toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+        }
+      });
+      body.querySelectorAll('[data-fb-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('ต้องการลบ Feedback นี้?')) return;
+          const id = btn.dataset.fbDel;
+          try {
+            await deleteDoc(userDoc(state.uid, 'settings', id));
+            state.userFeedback = (state.userFeedback || []).filter(x => x.id !== id);
+            window.dispatchEvent(new Event('trackme:notes-change'));
+            toast('ลบ Feedback แล้ว');
+            renderModal();
+          } catch (err) {
+            toast('ลบไม่สำเร็จ: ' + err.message, 'err');
+          }
+        });
+      });
+    }
+  };
+
+  $('#nf-tab-notes', box).addEventListener('click', () => { tab = 'notes'; renderModal(); });
+  $('#nf-tab-feedback', box).addEventListener('click', () => { tab = 'feedback'; renderModal(); });
+  const onNotesChange = () => { if (box.isConnected) renderModal(); };
+  window.addEventListener('trackme:notes-change', onNotesChange);
+  renderModal();
 }

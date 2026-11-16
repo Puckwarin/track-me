@@ -3,6 +3,38 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v4.4.0] - 2026-11-16
+
+### ความน่าเชื่อถือของข้อมูล & วันที่ตามเวลาท้องถิ่น (Reliability & Timezone Fixes)
+- **ยืนยันผลการเขียน Firestore ของ AI Assistant (`src/services/aiAssistant.js`, `src/chatWidget.js`)**:
+  - ปรับ `executeConfirmedAction()` และ `undoAssistantAction()` ให้ `await` คำสั่งเขียน/ลบ Firestore โดยรองรับการรอซิงค์เมื่อออฟไลน์ (`navigator.onLine === false`) และ rollback state ในหน่วยความจำ/แจ้งเตือน error ชัดเจนหากบันทึกไม่สำเร็จ
+- **คำนวณวันที่ตามปฏิทินท้องถิ่นแทน UTC (`src/util.js`, `src/summary.js`, `src/weekly.js`, `src/reminders.js`, `src/inventory.js`, `src/care.js`, `src/schema.js`, `src/planner.js`, `src/workout.js`, `src/reminderParser.js`)**:
+  - เพิ่ม `localDateStr`, `localMonthStr`, `addDays` ใน `src/util.js` พร้อม unit tests (`src/util.test.js`) และเปลี่ยนจุดที่ใช้ `.toISOString().slice(0, 10)` / `.slice(0, 7)` ให้ใช้วันที่ท้องถิ่นทั้งหมด เพื่อป้องกันปัญหาวันที่คลาดเคลื่อนข้ามวันในช่วง 00:00–06:59 น. (UTC+7)
+- **รวม `expense_records` ใน `COLLECTIONS` (`src/firebase.js`)**:
+  - เพิ่ม `'expense_records'` ในรายชื่อ collection มาตรฐานของ `src/firebase.js`
+
+### ระบบ AI Service, Cooldown & ความเสถียร
+- **แยก Cooldown รายโมเดล (`src/services/aiService.js`, `src/nutrition.js`, `src/services/aiAssistant.js`)**:
+  - เปลี่ยนจากการล็อกทั้ง Provider เมื่อโมเดลเดียวติดโควตา HTTP 429 เป็นการบันทึก cooldown แยกตามโมเดล (`getModelCooldownMs`, `rememberModelCooldown`, `clearModelCooldown`) เพื่อให้ระบบยังคงลองโมเดลสำรองอื่นใน Gemini / Groq / OpenRouter ที่ยังใช้งานได้ ก่อนข้ามไปยัง Provider ถัดไป (และคงสถานะ cooldown ของโมเดลที่เต็มไว้แม้โมเดลสำรองใน Provider เดียวกันจะตอบสำเร็จ)
+  - ขยาย `GROQ_VISION_MODEL_RE` / `GROQ_NON_TEXT_MODEL_RE` ให้รองรับโมเดลภาพ Groq ตระกูล `llama-4-scout` และ `llama-4-maverick` รวมถึงปรับปุ่มทดสอบการเชื่อมต่อใน `src/nutrition.js`
+- **ตรวจความครบถ้วนของ Lockfile (`scripts/check-lockfile.mjs`, `package.json`)**:
+  - เพิ่มสคริปต์ `npm run lock:check` (`validateLockfile`) ตรวจสอบว่า `package-lock.json` ตรงกับ `package.json` และไม่ขาด optional platform packages (`@tailwindcss/oxide-*`, `@esbuild/*`, `lightningcss-*`, `@rollup/rollup-*`) จากการรัน `npm install` บน Linux container
+- **ปรับชื่อ Workflow, UI และเอกสาร Daily Push ให้ตรงกับเวลา `12:15 น.` (`.github/workflows/daily-push.yml`, `src/settings.js`, `src/home.js`, `src/reminders.js`, `src/onboarding.js`, `src/push.js`, `README.md`, `docs/SETUP.md`, `docs/DEPLOYMENT.md`)**:
+  - คง cron schedule เดิม (`15 5 * * *` = 12:15 น. เวลาประเทศไทย UTC+7) และปรับชื่อ workflow เป็น `Daily Push Notifications (12:15 ICT)` พร้อมปรับข้อความแจ้งเวลาในหน้าตั้งค่า, หน้า Home, หน้าแจ้งเตือน, Onboarding, ข้อความทดสอบ Push และคู่มือให้ตรงกันทั้งหมด
+
+### สัตว์เลี้ยง, กิจวัตร, โน้ต/Feedback & การนอน/ก้าวเดิน (Zepp)
+- **บันทึกอาการน้องหมา (`src/care.js`, `src/schema.js`, `src/remindLog.js`, `src/reminders.js`)**:
+  - เพิ่มการ์ด **🐶 บันทึกอาการน้องหมา** สำหรับจดอาการรายวัน (`pet_care_records` แบบ `recordKind: 'symptom'`) ครอบคลุมระดับ 0–3 ของ `appetite`, `energy`, `stool`, `vomit`, `skin`, `cough`, อุณหภูมิ °C (`value`) และหมายเหตุ พร้อมแก้ไข ลบ และล้างฟอร์มอัตโนมัติ โดยไม่ปะปนกับระบบแจ้งเตือน
+- **AI Assistant จดโน้ต & เก็บ Feedback (`src/services/aiAssistant.js`, `src/chatWidget.js`, `src/settings.js`, `src/state.js`, `src/app.js`, `src/schema.js`)**:
+  - เพิ่ม Read Tool `getNotes` และ Write Tools `saveNote`, `submitFeedback` เชื่อมกับ Firestore ภายใต้ `settings/note_*` (`kind: 'assistant_note'`) และ `settings/feedback_*` (`kind: 'user_feedback'`) รวมถึง `getBodyAndWellness` ที่สรุปข้อมูลการนอน/ก้าวเดินและอาการสัตว์เลี้ยงเพิ่มให้ผู้ช่วยวิเคราะห์
+  - เพิ่มปุ่ม `📝` บนหัวหน้าต่างแชทและในหน้าตั้งค่าเพื่อเปิดหน้าต่างดู เพิ่ม แก้ไข ลบโน้ต และส่ง/ดูประวัติ Feedback ของผู้ใช้โดยตรง
+- **กิจวัตรประจำวันแบบไม่ทำซ้ำ (`src/planner.js`, `src/schema.js`)**:
+  - เพิ่มกิจวัตรแบบวันเดียวไม่ทำซ้ำ (`weekPattern: 'once'`, `date: 'YYYY-MM-DD'`) พร้อมปุ่ม **+ กิจวัตรวันเดียว (ไม่ซ้ำ)** ใน Planner
+- **ติดตามการนอนหลับ & ก้าวเดิน รองรับแอป Zepp (`src/zeppParser.js`, `src/body.js`, `src/nutrition.js`, `src/categories.js`, `src/summary.js`, `src/weekly.js`, `src/schema.js`)**:
+  - เพิ่มการจัดเก็บข้อมูลการนอนและก้าวเดินลง `body_records` (`zepp_YYYY-MM-DD`) รองรับ 3 ช่องทาง: กรอกเอง, นำเข้าไฟล์ Zepp CSV Export หลายไฟล์พร้อมกัน (`ACTIVITY` + `SLEEP` รวมตามวันที่ผ่าน `parseZeppCsv`/`mergeZeppDayRecords` + หน้าต่างยืนยัน), และสแกนภาพหน้าจอแอป Zepp ด้วย AI Vision (`readZeppScreenshot` + หน้าต่างยืนยัน)
+  - เพิ่มกราฟแนวโน้มการนอนและก้าวเดิน (7 วัน / 30 วัน) ในหน้า `ร่างกาย` (`น้ำหนัก · นอน/ก้าว`) และแสดงสรุปใน Home Summary, สรุปรายสัปดาห์/รายเดือน และ `aiAssistant`
+
+---
 ## [v4.3.0] - 2026-11-15
 
 ### การเงิน, Statement & การวิเคราะห์รายจ่ายประจำ

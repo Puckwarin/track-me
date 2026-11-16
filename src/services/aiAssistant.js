@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { addDays, daysBetween, fmtDate, isDateStr, localDateStr, round1 } from '../util.js';
 import { explainGeminiError, lookupPer100g } from '../nutrition.js';
 import {
-  discoverOpenRouterModels, getProviderKey, requestProviderApi,
+  discoverOpenRouterModels, getModelCooldownMs, getProviderKey, requestProviderApi,
   runProviderFallback, selectGeminiModels, selectGroqModels
 } from './aiService.js';
 import { getMeals, getTargets } from '../profile.js';
@@ -21,7 +21,7 @@ export { CHAT_ROLES, getChatRole };
 const REQUEST_TIMEOUT_MS = 35000;
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 20;
-const WRITE_TOOLS = new Set(['addExpense', 'addFoodLog', 'updateInventory', 'addReminder']);
+const WRITE_TOOLS = new Set(['addExpense', 'addFoodLog', 'updateInventory', 'addReminder', 'saveNote', 'submitFeedback']);
 
 export const AI_LIMITS = {
   MAX_EXPENSE_AMOUNT: 500000,
@@ -211,11 +211,23 @@ const TOOL_DEFS = [
   },
   {
     name: 'getBodyAndWellness',
-    description: 'ดึงข้อมูลน้ำหนัก สัดส่วนร่างกาย รอบเดือน อาการรายวัน (อารมณ์ ความเครียด) และผลตรวจสุขภาพล่าสุด',
+    description: 'ดึงข้อมูลน้ำหนัก สัดส่วนร่างกาย การนอน ก้าวเดิน (Zepp/กรอกเอง) รอบเดือน อาการรายวัน อาการน้องหมา และผลตรวจสุขภาพล่าสุด',
     parameters: {
       type: 'OBJECT',
       properties: {
         limit: { type: 'NUMBER', description: 'จำนวนรายการล่าสุดต่อหมวด (ค่าเริ่มต้น 7, สูงสุด 20)' }
+      }
+    }
+  },
+  {
+    name: 'getNotes',
+    description: 'ดึงโน้ตหรือบันทึกความจำที่ผู้ช่วยหรือผู้ใช้จดไว้ก่อนหน้า สามารถค้นหาด้วยคำค้นหรือหมวดหมู่ได้',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: { type: 'STRING', description: 'คำค้นหาในหัวข้อหรือเนื้อหาโน้ต (optional)' },
+        category: { type: 'STRING', description: 'หมวดหมู่โน้ต เช่น ทั่วไป, สุขภาพ, น้องหมา, ไอเดีย, การเงิน (optional)' },
+        limit: { type: 'NUMBER', description: 'จำนวนรายการล่าสุด (ค่าเริ่มต้น 10, สูงสุด 30)' }
       }
     }
   },
@@ -273,6 +285,34 @@ const TOOL_DEFS = [
         advanceNotice: { type: 'STRING', description: 'การเตือนล่วงหน้า เช่น "3 วัน", "1 สัปดาห์", "วันจริง" หรือจำนวนวัน' }
       },
       required: ['title']
+    }
+  },
+  {
+    name: 'saveNote',
+    description: 'จดโน้ตหรือบันทึกความจำสำคัญให้ผู้ใช้ (บันทึกลงบัญชีเพื่อกลับมาอ่านภายหลังได้)',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        title: { type: 'STRING', description: 'หัวข้อโน้ตสั้น ๆ' },
+        content: { type: 'STRING', description: 'เนื้อหาของโน้ตที่ต้องการจดไว้' },
+        category: { type: 'STRING', description: 'หมวดหมู่ เช่น ทั่วไป, สุขภาพ, น้องหมา, การงาน, ไอเดีย, การเงิน' },
+        date: { type: 'STRING', description: 'วันที่อ้างอิง (YYYY-MM-DD หรือ "วันนี้")' }
+      },
+      required: ['title', 'content']
+    }
+  },
+  {
+    name: 'submitFeedback',
+    description: 'บันทึกข้อเสนอแนะ ความคิดเห็น หรือแจ้งปัญหาการใช้งานแอป Track Me จากผู้ใช้',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        message: { type: 'STRING', description: 'รายละเอียดฟีดแบ็ก ปัญหาที่พบ หรือสิ่งที่อยากให้พัฒนาเพิ่ม' },
+        category: { type: 'STRING', description: 'ประเภท: bug (แจ้งปัญหา), feature (ขอฟีเจอร์), ux (ใช้งาน/หน้าตา), praise (คำชม), other (อื่น ๆ)' },
+        rating: { type: 'NUMBER', description: 'คะแนนความพึงพอใจ 1 ถึง 5 (ไม่บังคับ)' },
+        context: { type: 'STRING', description: 'หน้าหรือเมนูที่เกี่ยวข้อง เช่น แชท AI, ออกกำลังกาย, การเงิน (ไม่บังคับ)' }
+      },
+      required: ['message']
     }
   }
 ];
@@ -546,14 +586,31 @@ async function executeReadTool(name, args = {}) {
 
     case 'getBodyAndWellness': {
       const limit = Math.max(1, Math.min(20, Math.round(Number(args.limit) || 7)));
-      const bodyList = (state.body || [])
-        .filter(b => b?.date)
+      const measureList = (state.body || [])
+        .filter(b => b?.date && ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'].some(k => typeof b[k] === 'number'))
         .slice()
         .sort((a, b) => String(b.date).localeCompare(String(a.date)));
-      const latestBody = bodyList[0] || null;
-      const prevBody = bodyList[1] || null;
+      const latestBody = measureList[0] || null;
+      const prevBody = measureList[1] || null;
       const weightDeltaKg = latestBody?.weight != null && prevBody?.weight != null
         ? round1(Number(latestBody.weight) - Number(prevBody.weight))
+        : null;
+
+      const sleepStepsList = (state.body || [])
+        .filter(b => b?.date && (b.sleepHours != null || b.sleepMinutes != null || b.steps != null))
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      const sleepHoursVals = sleepStepsList.slice(0, 7)
+        .map(b => b.sleepHours != null ? Number(b.sleepHours) : (b.sleepMinutes != null ? round1(Number(b.sleepMinutes) / 60) : null))
+        .filter(v => v != null && Number.isFinite(v));
+      const stepsVals = sleepStepsList.slice(0, 7)
+        .map(b => b.steps != null ? Number(b.steps) : null)
+        .filter(v => v != null && Number.isFinite(v));
+      const avgSleepHours7 = sleepHoursVals.length
+        ? round1(sleepHoursVals.reduce((s, v) => s + v, 0) / sleepHoursVals.length)
+        : null;
+      const avgSteps7 = stepsVals.length
+        ? Math.round(stepsVals.reduce((s, v) => s + v, 0) / stepsVals.length)
         : null;
 
       const periodList = (state.period || [])
@@ -566,6 +623,11 @@ async function executeReadTool(name, args = {}) {
 
       const symptomList = (state.symptoms || [])
         .filter(s => s?.date)
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+      const petSymptomList = (state.petCare || [])
+        .filter(x => x?.recordKind === 'symptom' && x?.date)
         .slice()
         .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
@@ -583,10 +645,10 @@ async function executeReadTool(name, args = {}) {
             activity: state.profile.activity || null
           } : null,
           bodySummary: {
-            totalRecords: bodyList.length,
+            totalRecords: measureList.length,
             latestWeightKg: latestBody?.weight ?? null,
             weightDeltaFromPrevKg: weightDeltaKg,
-            recent: bodyList.slice(0, limit).map(b => ({
+            recent: measureList.slice(0, limit).map(b => ({
               date: b.date,
               weight: b.weight ?? null,
               waist: b.waist ?? null,
@@ -595,6 +657,25 @@ async function executeReadTool(name, args = {}) {
               arm: b.arm ?? null,
               thigh: b.thigh ?? null,
               note: sanitizeDataText(b.note || '', 80) || null
+            }))
+          },
+          sleepAndStepsSummary: {
+            totalRecords: sleepStepsList.length,
+            avgSleepHoursRecent7: avgSleepHours7,
+            avgStepsRecent7: avgSteps7,
+            recent: sleepStepsList.slice(0, limit).map(b => ({
+              date: b.date,
+              sleepHours: b.sleepHours ?? (b.sleepMinutes != null ? round1(Number(b.sleepMinutes) / 60) : null),
+              sleepMinutes: b.sleepMinutes ?? null,
+              deepSleepMin: b.deepSleepMin ?? null,
+              lightSleepMin: b.lightSleepMin ?? null,
+              remSleepMin: b.remSleepMin ?? null,
+              bedTime: b.bedTime || null,
+              wakeTime: b.wakeTime || null,
+              steps: b.steps ?? null,
+              distanceKm: b.distanceKm ?? null,
+              activeKcal: b.activeKcal ?? null,
+              source: sanitizeDataText(b.source || 'manual', 20)
             }))
           },
           periodSummary: {
@@ -616,6 +697,15 @@ async function executeReadTool(name, args = {}) {
               .map(([k, level]) => `${k}:${level}`),
             note: sanitizeDataText(s.note || '', 80) || null
           })),
+          petSymptomSummary: petSymptomList.slice(0, limit).map(p => ({
+            date: p.date,
+            petId: sanitizeDataText(p.petId || '', 40) || null,
+            tempC: p.value ?? null,
+            activeSymptoms: Object.entries(p.symptoms || {})
+              .filter(([, level]) => Number(level) > 0)
+              .map(([k, level]) => `${k}:${level}`),
+            note: sanitizeDataText(p.note || '', 100) || null
+          })),
           labResults: labList.slice(0, limit).map(l => ({
             date: l.date,
             name: sanitizeDataText(l.name, 60),
@@ -624,6 +714,36 @@ async function executeReadTool(name, args = {}) {
             refLow: l.refLow ?? null,
             refHigh: l.refHigh ?? null,
             note: sanitizeDataText(l.note || '', 80) || null
+          }))
+        })
+      };
+    }
+
+    case 'getNotes': {
+      const limit = Math.max(1, Math.min(30, Math.round(Number(args.limit) || 10)));
+      const qText = sanitizeDataText(args.query || '', 80).toLowerCase();
+      const catFilter = sanitizeDataText(args.category || '', 40).toLowerCase();
+      let notes = (state.assistantNotes || []).slice();
+      if (catFilter) {
+        notes = notes.filter(n => String(n.category || '').toLowerCase().includes(catFilter));
+      }
+      if (qText) {
+        notes = notes.filter(n =>
+          String(n.name || n.title || '').toLowerCase().includes(qText) ||
+          String(n.note || n.content || '').toLowerCase().includes(qText) ||
+          String(n.category || '').toLowerCase().includes(qText)
+        );
+      }
+      return {
+        payload: wrapUntrustedToolData({
+          totalNotes: (state.assistantNotes || []).length,
+          matchedCount: notes.length,
+          notes: notes.slice(0, limit).map(n => ({
+            id: n.id,
+            title: sanitizeDataText(n.name || n.title || 'โน้ต', 120),
+            content: sanitizeDataText(n.note || n.content || '', 400),
+            category: sanitizeDataText(n.category || 'ทั่วไป', 40),
+            date: n.date || null
           }))
         })
       };
@@ -886,6 +1006,77 @@ export async function prepareWriteAction(name, args = {}) {
       };
     }
 
+    case 'saveNote': {
+      const title = sanitizeDataText(args.title || 'โน้ต', 120) || 'โน้ต';
+      const content = String(args.content || '').trim().slice(0, 1200);
+      if (!content) return { error: 'กรุณาระบุเนื้อหาโน้ต' };
+      const category = sanitizeDataText(args.category || 'ทั่วไป', 40) || 'ทั่วไป';
+      const date = resolveNaturalDate(args.date || today, today);
+      const docId = 'note_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const nowIso = new Date().toISOString();
+      const record = {
+        kind: 'assistant_note',
+        name: title,
+        category,
+        note: content,
+        date,
+        source: 'assistant',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      return {
+        prepared: {
+          id: docId,
+          toolName: 'saveNote',
+          isHighRisk: false,
+          riskReason: '',
+          icon: '📝',
+          title: `จดโน้ต: ${title}`,
+          subtitle: `หมวด${category} · ${fmtDate(date)}`,
+          writePlan: { kind: 'assistant_note', docId, record, meta: { title, category, date, content } }
+        }
+      };
+    }
+
+    case 'submitFeedback': {
+      const message = String(args.message || '').trim().slice(0, 1200);
+      if (!message) return { error: 'กรุณาระบุรายละเอียดข้อเสนอแนะหรือปัญหาที่พบ' };
+      const rawCat = sanitizeDataText(args.category || 'other', 30).toLowerCase();
+      const category = ['bug', 'feature', 'ux', 'praise', 'other'].includes(rawCat) ? rawCat : 'other';
+      const rawRating = args.rating != null && args.rating !== '' ? Number(args.rating) : null;
+      const rating = rawRating != null && Number.isFinite(rawRating)
+        ? Math.max(1, Math.min(5, Math.round(rawRating)))
+        : null;
+      const context = sanitizeDataText(args.context || '', 80);
+      const docId = 'feedback_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const nowIso = new Date().toISOString();
+      const record = {
+        kind: 'user_feedback',
+        category,
+        ...(rating != null ? { value: rating } : {}),
+        note: message,
+        ...(context ? { type: context } : {}),
+        date: today,
+        status: 'new',
+        source: 'assistant',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      const catLabel = { bug: 'แจ้งปัญหา', feature: 'ขอฟีเจอร์', ux: 'การใช้งาน/UI', praise: 'คำชม', other: 'ทั่วไป' }[category] || category;
+      return {
+        prepared: {
+          id: docId,
+          toolName: 'submitFeedback',
+          isHighRisk: false,
+          riskReason: '',
+          icon: '💬',
+          title: `บันทึก Feedback (${catLabel})`,
+          subtitle: `${rating ? `⭐ ${rating}/5 · ` : ''}${message.slice(0, 70)}${message.length > 70 ? '…' : ''}`,
+          writePlan: { kind: 'user_feedback', docId, record, meta: { category, rating, context, date: today, message } }
+        }
+      };
+    }
+
     default:
       return { error: `ไม่รู้จักเครื่องมือ "${sanitizeDataText(name, 40)}"` };
   }
@@ -905,39 +1096,137 @@ export function assessWriteConfirmation(preparedList = [], priorWritesInTurn = 0
   return { requiresConfirmation: false, reason: '' };
 }
 
-export async function executeConfirmedAction(prepared) {
+const DEFAULT_ACK_TIMEOUT_MS = 2500;
+const OFFLINE_ACK_TIMEOUT_MS = 250;
+
+function resolveAckTimeoutMs(options = {}) {
+  if (Number.isFinite(options?.ackTimeoutMs) && options.ackTimeoutMs >= 0) {
+    return options.ackTimeoutMs;
+  }
+  if (typeof navigator !== 'undefined' && navigator?.onLine === false) {
+    return OFFLINE_ACK_TIMEOUT_MS;
+  }
+  return DEFAULT_ACK_TIMEOUT_MS;
+}
+
+async function awaitFirestoreWrite(writePromise, { ackTimeoutMs, onSuccess, onFailure, onSettled } = {}) {
+  const timeoutMs = resolveAckTimeoutMs({ ackTimeoutMs });
+  let timerId = null;
+
+  const settlementPromise = Promise.resolve(writePromise).then(
+    () => {
+      try { onSuccess?.(); } catch { /* ignore listener errors */ }
+      const res = { status: 'synced', ok: true, synced: true, pendingSync: false };
+      try { onSettled?.(res); } catch { /* ignore listener errors */ }
+      return res;
+    },
+    err => {
+      const error = err?.message || String(err || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      const code = err?.code || null;
+      try { onFailure?.(err); } catch { /* ignore rollback errors */ }
+      const res = { status: 'failed', ok: false, synced: false, pendingSync: false, error, ...(code ? { code } : {}) };
+      try { onSettled?.(res); } catch { /* ignore listener errors */ }
+      return res;
+    }
+  );
+
+  let timedOut = false;
+  const timeoutPromise = new Promise(resolve => {
+    timerId = setTimeout(() => {
+      timedOut = true;
+      resolve({ status: 'pending_sync', ok: false, synced: false, pendingSync: true });
+    }, timeoutMs);
+  });
+
+  const raceResult = await Promise.race([settlementPromise, timeoutPromise]);
+  if (timerId !== null) clearTimeout(timerId);
+
+  if (raceResult.status === 'pending_sync' && timedOut) {
+    return {
+      ...raceResult,
+      syncPromise: settlementPromise
+    };
+  }
+  return raceResult;
+}
+
+function buildWriteActionOutcome(prepared, writeRes, payloadData, undo) {
+  if (writeRes.status === 'failed') {
+    return {
+      status: 'failed',
+      ok: false,
+      synced: false,
+      pendingSync: false,
+      error: writeRes.error,
+      ...(writeRes.code ? { code: writeRes.code } : {}),
+      payload: {
+        success: false,
+        status: 'failed',
+        synced: false,
+        pendingSync: false,
+        error: writeRes.error
+      },
+      receipt: null
+    };
+  }
+
+  const isSynced = writeRes.status === 'synced';
+  const statusFields = isSynced
+    ? { success: true, status: 'synced', synced: true, pendingSync: false }
+    : {
+        success: false,
+        status: 'pending_sync',
+        synced: false,
+        pendingSync: true,
+        message: 'บันทึกไว้ในคิวออฟไลน์ของเครื่องแล้ว รอการยืนยันจากเซิร์ฟเวอร์'
+      };
+
+  const receipt = {
+    icon: prepared.icon,
+    title: prepared.title,
+    subtitle: prepared.subtitle,
+    syncStatus: writeRes.status,
+    ...(writeRes.syncPromise ? { syncPromise: writeRes.syncPromise } : {}),
+    undo
+  };
+
+  return {
+    status: writeRes.status,
+    ok: isSynced,
+    synced: isSynced,
+    pendingSync: !isSynced,
+    ...(writeRes.syncPromise ? { syncPromise: writeRes.syncPromise } : {}),
+    payload: { ...statusFields, ...payloadData },
+    receipt
+  };
+}
+
+export async function executeConfirmedAction(prepared, options = {}) {
   const uid = state.uid;
   if (!uid) throw new Error('ผู้ใช้ยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบก่อน');
   const wp = prepared?.writePlan;
   if (!wp) throw new Error('ข้อมูลรายการไม่สมบูรณ์');
 
   if (wp.kind === 'expense') {
-    setDoc(userDoc(uid, 'expense_records', wp.docId), wp.record)
-      .catch(err => ({ error: err.message }));
-    const receipt = {
-      icon: prepared.icon,
-      title: prepared.title,
-      subtitle: prepared.subtitle,
-      undo: { kind: 'expense', id: wp.docId, date: wp.meta.date, label: `${wp.meta.title} ${wp.meta.amount} บาท` }
-    };
-    return {
-      payload: { success: true, id: wp.docId, ...wp.meta },
-      receipt
-    };
+    const writeRes = await awaitFirestoreWrite(
+      setDoc(userDoc(uid, 'expense_records', wp.docId), wp.record),
+      options
+    );
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      { id: wp.docId, ...wp.meta },
+      { kind: 'expense', id: wp.docId, date: wp.meta.date, label: `${wp.meta.title} ${wp.meta.amount} บาท` }
+    );
   }
 
   if (wp.kind === 'food') {
     const ref = doc(userCol(uid, 'food_records'));
-    setDoc(ref, wp.rec).catch(err => ({ error: err.message }));
-    const receipt = {
-      icon: prepared.icon,
-      title: prepared.title,
-      subtitle: prepared.subtitle,
-      undo: { kind: 'food', docId: ref.id, label: wp.rec.name }
-    };
-    return {
-      payload: {
-        success: true,
+    const writeRes = await awaitFirestoreWrite(setDoc(ref, wp.rec), options);
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      {
         docId: ref.id,
         foodName: wp.rec.name,
         meal: wp.rec.meal,
@@ -948,48 +1237,43 @@ export async function executeConfirmedAction(prepared) {
         fat: wp.rec.fat,
         nutritionSource: wp.nutritionSource
       },
-      receipt
-    };
+      { kind: 'food', docId: ref.id, label: wp.rec.name }
+    );
   }
 
   if (wp.kind === 'inventory') {
-    updateDoc(userDoc(uid, 'tracked_products', wp.docId), {
-      quantity: wp.nextQty,
-      lowDismissed: wp.lowDismissed,
-      updatedAt: new Date()
-    }).catch(err => ({ error: err.message }));
-    const receipt = {
-      icon: prepared.icon,
-      title: prepared.title,
-      subtitle: prepared.subtitle,
-      undo: { kind: 'inventory', docId: wp.docId, prevQty: wp.prevQty, prevLowDismissed: wp.prevLowDismissed, label: wp.targetName }
-    };
-    return {
-      payload: {
-        success: true,
+    const writeRes = await awaitFirestoreWrite(
+      updateDoc(userDoc(uid, 'tracked_products', wp.docId), {
+        quantity: wp.nextQty,
+        lowDismissed: wp.lowDismissed,
+        updatedAt: new Date()
+      }),
+      options
+    );
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      {
         itemName: wp.targetName,
         unit: wp.unit,
         previousQuantity: wp.prevQty,
         newQuantity: wp.nextQty,
         isLowStock: wp.isLowStock
       },
-      receipt
-    };
+      { kind: 'inventory', docId: wp.docId, prevQty: wp.prevQty, prevLowDismissed: wp.prevLowDismissed, label: wp.targetName }
+    );
   }
 
   if (wp.kind === 'reminder') {
     const ref = doc(userCol(uid, wp.targetCol));
-    setDoc(ref, wp.payload).catch(err => ({ error: err.message }));
-    window.dispatchEvent(new Event('trackme:data-change'));
-    const receipt = {
-      icon: prepared.icon,
-      title: prepared.title,
-      subtitle: prepared.subtitle,
-      undo: { kind: 'reminder', col: wp.targetCol, docId: ref.id, label: wp.title }
-    };
-    return {
-      payload: {
-        success: true,
+    const writeRes = await awaitFirestoreWrite(setDoc(ref, wp.payload), {
+      ...options,
+      onSuccess: () => window.dispatchEvent(new Event('trackme:data-change'))
+    });
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      {
         col: wp.targetCol,
         docId: ref.id,
         title: wp.title,
@@ -998,8 +1282,54 @@ export async function executeConfirmedAction(prepared) {
         dueTime: wp.dueTime,
         remindDays: wp.remindDays
       },
-      receipt
-    };
+      { kind: 'reminder', col: wp.targetCol, docId: ref.id, label: wp.title }
+    );
+  }
+
+  if (wp.kind === 'assistant_note') {
+    const prevEntry = (state.assistantNotes || []).find(x => x.id === wp.docId) || null;
+    state.assistantNotes = [{ id: wp.docId, ...wp.record }, ...(state.assistantNotes || []).filter(x => x.id !== wp.docId)];
+    window.dispatchEvent(new Event('trackme:notes-change'));
+    const writeRes = await awaitFirestoreWrite(
+      setDoc(userDoc(uid, 'settings', wp.docId), wp.record),
+      {
+        ...options,
+        onFailure: () => {
+          const rest = (state.assistantNotes || []).filter(x => x.id !== wp.docId);
+          state.assistantNotes = prevEntry ? [prevEntry, ...rest] : rest;
+          window.dispatchEvent(new Event('trackme:notes-change'));
+        }
+      }
+    );
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      { docId: wp.docId, ...wp.meta },
+      { kind: 'assistant_note', docId: wp.docId, label: wp.meta.title }
+    );
+  }
+
+  if (wp.kind === 'user_feedback') {
+    const prevEntry = (state.userFeedback || []).find(x => x.id === wp.docId) || null;
+    state.userFeedback = [{ id: wp.docId, ...wp.record }, ...(state.userFeedback || []).filter(x => x.id !== wp.docId)];
+    window.dispatchEvent(new Event('trackme:notes-change'));
+    const writeRes = await awaitFirestoreWrite(
+      setDoc(userDoc(uid, 'settings', wp.docId), wp.record),
+      {
+        ...options,
+        onFailure: () => {
+          const rest = (state.userFeedback || []).filter(x => x.id !== wp.docId);
+          state.userFeedback = prevEntry ? [prevEntry, ...rest] : rest;
+          window.dispatchEvent(new Event('trackme:notes-change'));
+        }
+      }
+    );
+    return buildWriteActionOutcome(
+      prepared,
+      writeRes,
+      { docId: wp.docId, ...wp.meta },
+      { kind: 'user_feedback', docId: wp.docId, label: 'Feedback' }
+    );
   }
 
   throw new Error('ไม่รู้จักประเภทคำสั่งบันทึก');
@@ -1059,8 +1389,10 @@ async function processToolBatch(toolCalls, turnState) {
     } else if (preparedList.length === 1) {
       const { idx, prepared } = preparedList[0];
       const out = await executeConfirmedAction(prepared);
-      turnState.writesExecuted++;
-      if (out.receipt) turnState.receipts.push(out.receipt);
+      if (out.status !== 'failed') {
+        turnState.writesExecuted++;
+        if (out.receipt) turnState.receipts.push(out.receipt);
+      }
       outcomes[idx] = out.payload;
     }
   }
@@ -1068,33 +1400,85 @@ async function processToolBatch(toolCalls, turnState) {
   return outcomes;
 }
 
-export async function undoAssistantAction(undo) {
+export async function undoAssistantAction(undo, options = {}) {
   const uid = state.uid;
   if (!uid || !undo) throw new Error('ไม่สามารถยกเลิกรายการได้');
 
   if (undo.kind === 'expense') {
-    deleteDoc(userDoc(uid, 'expense_records', undo.id))
-      .catch(err => ({ error: err.message }));
-    return;
+    return awaitFirestoreWrite(deleteDoc(userDoc(uid, 'expense_records', undo.id)), options);
   }
   if (undo.kind === 'food') {
-    deleteDoc(userDoc(uid, 'food_records', undo.docId))
-      .catch(err => ({ error: err.message }));
-    return;
+    return awaitFirestoreWrite(deleteDoc(userDoc(uid, 'food_records', undo.docId)), options);
   }
   if (undo.kind === 'inventory') {
-    updateDoc(userDoc(uid, 'tracked_products', undo.docId), {
-      quantity: undo.prevQty,
-      lowDismissed: undo.prevLowDismissed ?? false,
-      updatedAt: new Date()
-    }).catch(err => ({ error: err.message }));
-    return;
+    return awaitFirestoreWrite(
+      updateDoc(userDoc(uid, 'tracked_products', undo.docId), {
+        quantity: undo.prevQty,
+        lowDismissed: undo.prevLowDismissed ?? false,
+        updatedAt: new Date()
+      }),
+      options
+    );
   }
   if (undo.kind === 'reminder') {
-    deleteDoc(userDoc(uid, undo.col, undo.docId))
-      .catch(err => ({ error: err.message }));
-    window.dispatchEvent(new Event('trackme:data-change'));
+    return awaitFirestoreWrite(deleteDoc(userDoc(uid, undo.col, undo.docId)), {
+      ...options,
+      onSuccess: () => window.dispatchEvent(new Event('trackme:data-change'))
+    });
   }
+  if (undo.kind === 'assistant_note') {
+    const list = state.assistantNotes || [];
+    const prevIdx = list.findIndex(x => x.id === undo.docId);
+    const prevEntry = prevIdx >= 0 ? list[prevIdx] : null;
+    state.assistantNotes = list.filter(x => x.id !== undo.docId);
+    window.dispatchEvent(new Event('trackme:notes-change'));
+    return awaitFirestoreWrite(deleteDoc(userDoc(uid, 'settings', undo.docId)), {
+      ...options,
+      onFailure: () => {
+        if (!prevEntry) return;
+        const cur = (state.assistantNotes || []).filter(x => x.id !== undo.docId);
+        const idx = Math.min(prevIdx, cur.length);
+        cur.splice(idx, 0, prevEntry);
+        state.assistantNotes = cur;
+        window.dispatchEvent(new Event('trackme:notes-change'));
+      }
+    });
+  }
+  if (undo.kind === 'user_feedback') {
+    const list = state.userFeedback || [];
+    const prevIdx = list.findIndex(x => x.id === undo.docId);
+    const prevEntry = prevIdx >= 0 ? list[prevIdx] : null;
+    state.userFeedback = list.filter(x => x.id !== undo.docId);
+    window.dispatchEvent(new Event('trackme:notes-change'));
+    return awaitFirestoreWrite(deleteDoc(userDoc(uid, 'settings', undo.docId)), {
+      ...options,
+      onFailure: () => {
+        if (!prevEntry) return;
+        const cur = (state.userFeedback || []).filter(x => x.id !== undo.docId);
+        const idx = Math.min(prevIdx, cur.length);
+        cur.splice(idx, 0, prevEntry);
+        state.userFeedback = cur;
+        window.dispatchEvent(new Event('trackme:notes-change'));
+      }
+    });
+  }
+
+  throw new Error('ไม่รู้จักประเภทคำสั่งยกเลิก');
+}
+
+function aggregateAssistantModelErrors(tried, fallbackMsg) {
+  const last = tried[tried.length - 1]?.error;
+  const summary = tried.map(x => `${x.model}: ${x.error.status ? `HTTP ${x.error.status} ` : ''}${x.error.message}`).join(' | ');
+  const err = new Error(summary || last?.message || fallbackMsg);
+  const allQuota = tried.length > 0 && tried.every(x => x.error.quotaExceeded);
+  const positiveCooldowns = tried.map(x => x.error.cooldownMs || 0).filter(ms => ms > 0);
+  err.quotaExceeded = allQuota;
+  err.cooldownMs = positiveCooldowns.length ? Math.min(...positiveCooldowns) : 60_000;
+  err.modelNotFound = tried.length > 0 && tried.every(x => x.error.modelNotFound);
+  err.timeoutError = tried.length > 0 && tried.every(x => x.error.timeoutError);
+  err.networkError = tried.length > 0 && tried.every(x => x.error.networkError);
+  err.status = last?.status;
+  return err;
 }
 
 // ---------- Multi-Provider Function Calling Loop ----------
@@ -1114,7 +1498,8 @@ export function buildSystemPrompt({ role = 'general', customInstruction = '' } =
     '- ตัดคำเกริ่นนำ คำลงท้ายยืดยาว และการทวนคำถามซ้ำออก ใช้ภาษาธรรมดาเป็นกันเอง อธิบายเพิ่มเติมเฉพาะเมื่อผู้ใช้ขอเจาะลึก',
     'ความสามารถและขอบเขตการสนทนา:',
     '- พูดคุยได้ "ทุกหัวข้อ" อย่างเป็นธรรมชาติ (ความรู้ทั่วไป ร่างข้อความ แปล ไอเดีย วางแผน และข้อมูลในแอป)',
-    '- เมื่อผู้ใช้ถามถึงข้อมูลส่วนตัวใน Track Me (รวมถึงการวิเคราะห์ความเหนื่อย RPE/RIR หลังออกกำลังกายเพื่อจัดโปรแกรมรอบถัดไป) หรือสั่งบันทึก ให้เรียก Tool ที่เหมาะสมเสมอ',
+    '- เมื่อผู้ใช้ถามถึงข้อมูลส่วนตัวใน Track Me (รวมถึงการนอน ก้าวเดิน อาการน้องหมา วิเคราะห์ RPE/RIR หลังออกกำลังกาย หรือโน้ตที่เคยจด) หรือสั่งบันทึก ให้เรียก Tool ที่เหมาะสมเสมอ',
+    '- หากผู้ใช้สั่งจดโน้ต/ช่วยจำ ให้ใช้ saveNote และหากต้องการค้นหาโน้ตเก่า ให้ใช้ getNotes; หากผู้ใช้ติชม แนะนำ หรือแจ้งปัญหาแอป ให้ใช้ submitFeedback',
     '- หากเป็นคำถามทั่วไปที่ไม่เกี่ยวกับข้อมูลในแอป ให้ตอบทันทีโดยไม่ต้องเรียก Tool',
     '- ตอบเป็นภาษาไทยที่สุภาพ อ่านง่าย (หรือตอบภาษาอื่นตามที่ผู้ใช้สื่อสาร)',
     'กฎความปลอดภัย (ห้ามฝ่าฝืน):',
@@ -1122,6 +1507,7 @@ export function buildSystemPrompt({ role = 'general', customInstruction = '' } =
     '- หากผู้ใช้สั่งจดอาหารโดยไม่ได้ระบุแคลอรี่ ให้ประมาณค่า kcal, protein, carbs, fat มาตรฐานต่อ 1 ที่แล้วส่งให้ addFoodLog',
     '- ห้ามเปิดเผยหรือเดาข้อมูลส่วนตัวจากแอปที่ไม่ได้รับมาจากผลลัพธ์ของ Tool ในบทสนทนา',
     '- เมื่อ Tool ส่งกลับ status: "requires_user_confirmation" แปลว่าระบบสร้างการ์ดขอให้ผู้ใช้กดปุ่มยืนยันในหน้าแชทก่อนบันทึกจริง ให้แจ้งผู้ใช้กรุณากดยืนยันในหน้าแชท (ห้ามบอกว่าบันทึกเสร็จแล้วจนกว่าผู้ใช้จะกดยืนยัน)',
+    '- หาก Tool ส่งกลับ status: "pending_sync" ให้แจ้งผู้ใช้ว่าบันทึกลงคิวออฟไลน์ในเครื่องแล้วและรอซิงค์เมื่อออนไลน์ (ห้ามบอกว่าซิงค์สำเร็จแล้ว); หากส่งกลับ status: "failed" หรือ success: false ให้แจ้งข้อผิดพลาดตามจริงและอย่าบอกว่าบันทึกสำเร็จ',
     `บทบาทที่ผู้ใช้เลือกตอนนี้ (${roleConfig.label}): ${roleConfig.rolePrompt}`
   ];
 
@@ -1177,6 +1563,8 @@ async function callGeminiWithTools(historyMessages, userText, { signal, role = '
         model,
         signal,
         timeoutMs: REQUEST_TIMEOUT_MS,
+        trackProviderCooldown: false,
+        trackModelCooldown: true,
         payload
       });
 
@@ -1211,25 +1599,30 @@ async function callGeminiWithTools(historyMessages, userText, { signal, role = '
     throw new Error('AI เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
   };
 
-  let lastErr = null;
+  const tried = [];
   const models = await selectGeminiModels(roleConfig.feature, key, signal);
   for (let i = 0; i < models.length; i++) {
     const m = models[i];
     const hasMoreModels = i < models.length - 1;
+    const modelCd = getModelCooldownMs('Gemini', m);
+    if (modelCd) {
+      tried.push({ model: m, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
     try { return await runModel(m); }
     catch (e) {
       const isPaidModelAccessError = hasMoreModels
         && /^gemini-4-(?:carbon|argon)/i.test(m)
         && (e.status === 403 || e.modelNotFound || (e.status === 400 && !/api.?key/i.test(e.message || '')));
       if (isPaidModelAccessError) {
-        lastErr = e;
+        tried.push({ model: m, error: e });
         continue;
       }
-      if (e.invalidKey || e.quotaExceeded || e.aborted) throw e;
-      lastErr = e;
+      if (e.invalidKey || e.aborted) throw e;
+      tried.push({ model: m, error: e });
     }
   }
-  throw lastErr || new Error('Gemini ไม่พร้อมใช้งาน');
+  throw aggregateAssistantModelErrors(tried, 'Gemini ไม่พร้อมใช้งาน');
 }
 
 async function callGroqWithTools(historyMessages, userText, { signal, role = 'general', customInstruction = '' } = {}) {
@@ -1258,6 +1651,8 @@ async function callGroqWithTools(historyMessages, userText, { signal, role = 'ge
         model,
         signal,
         timeoutMs: REQUEST_TIMEOUT_MS,
+        trackProviderCooldown: false,
+        trackModelCooldown: true,
         payload: {
           model,
           messages,
@@ -1301,15 +1696,20 @@ async function callGroqWithTools(historyMessages, userText, { signal, role = 'ge
   };
 
   const models = await selectGroqModels('text', key, undefined, signal);
-  let lastErr = null;
+  const tried = [];
   for (const m of models) {
+    const modelCd = getModelCooldownMs('Groq', m);
+    if (modelCd) {
+      tried.push({ model: m, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
     try { return await runModel(m); }
     catch (e) {
-      if (e.invalidKey || e.quotaExceeded || e.aborted) throw e;
-      lastErr = e;
+      if (e.invalidKey || e.aborted) throw e;
+      tried.push({ model: m, error: e });
     }
   }
-  throw lastErr || new Error('Groq ไม่พร้อมใช้งาน');
+  throw aggregateAssistantModelErrors(tried, 'Groq ไม่พร้อมใช้งาน');
 }
 
 async function callOpenRouterWithTools(historyMessages, userText, { signal, role = 'general', customInstruction = '' } = {}) {
@@ -1327,9 +1727,14 @@ async function callOpenRouterWithTools(historyMessages, userText, { signal, role
     })),
     { role: 'user', content: userText }
   ];
-  let lastErr = null;
+  const tried = [];
 
   for (const model of models.slice(0, 6)) {
+    const modelCd = getModelCooldownMs('OpenRouter', model);
+    if (modelCd) {
+      tried.push({ model, error: Object.assign(new Error('โควตาโมเดลนี้รอรีเซ็ต'), { quotaExceeded: true, cooldownMs: modelCd }) });
+      continue;
+    }
     const messages = baseMessages.map(message => ({ ...message }));
     const turnState = { receipts: [], pendingActions: [], writesExecuted: 0 };
     try {
@@ -1340,6 +1745,8 @@ async function callOpenRouterWithTools(historyMessages, userText, { signal, role
           model,
           signal,
           timeoutMs: REQUEST_TIMEOUT_MS,
+          trackProviderCooldown: false,
+          trackModelCooldown: true,
           payload: {
             model,
             messages,
@@ -1379,12 +1786,12 @@ async function callOpenRouterWithTools(historyMessages, userText, { signal, role
       }
       throw new Error('OpenRouter เรียกใช้เครื่องมือหลายรอบเกินกำหนด');
     } catch (error) {
-      if (error.invalidKey || error.quotaExceeded || error.aborted) throw error;
-      lastErr = error;
+      if (error.invalidKey || error.aborted) throw error;
+      tried.push({ model, error });
     }
   }
 
-  throw lastErr || new Error('OpenRouter ไม่พร้อมใช้งาน');
+  throw aggregateAssistantModelErrors(tried, 'OpenRouter ไม่พร้อมใช้งาน');
 }
 
 export async function runAssistantTurn(historyMessages, userText, { signal, role = 'general', customInstruction = '' } = {}) {

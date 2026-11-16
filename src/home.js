@@ -25,7 +25,7 @@ export function mountHome(navigate) {
       pushBtn.disabled = true;
       try {
         await enablePushNotifications();
-        toast('เปิดรับการแจ้งเตือน 08:00 น. เรียบร้อยแล้ว 🔔');
+        toast('เปิดรับการแจ้งเตือน 12:15 น. เรียบร้อยแล้ว 🔔');
         renderHome();
       } catch (err) {
         toast(err.message, 'err');
