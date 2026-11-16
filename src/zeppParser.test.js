@@ -47,8 +47,64 @@ describe('Zepp CSV parser and merger', () => {
       sleepHours: 7.5,
       bedTime: '23:20',
       wakeTime: '06:50',
+      note: 'ตื่นระหว่างคืน 15 นาที',
       source: 'zepp_csv'
     });
+  });
+
+  it('template 1: summarizes per-minute stage/hr/respiratory_rate rows into one night', () => {
+    const csv = [
+      'date,time,stage,hr,respiratory_rate',
+      '2026-11-09,23:00,light,64,15',
+      '2026-11-09,23:30,deep,58,14',
+      '2026-11-10,00:30,rem,62,16',
+      '2026-11-10,01:00,awake,70,17',
+      '2026-11-10,01:10,light,60,15',
+      '2026-11-10,01:40,light,60,15'
+    ].join('\n');
+    const res = parseZeppCsv(csv, 'SLEEP_DETAIL.csv');
+    expect(res.detectedType).toBe('sleep_stage');
+    expect(res.records).toHaveLength(1);
+    expect(res.records[0]).toMatchObject({
+      date: '2026-11-10',
+      bedTime: '23:00',
+      wakeTime: '02:10',
+      deepSleepMin: 30,
+      remSleepMin: 30,
+      lightSleepMin: 90,
+      sleepMinutes: 150,
+      sleepHours: 2.5
+    });
+    expect(res.records[0].note).toContain('HR ขณะนอนเฉลี่ย 62 bpm');
+    expect(res.records[0].note).toContain('หายใจเฉลี่ย 15.3');
+    expect(res.records[0].note).toContain('ตื่นระหว่างคืน 10 นาที');
+  });
+
+  it('template 1: skips rows with unknown stage or missing time', () => {
+    const res = parseZeppCsv('date,time,stage,hr,respiratory_rate\n2026-11-10,,deep,60,14\n2026-11-10,01:00,xyz,60,14\n', 'x.csv');
+    expect(res.records).toEqual([]);
+    expect(res.skipped).toBe(2);
+  });
+
+  it('template 2: reads naps and keeps main sleep totals', () => {
+    const csv = [
+      'date,deepSleepTime,shallowSleepTime,wakeTime,start,stop,REMTime,naps',
+      '2026-11-11,90,300,20,2026-11-10 23:00:00,2026-11-11 06:40:00,70,25'
+    ].join('\n');
+    const res = parseZeppCsv(csv, 'SLEEP.csv');
+    expect(res.records[0]).toMatchObject({ date: '2026-11-11', sleepMinutes: 460, bedTime: '23:00', wakeTime: '06:40' });
+    expect(res.records[0].note).toBe('งีบ 25 นาที · ตื่นระหว่างคืน 20 นาที');
+  });
+
+  it('template 3: converts runDistance meters into a note and merges all 3 templates by date', () => {
+    const act = parseZeppCsv('date,steps,distance,runDistance,calories\n2026-11-10,12000,8500,3200,410\n', 'ACTIVITY.csv');
+    expect(act.records[0]).toMatchObject({ steps: 12000, distanceKm: 8.5, activeKcal: 410, note: 'วิ่ง 3.2 กม.' });
+    const stage = parseZeppCsv('date,time,stage,hr,respiratory_rate\n2026-11-10,00:00,deep,55,13\n2026-11-10,00:01,deep,55,13\n', 's.csv');
+    const merged = mergeZeppDayRecords([act.records, stage.records]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ steps: 12000, deepSleepMin: 2 });
+    expect(merged[0].note).toContain('วิ่ง 3.2 กม.');
+    expect(merged[0].note).toContain('HR ขณะนอนเฉลี่ย 55 bpm');
   });
 
   it('parses Thai-header and HH:MM sleep duration CSVs safely and merges activity + sleep on same date', () => {

@@ -3,6 +3,19 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v4.6.0] - 2026-11-17
+
+### นำเข้า Zepp CSV 3 รูปแบบ (Rule-based, ไม่ใช้ AI)
+- **ตัวอ่านไฟล์ใหม่ (`src/zeppParser.js`)**: ตรวจรูปแบบจากหัวตารางอัตโนมัติ ประมวลผลในเบราว์เซอร์ทั้งหมด ไม่ใช้ Token
+  - **Template 1 `date,time,stage,hr,respiratory_rate`**: รวมข้อมูลรายนาทีเป็นสรุปต่อคืน — นาทีหลับลึก/ตื้น/REM/ตื่น, เวลาเข้านอน/ตื่น, HR ขณะนอนเฉลี่ย/ต่ำสุด และอัตราการหายใจเฉลี่ย (แยกคืนเมื่อเว้นช่วงเกิน 3 ชม., ใช้วันที่ตื่นนอน, รองรับ stage แบบคำและรหัส `5/4/8/7`) ผ่าน `normalizeSleepStage()`
+  - **Template 2 `date,deepSleepTime,shallowSleepTime,wakeTime,start,stop,REMTime,naps`**: เพิ่มการอ่าน `naps` (นาที หรือช่วงเวลา) และนาทีตื่นระหว่างคืน
+  - **Template 3 `date,steps,distance,runDistance,calories`**: เพิ่มการอ่าน `runDistance` (เมตร → กม.)
+  - `mergeZeppDayRecords()` รวมหมายเหตุของทุกไฟล์ในวันเดียวกันแทนการเขียนทับ
+- **UI (`src/body.js`)**: ปุ่ม **นำเข้า Zepp CSV (3 รูปแบบ)** พร้อมคำอธิบายรูปแบบที่รองรับ
+- **Unit Tests (`src/zeppParser.test.js`)**: เพิ่มเป็น 9 เคส ครอบคลุมทั้ง 3 template และการรวมข้ามไฟล์
+- ไม่เปลี่ยนโครงสร้าง Firestore/Rules: ใช้ `body_records` ฟิลด์เดิม ค่าเสริมเก็บใน `note`
+
+---
 ## [v4.5.0] - 2026-11-16
 
 ### แดชบอร์ดภาพรวมรายเดือน (Dashboard Overview)

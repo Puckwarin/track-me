@@ -78,7 +78,7 @@ export function mountBody(el) {
 
       <div class="flex flex-wrap gap-2">
         <label class="btn btn-soft text-xs cursor-pointer">
-          <i class="fa-solid fa-file-csv text-emerald-600"></i> นำเข้า Zepp CSV (ACTIVITY / SLEEP)
+          <i class="fa-solid fa-file-csv text-emerald-600"></i> นำเข้า Zepp CSV (3 รูปแบบ)
           <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
         </label>
         <label class="btn btn-soft text-xs cursor-pointer">
@@ -97,7 +97,7 @@ export function mountBody(el) {
         <div><label class="lbl">หมายเหตุ</label><input id="bz-note" class="input" placeholder="หลับสบาย / เดินออกกำลัง"></div>
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-400">นำเข้า CSV พร้อมกันทั้ง SLEEP.csv และ ACTIVITY.csv ระบบจะรวมข้อมูลวันเดียวกันให้อัตโนมัติ</span>
+        <span class="text-[11px] text-slate-400">รองรับ CSV 3 แบบ (ไม่ใช้ AI): ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY) — เลือกพร้อมกันได้ ระบบรวมวันเดียวกันให้อัตโนมัติ</span>
         <button id="bz-save" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> บันทึกนอน / ก้าวเดิน</button>
       </div>
 
