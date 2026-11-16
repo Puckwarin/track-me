@@ -3,6 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
+import { readZeppScreenshot, runImageBatch, formatImageProgress, explainGeminiError } from './nutrition.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
@@ -71,16 +72,21 @@ export function mountBody(el) {
       <div class="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-bed text-indigo-500"></i> การนอน & 👣 ก้าวเดิน <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp)</span></h2>
-          <p class="text-xs text-slate-500 mt-0.5">เว็บแอปบนเบราว์เซอร์ไม่สามารถเชื่อมต่อเข้าแอป Zepp บนมือถือโดยตรงได้ — เลือกบันทึกเอง หรือนำเข้าไฟล์ CSV ที่ Export จาก Zepp ได้ทันที</p>
+          <p class="text-xs text-slate-500 mt-0.5">เว็บแอปบนเบราว์เซอร์ไม่สามารถเชื่อมต่อเข้าแอป Zepp บนมือถือโดยตรงได้ — เลือกบันทึกเอง, นำเข้าไฟล์ CSV ที่ Export จาก Zepp, หรือสแกนภาพแคปหน้าจอจาก Zepp ได้ทันที</p>
         </div>
       </div>
 
       <div class="flex flex-wrap gap-2">
         <label class="btn btn-soft text-xs cursor-pointer">
-          <i class="fa-solid fa-file-csv text-emerald-600"></i> นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
+          <i class="fa-solid fa-file-csv text-emerald-600"></i> นำเข้า Zepp CSV
           <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
         </label>
+        <label class="btn btn-soft text-xs cursor-pointer">
+          <i class="fa-solid fa-camera text-indigo-600"></i> สแกนรูปจากแอป Zepp
+          <input type="file" id="bz-scan" accept="image/*" multiple class="hidden">
+        </label>
       </div>
+      <p id="bz-status" class="text-xs text-slate-500 hidden"></p>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div><label class="lbl">วันที่</label><input type="date" id="bz-date" class="input"></div>
@@ -91,7 +97,7 @@ export function mountBody(el) {
         <div><label class="lbl">หมายเหตุ</label><input id="bz-note" class="input" placeholder="หลับสบาย / เดินออกกำลัง"></div>
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-400">นำเข้า CSV พร้อมกันทั้ง SLEEP.csv และ ACTIVITY.csv ระบบจะรวมข้อมูลวันเดียวกันให้อัตโนมัติ</span>
+        <span class="text-[11px] text-slate-400">รองรับ Zepp CSV : ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY) — เลือกพร้อมกันได้ ระบบรวมวันเดียวกันให้อัตโนมัติ</span>
         <button id="bz-save" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> บันทึกนอน / ก้าวเดิน</button>
       </div>
 
@@ -129,6 +135,7 @@ export function mountBody(el) {
   $('#b-save', root).addEventListener('click', save);
   $('#bz-save', root).addEventListener('click', saveSleepSteps);
   $('#bz-csv', root).addEventListener('change', handleCsvImport);
+  $('#bz-scan', root).addEventListener('change', handleScreenshotScan);
 
   $('#b-chart-tabs', root).addEventListener('click', e => {
     const b = e.target.closest('[data-metric]');
@@ -260,7 +267,7 @@ function renderSleepStepsList(desc) {
   if (!listEl) return;
   const rows = desc.filter(hasSleepOrSteps).slice(0, 20);
   if (!rows.length) {
-    listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีบันทึกการนอนหรือก้าวเดิน (กรอกเอง หรือนำเข้าไฟล์ CSV จาก Zepp ได้เลย)</p>';
+    listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีบันทึกการนอนหรือก้าวเดิน (กรอกเอง นำเข้า CSV หรือสแกนภาพจาก Zepp ได้เลย)</p>';
     return;
   }
   listEl.innerHTML = rows.map(r => {
@@ -463,6 +470,60 @@ async function handleCsvImport(e) {
   }
 }
 
+async function handleScreenshotScan(e) {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+  const statusEl = $('#bz-status', root);
+  if (statusEl) {
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = `กำลังอ่านภาพจาก Zepp (0/${files.length})…`;
+  }
+  try {
+    const { results, errors } = await runImageBatch(
+      files,
+      file => readZeppScreenshot(file),
+      prog => {
+        if (statusEl) statusEl.textContent = formatImageProgress('อ่านภาพจาก Zepp', prog);
+      }
+    );
+    if (statusEl) {
+      statusEl.textContent = errors.length
+        ? `อ่านสำเร็จ ${results.length}/${files.length} ภาพ · ไม่สำเร็จ ${errors.length} (${explainGeminiError(errors[0].error || errors[0])})`
+        : '';
+      if (!errors.length) statusEl.classList.add('hidden');
+    }
+    const today = localDateStr();
+    const valid = results
+      .map(res => {
+        const d = res?.result || res || {};
+        return {
+          date: isDateStr(d.date) ? d.date : today,
+          sleepHours: typeof d.sleepHours === 'number' ? round1(d.sleepHours) : null,
+          sleepMinutes: typeof d.sleepMinutes === 'number' ? Math.round(d.sleepMinutes) : null,
+          deepSleepMin: typeof d.deepSleepMin === 'number' ? Math.round(d.deepSleepMin) : null,
+          lightSleepMin: typeof d.lightSleepMin === 'number' ? Math.round(d.lightSleepMin) : null,
+          remSleepMin: typeof d.remSleepMin === 'number' ? Math.round(d.remSleepMin) : null,
+          bedTime: typeof d.bedTime === 'string' ? d.bedTime : null,
+          wakeTime: typeof d.wakeTime === 'string' ? d.wakeTime : null,
+          steps: typeof d.steps === 'number' ? Math.round(d.steps) : null,
+          distanceKm: typeof d.distanceKm === 'number' ? Math.round(d.distanceKm * 100) / 100 : null,
+          activeKcal: typeof d.activeKcal === 'number' ? Math.round(d.activeKcal) : null,
+          note: d.note || '',
+          source: 'zepp_ai'
+        };
+      })
+      .filter(x => x.sleepHours != null || x.sleepMinutes != null || x.steps != null);
+
+    if (!valid.length) {
+      return toast(errors[0] ? explainGeminiError(errors[0].error || errors[0]) : 'ไม่พบตัวเลขการนอนหรือก้าวเดินในภาพ', 'err');
+    }
+    openZeppImportPreviewModal(mergeZeppDayRecords([valid]), 'zepp_ai');
+  } catch (err) {
+    if (statusEl) statusEl.classList.add('hidden');
+    toast(explainGeminiError(err), 'err');
+  }
+}
 
 function saveSleepSteps() {
   const date = $('#bz-date', root).value;
