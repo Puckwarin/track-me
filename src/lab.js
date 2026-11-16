@@ -3,6 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } from './util.js';
 import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
+import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -50,6 +51,13 @@ export function mountLab(el) {
         <span class="block text-xs text-slate-500">แสดงความคืบหน้าและให้ AI อ่านค่าหลายรายการเพื่อตรวจยืนยันก่อนบันทึก</span>
       </label>
       <p id="lb-scan-status" class="hidden text-xs text-slate-500"></p>
+      <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 space-y-1.5">
+        <p class="text-[11px] font-semibold text-slate-600">กรอกเร็วเป็นชุด (0 โทเค็น · ไม่ใช้ AI):</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${LAB_PANEL_TEMPLATES.map(p => `<button type="button" data-lab-panel="${esc(p.id)}" class="chip bg-white border border-slate-200 hover:bg-lav-soft text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
+          <button type="button" id="lb-bulk-paste" class="chip bg-lav-soft text-brand-dark text-[11px]"><i class="fa-solid fa-paste"></i> วางหลายบรรทัด</button>
+        </div>
+      </div>
       <div><label class="lbl">วันที่ตรวจ</label><input id="lb-date" type="date" class="input"></div>
       <div><label class="lbl">รายการตรวจ (เลือกจากรายการหรือพิมพ์เอง)</label><input id="lb-name" list="lb-names" class="input" placeholder="เช่น BUN, Creatinine, HCT"><datalist id="lb-names">${LAB_PRESETS.map(p => `<option value="${esc(p[0])}">`).join('')}</datalist></div>
       <div class="grid grid-cols-2 gap-3">
@@ -89,6 +97,18 @@ export function mountLab(el) {
     $('#lb-unit', root).value = last?.unit ?? p[1]; $('#lb-low', root).value = (last ? last.refLow : p[2]) ?? ''; $('#lb-high', root).value = (last ? last.refHigh : p[3]) ?? '';
   });
   $('#lb-photo', root).addEventListener('change', onScanLabPhoto);
+  $('#lb-bulk-paste', root).addEventListener('click', openLabPasteModal);
+  root.addEventListener('click', e => {
+    const pBtn = e.target.closest('[data-lab-panel]');
+    if (!pBtn) return;
+    const panel = LAB_PANEL_TEMPLATES.find(p => p.id === pBtn.dataset.labPanel);
+    if (!panel) return;
+    const rows = panel.items.map(itemName => {
+      const def = findLatestLabDefaults(itemName, LAB_PRESETS, state.labs);
+      return { name: def.name, value: '', unit: def.unit, refLow: def.refLow, refHigh: def.refHigh };
+    });
+    openLabBatchModal(rows, `${panel.icon} กรอกชุดตรวจ ${panel.label}`);
+  });
   $('#lb-save', root).addEventListener('click', save);
   $('#lb-search', root).addEventListener('input', render);
   $('#lb-filter', root).addEventListener('change', render);
@@ -233,6 +253,136 @@ async function onScanLabPhoto(e) {
     st.textContent = explainGeminiError(err);
     toast(explainGeminiError(err), 'err');
   }
+}
+
+function openLabBatchModal(initialRows, titleText = 'กรอกผลตรวจเป็นชุด (0 โทเค็น)') {
+  const defaultDate = $('#lb-date', root)?.value || localDateStr();
+  const defaultNote = $('#lb-note', root)?.value?.trim() || '';
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-3">กรอกเฉพาะรายการที่มีผลตรวจ (รายการที่เว้นว่างจะไม่ถูกบันทึก) — ค่าอ้างอิงดึงจากใบล่าสุดหรือค่าทั่วไป</p>
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      <div><label class="lbl">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
+      <div><label class="lbl">คลินิก/หมายเหตุรวม</label><input id="lbb-note" class="input" value="${esc(defaultNote)}" placeholder="ไม่บังคับ"></div>
+    </div>
+    <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+      ${initialRows.map((it, i) => `
+        <div class="rounded-xl border border-slate-200 p-2.5 space-y-2 bg-slate-50/70" data-lbb-row="${i}">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" class="lbb-check" checked>
+            <input class="input !py-1.5 text-sm font-semibold" data-f="name" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
+          </div>
+          <div class="grid grid-cols-4 gap-1.5 text-xs">
+            <div><label class="lbl">ผล *</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="value" value="${it.value ?? ''}" placeholder="ตัวเลข"></div>
+            <div><label class="lbl">หน่วย</label><input class="input !py-1" data-f="unit" value="${esc(it.unit || '')}"></div>
+            <div><label class="lbl">ต่ำสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="refLow" value="${it.refLow ?? ''}"></div>
+            <div><label class="lbl">สูงสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="refHigh" value="${it.refHigh ?? ''}"></div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="lbb-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกรายการที่กรอก</button>
+    </div>`, { wide: true });
+
+  $('#lbb-save', m.el).addEventListener('click', () => {
+    const date = $('#lbb-date', m.el).value;
+    const note = $('#lbb-note', m.el).value.trim().slice(0, 200);
+    if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
+    const rowsToSave = [];
+    m.el.querySelectorAll('[data-lbb-row]').forEach(rowEl => {
+      if (!rowEl.querySelector('.lbb-check')?.checked) return;
+      const val = k => rowEl.querySelector(`[data-f="${k}"]`).value;
+      const name = val('name').trim();
+      const value = toNum(val('value'));
+      if (!name || value === null) return;
+      const refLow = toNum(val('refLow'));
+      const refHigh = toNum(val('refHigh'));
+      rowsToSave.push({
+        date,
+        name: name.slice(0, 80),
+        value,
+        unit: val('unit').trim().slice(0, 20),
+        refLow: refLow !== null && refHigh !== null && refLow > refHigh ? null : refLow,
+        refHigh: refLow !== null && refHigh !== null && refLow > refHigh ? null : refHigh,
+        note,
+        createdAt: new Date()
+      });
+    });
+    if (!rowsToSave.length) return toast('กรอกตัวเลขผลตรวจอย่างน้อย 1 รายการก่อนบันทึก', 'err');
+    const btn = $('#lbb-save', m.el);
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึก...';
+    try {
+      const commits = [];
+      for (let i = 0; i < rowsToSave.length; i += 450) {
+        const batch = writeBatch(db);
+        const colRef = userCol(state.uid, 'lab_records');
+        rowsToSave.slice(i, i + 450).forEach(rec => batch.set(doc(colRef), rec));
+        commits.push(batch.commit());
+      }
+      Promise.all(commits).catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
+      m.close();
+      toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการที่กรอก';
+      toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+    }
+  });
+}
+
+function openLabPasteModal() {
+  const sample = [
+    'BUN 18 mg/dL (7-27)',
+    'Creatinine: 1.2 mg/dL (0.5-1.8)',
+    'ALT: 64 U/L (10-125)',
+    'WBC: 10.5'
+  ].join('\n');
+
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-xs text-slate-600 mb-2">วางผลแล็บ 1 บรรทัดต่อ 1 รายการ (รองรับ copy จาก Excel/Google Sheets, แยกด้วยวรรค/Tab/: และช่วงอ้างอิงท้ายบรรทัด)</p>
+    <div class="flex items-center justify-between mb-1">
+      <label class="lbl !mb-0">ข้อความผลแล็บ</label>
+      <button type="button" id="lbp-sample" class="text-xs text-brand underline">ใส่ตัวอย่าง</button>
+    </div>
+    <textarea id="lbp-text" rows="5" class="input font-mono text-xs" placeholder="BUN 18 mg/dL (7-27)&#10;Creatinine: 1.2 mg/dL"></textarea>
+    <div id="lbp-preview" class="mt-3 max-h-48 overflow-y-auto text-xs"></div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="lbp-next" class="btn btn-primary" disabled>ตรวจสอบและบันทึก</button>
+    </div>`, { wide: true });
+
+  let parsed = { items: [], errors: [] };
+  const update = () => {
+    parsed = parseBulkLabText($('#lbp-text', m.el).value, LAB_PRESETS, state.labs);
+    const box = $('#lbp-preview', m.el);
+    const btn = $('#lbp-next', m.el);
+    if (!parsed.items.length && !parsed.errors.length) {
+      box.innerHTML = '<p class="text-slate-400 text-center py-2">วางข้อความด้านบนเพื่อดูตัวอย่าง</p>';
+      btn.disabled = true;
+      return;
+    }
+    const errHtml = parsed.errors.length
+      ? `<div class="rounded-xl border border-amber-200 bg-amber-50 p-2 text-amber-800 mb-2">${parsed.errors.map(x => `<p>• ${esc(x.error)}</p>`).join('')}</div>`
+      : '';
+    const rowsHtml = parsed.items.length
+      ? `<div class="rounded-xl border border-slate-200 overflow-x-auto"><table class="w-full text-left"><thead class="bg-slate-50 text-slate-500"><tr><th class="p-2">รายการ</th><th class="p-2 text-right">ผล</th><th class="p-2">หน่วย</th><th class="p-2">อ้างอิง</th></tr></thead><tbody class="divide-y divide-slate-100">${parsed.items.map(it => `<tr><td class="p-2 font-medium">${esc(it.name)}</td><td class="p-2 text-right font-semibold">${esc(it.value)}</td><td class="p-2 text-slate-500">${esc(it.unit || '-')}</td><td class="p-2 text-slate-500">${it.refLow ?? '-'} – ${it.refHigh ?? '-'}</td></tr>`).join('')}</tbody></table></div>`
+      : '';
+    box.innerHTML = errHtml + rowsHtml;
+    btn.disabled = parsed.items.length === 0;
+  };
+
+  $('#lbp-text', m.el).addEventListener('input', update);
+  $('#lbp-sample', m.el).addEventListener('click', () => { $('#lbp-text', m.el).value = sample; update(); });
+  $('#lbp-next', m.el).addEventListener('click', () => {
+    if (!parsed.items.length) return;
+    const rows = parsed.items;
+    m.close();
+    openLabBatchModal(rows, `📝 ยืนยันผลแล็บ (${rows.length} รายการ)`);
+  });
+  update();
 }
 
 export function resetLabToToday() {

@@ -323,12 +323,14 @@ function labelNumber(text, patterns) {
   for(const pattern of patterns){const m=text.match(pattern);if(m){const n=Number(m[1].replace(',','.'));if(Number.isFinite(n))return n;}}
   return null;
 }
-async function readNutritionLabelLocally(file) {
+export async function readNutritionLabelLocally(file) {
   const ocr = await tryLabelOcr(file);
   const calories = labelNumber(ocr, [/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
   const protein = labelNumber(ocr, [/(?:protein|โปรตีน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
   const carbs = labelNumber(ocr, [/(?:total carbohydrate|carbohydrate|คาร์โบไฮเดรต)[^\d]{0,32}(\d+(?:[.,]\d+)?)/i]);
   const fat = labelNumber(ocr, [/(?:total fat|fat|ไขมัน)[^\d]{0,24}(\d+(?:[.,]\d+)?)/i]);
+  const sugar = labelNumber(ocr, [/(?:sugars?|น้ำตาล)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i]);
+  const sodium = labelNumber(ocr, [/(?:sodium|โซเดียม)[^\d]{0,20}(\d+(?:[.,]\d+)?)/i]);
   if ([calories, protein, carbs, fat].every(value => value === null)) return null;
   return {
     name: null,
@@ -339,8 +341,8 @@ async function readNutritionLabelLocally(file) {
     protein,
     carbs,
     fat,
-    sugar: null,
-    sodium: null,
+    sugar,
+    sodium,
     notes: 'อ่านด้วย OCR ในเครื่อง — โปรดตรวจตัวเลขและหน่วยกับรูปฉลากก่อนบันทึก'
   };
 }
@@ -368,9 +370,13 @@ export async function readNutritionLabel(file, { signal } = {}) {
 }
 
 // วิเคราะห์รูปอาหารหรือฉลากโภชนาการในปุ่มเดียว (ลดขั้นตอนบนมือถือ)
-export async function analyzeFoodImage(file, { signal } = {}) {
+export async function analyzeFoodImage(file, { signal, precheckedLocalLabel } = {}) {
   const hasAiKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
   if (!hasAiKey) {
+    if (precheckedLocalLabel !== undefined) {
+      if (precheckedLocalLabel) return { kind: 'label', ...precheckedLocalLabel };
+      throw new Error('NO_KEY');
+    }
     const label = await readNutritionLabel(file, { signal });
     return { kind: 'label', ...label };
   }
@@ -400,7 +406,9 @@ export async function analyzeFoodImage(file, { signal } = {}) {
     }, { signal });
   } catch (error) {
     if (!error.quotaExceeded) throw error;
-    const localResult = await readNutritionLabelLocally(file);
+    const localResult = precheckedLocalLabel !== undefined
+      ? precheckedLocalLabel
+      : await readNutritionLabelLocally(file);
     if (localResult) return { kind: 'label', ...localResult };
     error.message += ' · OCR ในเครื่องอ่านฉลากได้ไม่สำเร็จ';
     throw error;
@@ -503,31 +511,6 @@ export async function estimateStockFromPhotos(files, onProgress = () => {}, { si
   };
 }
 
-export async function parseReminderWithAI(text, today, existingTitles = [], { signal } = {}) {
-  const prompt = `วันนี้คือ ${today}. แปลงข้อความแจ้งเตือนภาษาไทยต่อไปนี้เป็นโครงสร้าง JSON:\n"${text}"\n` +
-    (existingTitles.length ? `รายการแจ้งเตือนที่มีอยู่แล้ว: ${existingTitles.slice(0, 20).join(', ')}\n` : '') +
-    `หมวดหมู่เลือกจาก: สัตว์เลี้ยง | เปลี่ยนของ | เอกสาร/ประกัน/ภาษี | นัดหมาย/อื่น ๆ\n` +
-    `ruleKind เลือกจาก: once | interval | monthly | yearly | nth_weekday | last_weekday | same_as | weekly_except_linked\n` +
-    `weekday: 0=จันทร์..5=เสาร์..6=อาทิตย์ (หรือ null). nth: 1-4 (หรือ null). remindDays: จำนวนวันเตือนล่วงหน้า (เช่น ก่อนสามวัน=3, สองสัปดาห์=14, ค่าเริ่มต้น=7). dueTime: HH:MM หรือ null.`;
-  return callAI([{ text: prompt }], {
-    type: 'OBJECT',
-    properties: {
-      title: S,
-      kind: S,
-      nextDate: { type: 'STRING', nullable: true },
-      dueTime: { type: 'STRING', nullable: true },
-      remindDays: N,
-      ruleKind: S,
-      weekday: N,
-      nth: N,
-      intervalDays: N,
-      repeatMonths: N,
-      linkedQuery: { type: 'STRING', nullable: true },
-      note: { type: 'STRING', nullable: true }
-    },
-    required: ['title', 'kind', 'nextDate', 'remindDays', 'ruleKind']
-  }, { signal });
-}
 
 // อ่านข้อมูลจากซองอาหารสัตว์เลี้ยง (ไม่เก็บไฟล์ภาพ)
 export async function readPetFoodLabel(file, { signal } = {}) {
@@ -587,30 +570,6 @@ export async function readLabReportFromPhoto(file, { signal } = {}) {
   }, { signal });
 }
 
-// อ่านข้อมูลการนอนและก้าวเดินจากภาพแคปหน้าจอแอป Zepp / นาฬิกา (ไม่เก็บไฟล์ภาพ)
-export async function readZeppScreenshot(file, { signal } = {}) {
-  const img = await imageToInlineData(file, 1400, 0.82);
-  return callAI([
-    { text: 'นี่คือภาพหน้าจอสรุปการนอน (Sleep) หรือการเดิน/ก้าวเดิน (Steps) จากแอป Zepp / Amazfit / นาฬิกาสุขภาพ ให้อ่านเฉพาะตัวเลขที่เห็นชัดในภาพ: date (YYYY-MM-DD คริสต์ศักราช ถ้าไม่มีปีให้เว้น null), sleepHours (ชั่วโมงรวมเป็นทศนิยม เช่น 7.5), sleepMinutes (นาทีรวม), deepSleepMin (นาทีหลับลึก), lightSleepMin (นาทีหลับตื้น), remSleepMin (นาที REM), bedTime (HH:MM), wakeTime (HH:MM), steps (จำนวนก้าว), distanceKm (ระยะทาง กม.), activeKcal (แคลอรี่), note (สรุปสั้น ๆ เช่น คุณภาพการนอน) ห้ามเดาค่าที่ไม่มีในรูป ตอบเป็น JSON ตาม schema' },
-    { inline_data: img }
-  ], {
-    type: 'OBJECT',
-    properties: {
-      date: { type: 'STRING', nullable: true },
-      sleepHours: N,
-      sleepMinutes: N,
-      deepSleepMin: N,
-      lightSleepMin: N,
-      remSleepMin: N,
-      bedTime: { type: 'STRING', nullable: true },
-      wakeTime: { type: 'STRING', nullable: true },
-      steps: N,
-      distanceKm: N,
-      activeKcal: N,
-      note: { type: 'STRING', nullable: true }
-    }
-  }, { signal });
-}
 
 export async function testGeminiConnection({ signal } = {}) {
   const key = getGeminiKey();
