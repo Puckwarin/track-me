@@ -20,7 +20,7 @@ export { CHAT_ROLES, getChatRole };
 
 const REQUEST_TIMEOUT_MS = 35000;
 const MAX_TOOL_ROUNDS = 5;
-const HISTORY_LIMIT = 20;
+const HISTORY_LIMIT = 12;
 const WRITE_TOOLS = new Set(['addExpense', 'addFoodLog', 'updateInventory', 'addReminder', 'saveNote', 'submitFeedback']);
 
 export const AI_LIMITS = {
@@ -761,17 +761,18 @@ export async function prepareWriteAction(name, args = {}) {
 
   switch (name) {
     case 'addExpense': {
-      const title = sanitizeDataText(args.title || 'รายจ่าย', 120) || 'รายจ่าย';
+      const isIncome = args.type === 'income';
+      const title = sanitizeDataText(args.title || (isIncome ? 'รายรับ' : 'รายจ่าย'), 120) || (isIncome ? 'รายรับ' : 'รายจ่าย');
       const amount = Number(args.amount);
       if (!Number.isFinite(amount) || amount <= 0 || amount > AI_LIMITS.MAX_EXPENSE_AMOUNT) {
         return { error: `จำนวนเงินต้องอยู่ระหว่าง 0.01 ถึง ${AI_LIMITS.MAX_EXPENSE_AMOUNT.toLocaleString('th-TH')} บาท` };
       }
       const roundedAmount = Math.round(amount * 100) / 100;
       const date = resolveNaturalDate(args.date || today, today);
-      const category = matchExpenseCategory(args.category, title);
+      const category = isIncome ? (sanitizeDataText(args.category, 60) || 'รายรับ') : matchExpenseCategory(args.category, title);
       const id = 'ex' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
       const record = {
-        type: 'expense',
+        type: isIncome ? 'income' : 'expense',
         amount: roundedAmount,
         category,
         date,
@@ -788,8 +789,8 @@ export async function prepareWriteAction(name, args = {}) {
           toolName: 'addExpense',
           isHighRisk,
           riskReason: isHighRisk ? `ยอดตั้งแต่ ${AI_LIMITS.HIGH_RISK_EXPENSE_AMOUNT.toLocaleString('th-TH')} บาทขึ้นไป` : '',
-          icon: '💸',
-          title: `บันทึกรายจ่าย: ${title} ${roundedAmount.toLocaleString('th-TH')} บาท`,
+          icon: isIncome ? '💰' : '💸',
+          title: `บันทึก${isIncome ? 'รายรับ' : 'รายจ่าย'}: ${title} ${roundedAmount.toLocaleString('th-TH')} บาท`,
           subtitle: `หมวด${category} · ${fmtDate(date)}`,
           writePlan: { kind: 'expense', docId: id, record, meta: { title, amount: roundedAmount, category, date } }
         }
@@ -935,7 +936,9 @@ export async function prepareWriteAction(name, args = {}) {
     case 'addReminder': {
       const title = sanitizeDataText(args.title, 120);
       if (!title) return { error: 'กรุณาระบุหัวข้อแจ้งเตือน' };
-      const parsed = parseSmartReminder(`${title} ${sanitizeDataText(args.date, 30)} ${sanitizeDataText(args.time, 10)}`, [
+      const ruleInput = sanitizeDataText(args.rawRuleText, 240)
+        || `${title} ${sanitizeDataText(args.date, 30)} ${sanitizeDataText(args.time, 10)}`;
+      const parsed = parseSmartReminder(ruleInput, [
         ...(state.petCare || []).map(x => ({ ...x, col: 'pet_care_records', title: x.type || '' })),
         ...(state.replacements || []).map(x => ({ ...x, col: 'replacement_records', title: x.name || '' }))
       ], today);
@@ -1518,6 +1521,15 @@ export function buildSystemPrompt({ role = 'general', customInstruction = '' } =
   return lines.join('\n');
 }
 
+export function shouldAttachToolsForTurn(historyMessages, userText, role = 'general') {
+  if (role === 'coach' || role === 'planner') return true;
+  const recentText = [
+    ...(historyMessages || []).slice(-2).map(m => m?.text || ''),
+    userText || ''
+  ].join(' ').toLowerCase();
+  return /(?:รายจ่าย|รายรับ|ค่าใช้จ่าย|ค่ากิน|ค่า|จ่าย|ซื้อ|บาท|อาหาร|มื้อ|แคล|kcal|โปรตีน|คาร์บ|ไขมัน|สต๊อก|ของใช้|ใกล้หมด|หมดอายุ|นัด|เตือน|แผน|กิจวัตร|ออกกำลัง|เวท|ท่า|น้ำหนัก|สัดส่วน|รอบเดือน|อาการ|หมา|แมว|ผลเลือด|แล็บ|นอน|ก้าว|zepp|โน้ต|จำไว้|feedback|ฟีดแบ็ก|แจ้งปัญหา|บันทึก|จด|สรุป|เช็ก|ดูข้อมูล|track\s*me)/.test(recentText);
+}
+
 function buildGeminiGenerationConfig(model, roleId) {
   if (/^gemini-4-/i.test(model)) {
     return undefined;
@@ -1534,6 +1546,7 @@ async function callGeminiWithTools(historyMessages, userText, { signal, role = '
   if (!key) throw new Error('NO_KEY');
 
   const roleConfig = getChatRole(role);
+  const useTools = shouldAttachToolsForTurn(historyMessages, userText, roleConfig.id);
   const systemInstruction = { parts: [{ text: buildSystemPrompt({ role: roleConfig.id, customInstruction }) }] };
   const baseContents = [
     ...historyMessages.slice(-HISTORY_LIMIT).map(m => ({
@@ -1552,8 +1565,7 @@ async function callGeminiWithTools(historyMessages, userText, { signal, role = '
       const payload = {
         systemInstruction,
         contents,
-        tools: GEMINI_TOOLS,
-        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        ...(useTools ? { tools: GEMINI_TOOLS, toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
         ...(generationConfig ? { generationConfig } : {})
       };
 
@@ -1630,6 +1642,7 @@ async function callGroqWithTools(historyMessages, userText, { signal, role = 'ge
   if (!key) throw new Error('NO_KEY');
 
   const roleConfig = getChatRole(role);
+  const useTools = shouldAttachToolsForTurn(historyMessages, userText, roleConfig.id);
   const temperature = roleConfig.id === 'fast' ? 0.2 : 0.5;
   const baseMessages = [
     { role: 'system', content: buildSystemPrompt({ role: roleConfig.id, customInstruction }) },
@@ -1656,8 +1669,7 @@ async function callGroqWithTools(historyMessages, userText, { signal, role = 'ge
         payload: {
           model,
           messages,
-          tools: OPENAI_TOOLS,
-          tool_choice: 'auto',
+          ...(useTools ? { tools: OPENAI_TOOLS, tool_choice: 'auto' } : {}),
           temperature
         }
       });
@@ -1715,9 +1727,10 @@ async function callGroqWithTools(historyMessages, userText, { signal, role = 'ge
 async function callOpenRouterWithTools(historyMessages, userText, { signal, role = 'general', customInstruction = '' } = {}) {
   const key = getProviderKey('OpenRouter');
   if (!key) throw new Error('NO_KEY');
-  const models = await discoverOpenRouterModels({ requireTools: true, signal });
-  if (!models.length) throw new Error('ไม่พบโมเดลฟรีของ OpenRouter ที่รองรับเครื่องมือ');
   const roleConfig = getChatRole(role);
+  const useTools = shouldAttachToolsForTurn(historyMessages, userText, roleConfig.id);
+  const models = await discoverOpenRouterModels({ requireTools: useTools, signal });
+  if (!models.length) throw new Error('ไม่พบโมเดลฟรีของ OpenRouter ที่รองรับเครื่องมือ');
   const temperature = roleConfig.id === 'fast' ? 0.2 : 0.5;
   const baseMessages = [
     { role: 'system', content: buildSystemPrompt({ role: roleConfig.id, customInstruction }) },
@@ -1750,8 +1763,7 @@ async function callOpenRouterWithTools(historyMessages, userText, { signal, role
           payload: {
             model,
             messages,
-            tools: OPENAI_TOOLS,
-            tool_choice: 'auto',
+            ...(useTools ? { tools: OPENAI_TOOLS, tool_choice: 'auto' } : {}),
             temperature
           }
         });

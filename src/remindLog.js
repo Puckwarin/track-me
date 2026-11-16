@@ -4,7 +4,6 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
-import { getGeminiKey, getGroqKey, getOpenRouterKey, parseReminderWithAI, explainGeminiError } from './nutrition.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -18,6 +17,17 @@ const SMART_EXAMPLES = [
   'ขูดหินปูนน้องหมาปีหน้าแจ้งเตือนก่อนถึงเวลาสองสัปดาห์',
   'เปลี่ยนผ้าปูวันเดียวกับที่อาบน้ำน้องหมา',
   'ซักผ้าห่มทุกวันเสาร์ที่ไม่ได้พาน้องหมาไปอาบน้ำ'
+];
+
+const REMINDER_PATTERN_CHIPS = [
+  ['+ ทุก 7 วัน', 'ทุก 7 วัน'],
+  ['+ ทุกเดือน', 'ทุกเดือน'],
+  ['+ ทุก 3 เดือน', 'ทุก 3 เดือน'],
+  ['+ ทุกวันเสาร์ที่ 3 ของเดือน', 'ทุกวันเสาร์ที่สามของเดือน'],
+  ['+ วันเดียวกับ...', 'วันเดียวกับ'],
+  ['+ เตือนก่อน 3 วัน', 'แจ้งเตือนก่อนสามวัน'],
+  ['+ เตือนก่อน 2 สัปดาห์', 'แจ้งเตือนก่อนสองสัปดาห์'],
+  ['+ เวลา 09:00', 'เวลา 09:00']
 ];
 
 let root;
@@ -97,16 +107,17 @@ export function mountRemind(el) {
       </header>
 
       <div class="space-y-2.5">
-        <div class="flex items-center justify-between gap-2">
-          <label for="rm-smart" class="lbl !mb-0">พิมพ์หรือวางข้อความแจ้งเตือน *</label>
-          <button id="rm-ai-btn" type="button" class="chip bg-lav-soft text-brand-dark text-[11px] !py-1 hidden"><i class="fa-solid fa-sparkles"></i> ให้ AI ช่วยตีความ</button>
-        </div>
+        <label for="rm-smart" class="lbl !mb-0">พิมพ์หรือวางข้อความแจ้งเตือน *</label>
         <textarea id="rm-smart" rows="3" class="input min-h-24 text-sm leading-relaxed" placeholder="เช่น นัดอาบน้ำน้องหมา ทุกวันเสาร์ที่สามของเดือน แจ้งเตือนก่อนสามวัน"></textarea>
 
-        <div class="space-y-1">
+        <div class="space-y-1.5">
           <p class="text-[11px] text-slate-400">ตัวอย่างกดลองใช้ได้:</p>
           <div class="flex flex-wrap gap-1.5">
             ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-2.5 py-1 text-slate-600 transition">${esc(ex)}</button>`).join('')}
+          </div>
+          <p class="text-[11px] text-slate-400 pt-0.5">ตัวช่วยต่อท้ายแพตเทิร์น (0 โทเค็น):</p>
+          <div class="flex flex-wrap gap-1">
+            ${REMINDER_PATTERN_CHIPS.map(([lbl, token]) => `<button type="button" data-rm-token="${esc(token)}" class="text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-lav-soft px-2 py-0.5 text-slate-600 transition">${esc(lbl)}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -157,11 +168,6 @@ export function mountRemind(el) {
     </section>
   </div>`;
 
-  const syncAiBtn = () => {
-    const hasKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
-    $r('#rm-ai-btn')?.classList.toggle('hidden', !hasKey);
-  };
-  syncAiBtn();
 
   $r('#rm-smart').addEventListener('input', () => {
     manualOverrides = {};
@@ -174,6 +180,17 @@ export function mountRemind(el) {
       manualOverrides = {};
       updateSmartPreview();
       $r('#rm-smart').focus();
+      return;
+    }
+    const tokBtn = e.target.closest('[data-rm-token]');
+    if (tokBtn) {
+      const inp = $r('#rm-smart');
+      const token = tokBtn.dataset.rmToken || '';
+      const cur = inp.value.trim();
+      inp.value = cur ? `${cur} ${token}` : `รายการใหม่ ${token}`;
+      manualOverrides = {};
+      updateSmartPreview();
+      inp.focus();
     }
   });
   ['rm-ov-title', 'rm-ov-kind', 'rm-ov-remind', 'rm-ov-next', 'rm-ov-time', 'rm-ov-note'].forEach(id => {
@@ -187,7 +204,6 @@ export function mountRemind(el) {
     });
   });
 
-  $r('#rm-ai-btn').addEventListener('click', assistWithAI);
   $r('#rm-save').addEventListener('click', saveForm);
   $r('#rm-cancel').addEventListener('click', resetForm);
   $r('#rm-search').addEventListener('input', renderRemind);
@@ -266,54 +282,6 @@ function updateSmartPreview(reparse = true) {
     ${unlinkedWarn}`;
 }
 
-async function assistWithAI() {
-  const text = $r('#rm-smart').value.trim();
-  if (!text) return toast('พิมพ์ข้อความแจ้งเตือนก่อนค่ะ', 'err');
-  const btn = $r('#rm-ai-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังวิเคราะห์…';
-  try {
-    const existing = rawItems().filter(x => !editing || x.id !== editing.id);
-    const ai = await parseReminderWithAI(text, localDateStr(), existing.map(x => x.title));
-    const localBase = parseSmartReminder(text, existing, localDateStr());
-    const validKind = KINDS.some(([v]) => v === ai.kind) ? ai.kind : localBase.kind;
-    const ruleKind = ['once', 'interval', 'monthly', 'yearly', 'nth_weekday', 'last_weekday', 'same_as', 'weekly_except_linked'].includes(ai.ruleKind)
-      ? ai.ruleKind
-      : localBase.rule.kind;
-    const rule = {
-      kind: ruleKind,
-      ...(Number.isInteger(ai.weekday) && ai.weekday >= 0 && ai.weekday <= 6 && { weekday: ai.weekday }),
-      ...(Number.isInteger(ai.nth) && ai.nth >= 1 && ai.nth <= 5 && { nth: ai.nth }),
-      ...(ai.intervalDays > 0 && { intervalDays: Math.round(ai.intervalDays) }),
-      ...(ai.repeatMonths > 0 && { repeatMonths: Math.round(ai.repeatMonths) }),
-      ...(ai.linkedQuery && { linkedQuery: ai.linkedQuery }),
-      summary: localBase.rule?.summary && ruleKind === localBase.rule?.kind ? localBase.rule.summary : (ai.ruleKind === 'once' ? 'ครั้งเดียว' : ai.ruleKind)
-    };
-    const resolvedDate = resolveRuleNextDate(rule, existing, localDateStr(), true) || ai.nextDate || localBase.nextDate;
-    currentDraft = {
-      rawText: text,
-      title: ai.title || localBase.title,
-      kind: validKind,
-      nextDate: resolvedDate,
-      dueTime: ai.dueTime || localBase.dueTime || null,
-      remindDays: Number.isFinite(ai.remindDays) ? Math.round(ai.remindDays) : localBase.remindDays,
-      repeatMonths: ai.repeatMonths || localBase.repeatMonths || null,
-      intervalDays: ai.intervalDays || localBase.intervalDays || null,
-      rule,
-      note: ai.note || ''
-    };
-    manualOverrides = {};
-    updateSmartPreview(false);
-    toast('AI แปลงข้อความให้แล้ว ✓');
-  } catch (err) {
-    toast(explainGeminiError(err), 'err');
-  } finally {
-    if (btn.isConnected) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-sparkles"></i> ให้ AI ช่วยตีความ';
-    }
-  }
-}
 
 function resetForm() {
   editing = null;

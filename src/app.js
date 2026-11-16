@@ -78,7 +78,7 @@ window.addEventListener('vite:preloadError', event => {
   }
 });
 
-const TABS = ['home', 'food', 'workout', 'overview', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
+const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
 
 function renderSubnav(group, name) {
@@ -88,25 +88,6 @@ function renderSubnav(group, name) {
   if (tabs.length < 2) { nav.innerHTML = ''; return; }
   nav.innerHTML = `<div class="subnav-row">${tabs.map(t => { const x = SUBTABS[t]; return `<button data-sub="${t}" class="sub-chip ${x.cat} ${t === name ? 'is-active' : ''}" ${t === name ? 'aria-current="page"' : ''}><span>${x.emoji}</span>${x.label}</button>`; }).join('')}</div>`;
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
-}
-
-let dashboardFeature = null;
-let dashboardMountPromise = null;
-function ensureDashboardMounted() {
-  if (!dashboardMountPromise) {
-    dashboardMountPromise = import('./dashboard.js')
-      .then(module => {
-        dashboardFeature = module;
-        module.mountDashboard($('#tab-overview'));
-      })
-      .catch(error => {
-        dashboardMountPromise = null;
-        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
-        console.error('Could not load dashboard:', error);
-        toast('เปิดแดชบอร์ดไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
-      });
-  }
-  return dashboardMountPromise;
 }
 
 let reportFeature = null;
@@ -171,7 +152,6 @@ export function showTab(name, { preserveDate = false } = {}) {
   if (name === 'weekly') renderWeekly();
   if (name === 'expense') renderExpense();
   if (name === 'notifications') renderReminders();
-  if (name === 'overview') void ensureDashboardMounted().then(() => { if (!preserveDate) dashboardFeature?.resetDashboardToToday?.(); });
   if (name === 'report') void ensureReportMounted().then(() => { if (!preserveDate) reportFeature?.resetReportToToday?.(); });
   if (name === 'workout') void ensureWorkoutMounted().then(() => { if (!preserveDate) workoutFeature?.resetToToday?.(); });
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}

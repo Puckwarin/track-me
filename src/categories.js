@@ -17,13 +17,12 @@ export const catOf = tab => CATEGORIES.find(c => c.tab === tab);
 export const GROUPS = {
   home: ['home'],
   food: ['food'],
-  health: ['overview', 'weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
+  health: ['weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
   care: ['expense', 'care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
-  overview: { emoji: '📈', label: 'แดชบอร์ด', cat: 'cat-neutral' },
-  weekly: { emoji: '📊', label: 'สรุปสัปดาห์', cat: 'cat-neutral'},
+  weekly: { emoji: '📊', label: 'สรุปสัปดาห์', cat: 'cat-neutral' },
   workout: { emoji: '🏃‍♀️', label: 'ออกกำลังกาย', cat: 'cat-workout' },
   period: { emoji: '🌸', label: 'ประจำเดือน', cat: 'cat-period' },
   symptoms: { emoji: '🌿', label: 'อาการ & ผิว', cat: 'cat-symptoms' },
