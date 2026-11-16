@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v4.5.0
+# Project Setup — ตั้งค่า Track Me v4.6.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,17 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.list`
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
+
+---
+
+## อัปเดต v4.6.0 (Zepp CSV 3 รูปแบบ ไม่ใช้ AI)
+
+- **ไม่ต้องอัปเดต `firestore.rules` เพิ่มเติม**: ยังบันทึกลง `body_records` (`zepp_YYYY-MM-DD`, `source: 'zepp_csv'`) ด้วยฟิลด์เดิมทั้งหมด ค่าเสริม (HR, อัตราการหายใจ, งีบ, ระยะวิ่ง) เก็บสรุปในช่อง `note`
+- **วิธีใช้**: เมนู **ร่างกาย** → การ์ด **การนอน & ก้าวเดิน** → **นำเข้า Zepp CSV (3 รูปแบบ)** เลือกได้หลายไฟล์พร้อมกัน ระบบตรวจรูปแบบจากหัวตารางเอง, รวมข้อมูลวันเดียวกัน และเปิดหน้าตรวจยืนยันก่อนบันทึก ทั้งหมดประมวลผลในเบราว์เซอร์ ไม่เรียก AI และไม่ใช้ Token
+- **รูปแบบที่รองรับ**:
+  1. `date,time,stage,hr,respiratory_rate` — ข้อมูลรายนาทีระหว่างนอน: รวมนาทีหลับลึก/ตื้น/REM/ตื่น (รองรับ stage เป็นคำ เช่น `deep`, `light`, `rem`, `awake` หรือรหัส Zepp `5/4/8/7`), เวลาเข้านอน/ตื่น, HR เฉลี่ย/ต่ำสุด และอัตราการหายใจเฉลี่ย; แยกคืนเมื่อเว้นช่วงเกิน 3 ชั่วโมง และนับเป็นวันที่ตื่นนอน
+  2. `date,deepSleepTime,shallowSleepTime,wakeTime,start,stop,REMTime,naps` — สรุปการนอนรายวัน (นาที) พร้อมเวลาเข้านอน/ตื่นจาก `start`/`stop`, นาทีตื่นระหว่างคืน และการงีบ (`naps`)
+  3. `date,steps,distance,runDistance,calories` — ก้าวเดิน, ระยะทาง (แปลงเมตรเป็น กม.), ระยะวิ่ง และแคลอรี่
 
 ---
 
