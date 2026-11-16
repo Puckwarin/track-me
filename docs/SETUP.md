@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v4.4.0
+# Project Setup — ตั้งค่า Track Me v4.5.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,14 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.list`
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
+
+---
+
+## อัปเดต v4.5.0 (แดชบอร์ดภาพรวมรายเดือน)
+
+- **ไม่ต้องอัปเดต `firestore.rules` เพิ่มเติม**: แดชบอร์ดอ่านข้อมูลจาก `food_records`, `workout_records`, `body_records` และ `expense_records` ที่มีอยู่แล้ว ไม่ได้สร้าง collection ใหม่
+- **แท็บใหม่**: เปิดได้จากกลุ่มเมนู **สุขภาพ** → แท็บ **📈 แดชบอร์ด** (เป็นแท็บแรกของกลุ่ม) แสดงกราฟเปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายรายเดือนในหน้าเดียว
+- เลือกช่วงเวลา 3/6/12 เดือนได้ และกดรีเฟรชเพื่อโหลดข้อมูลใหม่
 
 ---
 
