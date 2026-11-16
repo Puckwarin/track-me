@@ -135,7 +135,7 @@ export function mountBody(el) {
   $('#b-save', root).addEventListener('click', save);
   $('#bz-save', root).addEventListener('click', saveSleepSteps);
   $('#bz-csv', root).addEventListener('change', handleCsvImport);
-  $('#bz-scan', root).addEventListener('change', handleScreenshotScan);
+  // $('#bz-scan', root).addEventListener('change', handleScreenshotScan);
 
   $('#b-chart-tabs', root).addEventListener('click', e => {
     const b = e.target.closest('[data-metric]');
