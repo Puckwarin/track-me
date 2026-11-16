@@ -3,7 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
-import { readZeppScreenshot, runImageBatch, formatImageProgress, explainGeminiError } from './nutrition.js';
+import { runImageBatch, formatImageProgress, explainGeminiError } from './nutrition.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
@@ -470,60 +470,60 @@ async function handleCsvImport(e) {
   }
 }
 
-async function handleScreenshotScan(e) {
-  const files = [...(e.target.files || [])];
-  e.target.value = '';
-  if (!files.length) return;
-  const statusEl = $('#bz-status', root);
-  if (statusEl) {
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = `กำลังอ่านภาพจาก Zepp (0/${files.length})…`;
-  }
-  try {
-    const { results, errors } = await runImageBatch(
-      files,
-      file => readZeppScreenshot(file),
-      prog => {
-        if (statusEl) statusEl.textContent = formatImageProgress('อ่านภาพจาก Zepp', prog);
-      }
-    );
-    if (statusEl) {
-      statusEl.textContent = errors.length
-        ? `อ่านสำเร็จ ${results.length}/${files.length} ภาพ · ไม่สำเร็จ ${errors.length} (${explainGeminiError(errors[0].error || errors[0])})`
-        : '';
-      if (!errors.length) statusEl.classList.add('hidden');
-    }
-    const today = localDateStr();
-    const valid = results
-      .map(res => {
-        const d = res?.result || res || {};
-        return {
-          date: isDateStr(d.date) ? d.date : today,
-          sleepHours: typeof d.sleepHours === 'number' ? round1(d.sleepHours) : null,
-          sleepMinutes: typeof d.sleepMinutes === 'number' ? Math.round(d.sleepMinutes) : null,
-          deepSleepMin: typeof d.deepSleepMin === 'number' ? Math.round(d.deepSleepMin) : null,
-          lightSleepMin: typeof d.lightSleepMin === 'number' ? Math.round(d.lightSleepMin) : null,
-          remSleepMin: typeof d.remSleepMin === 'number' ? Math.round(d.remSleepMin) : null,
-          bedTime: typeof d.bedTime === 'string' ? d.bedTime : null,
-          wakeTime: typeof d.wakeTime === 'string' ? d.wakeTime : null,
-          steps: typeof d.steps === 'number' ? Math.round(d.steps) : null,
-          distanceKm: typeof d.distanceKm === 'number' ? Math.round(d.distanceKm * 100) / 100 : null,
-          activeKcal: typeof d.activeKcal === 'number' ? Math.round(d.activeKcal) : null,
-          note: d.note || '',
-          source: 'zepp_ai'
-        };
-      })
-      .filter(x => x.sleepHours != null || x.sleepMinutes != null || x.steps != null);
+// async function handleScreenshotScan(e) {
+//   const files = [...(e.target.files || [])];
+//   e.target.value = '';
+//   if (!files.length) return;
+//   const statusEl = $('#bz-status', root);
+//   if (statusEl) {
+//     statusEl.classList.remove('hidden');
+//     statusEl.textContent = `กำลังอ่านภาพจาก Zepp (0/${files.length})…`;
+//   }
+//   try {
+//     const { results, errors } = await runImageBatch(
+//       files,
+//       file => readZeppScreenshot(file),
+//       prog => {
+//         if (statusEl) statusEl.textContent = formatImageProgress('อ่านภาพจาก Zepp', prog);
+//       }
+//     );
+//     if (statusEl) {
+//       statusEl.textContent = errors.length
+//         ? `อ่านสำเร็จ ${results.length}/${files.length} ภาพ · ไม่สำเร็จ ${errors.length} (${explainGeminiError(errors[0].error || errors[0])})`
+//         : '';
+//       if (!errors.length) statusEl.classList.add('hidden');
+//     }
+//     const today = localDateStr();
+//     const valid = results
+//       .map(res => {
+//         const d = res?.result || res || {};
+//         return {
+//           date: isDateStr(d.date) ? d.date : today,
+//           sleepHours: typeof d.sleepHours === 'number' ? round1(d.sleepHours) : null,
+//           sleepMinutes: typeof d.sleepMinutes === 'number' ? Math.round(d.sleepMinutes) : null,
+//           deepSleepMin: typeof d.deepSleepMin === 'number' ? Math.round(d.deepSleepMin) : null,
+//           lightSleepMin: typeof d.lightSleepMin === 'number' ? Math.round(d.lightSleepMin) : null,
+//           remSleepMin: typeof d.remSleepMin === 'number' ? Math.round(d.remSleepMin) : null,
+//           bedTime: typeof d.bedTime === 'string' ? d.bedTime : null,
+//           wakeTime: typeof d.wakeTime === 'string' ? d.wakeTime : null,
+//           steps: typeof d.steps === 'number' ? Math.round(d.steps) : null,
+//           distanceKm: typeof d.distanceKm === 'number' ? Math.round(d.distanceKm * 100) / 100 : null,
+//           activeKcal: typeof d.activeKcal === 'number' ? Math.round(d.activeKcal) : null,
+//           note: d.note || '',
+//           source: 'zepp_ai'
+//         };
+//       })
+//       .filter(x => x.sleepHours != null || x.sleepMinutes != null || x.steps != null);
 
-    if (!valid.length) {
-      return toast(errors[0] ? explainGeminiError(errors[0].error || errors[0]) : 'ไม่พบตัวเลขการนอนหรือก้าวเดินในภาพ', 'err');
-    }
-    openZeppImportPreviewModal(mergeZeppDayRecords([valid]), 'zepp_ai');
-  } catch (err) {
-    if (statusEl) statusEl.classList.add('hidden');
-    toast(explainGeminiError(err), 'err');
-  }
-}
+//     if (!valid.length) {
+//       return toast(errors[0] ? explainGeminiError(errors[0].error || errors[0]) : 'ไม่พบตัวเลขการนอนหรือก้าวเดินในภาพ', 'err');
+//     }
+//     openZeppImportPreviewModal(mergeZeppDayRecords([valid]), 'zepp_ai');
+//   } catch (err) {
+//     if (statusEl) statusEl.classList.add('hidden');
+//     toast(explainGeminiError(err), 'err');
+//   }
+// }
 
 function saveSleepSteps() {
   const date = $('#bz-date', root).value;
