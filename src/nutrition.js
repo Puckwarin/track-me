@@ -714,3 +714,16 @@ ${input}
     required: ['sections']
   }, { includeMeta: true, signal });
 }
+
+// ในไฟล์ src/nutrition.js
+export async function readZeppScreenshot(file) {
+  // โค้ดสำหรับการอ่านรูปภาพหน้าจอ Zepp (ผ่าน Gemini AI หรือตัวช่วยประมวลผลภาพ)
+  // ตัวอย่างโครงสร้างเบื้องต้น:
+  try {
+    // ... โค้ดจัดการรูปภาพ ...
+    return { steps: 0, sleepHours: 0 };
+  } catch (error) {
+    console.error('Failed to read Zepp screenshot:', error);
+    throw error;
+  }
+}
