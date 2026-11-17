@@ -83,7 +83,7 @@ export function mountLab(el) {
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="text-slate-500">ช่วงวันที่:</span>
         <input id="lb-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
-        <span class="text-slate-400">–</span>
+        <span class="text-slate-500">–</span>
         <input id="lb-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
         <button id="lb-clear" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
       </div>
@@ -174,7 +174,7 @@ async function onScanLabPhoto(e) {
     const defaultDate = detectedDate || ($('#lb-date', root).value || localDateStr());
     const labName = labNames.join(', ');
     const m = openModal(`
-      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
       <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3">โปรดเทียบตัวเลขและค่าอ้างอิงกับใบผลตรวจจริงก่อนกดบันทึก</p>
       ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 mb-3">
@@ -187,7 +187,7 @@ async function onScanLabPhoto(e) {
             <div class="flex items-center gap-2">
               <input type="checkbox" class="lbs-check" data-i="${i}" checked>
               <input class="input !py-1.5 text-sm font-semibold" data-f="name" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
-              ${files.length > 1 ? `<span class="text-[10px] text-slate-400 shrink-0">${esc(it.fileName)}</span>` : ''}
+              ${files.length > 1 ? `<span class="text-[10px] text-slate-500 shrink-0">${esc(it.fileName)}</span>` : ''}
             </div>
             <div class="grid grid-cols-4 gap-1.5 text-xs">
               <div><label class="lbl">ค่า</label><input type="number" step="any" class="input !py-1" data-f="value" value="${it.value ?? ''}"></div>
@@ -259,7 +259,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
   const defaultDate = $('#lb-date', root)?.value || localDateStr();
   const defaultNote = $('#lb-note', root)?.value?.trim() || '';
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-3">กรอกเฉพาะรายการที่มีผลตรวจ (รายการที่เว้นว่างจะไม่ถูกบันทึก) — ค่าอ้างอิงดึงจากใบล่าสุดหรือค่าทั่วไป</p>
     <div class="grid grid-cols-2 gap-2 mb-3">
       <div><label class="lbl">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
@@ -341,7 +341,7 @@ function openLabPasteModal() {
   ].join('\n');
 
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-xs text-slate-600 mb-2">วางผลแล็บ 1 บรรทัดต่อ 1 รายการ (รองรับ copy จาก Excel/Google Sheets, แยกด้วยวรรค/Tab/: และช่วงอ้างอิงท้ายบรรทัด)</p>
     <div class="flex items-center justify-between mb-1">
       <label class="lbl !mb-0">ข้อความผลแล็บ</label>
@@ -360,7 +360,7 @@ function openLabPasteModal() {
     const box = $('#lbp-preview', m.el);
     const btn = $('#lbp-next', m.el);
     if (!parsed.items.length && !parsed.errors.length) {
-      box.innerHTML = '<p class="text-slate-400 text-center py-2">วางข้อความด้านบนเพื่อดูตัวอย่าง</p>';
+      box.innerHTML = '<p class="text-slate-500 text-center py-2">วางข้อความด้านบนเพื่อดูตัวอย่าง</p>';
       btn.disabled = true;
       return;
     }
@@ -407,7 +407,7 @@ function spark(rows) {
   if (rows.length < 2) return '';
   const W = 120, H = 32, vs = rows.map(r => r.value), min = Math.min(...vs), max = Math.max(...vs), rng = max - min || 1;
   const pts = rows.map((r, i) => `${(i / (rows.length - 1) * (W - 6) + 3).toFixed(1)},${(H - 4 - (r.value - min) / rng * (H - 8)).toFixed(1)}`).join(' ');
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-28 h-8"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2"/></svg>`;
+  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-28 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2" stroke-linecap="round"/></svg>`;
 }
 
 export function render() {
@@ -440,6 +440,7 @@ export function render() {
     })
     .sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
 
+  const hasAny = (state.labs || []).length > 0;
   $('#lb-list', root).innerHTML = cards.length ? cards.map(rows => {
     const last = rows[rows.length - 1], f = labFlag(last), prev = rows[rows.length - 2];
     const arrow = prev ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : '';
@@ -447,8 +448,8 @@ export function render() {
       ? rows.slice().reverse().filter(r => { const rf = labFlag(r); return rf === 'low' || rf === 'high'; })
       : rows.slice().reverse();
     return `<details class="card !p-3" ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
-      <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
-      <div class="flex items-center gap-3">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-400">${arrow}</span></p>${f ? `<span class="chip !cursor-default ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
-      <div class="mt-3 divide-y divide-slate-100 text-sm">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-400">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="text-rose-400 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
-  }).join('') : `<p class="text-sm text-slate-400">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
+      <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500 tabular-nums">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
+      <div class="flex items-center gap-3 tabular-nums">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-500">${arrow}</span></p>${f ? `<span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
+      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
+  }).join('') : `<p class="text-sm text-slate-500 py-4 text-center">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : hasAny ? 'ไม่พบผลตรวจที่ตรงกับคำค้นหาหรือช่วงวันที่ที่เลือก' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย ใช้ชุดกรอกเร็ว หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
 }
