@@ -16,6 +16,13 @@ const PET_SYMPTOMS = [
 ];
 const PET_SX_LEVELS = ['ปกติ', 'เล็กน้อย', 'ปานกลาง', 'มาก'];
 const PET_SX_COLORS = ['bg-slate-100 text-slate-600', 'bg-amber-100 text-amber-800', 'bg-orange-100 text-orange-800', 'bg-rose-100 text-rose-700 font-semibold'];
+const DAILY_PET_CARE = [
+  { key: 'feeding', label: 'ให้อาหาร', icon: 'fa-bowl-food' },
+  { key: 'teeth', label: 'แปรงฟัน', icon: 'fa-tooth' },
+  { key: 'walk', label: 'พาเดินเล่น', icon: 'fa-person-walking' },
+  { key: 'groom', label: 'แปรงขน', icon: 'fa-brush' }
+];
+const pendingPetCare = new Set();
 
 let root, petFormDirty = false, editingSxId = null;
 let labFeature = null, labMountPromise = null;
@@ -35,6 +42,11 @@ export function mountCare(el) {
     <div class="grid sm:grid-cols-2 gap-3"><input id="pet-name" class="input" placeholder="ชื่อน้อง"><input id="pet-kind" class="input" placeholder="พันธุ์/ชนิด"><label class="text-sm">วันเกิด<input id="pet-birth" type="date" class="input"></label><input id="pet-weight" type="number" min="0.1" step="0.1" class="input" placeholder="น้ำหนัก (kg)"><select id="pet-life" class="input"><option value="neutered">โตเต็มวัย ทำหมัน</option><option value="intact">โตเต็มวัย ยังไม่ทำหมัน</option><option value="inactive">กิจกรรมน้อย/น้ำหนักขึ้นง่าย</option><option value="puppy-young">ลูกสุนัขอายุต่ำกว่า 4 เดือน</option><option value="puppy-old">ลูกสุนัข 4 เดือนขึ้นไป</option></select></div>
     <button id="pet-save" class="btn btn-primary">บันทึกข้อมูลน้อง/น้ำหนัก</button>
     <div id="pet-profile" class="rounded-xl bg-amber-50 p-3 text-sm"></div>
+    <section id="pet-daily-care" class="rounded-2xl border border-amber-200 bg-amber-50/50 p-3 space-y-3" aria-labelledby="pet-daily-care-title">
+      <div class="flex items-start justify-between gap-2"><div><h3 id="pet-daily-care-title" class="font-semibold text-sm text-slate-800">วันนี้ดูแลอะไรแล้วบ้าง</h3><p class="text-xs text-slate-500">แตะครั้งเดียวเพื่อบันทึกงานประจำวัน</p></div><span id="pet-care-done-count" class="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"></span></div>
+      <div id="pet-care-actions" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+      <div id="pet-care-timeline" class="space-y-2"></div>
+    </section>
     <div class="rounded-xl border border-slate-200 p-3"><h3 class="font-semibold">แนวโน้มน้ำหนัก</h3><p class="text-xs text-slate-500">บันทึกน้ำหนักได้วันละครั้ง กราฟจะเก็บประวัติไว้กับโปรไฟล์น้อง</p><div id="pet-weight-chart" class="mt-2 overflow-x-auto"></div></div>
 
     <div class="border-t pt-3 space-y-3">
@@ -112,6 +124,11 @@ export function mountCare(el) {
   ['#pet-name', '#pet-kind', '#pet-birth', '#pet-weight', '#pet-life'].forEach(sel => $r(sel).addEventListener('input', () => { petFormDirty = true; renderPetEstimate(); }));
   $r('#pet-food-kcal').addEventListener('input', renderPetEstimate);
   $r('#pet-sx-date').value = localDateStr();
+  $r('#pet-daily-care').addEventListener('click', event => {
+    const button = event.target.closest('[data-pet-care-action]');
+    const task = DAILY_PET_CARE.find(item => item.key === button?.dataset.petCareAction);
+    if (task) void savePetDailyCare(task);
+  });
   $r('#pet-sx-save').addEventListener('click', savePetSymptom);
   $r('#pet-sx-cancel').addEventListener('click', resetPetSymptomForm);
   $r('#pet-sx-grid').addEventListener('click', e => {
@@ -187,7 +204,7 @@ export function onLabsUpdated() {
 
 function renderAll() {
   if (!root?.isConnected) return;
-  renderPet(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList();
+  renderPet(); renderPetDailyCare(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList();
   onLabsUpdated();
 }
 
@@ -373,7 +390,74 @@ function renderPetFoodPresets() {
   `;
 }
 
-function renderPetFoods(){renderPetFoodPresets();const rows=(state.petFoods||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);$r('#pet-food-list').innerHTML=rows.map(x=>`<div class="rounded-lg bg-slate-50 p-2 flex justify-between items-start gap-2"><div>${esc(x.date)} · <b>${esc(x.name)}</b> ${esc(x.grams)} g${x.kcalPer100!=null?` · ${Math.round(x.kcalPer100*x.grams/100)} kcal`:''} · ${x.allergy==='yes'?'⚠️ สงสัยแพ้':x.allergy==='no'?'ไม่พบอาการแพ้':'ยังไม่ทราบ'}<small class="block text-slate-500">${esc(x.note||'')}</small></div><button data-del-pet-food="${esc(x.id)}" class="text-rose-400 text-xs p-1">ลบ</button></div>`).join('')||'<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาหาร</p>';$r('#pet-food-list').onclick=e=>{const b=e.target.closest('[data-del-pet-food]');if(b&&confirm('ลบบันทึกอาหารน้องนี้?'))deleteDoc(userDoc(state.uid,'pet_food_records',b.dataset.delPetFood)).catch(err=>toast(err.message,'err'));};}
+async function savePetDailyCare(task) {
+  const pet = (state.petProfiles || [])[0];
+  if (!pet) return toast('บันทึกโปรไฟล์น้องก่อนเริ่มบันทึกกิจวัตรค่ะ', 'err');
+  const today = localDateStr();
+  const pendingKey = `${pet.id}:${task.key}:${today}`;
+  if (pendingPetCare.has(pendingKey)) return;
+  const existing = (state.petCare || []).find(record => record.petId === pet.id && record.date === today && record.type === task.label && record.recordKind !== 'symptom');
+  if (existing?.done) return toast(`บันทึก${task.label}วันนี้แล้ว`);
+
+  pendingPetCare.add(pendingKey);
+  renderPetDailyCare();
+  try {
+    if (existing) {
+      await updateDoc(userDoc(state.uid, 'pet_care_records', existing.id), { done: true, dismissedFor: null, updatedAt: new Date() });
+      state.petCare = (state.petCare || []).map(record => record.id === existing.id ? { ...record, done: true, dismissedFor: null, updatedAt: new Date() } : record);
+    } else {
+      const record = { petId: pet.id, category: 'สัตว์เลี้ยง', type: task.label, date: today, nextDate: null, done: true, createdAt: new Date() };
+      const saved = await addDoc(userCol(state.uid, 'pet_care_records'), record);
+      state.petCare = [...(state.petCare || []), { ...record, id: saved.id }];
+    }
+    toast(`บันทึก${task.label}แล้ว`);
+  } catch (error) {
+    toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
+  } finally {
+    pendingPetCare.delete(pendingKey);
+    renderPetDailyCare();
+  }
+}
+
+function renderPetDailyCare() {
+  const actions = $r('#pet-care-actions');
+  if (!actions) return;
+  const pet = (state.petProfiles || [])[0];
+  const today = localDateStr();
+  const doneCount = DAILY_PET_CARE.filter(task => (state.petCare || []).some(record => record.petId === pet?.id && record.date === today && record.type === task.label && record.done)).length;
+  $r('#pet-care-done-count').textContent = `${doneCount}/${DAILY_PET_CARE.length} แล้ว`;
+  actions.innerHTML = DAILY_PET_CARE.map(task => {
+    const key = `${pet?.id || ''}:${task.key}:${today}`;
+    const done = (state.petCare || []).some(record => record.petId === pet?.id && record.date === today && record.type === task.label && record.done);
+    const pending = pendingPetCare.has(key);
+    return `<button type="button" data-pet-care-action="${task.key}" ${!pet || done || pending ? 'disabled' : ''} aria-label="${done ? `บันทึก${task.label}แล้ววันนี้` : `${task.label}วันนี้`}" class="min-h-16 rounded-xl border px-2 py-2 text-left transition ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300'} disabled:cursor-default">
+      <span class="flex items-center justify-between gap-1"><i class="fa-solid ${task.icon} text-brand"></i><span class="rounded-full px-2 py-0.5 text-[10px] font-semibold ${done ? 'bg-emerald-100 text-emerald-800' : pending ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">${done ? 'เสร็จแล้ว' : pending ? 'กำลังบันทึก' : 'ยังไม่ได้ทำ'}</span></span>
+      <span class="mt-1 block text-xs font-semibold">${task.label}</span>
+    </button>`;
+  }).join('');
+  const timeline = $r('#pet-care-timeline');
+  if (!timeline) return;
+  if (!pet) {
+    timeline.innerHTML = '<p class="text-xs text-slate-500">บันทึกโปรไฟล์น้องเพื่อเริ่มใช้ปุ่มดูแลประจำวัน</p>';
+    return;
+  }
+  const rows = (state.petCare || []).filter(record => record.petId === pet.id && record.recordKind !== 'symptom').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 4);
+  timeline.innerHTML = rows.length ? `<ol class="space-y-1.5" aria-label="กิจกรรมดูแลล่าสุด">${rows.map(record => `<li class="flex items-center gap-2 rounded-xl bg-white/80 px-2.5 py-2 text-xs"><span class="h-2 w-2 shrink-0 rounded-full ${record.done ? 'bg-emerald-500' : 'bg-amber-400'}"></span><span class="font-medium text-slate-700">${esc(record.type || 'ดูแลสัตว์เลี้ยง')}</span><span class="ml-auto whitespace-nowrap text-slate-500">${esc(fmtDate(record.date))}</span><span class="rounded-full px-2 py-0.5 ${record.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}">${record.done ? 'เสร็จแล้ว' : 'รอดำเนินการ'}</span></li>`).join('')}</ol>` : '<p class="text-xs text-slate-500">กิจกรรมที่บันทึกจะแสดงที่นี่</p>';
+}
+
+function renderPetFoods() {
+  renderPetFoodPresets();
+  const rows = (state.petFoods || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 10);
+  $r('#pet-food-list').innerHTML = rows.map(record => `<article class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+    <time datetime="${esc(record.date)}" class="flex w-12 shrink-0 flex-col items-center rounded-lg bg-white px-1 py-1.5 text-center"><span class="text-[10px] text-slate-500">เดือน ${esc(record.date.slice(5, 7))}</span><b class="text-sm text-slate-700">${esc(record.date.slice(8, 10))}</b></time>
+    <div class="min-w-0 flex-1 space-y-1"><div class="flex flex-wrap items-center gap-1.5"><b class="text-sm text-slate-800">${esc(record.name)}</b><span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">${esc(record.grams)} g</span>${record.kcalPer100 != null ? `<span class="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] text-orange-800">${Math.round(record.kcalPer100 * record.grams / 100)} kcal</span>` : ''}</div><span class="inline-flex rounded-full px-2 py-0.5 text-[10px] ${record.allergy === 'yes' ? 'bg-rose-100 text-rose-800' : record.allergy === 'no' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">${record.allergy === 'yes' ? 'สงสัยแพ้' : record.allergy === 'no' ? 'ไม่พบอาการแพ้' : 'ยังไม่ทราบการแพ้'}</span>${record.note ? `<p class="text-xs text-slate-500">${esc(record.note)}</p>` : ''}</div>
+    <button type="button" data-del-pet-food="${esc(record.id)}" class="min-h-11 min-w-11 rounded-lg text-rose-500 hover:bg-rose-50" aria-label="ลบบันทึกอาหาร ${esc(record.name)}"><i class="fa-solid fa-trash-can"></i></button>
+  </article>`).join('') || '<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาหาร</p>';
+  $r('#pet-food-list').onclick = event => {
+    const button = event.target.closest('[data-del-pet-food]');
+    if (button && confirm('ลบบันทึกอาหารน้องนี้?')) deleteDoc(userDoc(state.uid, 'pet_food_records', button.dataset.delPetFood)).catch(error => toast(error.message, 'err'));
+  };
+}
 
 function renderPetSymptomGrid() {
   const grid = $r('#pet-sx-grid');

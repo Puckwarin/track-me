@@ -59,6 +59,13 @@
         </div>
       </div>
     </header>
+    <nav id="desktop-nav" class="desktop-nav" aria-label="เมนูหลัก">
+      <button data-nav="home" class="desktop-nav-item"><i class="fa-solid fa-house"></i><span>หน้าหลัก</span></button>
+      <button data-nav="food" class="desktop-nav-item"><i class="fa-solid fa-bowl-food"></i><span>อาหาร / บันทึก</span></button>
+      <button data-nav="health" class="desktop-nav-item"><i class="fa-solid fa-chart-line"></i><span>สถิติ</span></button>
+      <button data-nav="care" class="desktop-nav-item"><i class="fa-solid fa-paw"></i><span>ดูแล</span></button>
+      <button data-nav="more" class="desktop-nav-item"><i class="fa-solid fa-ellipsis"></i><span>เพิ่มเติม</span></button>
+    </nav>
     <div id="reminder-banner" class="hidden bg-pink-soft text-pink-800"></div>
 
     <nav id="subnav" class="subnav hidden max-w-6xl mx-auto px-4" aria-label="หน้าย่อย"></nav>
@@ -91,15 +98,15 @@
     <main id="tab-notifications" class="hidden page max-w-6xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
     <main id="tab-settings" class="hidden page max-w-6xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
 
-    <!-- แถบเมนูด้านล่าง -->
+    <!-- แถบเมนูมือถือ; data-nav ใช้ binding กลุ่มเดิมใน app.js -->
     <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">
       <div class="bottom-nav-inner">
         <button data-nav="home" class="nav-item"><i class="fa-solid fa-house"></i><span>หน้าหลัก</span></button>
         <button data-nav="food" class="nav-item"><i class="fa-solid fa-bowl-food"></i><span>อาหาร</span></button>
-        <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog"><i class="fa-solid fa-plus"></i></button>
-        <button data-nav="health" class="nav-item"><i class="fa-solid fa-heart-pulse"></i><span>สุขภาพ</span></button>
-        <button data-nav="care" class="nav-item"><i class="fa-solid fa-paw"></i><span>ดูแล</span></button>
+        <button data-nav="health" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>สถิติ</span></button>
+        <button data-nav="more" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>เพิ่มเติม</span></button>
       </div>
+      <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"><i class="fa-solid fa-plus"></i></button>
     </nav>
 
     <!-- แผ่นเลือกหมวดเพื่อบันทึกด่วน -->
