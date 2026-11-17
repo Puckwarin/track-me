@@ -19,7 +19,7 @@ function choiceRow(label, id, options, icons = [], values = options.map((_, i) =
     <div class="flex-1 min-w-0">
       <select id="${id}" class="hidden" aria-hidden="true" tabindex="-1">${options.map((text, i) => `<option value="${values[i]}">${text}</option>`).join('')}</select>
       <div class="grid ${colsClass} gap-1.5" role="group" aria-label="${esc(label)}">
-        ${options.map((text, i) => `<button type="button" data-choice-for="${id}" data-value="${values[i]}" aria-pressed="${i === 0}" class="rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-600 text-center transition hover:bg-pink-50 aria-pressed:bg-pink-100 aria-pressed:border-pink-300 aria-pressed:text-rose-800">${icons[i] ? `<span class="mr-0.5">${icons[i]}</span>` : ''}${text || 'ไม่ระบุ'}</button>`).join('')}
+        ${options.map((text, i) => `<button type="button" data-choice-for="${id}" data-value="${values[i]}" aria-pressed="${i === 0}" class="rounded-xl border border-slate-200 bg-white px-2 py-2 min-h-[40px] text-xs font-medium text-slate-600 text-center transition hover:bg-pink-50 aria-pressed:bg-pink-100 aria-pressed:border-pink-300 aria-pressed:text-rose-800">${icons[i] ? `<span class="mr-0.5">${icons[i]}</span>` : ''}${text || 'ไม่ระบุ'}</button>`).join('')}
       </div>
     </div>
   </div>`;
@@ -51,7 +51,7 @@ export function mountSymptoms(el) {
         <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">วันที่</label>
         <div class="flex-1 min-w-0">
           <input type="date" id="s-date" class="input" min="${addDays(localDateStr(), -399)}" max="${localDateStr()}">
-          <p class="text-[11px] text-slate-400 mt-1">แตะวันที่ในปฏิทินหน้าประจำเดือนเพื่อเลือกก็ได้</p>
+          <p class="text-[11px] text-slate-500 mt-1">แตะวันที่ในปฏิทินหน้าประจำเดือนเพื่อเลือกก็ได้</p>
         </div>
       </div>
       <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
@@ -157,9 +157,9 @@ export function renderList() {
   const rows = state.symptoms.slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
   $('#s-list', root).innerHTML = rows.length ? rows.map(r => {
     const sx = SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-d="${esc(r.id)}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-pink-soft/50 border border-pink-soft">
+    return `<button data-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl hover:bg-pink-soft/50 border border-pink-soft tabular-nums">
       <b>${esc(fmtDate(r.id))}</b> <span class="text-slate-600">${esc(sx || 'ไม่มีอาการ')}</span>${r.mood ? ` · ${esc(MOODS[r.mood])}` : ''}</button>`;
-  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึกอาการ</p>';
+  }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกอาการ</p>';
   loadForm();
   renderSkinList();
 }
@@ -169,8 +169,8 @@ export function renderSkinList() {
   const rows = (state.skinRecords || []).slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
   $('#skin-list', root).innerHTML = rows.length ? rows.map(r => {
     const signs = SKIN_FIELDS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2 rounded-lg border border-rose-100 hover:bg-rose-50"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
-  }).join('') : '<p class="text-xs text-slate-400">ยังไม่มีบันทึกผิว</p>';
+    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl border border-rose-100 hover:bg-rose-50 tabular-nums"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
+  }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกผิว</p>';
   loadSkinForm();
 }
 
