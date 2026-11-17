@@ -111,13 +111,13 @@ export function mountRemind(el) {
         <textarea id="rm-smart" rows="3" class="input min-h-24 text-sm leading-relaxed" placeholder="เช่น นัดอาบน้ำน้องหมา ทุกวันเสาร์ที่สามของเดือน แจ้งเตือนก่อนสามวัน"></textarea>
 
         <div class="space-y-1.5">
-          <p class="text-[11px] text-slate-400">ตัวอย่างกดลองใช้ได้:</p>
+          <p class="text-[11px] text-slate-500">ตัวอย่างกดลองใช้ได้:</p>
           <div class="flex flex-wrap gap-1.5">
-            ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-2.5 py-1 text-slate-600 transition">${esc(ex)}</button>`).join('')}
+            ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="min-h-[36px] text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-2.5 py-1.5 text-slate-700 transition">${esc(ex)}</button>`).join('')}
           </div>
-          <p class="text-[11px] text-slate-400 pt-0.5">ตัวช่วยต่อท้ายแพตเทิร์น (0 โทเค็น):</p>
-          <div class="flex flex-wrap gap-1">
-            ${REMINDER_PATTERN_CHIPS.map(([lbl, token]) => `<button type="button" data-rm-token="${esc(token)}" class="text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-lav-soft px-2 py-0.5 text-slate-600 transition">${esc(lbl)}</button>`).join('')}
+          <p class="text-[11px] text-slate-500 pt-0.5">ตัวช่วยต่อท้ายแพตเทิร์น (0 โทเค็น):</p>
+          <div class="flex flex-wrap gap-1.5">
+            ${REMINDER_PATTERN_CHIPS.map(([lbl, token]) => `<button type="button" data-rm-token="${esc(token)}" class="min-h-[34px] text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-lav-soft px-2.5 py-1 text-slate-700 transition">${esc(lbl)}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -154,15 +154,15 @@ export function mountRemind(el) {
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="text-slate-500">ช่วงวันครบกำหนด:</span>
         <input id="rm-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
-        <span class="text-slate-400">–</span>
+        <span class="text-slate-500">–</span>
         <input id="rm-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
-        <button id="rm-clear-filter" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
+        <button id="rm-clear-filter" type="button" class="chip min-h-[34px] bg-slate-100 text-slate-700 hidden">ล้างตัวกรอง</button>
       </div>
-      <div id="rm-bulk" class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs">
-        <label class="flex items-center gap-1.5 cursor-pointer"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
+      <div id="rm-bulk" class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
+        <label class="flex items-center gap-1.5 cursor-pointer min-h-[36px]"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="rm-sel-count">0</b></span>
         <select id="rm-bulk-remind" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        <button id="rm-bulk-apply" type="button" class="chip bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
+        <button id="rm-bulk-apply" type="button" class="chip min-h-[36px] bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
       </div>
       <div id="rm-list" class="space-y-2.5"></div>
     </section>
@@ -270,10 +270,10 @@ function updateSmartPreview(reparse = true) {
   box.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-1">
       <span class="font-bold text-green-700"><i class="fa-solid fa-circle-check mr-1"></i>ระบบเข้าใจว่า:</span>
-      <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">${esc(effective.kind)}</span>
+      <span class="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">${esc(effective.kind)}</span>
     </div>
     <p class="text-sm font-bold text-slate-800">${esc(effective.title)}</p>
-    <div class="flex flex-wrap gap-1.5">
+    <div class="flex flex-wrap gap-1.5 tabular-nums">
       <span class="rounded-lg bg-white px-2 py-1 text-slate-700">📅 <b>${esc(fmtDate(effective.nextDate))}</b></span>
       ${effective.dueTime ? `<span class="rounded-lg bg-white px-2 py-1 text-blue-700">⏰ <b>${esc(effective.dueTime)} น.</b></span>` : ''}
       <span class="rounded-lg bg-white px-2 py-1 text-brand-dark">🔁 ${esc(ruleText)}</span>
@@ -487,7 +487,8 @@ function filteredItems() {
 export function renderRemind() {
   if (!root?.isConnected) return;
   const rows = filteredItems();
-  const existing = new Set(allItems().map(x => x.uidKey));
+  const allList = allItems();
+  const existing = new Set(allList.map(x => x.uidKey));
   selectedKeys.forEach(k => { if (!existing.has(k)) selectedKeys.delete(k); });
 
   $r('#rm-vis-count').textContent = rows.length;
@@ -498,26 +499,32 @@ export function renderRemind() {
 
   const today = localDateStr();
   const iconOf = kind => kind === 'สัตว์เลี้ยง' ? '🐾' : kind === 'เปลี่ยนของ' ? '🔄' : kind === 'เอกสาร/ประกัน/ภาษี' ? '📄' : '📌';
+  const showDone = Boolean($r('#rm-show-done')?.checked);
+  const emptyMsg = !allList.length
+    ? 'ยังไม่มีบันทึกแจ้งเตือน — พิมพ์รายการใหม่ทางด้านซ้ายได้เลย'
+    : (!showDone && allList.every(x => x.done))
+      ? 'ทุกรายการทำเสร็จแล้ว 🎉 (ติ๊ก “แสดงที่ทำเสร็จแล้ว” เพื่อดูย้อนหลัง)'
+      : 'ไม่พบบันทึกแจ้งเตือนที่ตรงกับเงื่อนไขการค้นหาหรือช่วงวันที่';
 
   $r('#rm-list').innerHTML = rows.length ? rows.map(x => {
     const due = x.nextDate;
     const diff = due ? daysBetween(today, due) : null;
     const statusBadge = x.done
-      ? '<span class="rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-[11px]">เสร็จแล้ว</span>'
+      ? '<span class="rounded-md bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px]">เสร็จแล้ว</span>'
       : diff === null ? ''
-      : diff < 0 ? `<span class="rounded-full bg-rose-100 text-rose-700 px-2 py-0.5 text-[11px] font-semibold">เลยกำหนด ${-diff} วัน</span>`
-      : diff === 0 ? '<span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[11px] font-semibold">ครบกำหนดวันนี้</span>'
-      : diff <= Math.max(0, x.remindDays) ? `<span class="rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 text-[11px]">อีก ${diff} วัน</span>`
-      : `<span class="rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px]">อีก ${diff} วัน</span>`;
+      : diff < 0 ? `<span class="rounded-md bg-rose-100 text-rose-700 px-2 py-0.5 text-[11px] font-semibold">เลยกำหนด ${-diff} วัน</span>`
+      : diff === 0 ? '<span class="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-[11px] font-semibold">ครบกำหนดวันนี้</span>'
+      : diff <= Math.max(0, x.remindDays) ? `<span class="rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-[11px] font-medium">อีก ${diff} วัน</span>`
+      : `<span class="text-[11px] text-slate-500">· อีก ${diff} วัน</span>`;
     const rep = repeatText(x);
-    return `<article class="rounded-2xl border ${!x.done && diff !== null && diff < 0 ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'} p-3 space-y-2">
+    return `<article class="rounded-2xl border ${!x.done && diff !== null && diff < 0 ? 'border-rose-200 bg-rose-50/40' : !x.done && diff === 0 ? 'border-amber-200 bg-amber-50/35' : 'border-slate-200 bg-slate-50/60'} p-3 space-y-2 tabular-nums">
       <div class="flex items-start justify-between gap-2">
-        <label class="flex items-start gap-2.5 min-w-0 cursor-pointer">
+        <label class="flex items-start gap-2.5 min-w-0 cursor-pointer flex-1">
           <input type="checkbox" class="mt-1 shrink-0" data-rm-sel="${esc(x.uidKey)}" ${selectedKeys.has(x.uidKey) ? 'checked' : ''}>
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="text-sm font-bold text-slate-800">${iconOf(x.kind)} ${esc(x.title)}</span>
-              <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">${esc(x.kind)}</span>
+              <span class="text-[11px] text-slate-500">· ${esc(x.kind)}</span>
               ${statusBadge}
             </div>
             <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · 🔁 ${esc(rep)}` : ''}</p>
@@ -525,17 +532,17 @@ export function renderRemind() {
           </div>
         </label>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
         <div class="flex items-center gap-1.5">
           <span class="text-[11px] text-slate-500">เตือน:</span>
           <select data-rm-remind="${esc(x.uidKey)}" class="input !w-auto !py-1 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
         </div>
         <div class="flex flex-wrap gap-1.5">
-          <button data-done="${esc(x.uidKey)}" class="chip bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
-          <button data-edit="${esc(x.uidKey)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button>
-          <button data-del="${esc(x.uidKey)}" class="chip bg-pink-soft text-rose-600">ลบ</button>
+          <button data-done="${esc(x.uidKey)}" class="chip min-h-[36px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
+          <button data-edit="${esc(x.uidKey)}" class="chip min-h-[36px] bg-sky-soft text-blue-700">แก้ไข</button>
+          <button data-del="${esc(x.uidKey)}" class="chip min-h-[36px] bg-pink-soft text-rose-600">ลบ</button>
         </div>
       </div>
     </article>`;
-  }).join('') : '<p class="text-sm text-slate-400 text-center py-6">ยังไม่มีบันทึกแจ้งเตือน — พิมพ์รายการใหม่ทางด้านซ้ายได้เลย</p>';
+  }).join('') : `<p class="text-sm text-slate-500 text-center py-6">${emptyMsg}</p>`;
 }
