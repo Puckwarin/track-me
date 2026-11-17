@@ -10,6 +10,7 @@ import { mountMigrate } from './migrate.js';
 import { checkReminder, REMIND_OPTIONS, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
 import { signOutUser, lockCurrentApp } from './auth.js';
 import { state } from './state.js';
+import { mountNavigationSettings } from './navigationSettings.js';
 import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
 import {
@@ -52,6 +53,15 @@ export function mountSettings(el) {
       <p class="text-xs text-slate-500">เลือก Cozy, Pastel หรือ Dark mode เก็บการตั้งค่าไว้ในอุปกรณ์นี้</p>
       <select id="st-theme" class="input">${Object.entries(THEMES).map(([value, name]) => `<option value="${value}">${name}</option>`).join('')}</select>
     </div>
+
+    <section class="card space-y-4 lg:col-span-2" id="st-nav-customize" aria-labelledby="st-nav-title">
+      <header><h3 id="st-nav-title" class="font-bold text-slate-800"><i class="fa-solid fa-compass text-brand"></i> เมนูและทางลัด</h3><p class="text-xs text-slate-500 mt-1">จัดทางลัดหน้าแรก ลำดับเมนูย่อย และหน้าที่เปิดเมื่อเริ่มใช้งาน การตั้งค่านี้เก็บในอุปกรณ์นี้</p></header>
+      <div><label class="lbl" for="st-nav-landing">หน้าเริ่มต้น</label><select id="st-nav-landing" class="input"></select></div>
+      <div><h4 class="text-sm font-semibold text-slate-700 mb-2">ทางลัดบนหน้าหลัก</h4><p class="text-xs text-slate-500 mb-2">เลือกได้สูงสุด 8 รายการ และใช้ปุ่มลูกศรจัดลำดับได้</p><div id="st-nav-favorites" class="nav-pref-list"></div></div>
+      <div><h4 class="text-sm font-semibold text-slate-700 mb-2">เมนูย่อย</h4><p class="text-xs text-slate-500 mb-2">จัดลำดับหรือซ่อนรายการเสริมได้ ตั้งค่าและแจ้งเตือนยังคงเข้าถึงได้เสมอ</p><div id="st-nav-submenus" class="space-y-4"></div></div>
+      <button type="button" id="st-nav-reset" class="btn btn-ghost text-sm">รีเซ็ตเมนูเป็นค่าเริ่มต้น</button>
+      <p class="text-xs text-slate-500" id="st-nav-storage-note">การปรับแต่งเมนูจะไม่เปลี่ยนข้อมูลสุขภาพหรือบัญชี</p>
+    </section>
 
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-lock text-brand"></i> ล็อกแอปด้วย PIN</h3>
@@ -184,6 +194,7 @@ export function mountSettings(el) {
   const savedTheme = localStorage.getItem('trackme-theme');
   theme.value = savedTheme === 'minimal' ? 'cozy' : (savedTheme && Object.hasOwn(THEMES, savedTheme) ? savedTheme : 'cozy');
   theme.addEventListener('change', () => applyTheme(theme.value));
+  mountNavigationSettings($('#st-nav-customize', el));
   const pinState = $('#st-pin-state', el), updatePinState = () => { const active = hasDevicePin(state.uid); pinState.textContent = active ? 'เปิดใช้ PIN บนอุปกรณ์นี้แล้ว' : 'ยังไม่ได้ตั้ง PIN'; $('#st-lock-now', el).disabled = !active; $('#st-pin-remove', el).disabled = !active; };
   $('#st-pin-save', el).addEventListener('click', async () => {
     const pin = $('#st-pin', el).value, confirmPin = $('#st-pin-confirm', el).value;

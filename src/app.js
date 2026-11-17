@@ -22,7 +22,8 @@ import { $, localDateStr, addDays, toast } from './util.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import './theme.js';
-import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
+import { CATEGORIES, GROUPS, groupOf } from './categories.js';
+import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
@@ -74,11 +75,29 @@ const lastSub = {};   // จำหน้าย่อยล่าสุดขอ�
 
 function renderSubnav(group, name) {
   const nav = $('#subnav');
-  const tabs = GROUPS[group] || [];
+  const preferences = readNavigationPreferences(state.uid);
+  const tabs = getSubnavTabs(group, preferences, name);
   nav.classList.toggle('hidden', tabs.length < 2);
   if (tabs.length < 2) { nav.innerHTML = ''; return; }
-  nav.innerHTML = `<div class="subnav-row">${tabs.map(t => { const x = SUBTABS[t]; return `<button data-sub="${t}" class="sub-chip ${x.cat} ${t === name ? 'is-active' : ''}" ${t === name ? 'aria-current="page"' : ''}><span>${x.emoji}</span>${x.label}</button>`; }).join('')}</div>`;
+  nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button data-sub="${item.tab}" class="sub-chip ${item.cat} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span>${item.emoji}</span>${item.label}</button>`).join('')}</div>`;
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function renderHomeShortcuts() {
+  const home = $('#tab-home');
+  if (!home) return;
+  let section = $('#home-shortcuts', home);
+  if (!section) {
+    section = document.createElement('section');
+    section.id = 'home-shortcuts';
+    section.className = 'nav-shortcuts';
+    const anchor = $('#home-head', home) || $('#home-today', home);
+    anchor?.insertAdjacentElement(anchor.id === 'home-head' ? 'afterend' : 'afterbegin', section);
+  }
+  const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
+  section.classList.toggle('hidden', shortcuts.length === 0);
+  section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
+  section.innerHTML = shortcuts.length ? `<h2 class="text-sm font-semibold text-slate-600">ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span aria-hidden="true">${item.emoji}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
 
 function makeLazyFeature(loader, onMount, errorLabel) {
@@ -181,7 +200,7 @@ export function showTab(name, { preserveDate = false } = {}) {
     if (name === 'body') resetBodyToToday();
   }
   let pending = Promise.resolve();
-  if (name === 'home') renderHome();
+  if (name === 'home') { renderHome(); renderHomeShortcuts(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
   if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderOverview?.());
   if (name === 'weekly') pending = weeklyLoader.ensure().then(m => { if (!preserveDate) m?.resetWeeklyToToday?.(); m?.renderWeekly?.(); });
@@ -247,6 +266,7 @@ function mountAll() {
   if (mounted) return;
   mounted = true;
   mountHome(goTo);
+  renderHomeShortcuts();
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
   mountBody($('#tab-body'));
@@ -418,6 +438,7 @@ function watchToday() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); renderSummary(); } });
 
 on('auth', user => {
+  window.dispatchEvent(new Event('trackme:auth-change'));
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
@@ -431,7 +452,8 @@ on('auth', user => {
     renderSummary();
     startData();
     let start = null; try { start = sessionStorage.getItem('active_tab'); } catch (e) {}
-    void showTab(start || 'home');
+    const navigationPreferences = readNavigationPreferences(state.uid);
+    void showTab(navigationPreferences.customized ? navigationPreferences.landingPage : (start || 'home'));
     if (new URLSearchParams(window.location.search).has('shared-slip')) {
       void expenseLoader.ensure().then(m => m?.handleSharedSlipLaunch?.(showTab));
     }
@@ -456,7 +478,11 @@ $('#quick-sheet').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
-window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderSummary(); });
+window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderHomeShortcuts(); renderSummary(); });
+window.addEventListener('trackme:navigation-change', () => {
+  renderHomeShortcuts();
+  renderSubnav(groupOf(document.documentElement.dataset.page || 'home'), document.documentElement.dataset.page || 'home');
+});
 window.addEventListener('trackme:reminders', updateBell);
 window.addEventListener('trackme:push-change', () => renderHome());
 navigator.serviceWorker?.addEventListener('message', e => {
