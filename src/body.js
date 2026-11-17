@@ -357,36 +357,41 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
     source: r.source || defaultSource
   }));
 
-  const box = openModal(`
-    <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-file-import text-indigo-500"></i> ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</h3>
-      <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
-    <div class="space-y-2 max-h-72 overflow-y-auto pr-0.5">
-      ${items.map((it, idx) => `
-        <label class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 text-xs cursor-pointer">
-          <input type="checkbox" data-zp-chk="${idx}" class="mt-0.5" checked>
-          <div class="flex-1 min-w-0 space-y-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <input type="date" data-zp-date="${idx}" value="${esc(it.date)}" class="input !py-1 !px-2 text-xs w-auto">
-              <span class="chip bg-white border border-slate-200 text-[10px] text-slate-500">${esc(sourceBadgeLabel(it.source))}</span>
+  const modalRes = openModal(`
+    <div id="zepp-preview-box">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-file-import text-indigo-500"></i> ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</h3>
+        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
+      <div class="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+        ${items.map((it, idx) => `
+          <label class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 text-xs cursor-pointer">
+            <input type="checkbox" data-zp-chk="${idx}" class="mt-0.5" checked>
+            <div class="flex-1 min-w-0 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <input type="date" data-zp-date="${idx}" value="${esc(it.date)}" class="input !py-1 !px-2 text-xs w-auto">
+                <span class="chip bg-white border border-slate-200 text-[10px] text-slate-500">${esc(sourceBadgeLabel(it.source))}</span>
+              </div>
+              <div class="flex flex-wrap gap-3 text-slate-700">
+                ${it.sleepHours != null ? `<span>😴 นอน <b>${it.sleepHours}</b> ชม.${it.bedTime || it.wakeTime ? ` (${esc(it.bedTime || '?')}–${esc(it.wakeTime || '?')})` : ''}</span>` : ''}
+                ${it.steps != null ? `<span>👣 <b>${it.steps.toLocaleString()}</b> ก้าว${it.distanceKm != null ? ` · ${it.distanceKm} กม.` : ''}</span>` : ''}
+                ${it.activeKcal != null ? `<span>🔥 ${it.activeKcal} kcal</span>` : ''}
+              </div>
+              ${it.note ? `<p class="text-[11px] text-slate-500">${esc(it.note)}</p>` : ''}
             </div>
-            <div class="flex flex-wrap gap-3 text-slate-700">
-              ${it.sleepHours != null ? `<span>😴 นอน <b>${it.sleepHours}</b> ชม.${it.bedTime || it.wakeTime ? ` (${esc(it.bedTime || '?')}–${esc(it.wakeTime || '?')})` : ''}</span>` : ''}
-              ${it.steps != null ? `<span>👣 <b>${it.steps.toLocaleString()}</b> ก้าว${it.distanceKm != null ? ` · ${it.distanceKm} กม.` : ''}</span>` : ''}
-              ${it.activeKcal != null ? `<span>🔥 ${it.activeKcal} kcal</span>` : ''}
-            </div>
-            ${it.note ? `<p class="text-[11px] text-slate-500">${esc(it.note)}</p>` : ''}
-          </div>
-        </label>
-      `).join('')}
-    </div>
-    <div class="flex justify-end gap-2 mt-4">
-      <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
-      <button type="button" id="zp-confirm" class="btn btn-primary text-xs">ยืนยันนำเข้า (${items.length})</button>
+          </label>
+        `).join('')}
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
+        <button type="button" id="zp-confirm" class="btn btn-primary text-xs">ยืนยันนำเข้า (${items.length})</button>
+      </div>
     </div>
   `);
+
+  // ดึงกล่อง HTML Element จริงๆ ออกมา (รองรับทั้งกรณี openModal คืนค่าเป็น Element, Object หรือ undefined)
+  const box = (modalRes instanceof HTMLElement ? modalRes : modalRes?.el) || document.getElementById('zepp-preview-box') || document;
 
   const updateCount = () => {
     const count = items.filter(x => x.checked).length;
@@ -409,7 +414,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
     });
   });
 
-  $('#zp-confirm', box).addEventListener('click', async () => {
+  $('#zp-confirm', box)?.addEventListener('click', async () => {
     const picked = items.filter(x => x.checked && isDateStr(x.date));
     if (!picked.length || !state.uid) return;
     const confirmBtn = $('#zp-confirm', box);
