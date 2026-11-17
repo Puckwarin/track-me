@@ -97,7 +97,7 @@ function renderHomeShortcuts() {
   const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
   section.classList.toggle('hidden', shortcuts.length === 0);
   section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
-  section.innerHTML = shortcuts.length ? `<h2 class="text-sm font-semibold text-slate-600">ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span aria-hidden="true">${item.emoji}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
+  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span aria-hidden="true">${item.emoji}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
 
 function makeLazyFeature(loader, onMount, errorLabel) {
