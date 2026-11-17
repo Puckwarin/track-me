@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v4.6.0
+# Project Setup — ตั้งค่า Track Me v4.7.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,18 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.list`
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
+
+---
+
+## อัปเดต v4.7.0 (ลดการเรียก AI และเพิ่มระบบแคชในเครื่อง 5 จุด)
+
+- **ไม่ต้องอัปเดต `firestore.rules` เพิ่มเติม**: การแคชทั้งหมดเก็บไว้ฝั่งเบราว์เซอร์ใน `localStorage` ของอุปกรณ์นั้นเท่านั้น (ไม่ซิงค์ลง Firestore)
+- **รายการแคชและการลดโทเค็น**:
+  1. แคชผลค้นหาโภชนาการต่อ 100 กรัมจาก AI ใน `trackme_nutrition_v1` (TTL 30 วัน, จำกัด 300 รายการ) พร้อมแสดงป้าย `แคช AI ในเครื่อง`
+  2. ผ่อนเกณฑ์ OCR ฉลากในเครื่อง (`tesseract.js`) เป็นอ่านค่าหลักครบอย่างน้อย 3 จาก 4 ค่า (`calories`, `protein`, `carbs`, `fat`) และคง warm worker ไว้ 60 วินาที
+  3. จับคู่อาหารกับคลังในเครื่องแบบ fuzzy ด้วย `normalizeFoodName()` ตัดหน่วยน้ำหนัก/ปริมาตรท้ายชื่อ (`150g`, `120 กรัม`, `250 มล.`) ก่อนเรียก AI
+  4. แคชรูปท่าออกกำลังกายใน `trackme_eximg_v1` (จำกัด 300 รายการ)
+  5. แคชผลค้นหา USDA (คีย์ภาษาอังกฤษที่แปลแล้ว) และ Open Food Facts ใน `trackme_foodsearch_v1` (TTL 7 วัน, จำกัด 60 รายการ)
 
 ---
 

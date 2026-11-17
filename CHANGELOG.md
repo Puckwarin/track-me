@@ -3,6 +3,47 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v4.7.0] - 2026-11-17
+
+### ลดการเรียก AI & เพิ่มระบบแคชในเครื่อง (5 กลุ่ม)
+- **แคชโภชนาการต่อ 100 กรัม (`src/nutrition.js`, `src/foodsearch.js`)**:
+  - บันทึกผล `lookupPer100g` / `lookupPer100gWithProvider` ลง `localStorage` (`trackme_nutrition_v1`, TTL 30 วัน, สูงสุด 300 รายการแบบตัดรายการเก่าสุดอัตโนมัติ) พร้อมคืน `provider: 'cache'` และแสดงป้าย `แคช AI ในเครื่อง` เมื่อค้นหาอาหารเดิมซ้ำ
+- **OCR ฉลากในเครื่องก่อน AI + Warm Worker (`src/nutrition.js`, `src/food.js`)**:
+  - เพิ่ม `isLocalNutritionSufficient()` ยอมรับผล OCR จาก `tesseract.js` เมื่ออ่านค่าหลัก (`calories`, `protein`, `carbs`, `fat`) ได้อย่างน้อย 3 จาก 4 ค่าโดยไม่ต้องส่งต่อไปยัง AI และคง warm OCR worker ไว้ 60 วินาทีเพื่อลดเวลาโหลดซ้ำ
+- **จับคู่ชื่ออาหารแบบ Fuzzy กับคลังในเครื่อง (`src/services/aiAssistant.js`, `src/services/localAssistant.js`)**:
+  - เพิ่ม `normalizeFoodName()` ตัดหน่วยน้ำหนัก/ปริมาตรท้ายชื่อ (`150g`, `120 กรัม`, `250 มล.`, `100 ก.`) ก่อนจับคู่กับคลังอาหารของฉันทั้งในโหมดแพตเทิร์น 0 โทเค็น และ `addFoodLog`
+- **แคชรูปท่าออกกำลังกาย & ผลค้นหาอาหาร (`src/exerciseMedia.js`, `src/foodsearch.js`)**:
+  - แคชผลจับคู่รูปท่าออกกำลังกายใน `trackme_eximg_v1` (สูงสุด 300 รายการ) และแคชผลค้นหา `searchUsda`, `searchOff`, `barcodeOff` ใน `trackme_foodsearch_v1` (TTL 7 วัน, สูงสุด 60 รายการ โดย `searchUsda` ใช้คีย์ภาษาอังกฤษที่แปลแล้วผ่าน `usdaCacheKey`)
+- **กู้คืนแดชบอร์ดภาพรวมรายเดือน (`src/overview.js`, `src/overviewLogic.js`, `src/categories.js`, `src/app.js`, `index.html`)**:
+  - เพิ่มแท็บ **📈 แดชบอร์ด (`overview`)** กลับมาเป็นแท็บแรกของกลุ่ม **สุขภาพ** แสดง KPI และกราฟเปรียบเทียบ **น้ำหนักเฉลี่ย, แคลอรี่เฉลี่ย/วันที่บันทึก, การออกกำลังกาย และค่าใช้จ่ายรายเดือน** ย้อนหลัง **3 / 6 / 12 เดือน** พร้อมตารางสรุปและปุ่มรีเฟรช
+- **ความเรียบร้อยของโค้ด, เอกสาร & Tests**:
+  - เก็บกวาดปุ่ม/โค้ดสแกนภาพ Zepp ที่ตัดออกแล้วใน `src/body.js`, อัปเดต `package-lock.json` และเอกสาร (`README.md`, `CHANGELOG.md`, `docs/*`) ให้ตรงกับเวอร์ชันปัจจุบัน พร้อมเพิ่ม Unit Tests (`src/nutrition.test.js`, `src/foodsearch.test.js`, `src/exerciseMedia.test.js`, `src/overviewLogic.test.js`, `src/services/localAssistant.test.js`)
+
+---
+## [v4.6.0] - 2026-11-16
+
+### ลดการใช้โทเค็น AI (0-Token Patterns, Templates & Zepp CSV 3 รูปแบบ)
+- **ผู้ช่วยแพตเทิร์น 0 โทเค็น & ลด Context (`src/services/localAssistant.js`, `src/services/chatRoles.js`, `src/services/aiAssistant.js`, `src/chatWidget.js`)**:
+  - เพิ่มโหมด **⚡ แพตเทิร์น (0 โทเค็น)** และตัวเลือกใช้แพตเทิร์นในเครื่องก่อนเรียก AI สำหรับจดรายรับ-รายจ่าย ปรับสต๊อก บันทึกอาหารจากคลัง ตั้งเตือน จดโน้ต ส่ง Feedback และเช็กสรุปข้อมูลโดยไม่เรียก AI
+  - ปรับ `HISTORY_LIMIT = 12`, ทำ prompt ให้กระชับ, และเพิ่ม `shouldAttachToolsForTurn()` เพื่อแนบ Tool declarations เฉพาะบทบาทโค้ช/วางแผน หรือข้อความที่เกี่ยวกับข้อมูล Track Me เท่านั้น
+- **นำเข้า Zepp CSV 3 รูปแบบไม่ใช้ AI (`src/zeppParser.js`, `src/body.js`, `src/zeppParser.test.js`)**:
+  - รองรับไฟล์ Sleep Stage รายนาที (`date,time,stage,hr,respiratory_rate`), สรุปการนอนรายวัน (`date,deepSleepTime,...`), และกิจกรรม/ก้าวเดิน (`date,steps,distance,runDistance,calories`) พร้อมรวมข้อมูลวันเดียวกันในเบราว์เซอร์ และตัดปุ่มสแกนภาพหน้าจอ Zepp ด้วย AI ออก (คงป้ายแสดงผลข้อมูลเดิม `zepp_ai`)
+- **เทมเพลต 0 โทเค็นในฟีเจอร์หลัก (`src/workoutPresets.js`, `src/labTemplates.js`, `src/reminders.js`, `src/food.js`)**:
+  - เพิ่มเทมเพลตออกกำลังกายสำเร็จรูป 5 ชุด (`workoutPresets.js`), ชุดเทมเพลตผลตรวจสุขภาพ & วางหลายบรรทัด (`labTemplates.js`), การตั้งเตือนแบบพิมพ์เองด้วยแพตเทิร์น 0 โทเค็น (`reminders.js`), และให้ปุ่มสแกนอาหารลองอ่านบาร์โค้ด/OCR ฉลากในเครื่องก่อนเรียก AI
+
+---
+## [v4.5.0] - 2026-11-16
+
+### แดชบอร์ดภาพรวมรายเดือน (Dashboard Overview)
+- **หน้าแดชบอร์ดใหม่ (`src/dashboard.js`, `src/categories.js`, `src/app.js`, `index.html`)**:
+  - เพิ่มแท็บ **📈 แดชบอร์ด** เป็นเมนูแรกของกลุ่มสุขภาพ แสดงเปรียบเทียบ 4 มิติพร้อมกันในหน้าเดียว: **น้ำหนัก**, **แคลอรี่เฉลี่ย/วัน**, **จำนวนครั้งออกกำลังกาย**, และ **ค่าใช้จ่ายรายเดือน**
+  - การ์ดสรุปด้านบน 4 ใบ: น้ำหนักล่าสุด (พร้อมเปลี่ยนแปลงจากเดือนแรก), แคลอรี่เฉลี่ย/วัน, จำนวนครั้งออกกำลังกายรวม, และค่าใช้จ่ายสุทธิ (รายรับลบรายจ่าย)
+  - 4 กราฟ SVG (2 เส้น + 2 แท่ง) ในตาราง 2×2 พร้อมตารางเปรียบเทียบตัวเลขรายเดือน
+  - ปุ่มเลือกช่วงเวลา 3/6/12 เดือน และปุ่มรีเฟรชข้อมูล
+  - โมดูลโหลดแบบ lazy-load เมื่อกดเข้าแท็บเท่านั้น (chunk แยก ~11 KB)
+  - ดึงข้อมูลจาก Firestore (อาหาร/ออกกำลังกาย) และหน่วยความจำ (น้ำหนัก/ค่าใช้จ่าย) ที่มีอยู่แล้ว ไม่ต้องเปลี่ยน Firestore Rules
+
+---
 ## [v4.4.0] - 2026-11-16
 
 ### ความน่าเชื่อถือของข้อมูล & วันที่ตามเวลาท้องถิ่น (Reliability & Timezone Fixes)

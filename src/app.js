@@ -78,7 +78,7 @@ window.addEventListener('vite:preloadError', event => {
   }
 });
 
-const TABS = ['home', 'food', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
+const TABS = ['home', 'food', 'overview', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
 
 function renderSubnav(group, name) {
@@ -128,6 +128,25 @@ function ensureWorkoutMounted() {
   return workoutMountPromise;
 }
 
+let overviewFeature = null;
+let overviewMountPromise = null;
+function ensureOverviewMounted() {
+  if (!overviewMountPromise) {
+    overviewMountPromise = import('./overview.js')
+      .then(module => {
+        overviewFeature = module;
+        module.mountOverview($('#tab-overview'));
+      })
+      .catch(error => {
+        overviewMountPromise = null;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+        console.error('Could not load overview dashboard:', error);
+        toast('เปิดแดชบอร์ดภาพรวมไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+      });
+  }
+  return overviewMountPromise;
+}
+
 export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
   TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== name); });
@@ -149,6 +168,7 @@ export function showTab(name, { preserveDate = false } = {}) {
     if (name === 'expense') resetExpenseToToday();
   }
   if (name === 'home') renderHome();
+  if (name === 'overview') void ensureOverviewMounted().then(() => overviewFeature?.renderOverview?.());
   if (name === 'weekly') renderWeekly();
   if (name === 'expense') renderExpense();
   if (name === 'notifications') renderReminders();
@@ -307,13 +327,13 @@ function startData() {
   legacyMigrationBlocked = false;
   state.loaded = { period: false, body: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); renderHome(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewFeature?.renderOverview?.(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   watchCare(uid);
   watchInventory(uid);
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutFeature?.render(); renderWeekly(); renderHome(); renderSummary(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutFeature?.render(); renderWeekly(); renderHome(); renderSummary(); overviewFeature?.renderOverview?.(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutFeature?.render(); });
   watch('expense_records', userCol(uid, 'expense_records'), list => {
@@ -324,6 +344,7 @@ function startData() {
     renderHome();
     renderWeekly();
     renderSummary();
+    overviewFeature?.renderOverview?.();
     migrateLegacyExpensesIfNeeded(uid);
   });
   watch('settings', userCol(uid, 'settings'), list => {
@@ -350,6 +371,7 @@ function startData() {
     renderHome();
     renderWeekly();
     renderSummary();
+    overviewFeature?.renderOverview?.();
     window.dispatchEvent(new Event('trackme:push-change'));
     window.dispatchEvent(new Event('trackme:notes-change'));
     migrateLegacyExpensesIfNeeded(uid);
@@ -371,6 +393,7 @@ on('auth', user => {
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
+  overviewFeature?.resetOverviewState?.();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   if (user) {
