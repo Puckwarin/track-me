@@ -2,7 +2,7 @@ import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'fireb
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { $, $$, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
-import { analyzeFoodImage, readNutritionLabelLocally, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
+import { analyzeFoodImage, isLocalNutritionSufficient, readNutritionLabelLocally, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
@@ -771,10 +771,7 @@ async function scanSingleFoodFile(file, { signal } = {}) {
   }
 
   const localLabel = await readNutritionLabelLocally(file);
-  const localMacroCount = localLabel
-    ? [localLabel.protein, localLabel.carbs, localLabel.fat].filter(v => v !== null).length
-    : 0;
-  if (localLabel && localLabel.calories !== null && localMacroCount >= 1) {
+  if (isLocalNutritionSufficient(localLabel)) {
     const per100 = localLabel.basis === 'per_100g';
     return {
       sourceType: 'label',
@@ -782,13 +779,13 @@ async function scanSingleFoodFile(file, { signal } = {}) {
       name: 'สินค้าจากฉลาก',
       unit: per100 ? '100 กรัม' : 'หน่วย',
       gramsPerUnit: per100 ? 100 : null,
-      calories: Math.round(localLabel.calories),
+      calories: localLabel.calories != null ? Math.round(localLabel.calories) : '',
       protein: localLabel.protein != null ? round1(localLabel.protein) : '',
       carbs: localLabel.carbs != null ? round1(localLabel.carbs) : '',
       fat: localLabel.fat != null ? round1(localLabel.fat) : '',
       sugar: localLabel.sugar != null ? round1(localLabel.sugar) : '',
       sodium: localLabel.sodium != null ? Math.round(localLabel.sodium) : '',
-      notes: localLabel.notes || 'อ่านด้วย OCR ในเครื่อง (0 โทเค็น)'
+      notes: 'อ่านด้วย OCR ในเครื่อง (0 โทเค็น)'
     };
   }
 

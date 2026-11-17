@@ -53,7 +53,7 @@ vi.mock('firebase/firestore', async () => {
 
 import { state } from '../state.js';
 import { getAnyChatRole } from './chatRoles.js';
-import { shouldAttachToolsForTurn } from './aiAssistant.js';
+import { normalizeFoodName, prepareWriteAction, shouldAttachToolsForTurn } from './aiAssistant.js';
 import { parseLocalAssistantIntent, runLocalAssistantCommand } from './localAssistant.js';
 
 describe('0-token Local Pattern Assistant & AI tool-gating', () => {
@@ -221,5 +221,30 @@ describe('0-token Local Pattern Assistant & AI tool-gating', () => {
     expect(shouldAttachToolsForTurn([], 'สวัสดี', 'coach')).toBe(true);
     expect(shouldAttachToolsForTurn([], 'สวัสดี', 'planner')).toBe(true);
     expect(shouldAttachToolsForTurn([{ role: 'user', text: 'เช็กสต๊อก' }], 'เหลืออันไหนอีกไหม', 'general')).toBe(true);
+  });
+
+  it('normalizes trailing food weights/units and matches local presets with 0 AI calls', async () => {
+    expect(normalizeFoodName('ข้าวสวย 150g')).toBe('ข้าวสวย');
+    expect(normalizeFoodName('อกไก่ต้ม 120 กรัม')).toBe('อกไก่ต้ม');
+    expect(normalizeFoodName('นมถั่วเหลือง 250 มล.')).toBe('นมถั่วเหลือง');
+
+    const localMatch = parseLocalAssistantIntent('จดมื้อกลางวัน ข้าวสวย 150g', {
+      today,
+      presets: [{ name: 'ข้าวสวย', defaultQuantity: 1, calories: 130, protein: 2.7, carbs: 28, fat: 0.3 }]
+    });
+    expect(localMatch).toMatchObject({
+      matched: true,
+      kind: 'write',
+      toolName: 'addFoodLog',
+      args: { mealType: 'กลางวัน', foodName: 'ข้าวสวย 150g', calories: 130 }
+    });
+
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+    state.customFoods = [{ name: 'ข้าวสวย', defaultQuantity: 1, calories: 130, protein: 2.7, carbs: 28, fat: 0.3 }];
+    const prep = await prepareWriteAction('addFoodLog', { foodName: 'ข้าวสวย 150g', mealType: 'กลางวัน' });
+    expect(prep.prepared.writePlan.nutritionSource).toBe('local_library');
+    expect(prep.prepared.writePlan.rec.calories).toBe(130);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

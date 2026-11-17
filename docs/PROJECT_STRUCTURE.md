@@ -27,16 +27,16 @@
 | `state.js`, `sync.js` | in-memory app state, event bus, Firestore listeners และสถานะ offline/sync |
 | `schema.js` | sanitizers, collection labels และ document ID สำหรับ backup/restore |
 | `util.js`, `style.css`, `theme.js` | utilities, local calendar date helpers (`localDateStr`, `localMonthStr`, `addDays`), shared styles และ theme |
-| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, โภชนาการ, AI consumers (รวม `readZeppScreenshot`) และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
-| `period.js`, `body.js`, `zeppParser.js`, `symptoms.js`, `profile.js`, `lab.js` | สุขภาพ, สัดส่วนร่างกาย + การนอน/ก้าวเดิน (กรอกเอง / Zepp CSV / สแกนภาพ), เป้าหมายและผลตรวจ (รองรับสแกนหลายภาพ) |
+| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, สแกนปุ่มเดียว (บาร์โค้ด → OCR ฉลากในเครื่อง → AI), โภชนาการ, AI consumers และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
+| `period.js`, `body.js`, `zeppParser.js`, `symptoms.js`, `profile.js`, `lab.js`, `labTemplates.js` | สุขภาพ, สัดส่วนร่างกาย + การนอน/ก้าวเดิน (กรอกเอง / นำเข้า Zepp CSV ฟรี), เป้าหมายและผลตรวจ (ชุดเทมเพลตแล็บ & วางหลายบรรทัดในเครื่อง + สแกนหลายภาพ) |
 | `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, วิเคราะห์จ่ายซ้ำรายเดือน, กฎหมวดหมู่, Statement และ OCR สลิป |
-| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง (อาการน้องหมา & สแกนซองหลายภาพ), สต๊อก, Planner (รวมกิจวัตรวันเดียว `once`) และการเตือน |
-| `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutConstants.js` | แผน/บันทึก workout, ตัวแปลงข้อความและตาราง, กรอบภาพ และโหมดจับเวลาพัก |
+| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง (อาการน้องหมา, เทมเพลตอาหารเดิม & สแกนซองหลายภาพ), สต๊อก, Planner (รวมกิจวัตรวันเดียว `once`) และการเตือนแบบพิมพ์เองพร้อมตัวช่วยแพตเทิร์น (0 โทเค็น) |
+| `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutPresets.js`, `workoutConstants.js` | แผน/บันทึก workout, เทมเพลตสำเร็จรูป 5 ชุด (0 โทเค็น), ตัวแปลงข้อความและตาราง, กรอบภาพ และโหมดจับเวลาพัก |
 | `reports.js`, `weekly.js`, `summary.js`, `home.js` | หน้าสรุปและรายงาน (รวมสรุปการนอนและก้าวเดิน) |
 | `settings.js`, `backup.js`, `migrate.js`, `onboarding.js` | ตั้งค่า, คีย์ AI, ทางลัดโน้ต/Feedback, backup/restore, migration และ first-run UX |
 | `services/aiService.js` | AI provider transport/model selection/retry/cooldown (แยกตามรายโมเดลและ provider)/fallback |
-| `services/chatRoles.js` | นิยาม 5 บทบาทแชทและการจับคู่ model preset แบบ lightweight สำหรับ UI |
-| `services/aiAssistant.js`, `chatWidget.js` | AI Read/Write tools (รวม `getNotes`, `saveNote`, `submitFeedback`), system prompt, Markdown renderer, หน้าต่างแชทและหน้าต่างโน้ต/Feedback |
+| `services/chatRoles.js` | นิยามโหมดแพตเทิร์น (`LOCAL_ROLE`) + 5 บทบาท AI และการจับคู่ model preset แบบ lightweight สำหรับ UI |
+| `services/localAssistant.js`, `services/aiAssistant.js`, `chatWidget.js` | ตัวประมวลผลคำสั่งแพตเทิร์น 0 โทเค็นในเครื่อง, AI Read/Write tools (พร้อม `shouldAttachToolsForTurn`), system prompt, Markdown renderer, หน้าต่างแชทและหน้าต่างโน้ต/Feedback |
 | `runtimeErrorMonitor.js` | error report ที่จำกัด metadata และปริมาณ |
 | `*.test.js` | Vitest tests วางข้างโมดูลที่ทดสอบ |
 

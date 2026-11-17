@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyzeFoodImage, formatImageProgress, runImageBatch } from './nutrition.js';
+import {
+  analyzeFoodImage,
+  formatImageProgress,
+  isLocalNutritionSufficient,
+  lookupPer100g,
+  lookupPer100gWithProvider,
+  runImageBatch
+} from './nutrition.js';
 
 describe('image batch progress helpers', () => {
   beforeEach(() => {
@@ -61,5 +68,60 @@ describe('image batch progress helpers', () => {
     await expect(analyzeFoodImage(file, { precheckedLocalLabel: null })).rejects.toThrow('NO_KEY');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('evaluates local OCR sufficiency with >= 3 of 4 main nutrition fields', () => {
+    expect(isLocalNutritionSufficient(null)).toBe(false);
+    expect(isLocalNutritionSufficient({ calories: 120, protein: 5, carbs: null, fat: null })).toBe(false);
+    expect(isLocalNutritionSufficient({ calories: 120, protein: 5, carbs: 20, fat: null, sugar: null, sodium: null })).toBe(true);
+    expect(isLocalNutritionSufficient({ calories: 0, protein: 0, carbs: 10, fat: 0 })).toBe(true);
+  });
+
+  it('caches lookupPer100g persistently in localStorage with 30-day TTL and 300-item eviction', async () => {
+    localStorage.setItem('gemini_key', 'test-gemini-key');
+    const fetchSpy = vi.fn(async url => {
+      if (String(url).endsWith('/models')) {
+        return new Response(JSON.stringify({
+          models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }]
+        }));
+      }
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{ text: JSON.stringify({ name: 'กล้วยหอม', calories: 89, protein: 1.1, carbs: 22.8, fat: 0.3 }) }]
+          }
+        }]
+      }));
+    });
+    globalThis.fetch = fetchSpy;
+
+    const first = await lookupPer100g(' กล้วยหอม ');
+    expect(first).toMatchObject({ name: 'กล้วยหอม', calories: 89, protein: 1.1 });
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    const second = await lookupPer100gWithProvider('กล้วยหอม');
+    expect(second).toEqual({
+      result: { name: 'กล้วยหอม', calories: 89, protein: 1.1, carbs: 22.8, fat: 0.3 },
+      provider: 'cache'
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(callsAfterFirst);
+
+    // Expired (>30 days) entry should bypass cache and fetch again
+    const stored = JSON.parse(localStorage.getItem('trackme_nutrition_v1'));
+    stored['กล้วยหอม'].t = Date.now() - (31 * 864e5);
+    // Populate 305 older items to verify 300-item cap eviction when saving new result
+    for (let i = 0; i < 305; i++) {
+      stored[`เมนูเก่า_${i}`] = { t: 1000 + i, v: { name: `เมนูเก่า_${i}`, calories: 100, protein: 1, carbs: 1, fat: 1 } };
+    }
+    localStorage.setItem('trackme_nutrition_v1', JSON.stringify(stored));
+
+    await lookupPer100g('กล้วยหอม');
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    const trimmed = JSON.parse(localStorage.getItem('trackme_nutrition_v1'));
+    expect(Object.keys(trimmed).length).toBeLessThanOrEqual(300);
+    expect(trimmed['เมนูเก่า_0']).toBeUndefined();
+    expect(trimmed['กล้วยหอม']).toBeDefined();
+  });
 });
+
 

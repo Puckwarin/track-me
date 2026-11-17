@@ -283,16 +283,62 @@ export async function imageToInlineData(file, maxDim = 1024, quality = 0.78) {
 const S = { type: 'STRING' };
 const N = { type: 'NUMBER', nullable: true };
 
+const NUTRITION_CACHE = 'trackme_nutrition_v1';
+const NUTRITION_CACHE_TTL_MS = 30 * 864e5;
+const NUTRITION_CACHE_MAX = 300;
+
+function nutritionCacheKey(name) {
+  return String(name || '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function nutritionCacheGet(name) {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const key = nutritionCacheKey(name);
+    if (!key) return null;
+    const c = JSON.parse(localStorage.getItem(NUTRITION_CACHE) || '{}');
+    const e = c[key];
+    return e && Date.now() - e.t < NUTRITION_CACHE_TTL_MS ? e.v : null;
+  } catch {
+    return null;
+  }
+}
+
+function nutritionCachePut(name, v) {
+  try {
+    if (typeof localStorage === 'undefined' || !v || typeof v !== 'object') return;
+    const key = nutritionCacheKey(name);
+    if (!key) return;
+    const c = JSON.parse(localStorage.getItem(NUTRITION_CACHE) || '{}');
+    c[key] = { t: Date.now(), v };
+    const keys = Object.keys(c).sort((a, b) => (c[a]?.t || 0) - (c[b]?.t || 0));
+    keys.slice(0, Math.max(0, keys.length - NUTRITION_CACHE_MAX)).forEach(k => delete c[k]);
+    localStorage.setItem(NUTRITION_CACHE, JSON.stringify(c));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 function lookupNutrition(name, includeMeta, signal) {
+  const hit = nutritionCacheGet(name);
+  if (hit) return Promise.resolve(includeMeta ? { result: hit, provider: 'cache' } : hit);
+
   const prompt = `ให้ข้อมูลโภชนาการมาตรฐานต่อ 100 กรัมของอาหาร "${name}" (ค่าโดยประมาณทั่วไป) ตอบเป็น JSON ตาม schema`;
-  const run = () => callAI([{ text: prompt }], {
-    type: 'OBJECT',
-    properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
-    required: ['name', 'calories', 'protein', 'carbs', 'fat']
-  }, { includeMeta, signal });
+  const run = async () => {
+    const out = await callAI([{ text: prompt }], {
+      type: 'OBJECT',
+      properties: { name: S, calories: N, protein: N, carbs: N, fat: N },
+      required: ['name', 'calories', 'protein', 'carbs', 'fat']
+    }, { includeMeta, signal });
+    const value = includeMeta ? out?.result : out;
+    if (value && Number.isFinite(Number(value.calories))) {
+      nutritionCachePut(name, value);
+    }
+    return out;
+  };
   return signal
     ? run()
-    : dedupeInFlight(`nutrition:${includeMeta}:${String(name).trim()}`, run);
+    : dedupeInFlight(`nutrition:${includeMeta}:${nutritionCacheKey(name)}`, run);
 }
 
 export const lookupPer100g = (name, options = {}) => lookupNutrition(name, false, options.signal);
@@ -310,19 +356,55 @@ export async function estimateFromPhoto(file, { signal } = {}) {
   }, { signal });
 }
 
-// อ่านฉลากโภชนาการ — ห้ามเดา: ค่าที่ไม่เห็นชัดต้องเป็น null
+// อ่านฉลากโภชนาการ — ห้ามเดา: ค่าที่ไม่เห็นชัดต้องเป็น null (warm worker 60 วินาทีเพื่อลดเวลาโหลดซ้ำ)
+let _ocrWorker = null;
+let _ocrWorkerTimer = null;
+
+async function getOcrWorker() {
+  clearTimeout(_ocrWorkerTimer);
+  if (!_ocrWorker) {
+    const mod = await import('tesseract.js');
+    _ocrWorker = await mod.createWorker('tha+eng');
+  }
+  _ocrWorkerTimer = setTimeout(async () => {
+    if (_ocrWorker) {
+      const worker = _ocrWorker;
+      _ocrWorker = null;
+      await worker.terminate().catch(() => {});
+    }
+  }, 60_000);
+  if (typeof _ocrWorkerTimer?.unref === 'function') _ocrWorkerTimer.unref();
+  return _ocrWorker;
+}
+
 async function tryLabelOcr(file) {
   try {
-    const mod = await import('tesseract.js');
-    const worker = await mod.createWorker('tha+eng');
-    try { const result = await worker.recognize(file); return result?.data?.text || ''; }
-    finally { await worker.terminate(); }
-  } catch { return ''; }
+    const worker = await getOcrWorker();
+    const result = await worker.recognize(file);
+    return result?.data?.text || '';
+  } catch {
+    clearTimeout(_ocrWorkerTimer);
+    if (_ocrWorker) {
+      const worker = _ocrWorker;
+      _ocrWorker = null;
+      await worker.terminate().catch(() => {});
+    }
+    return '';
+  }
 }
+
 function labelNumber(text, patterns) {
   for(const pattern of patterns){const m=text.match(pattern);if(m){const n=Number(m[1].replace(',','.'));if(Number.isFinite(n))return n;}}
   return null;
 }
+
+export function isLocalNutritionSufficient(localResult) {
+  if (!localResult || typeof localResult !== 'object') return false;
+  const mainFields = [localResult.calories, localResult.protein, localResult.carbs, localResult.fat];
+  const filled = mainFields.filter(v => typeof v === 'number' && Number.isFinite(v) && v >= 0).length;
+  return filled >= 3;
+}
+
 export async function readNutritionLabelLocally(file) {
   const ocr = await tryLabelOcr(file);
   const calories = labelNumber(ocr, [/(?:energy|พลังงาน)[^\d]{0,30}(\d+(?:[.,]\d+)?)[^\d]{0,8}(?:kcal|กิโลแคลอรี)?/i]);
@@ -347,9 +429,12 @@ export async function readNutritionLabelLocally(file) {
   };
 }
 export async function readNutritionLabel(file, { signal } = {}) {
+  const localResult = await readNutritionLabelLocally(file);
+  if (isLocalNutritionSufficient(localResult)) {
+    return { ...localResult, notes: 'อ่านด้วย OCR ในเครื่อง (0 โทเค็น)' };
+  }
   const hasAiKey = Boolean(getGeminiKey() || getGroqKey() || getOpenRouterKey());
   if (!hasAiKey) {
-    const localResult = await readNutritionLabelLocally(file);
     if (localResult) return localResult;
     throw new Error('NO_KEY');
   }
@@ -362,7 +447,6 @@ export async function readNutritionLabel(file, { signal } = {}) {
     }, { signal });
   } catch (error) {
     if (!error.quotaExceeded) throw error;
-    const localResult = await readNutritionLabelLocally(file);
     if (localResult) return localResult;
     error.message += ' · OCR ในเครื่องอ่านตัวเลขฉลากไม่สำเร็จ';
     throw error;

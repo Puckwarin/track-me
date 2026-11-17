@@ -7,6 +7,7 @@ import {
   executeAssistantTool,
   executeConfirmedAction,
   matchExpenseCategory,
+  normalizeFoodName,
   prepareWriteAction,
   resolveDateRange,
   resolveNaturalDate,
@@ -141,13 +142,16 @@ function parseFoodCommand(clean, presets = []) {
   }
 
   if (calories === null && Array.isArray(presets) && presets.length) {
-    const q1 = rawFoodText.toLowerCase();
-    const q2 = baseLookupName.toLowerCase();
-    const hit = presets.find(p => String(p.name || '').toLowerCase() === q1)
-      || presets.find(p => String(p.name || '').toLowerCase() === q2)
-      || presets.find(p => String(p.name || '').toLowerCase().includes(q2) || q2.includes(String(p.name || '').toLowerCase()));
+    const q1 = normalizeFoodName(rawFoodText) || rawFoodText.toLowerCase();
+    const q2 = normalizeFoodName(baseLookupName) || baseLookupName.toLowerCase();
+    const hit = presets.find(p => normalizeFoodName(p.name) === q1)
+      || presets.find(p => normalizeFoodName(p.name) === q2)
+      || presets.find(p => {
+        const pn = normalizeFoodName(p.name);
+        return pn && q2 && (pn.includes(q2) || q2.includes(pn));
+      });
     if (hit) {
-      const unitQty = (hit.defaultQuantity || 1) * (hit.name.toLowerCase() === q1 ? 1 : qtyMultiplier);
+      const unitQty = (hit.defaultQuantity || 1) * (normalizeFoodName(hit.name) === q1 ? 1 : qtyMultiplier);
       calories = Math.round((Number(hit.calories) || 0) * unitQty);
       if (protein === null) protein = round1((Number(hit.protein) || 0) * unitQty);
       if (carbs === null) carbs = round1((Number(hit.carbs) || 0) * unitQty);

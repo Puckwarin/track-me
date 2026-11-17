@@ -26,18 +26,22 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 - **OpenRouter**: เลือกเฉพาะโมเดลฟรีที่รับข้อความ และกรองเพิ่มตามความต้องการ เช่น ภาพหรือ `tools`
 - รายชื่อโมเดลถูก cache ในหน่วยความจำ 5 นาที; ไม่ cache ผลลัพธ์ส่วนตัวจาก AI
 
-ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง (รวมถึงการสแกนภาพหน้าจอ Zepp `readZeppScreenshot` ใน `src/nutrition.js`) งานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA → Open Food Facts → AI**.
+ลำดับ fallback ของ consumer ที่ใช้ `runProviderFallback` คือ **Gemini → Groq → OpenRouter** โดยข้าม provider ที่ไม่มีคีย์หรือติด cooldown อยู่ ไม่ใช่ทุก API request จะ fallback โดยอัตโนมัติ; consumer แต่ละตัวกำหนดลำดับและประเภทโมเดลของงานเอง งานสแกนรูปอาหารมี pipeline ก่อนเข้าสู่ AI: **BarcodeDetector + Open Food Facts → OCR ฉลากในเครื่อง (`tesseract.js`) → AI** (ยอมรับผล OCR ในเครื่องเมื่ออ่านค่าหลัก `calories`, `protein`, `carbs`, `fat` ได้อย่างน้อย 3 จาก 4 ค่าผ่าน `isLocalNutritionSufficient()` และคง warm OCR worker ไว้ 60 วินาทีเพื่อลดเวลาโหลดซ้ำ) และงานค้นหาโภชนาการมี pipeline ก่อนเข้าสู่ AI: **คลังในเครื่อง → USDA (cache ภาษาอังกฤษ) → Open Food Facts → แคช AI ในเครื่อง / AI**.
 
-## AI Chat Assistant (`src/services/aiAssistant.js`, `src/services/chatRoles.js`, `src/chatWidget.js`)
+## AI Chat Assistant (`src/services/aiAssistant.js`, `src/services/localAssistant.js`, `src/services/chatRoles.js`, `src/chatWidget.js`)
 
-- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me:
+- **โหมด 0 โทเค็นในเครื่อง (`⚡ แพตเทิร์น (0 โทเค็น)` และ Local-first routing):**
+  - จดรายจ่าย/รายรับ (`จดค่ากาแฟ 60 บาท`, `จดรายรับ โบนัส 5000 บาท`), ปรับสต๊อก (`ใช้ทิชชู่ไป 1`, `เติมทิชชู่ 4`), บันทึกอาหารจากคลังในเครื่องหรือค่าแคล/มาโครที่ระบุตรงๆ (`จดมื้อเช้า ไข่ต้ม 2 ฟอง`), ตั้งเตือนด้วย `parseSmartReminder`, จดโน้ต/ส่ง Feedback และเช็กสรุป (การเงิน สต๊อก นัด/แผน โภชนาการ ออกกำลังกาย น้ำหนัก/นอน/ก้าวเดิน) ได้ในเบราว์เซอร์ทันที **โดยไม่เรียก AI และไม่ต้องใช้ API Key** (ยังคงการ์ดยืนยันความเสี่ยงสูง เช่น ยอด `>= 1,000 บาท`)
+  - ในหน้าตั้งค่าบทบาท (`sliders`) เปิดใช้ **“ใช้แพตเทิร์นในเครื่องก่อนเรียก AI”** เป็นค่าเริ่มต้น และสลับกลับไปถาม-ตอบอิสระกับ AI ได้ตลอดเวลา
+- รองรับทั้งบทสนทนาทั่วไปทุกหัวข้อและ Function Calling กับข้อมูล Track Me เมื่อเรียก AI:
   - **Read Tools (7 ตัว):** `getExpenses`, `getInventory`, `getNutritionSummary`, `getRemindersAndPlanner`, `getWorkouts`, `getBodyAndWellness` (รวม `sleepAndStepsSummary` และ `petSymptomSummary`), `getNotes`
   - **Write Tools (6 ตัว):** `addExpense`, `addFoodLog`, `updateInventory`, `addReminder`, `saveNote`, `submitFeedback`
   - โดย `getWorkouts` ส่งค่า `feeling`, `sessionRpe` และ `exerciseFeedback` (`rpe`, `rir`, `nextAction`) เพื่อใช้วิเคราะห์การปรับระดับครั้งถัดไป และโน้ต/Feedback เก็บใน `settings/note_*` กับ `settings/feedback_*` พร้อมหน้าต่างดู/จัดการผ่านปุ่ม `📝`
-- ปรับ `buildSystemPrompt()` และ `CHAT_ROLES` ให้ตอบกระชับ อ่านง่าย (สรุปคำตอบหลัก 1–2 ประโยค + ข้อย่อยสั้น ๆ 2–4 ข้อ ยกเว้นเมื่อผู้ใช้ขอรายละเอียดเชิงลึก)
-- เก็บหน้าต่างสนทนาต่อเนื่องย้อนหลังสูงสุด 20 ข้อความต่อคำขอ (`HISTORY_LIMIT = 20`) พร้อมบทบาทที่เลือกและคำสั่งเพิ่มเติมที่ผู้ใช้กำหนด
+- ปรับ `buildSystemPrompt()` และ `CHAT_ROLES` ให้กระชับ, เพิ่ม `shouldAttachToolsForTurn()` เพื่อแนบ Tool declarations เฉพาะบทบาทโค้ช/วางแผน หรือข้อความ/บริบทล่าสุดที่เกี่ยวกับข้อมูล Track Me เท่านั้น, และเพิ่ม `normalizeFoodName()` ตัดหน่วยน้ำหนัก/ปริมาตร (`150g`, `120 กรัม`, `250 มล.`) ก่อนเทียบกับคลังอาหารในเครื่องเพื่อลดการเรียก AI ซ้ำ
+- ส่งหน้าต่างสนทนาต่อเนื่องย้อนหลังสูงสุด 12 ข้อความต่อคำขอ (`HISTORY_LIMIT = 12`) พร้อมบทบาทที่เลือกและคำสั่งเพิ่มเติมที่ผู้ใช้กำหนด
 - ป้องกัน Prompt Injection ด้วย `sanitizeDataText()` และ `wrapUntrustedToolData()` รอบผลลัพธ์จาก Read Tools รวมถึงบังคับการ์ดยืนยันจากผู้ใช้สำหรับรายการยอดสูงหรือการเขียนหลายรายการพร้อมกัน และใน `executeConfirmedAction()` / `undoAssistantAction()` จะรอการยืนยันจาก Firestore (หรือรองรับคิวรอซิงค์เมื่อออฟไลน์) พร้อม rollback state หากเขียนไม่สำเร็จ
-- บันทึกประวัติแชทล่าสุด (สูงสุด 30 ข้อความ), บทบาทที่เลือก และคำสั่งเพิ่มเติมไว้ใน `localStorage` ของเบราว์เซอร์เครื่องนั้น (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) โดยไม่ซิงค์ลง Firestore และล้างออกได้ด้วยปุ่มเริ่มบทสนทนาใหม่
+- บันทึกประวัติแชทล่าสุด (สูงสุด 30 ข้อความ), บทบาทที่เลือก, การตั้งค่าใช้แพตเทิร์นในเครื่อง และคำสั่งเพิ่มเติมไว้ใน `localStorage` ของเบราว์เซอร์เครื่องนั้น (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_prefer_local`, `trackme_ai_chat_custom_role`) โดยไม่ซิงค์ลง Firestore และล้างออกได้ด้วยปุ่มเริ่มบทสนทนาใหม่
+
 
 ## Quota, retry และ cooldown
 
@@ -53,8 +57,9 @@ Consumer ยังคงเป็นเจ้าของ prompt, schema, รู
 ## Request management
 
 - การค้นหารายชื่อโมเดลที่ไม่มี `AbortSignal` จะรวมคำขอที่กำลังทำงานเดียวกันและ cache ผลลัพธ์ชั่วคราว; เมื่อมี signal จะไม่แชร์คำขอ เพื่อให้ยกเลิกได้โดยไม่กระทบ consumer อื่น
-- `lookupPer100g` deduplicate คำขอชื่ออาหารเดียวกันเมื่อไม่มี `AbortSignal`; คำขอที่มี signal แยกกันไม่แชร์การยกเลิก
-- ไม่ deduplicate AI Chat/function calls และไม่ cache ผลลัพธ์ AI ที่มีข้อมูลผู้ใช้
+- `lookupPer100g` / `lookupPer100gWithProvider` deduplicate คำขอชื่ออาหารเดียวกันเมื่อไม่มี `AbortSignal` และบันทึกผลลัพธ์มาตรฐานต่อ 100 กรัมไว้ใน `localStorage` (`trackme_nutrition_v1`, TTL 30 วัน, จำกัด 300 รายการ) พร้อมคืน `provider: 'cache'` เมื่อพบในแคช
+- `searchUsda`, `searchOff` และ `barcodeOff` บันทึกผลค้นหาไว้ใน `localStorage` (`trackme_foodsearch_v1`, TTL 7 วัน, จำกัด 60 รายการ) โดย `searchUsda` ใช้คีย์ภาษาอังกฤษที่แปลแล้วผ่าน `usdaCacheKey()` เพื่อให้คำค้นภาษาไทยและอังกฤษใช้แคชร่วมกันได้; และ `findExerciseImage` แคชผลจับคู่รูปท่าออกกำลังกายใน `trackme_eximg_v1` (สูงสุด 300 รายการ)
+- ไม่ deduplicate AI Chat/function calls และไม่ cache ผลลัพธ์ AI ที่มีข้อมูลส่วนตัวของผู้ใช้
 - ปิดหน้าต่าง AI Chat จะยกเลิกคำขอที่กำลังทำงาน
 
 ## การตั้งค่าและความเป็นส่วนตัว
@@ -76,7 +81,7 @@ npm test
 npm run test:coverage
 ```
 
-คำสั่งเหล่านี้รวม tests ใน `src/services/aiService.test.js` และ `src/services/aiAssistant.test.js`; `npm run test:rules` แยกทดสอบ Firestore Emulator ไม่ได้เรียก AI. Build เพื่อตรวจ production bundle:
+คำสั่งเหล่านี้รวม tests ใน `src/services/aiService.test.js`, `src/services/aiAssistant.test.js`, `src/services/localAssistant.test.js`, `src/nutrition.test.js`, `src/foodsearch.test.js` และ `src/exerciseMedia.test.js`; `npm run test:rules` แยกทดสอบ Firestore Emulator ไม่ได้เรียก AI. Build เพื่อตรวจ production bundle:
 
 ```bash
 npm run build

@@ -59,6 +59,39 @@ export function translateThaiFoodQuery(query) {
     .replace(/\s+/g, ' ').trim();
 }
 
+const FOOD_SEARCH_CACHE = 'trackme_foodsearch_v1';
+const FOOD_SEARCH_CACHE_TTL_MS = 7 * 864e5;
+const FOOD_SEARCH_CACHE_MAX = 60;
+
+function cacheGet(key) {
+  try {
+    if (typeof localStorage === 'undefined' || !key) return null;
+    const c = JSON.parse(localStorage.getItem(FOOD_SEARCH_CACHE) || '{}');
+    const e = c[key];
+    return e && Date.now() - e.t < FOOD_SEARCH_CACHE_TTL_MS ? e.v : null;
+  } catch {
+    return null;
+  }
+}
+
+function cachePut(key, v) {
+  try {
+    if (typeof localStorage === 'undefined' || !key || !Array.isArray(v) || !v.length) return;
+    const c = JSON.parse(localStorage.getItem(FOOD_SEARCH_CACHE) || '{}');
+    c[key] = { t: Date.now(), v };
+    const keys = Object.keys(c).sort((a, b) => (c[a]?.t || 0) - (c[b]?.t || 0));
+    keys.slice(0, Math.max(0, keys.length - FOOD_SEARCH_CACHE_MAX)).forEach(k => delete c[k]);
+    localStorage.setItem(FOOD_SEARCH_CACHE, JSON.stringify(c));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function usdaCacheKey(q) {
+  const en = translateThaiFoodQuery(q);
+  return 'usda|' + (en || String(q || '')).toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : (typeof x === 'string' && x.trim() !== '' && Number.isFinite(+x) ? +x : null));
 const r1 = x => (x === null ? null : round1(x));
 
@@ -101,7 +134,11 @@ function fromOff(p) {
   };
 }
 const OFF_FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_quantity';
-async function searchOff(q) {
+export async function searchOff(q) {
+  const cacheKey = 'off|' + String(q || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   offRateOk();
   const enc = encodeURIComponent(q);
   // Start with Open Food Facts' plain-text search. The v2 structured endpoint does not support free-text search.
@@ -109,21 +146,32 @@ async function searchOff(q) {
   try {
     const d = await getJson(`https://search.openfoodfacts.org/search?q=${enc}&page_size=12&fields=${OFF_FIELDS}`);
     const hits = (d.hits || d.products || []).map(fromOff).filter(Boolean);
-    if (hits.length) return hits;
+    if (hits.length) {
+      cachePut(cacheKey, hits);
+      return hits;
+    }
   } catch (e) { firstError = e; }
   try {
     const d = await getJson(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${enc}&search_simple=1&action=process&json=1&page_size=15&fields=${OFF_FIELDS}`);
-    return (d.products || []).map(fromOff).filter(Boolean);
+    const hits = (d.products || []).map(fromOff).filter(Boolean);
+    if (hits.length) cachePut(cacheKey, hits);
+    return hits;
   } catch (e) {
     // Keep the actual connection error visible so users know that retrying a different source is needed.
     throw firstError || e;
   }
 }
 export async function barcodeOff(code) {
+  const cacheKey = 'off_code|' + String(code || '').trim();
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   offRateOk();
   const d = await getJson(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`);
   if (d.status !== 1 || !d.product) return [];
-  return [fromOff({ ...d.product, code })].filter(Boolean);
+  const hits = [fromOff({ ...d.product, code })].filter(Boolean);
+  if (hits.length) cachePut(cacheKey, hits);
+  return hits;
 }
 
 // ---- USDA FoodData Central ----
@@ -134,17 +182,23 @@ export async function testUsdaConnection() {
   const d = await getJson('https://api.nal.usda.gov/fdc/v1/foods/search?' + u, 12000);
   return { ok: true, totalHits: d.totalHits ?? 0 };
 }
-async function searchUsda(q) {
+export async function searchUsda(q) {
+  const en = translateThaiFoodQuery(q);
+  const cacheKey = usdaCacheKey(q);
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   const key = getUsdaKey();
-  const translatedQuery = translateThaiFoodQuery(q);
-  const u = new URLSearchParams({ api_key: key, query: translatedQuery, pageSize: '12', dataType: 'Foundation,SR Legacy' });
+  const u = new URLSearchParams({ api_key: key, query: en, pageSize: '12', dataType: 'Foundation,SR Legacy' });
   const d = await getJson('https://api.nal.usda.gov/fdc/v1/foods/search?' + u);
-  return (d.foods || []).map(f => {
+  const hits = (d.foods || []).map(f => {
     const get = no => num((f.foodNutrients || []).find(n => String(n.nutrientNumber) === no)?.value);
     const kcal = get('208');
     if (kcal === null) return null;
     return { source: 'usda', code: String(f.fdcId), name: f.description, brand: '', per100: { calories: Math.round(kcal), protein: r1(get('203')), carbs: r1(get('205')), fat: r1(get('204')), sugar: r1(get('269')), sodium: get('307') !== null ? Math.round(get('307')) : null }, servingGrams: null, servingText: '' };
   }).filter(Boolean);
+  if (hits.length) cachePut(cacheKey, hits);
+  return hits;
 }
 
 export async function testFoodSearchConnections() {
@@ -168,7 +222,13 @@ export async function testFoodSearchConnections() {
 async function searchAI(q) {
   if (!getGroqKey() && !getGeminiKey() && !getOpenRouterKey()) throw new Error('NO_KEY');
   const { result: r, provider } = await lookupPer100gWithProvider(q);
-  const srcKey = provider === 'Groq' ? 'groq' : provider === 'OpenRouter' ? 'openrouter' : 'gemini';
+  const srcKey = provider === 'Groq'
+    ? 'groq'
+    : provider === 'OpenRouter'
+      ? 'openrouter'
+      : provider === 'cache'
+        ? 'cache'
+        : 'gemini';
   return [{
     source: srcKey,
     name: r.name || q,
@@ -273,7 +333,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       $('#os-out', m.el).textContent = `${Math.round(p.calories * k)} kcal · P ${round1((p.protein || 0) * k)} · C ${round1((p.carbs || 0) * k)} · F ${round1((p.fat || 0) * k)}`;
     }
   };
-  const sourceLabel = src => ({ local: 'คลังอาหารของฉัน', off: 'Open Food Facts', usda: 'USDA', groq: 'Groq AI', gemini: 'Gemini AI', openrouter: 'OpenRouter AI' })[src] || src;
+  const sourceLabel = src => ({ local: 'คลังอาหารของฉัน', off: 'Open Food Facts', usda: 'USDA', groq: 'Groq AI', gemini: 'Gemini AI', openrouter: 'OpenRouter AI', cache: 'แคช AI ในเครื่อง' })[src] || src;
   const renderResults = (errors = [], canContinue = false) => {
     const warnings = errors.map(x => `<p class="text-xs ${x.missing ? 'text-amber-700' : 'text-rose-600'} py-1"><b>${esc(x.label)}:</b> ${esc(x.message)}</p>`).join('');
     const doneBanner = results.length ? `<p class="text-xs text-green-700 font-semibold py-1">✓ พบ ${results.length} รายการ (ค้นหาเสร็จสิ้น)</p>` : '';

@@ -127,6 +127,13 @@ export function parseAdvanceNoticeDays(advanceNotice) {
   return Math.max(0, Math.min(365, n * mult));
 }
 
+export function normalizeFoodName(s) {
+  return String(s || '').toLowerCase()
+    .replace(/\s*\d+(?:\.\d+)?\s*(?:g|gram|grams|กรัม|ml|มล\.?|ก\.)(?=\s|$)/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function matchMeal(mealType) {
   const meals = getMeals();
   const s = String(mealType || '').trim().toLowerCase();
@@ -822,10 +829,13 @@ export async function prepareWriteAction(name, args = {}) {
       if (carbs !== null) carbs = round1(carbs);
       if (fat !== null) fat = round1(fat);
 
-      const qLower = foodName.toLowerCase();
+      const qNorm = normalizeFoodName(foodName) || foodName.toLowerCase();
       const presets = getPresets();
-      const matchedPreset = presets.find(p => String(p.name || '').toLowerCase() === qLower)
-        || presets.find(p => String(p.name || '').toLowerCase().includes(qLower) || qLower.includes(String(p.name || '').toLowerCase()));
+      const matchedPreset = presets.find(p => normalizeFoodName(p.name) === qNorm)
+        || presets.find(p => {
+          const pNorm = normalizeFoodName(p.name);
+          return pNorm && qNorm && (pNorm.includes(qNorm) || qNorm.includes(pNorm));
+        });
 
       if (calories === null && matchedPreset) {
         const qty = matchedPreset.defaultQuantity || 1;
