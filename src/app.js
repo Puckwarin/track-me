@@ -10,6 +10,7 @@ import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
 import '@fortawesome/fontawesome-free/css/solid.min.css';
 import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
+import './design-tokens.css';
 import { registerSW } from 'virtual:pwa-register';
 import { doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 
