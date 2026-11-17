@@ -29,7 +29,7 @@ function renderBarChart(months, valueKey, {
   const vals = months.map(m => m[valueKey]);
   const numericVals = vals.filter(v => typeof v === 'number' && Number.isFinite(v) && v > 0);
   if (!numericVals.length) {
-    return `<p class="text-xs text-slate-400 py-8 text-center">${esc(emptyText)}</p>`;
+    return `<p class="text-xs text-slate-500 py-8 text-center">${esc(emptyText)}</p>`;
   }
 
   const W = 440, H = 165, padX = 28, padTop = 20, padBottom = 26;
@@ -56,7 +56,7 @@ function renderBarChart(months, valueKey, {
       ${showLabel ? `<text x="${x + barW / 2}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${esc(m.label)}</text>` : ''}`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img">${bars}${targetLine}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="${esc(emptyText)}">${bars}${targetLine}</svg>`;
 }
 
 function renderWeightChart(months) {
@@ -64,7 +64,7 @@ function renderWeightChart(months) {
     .map((m, i) => (typeof m.weightAvg === 'number' ? { i, m, v: m.weightAvg } : null))
     .filter(Boolean);
   if (!points.length) {
-    return '<p class="text-xs text-slate-400 py-8 text-center">ยังไม่มีบันทึกน้ำหนักในช่วงเวลานี้</p>';
+    return '<p class="text-xs text-slate-500 py-8 text-center">ยังไม่มีบันทึกน้ำหนักในช่วงเวลานี้</p>';
   }
 
   const W = 440, H = 165, padX = 32, padTop = 20, padBottom = 26;
@@ -93,7 +93,7 @@ function renderWeightChart(months) {
     return show ? `<text x="${xAt(i)}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${esc(m.label)}</text>` : '';
   }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img">${polyline}${dots}${xLabels}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟน้ำหนักเฉลี่ยรายเดือน">${polyline}${dots}${xLabels}</svg>`;
 }
 
 async function loadFoodForRange(forceRefresh = false) {
@@ -116,7 +116,6 @@ async function loadFoodForRange(forceRefresh = false) {
       renderView();
       return;
     }
-    // แคชหมดอายุแล้ว: แสดงทันทีระหว่างอัปเดตข้อมูลล่าสุดในพื้นหลัง
     renderView();
   }
 
@@ -186,7 +185,7 @@ function renderView() {
 
   root.querySelectorAll('[data-ov-range]').forEach(btn => {
     const active = Number(btn.dataset.ovRange) === rangeMonths;
-    btn.className = `chip ${active ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
+    btn.className = `chip whitespace-nowrap min-h-[38px] ${active ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 
@@ -200,10 +199,13 @@ function renderView() {
 
   const cacheInfoEl = $('#ov-cache-info', root);
   if (cacheInfoEl) {
-    if (cachedUpdatedAt) {
+    if (isLoading && !cachedUpdatedAt) {
+      cacheInfoEl.textContent = '⏳ กำลังโหลดข้อมูลอาหารย้อนหลังจากเซิร์ฟเวอร์...';
+      cacheInfoEl.classList.remove('hidden');
+    } else if (cachedUpdatedAt) {
       cacheInfoEl.textContent = cachedFromStorage
-        ? `💾 แสดงผลจากแคชในเครื่อง (${fmtDateTime(cachedUpdatedAt)}) · กดรีเฟรชเพื่ออัปเดตจากเซิร์ฟเวอร์`
-        : `☁️ อัปเดตล่าสุดจากเซิร์ฟเวอร์ (${fmtDateTime(cachedUpdatedAt)})`;
+        ? `แสดงผลจากแคชในเครื่อง (${fmtDateTime(cachedUpdatedAt)}) · กดรีเฟรชเพื่ออัปเดตจากเซิร์ฟเวอร์`
+        : `อัปเดตล่าสุดจากเซิร์ฟเวอร์ (${fmtDateTime(cachedUpdatedAt)})`;
       cacheInfoEl.classList.remove('hidden');
     } else {
       cacheInfoEl.textContent = '';
@@ -219,37 +221,43 @@ function renderView() {
 
   const kpi = (icon, label, value, sub) => `
     <div class="bg-lav-soft/40 border border-slate-100 rounded-2xl p-3">
-      <p class="text-xs text-slate-500"><i class="${icon}"></i> ${label}</p>
-      <p class="text-lg font-bold text-slate-800 mt-0.5">${value}</p>
-      <p class="text-[11px] text-slate-500 mt-0.5">${sub}</p>
+      <p class="text-xs text-slate-600"><i class="${icon}"></i> ${label}</p>
+      <p class="text-base sm:text-lg font-bold text-slate-800 mt-0.5 tabular-nums">${value}</p>
+      <p class="text-[11px] text-slate-500 mt-0.5 tabular-nums">${sub}</p>
     </div>`;
 
   const weightSub = summary.weightChange === null
     ? 'ต้องมีบันทึกอย่างน้อย 2 เดือน'
     : `เทียบต้นช่วง ${summary.weightChange > 0 ? '+' : ''}${summary.weightChange} กก.`;
 
+  const foodKpiValue = isLoading && !cachedUpdatedAt
+    ? 'กำลังโหลด...'
+    : (summary.avgCalPerDay !== null ? `${summary.avgCalPerDay.toLocaleString()} kcal` : 'ยังไม่มีข้อมูล');
+
   $('#ov-kpis', root).innerHTML = `
-    ${kpi('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', summary.latestWeight !== null ? `${summary.latestWeight} กก.` : '-', weightSub)}
-    ${kpi('fa-solid fa-fire text-brand', 'แคลอรี่เฉลี่ย/วันที่บันทึก', summary.avgCalPerDay !== null ? `${summary.avgCalPerDay.toLocaleString()} kcal` : '-', summary.totalLoggedDays ? `บันทึกแล้ว ${summary.totalLoggedDays} วัน · เป้า ${targets.kcal.toLocaleString()}` : 'ยังไม่มีบันทึกอาหาร')}
-    ${kpi('fa-solid fa-dumbbell text-amber-600', 'ออกกำลังกายรวม', `${summary.totalWorkouts} ครั้ง`, summary.totalWorkoutMinutes ? `รวม ${summary.totalWorkoutMinutes.toLocaleString()} นาที` : 'ยังไม่มีบันทึกในกลุ่มเดือนนี้')}
-    ${kpi('fa-solid fa-wallet text-emerald-600', 'ค่าใช้จ่ายรวม', `฿${fmtMoney(summary.totalExpense)}`, summary.totalIncome ? `รายรับรวม ฿${fmtMoney(summary.totalIncome)}` : 'ไม่รวมรายการรายรับ')}`;
+    ${kpi('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', summary.latestWeight !== null ? `${summary.latestWeight} กก.` : 'ยังไม่มีข้อมูล', weightSub)}
+    ${kpi('fa-solid fa-fire text-brand', 'แคลอรี่เฉลี่ย/วันที่บันทึก', foodKpiValue, summary.totalLoggedDays ? `บันทึกแล้ว ${summary.totalLoggedDays} วัน · เป้า ${targets.kcal.toLocaleString()}` : (isLoading ? 'กำลังดึงรายการอาหาร...' : 'ยังไม่มีบันทึกอาหารในช่วงนี้'))}
+    ${kpi('fa-solid fa-dumbbell text-amber-600', 'ออกกำลังกายรวม', summary.totalWorkouts ? `${summary.totalWorkouts} ครั้ง` : 'ยังไม่มีบันทึก', summary.totalWorkoutMinutes ? `รวม ${summary.totalWorkoutMinutes.toLocaleString()} นาที` : 'ยังไม่มีบันทึกในช่วงเดือนนี้')}
+    ${kpi('fa-solid fa-wallet text-emerald-600', 'ค่าใช้จ่ายรวม', (summary.totalExpense || summary.totalIncome) ? `฿${fmtMoney(summary.totalExpense)}` : 'ยังไม่มีรายการ', summary.totalIncome ? `รายรับรวม ฿${fmtMoney(summary.totalIncome)}` : 'ยังไม่มีรายการรายรับ-รายจ่าย')}`;
 
   $('#ov-charts', root).innerHTML = `
     <div class="card space-y-2">
       <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนักเฉลี่ยรายเดือน (กก.)</h3>
       ${renderWeightChart(months)}
-      <p class="text-[11px] text-slate-400">จุดบนเส้นแสดงค่าเฉลี่ยของแต่ละเดือน (แตะจุดเพื่อดูน้ำหนักล่าสุดของเดือน)</p>
+      <p class="text-[11px] text-slate-500">จุดบนเส้นแสดงค่าเฉลี่ยของแต่ละเดือน (แตะจุดเพื่อดูน้ำหนักล่าสุดของเดือน)</p>
     </div>
     <div class="card space-y-2">
       <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-utensils text-brand"></i> แคลอรี่เฉลี่ยต่อวันที่บันทึก (kcal/วัน)</h3>
-      ${renderBarChart(months, 'calAvgPerLoggedDay', {
-        color: '#a78bfa',
-        emptyText: 'ยังไม่มีบันทึกอาหารในช่วงเวลานี้',
-        targetValue: targets.kcal,
-        targetLabel: `เป้า ${targets.kcal.toLocaleString()} kcal`,
-        formatTooltip: (m, v) => `${m.label}: เฉลี่ย ${Math.round(v).toLocaleString()} kcal/วัน (${m.foodDays} วัน)`
-      })}
-      <p class="text-[11px] text-slate-400">คำนวณเฉพาะวันที่มีบันทึกอาหารในแต่ละเดือน</p>
+      ${isLoading && !cachedUpdatedAt
+        ? '<p class="text-xs text-slate-500 py-8 text-center"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลแคลอรี่...</p>'
+        : renderBarChart(months, 'calAvgPerLoggedDay', {
+          color: '#a78bfa',
+          emptyText: 'ยังไม่มีบันทึกอาหารในช่วงเวลานี้',
+          targetValue: targets.kcal,
+          targetLabel: `เป้า ${targets.kcal.toLocaleString()} kcal`,
+          formatTooltip: (m, v) => `${m.label}: เฉลี่ย ${Math.round(v).toLocaleString()} kcal/วัน (${m.foodDays} วัน)`
+        })}
+      <p class="text-[11px] text-slate-500">คำนวณเฉพาะวันที่มีบันทึกอาหารในแต่ละเดือน</p>
     </div>
     <div class="card space-y-2">
       <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-dumbbell text-amber-600"></i> การออกกำลังกายรายเดือน (ครั้ง)</h3>
@@ -258,7 +266,7 @@ function renderView() {
         emptyText: 'ยังไม่มีบันทึกออกกำลังกายในช่วงเวลานี้',
         formatTooltip: (m, v) => `${m.label}: ${v} ครั้ง${m.workoutMinutes ? ` (${m.workoutMinutes} นาที)` : ''}`
       })}
-      <p class="text-[11px] text-slate-400">นับเฉพาะครั้งที่ทำจริง (ไม่รวมรายการที่สถานะเป็นแผนล่วงหน้า)</p>
+      <p class="text-[11px] text-slate-500">นับเฉพาะครั้งที่ทำจริง (ไม่รวมรายการที่สถานะเป็นแผนล่วงหน้า)</p>
     </div>
     <div class="card space-y-2">
       <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-wallet text-emerald-600"></i> ค่าใช้จ่ายรายเดือน (บาท)</h3>
@@ -267,16 +275,16 @@ function renderView() {
         emptyText: 'ยังไม่มีรายการรายจ่ายในช่วงเวลานี้',
         formatTooltip: (m, v) => `${m.label}: จ่าย ฿${fmtMoney(v)} · รับ ฿${fmtMoney(m.incomeTotal)}`
       })}
-      <p class="text-[11px] text-slate-400">รวมรายการรายจ่ายจริงรายเดือน (ไม่รวมรายรับ)</p>
+      <p class="text-[11px] text-slate-500">รวมรายการรายจ่ายจริงรายเดือน (ไม่รวมรายรับ)</p>
     </div>`;
 
   $('#ov-table-body', root).innerHTML = months.slice().reverse().map(m => `
     <tr>
       <td class="p-2.5 font-medium text-slate-800 whitespace-nowrap">${esc(m.label)}</td>
-      <td class="p-2.5 text-right whitespace-nowrap">${m.weightLatest !== null ? `${m.weightLatest} กก.` : '-'}</td>
-      <td class="p-2.5 text-right whitespace-nowrap">${m.calAvgPerLoggedDay !== null ? `${m.calAvgPerLoggedDay.toLocaleString()} (${m.foodDays}ว.)` : '-'}</td>
-      <td class="p-2.5 text-right whitespace-nowrap">${m.workoutCount ? `${m.workoutCount} ครั้ง` : '-'}</td>
-      <td class="p-2.5 text-right whitespace-nowrap">${m.expenseTotal ? `฿${fmtMoney(m.expenseTotal)}` : '-'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.weightLatest !== null ? `${m.weightLatest} กก.` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.calAvgPerLoggedDay !== null ? `${m.calAvgPerLoggedDay.toLocaleString()} (${m.foodDays}ว.)` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.workoutCount ? `${m.workoutCount} ครั้ง` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.expenseTotal ? `฿${fmtMoney(m.expenseTotal)}` : '—'}</td>
     </tr>`).join('');
 }
 
@@ -288,17 +296,17 @@ export function mountOverview(el) {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-chart-column text-brand"></i> แดชบอร์ดภาพรวมรายเดือน</h2>
-          <p class="text-xs text-slate-500">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
+          <p class="text-xs text-slate-600">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" data-ov-range="3" class="chip">3 เดือน</button>
-          <button type="button" data-ov-range="6" class="chip">6 เดือน</button>
-          <button type="button" data-ov-range="12" class="chip">12 เดือน</button>
-          <button type="button" id="ov-refresh" class="btn btn-soft text-xs"><i class="fa-solid fa-rotate-right"></i> รีเฟรช</button>
+          <button type="button" data-ov-range="3" class="chip whitespace-nowrap">3 เดือน</button>
+          <button type="button" data-ov-range="6" class="chip whitespace-nowrap">6 เดือน</button>
+          <button type="button" data-ov-range="12" class="chip whitespace-nowrap">12 เดือน</button>
+          <button type="button" id="ov-refresh" class="btn btn-soft text-xs whitespace-nowrap"><i class="fa-solid fa-rotate-right"></i> รีเฟรช</button>
         </div>
       </div>
       <p id="ov-cache-info" class="hidden text-[11px] text-slate-500"></p>
-      <p id="ov-notice" class="hidden text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2"></p>
+      <p id="ov-notice" class="hidden text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2"></p>
       <div id="ov-kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
     </div>
     <div id="ov-charts" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
@@ -318,7 +326,7 @@ export function mountOverview(el) {
           <tbody id="ov-table-body" class="divide-y divide-slate-100"></tbody>
         </table>
       </div>
-      <p class="text-[11px] text-slate-400">หมายเหตุ: ประวัติออกกำลังกายซิงค์ย้อนหลังประมาณ 400 วัน (~13 เดือน)</p>
+      <p class="text-[11px] text-slate-500">หมายเหตุ: ประวัติออกกำลังกายซิงค์ย้อนหลังประมาณ 400 วัน (~13 เดือน)</p>
     </div>
   </div>`;
 
