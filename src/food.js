@@ -77,10 +77,10 @@ export function mountFood(el) {
           <datalist id="f-datalist"></datalist>
         </div>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><div id="f-qty-adjust" class="food-adjust-row hidden" aria-label="ปรับน้ำหนักทีละ 50 กรัม"><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="-50" aria-label="ลดน้ำหนัก 50 กรัม">− 50 g</button><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="50" aria-label="เพิ่มน้ำหนัก 50 กรัม">+ 50 g</button></div><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
         <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
-        <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"></div>
+        <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"><div class="food-adjust-row" aria-label="ปรับแคลอรี่ทีละ 100 กิโลแคลอรี่"><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="-100" aria-label="ลดแคลอรี่ 100 กิโลแคลอรี่">− 100</button><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="100" aria-label="เพิ่มแคลอรี่ 100 กิโลแคลอรี่">+ 100 kcal</button></div></div>
         <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">คาร์บ (g)</label><input id="f-carb" type="number" inputmode="decimal" class="input"></div>
         <div><label class="lbl">ไขมัน (g)</label><input id="f-fat" type="number" inputmode="decimal" class="input"></div>
@@ -131,6 +131,15 @@ export function mountFood(el) {
   $('#f-date', root).addEventListener('change', watchDay);
   $('#f-name', root).addEventListener('input', e => pickByLabel(e.target.value));
   $('#f-qty', root).addEventListener('input', updateFoodPreview);
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-food-adjust]');
+    if (!button) return;
+    const field = $('#' + button.dataset.foodAdjust, root);
+    if (!field) return;
+    const current = toNum(field.value) ?? 0;
+    field.value = String(Math.max(0, round1(current + Number(button.dataset.adjustBy))));
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   $$('[data-day]', root).forEach(b => b.addEventListener('click', () => { $('#f-date', root).value = addDays(localDateStr(), +b.dataset.day); watchDay(); }));
   $('#f-meals', root).addEventListener('click', e => { const b = e.target.closest('[data-meal]'); if (b) { $('#f-meal', root).value = b.dataset.meal; $('#f-name', root).focus(); $('#f-name', root).scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
   ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
@@ -407,6 +416,7 @@ function syncFoodWeightForm() {
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
+  $('#f-qty-adjust', root).classList.toggle('hidden', !(canWeigh(base) || gramMode));
   $('#f-qty-label', root).textContent = gramMode ? 'น้ำหนักที่กิน (กรัม)'
     : canWeigh(base) ? `จำนวน หรือน้ำหนัก (กรัม)` : 'จำนวน (หน่วย)';
   $('#f-qty', root).step = gramMode ? '1' : '0.01';
