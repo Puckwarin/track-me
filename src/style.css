@@ -793,3 +793,61 @@ html[data-theme="dark"] .wa-rest-btn:hover,
 html[data-theme="dark"] .wa-eval-btn:hover { background: #3a2e29; color: #f3c3a6; }
 html[data-theme="dark"] .wa-rest-btn.is-active,
 html[data-theme="dark"] .wa-eval-btn.is-active { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }
+
+/* ---------- Responsive usability refinements ---------- */
+:where(button, a, input, select, textarea) { min-width: 0; }
+:where(button, a, input, select) { scroll-margin-block: 6rem; }
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-brand) 68%, white);
+  outline-offset: 2px;
+}
+
+.icon-btn { width: 2.75rem; height: 2.75rem; flex: none; }
+.btn { min-height: 2.75rem; }
+.input, select.input { min-height: 2.75rem; }
+.sub-chip { min-height: 2.75rem; }
+
+/* Keep wide user-generated content and tables from forcing page-level scrolling. */
+#app-shell, .page, .card { min-width: 0; }
+.page > *, .card > *, .card :where(.grid, .flex) { min-width: 0; }
+.card :where(p, li, td, th, code, a) { overflow-wrap: anywhere; }
+.card table { display: block; width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+img, video, canvas, svg { max-width: 100%; }
+
+@media (max-width: 640px) {
+  #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 2.75rem); }
+  .page { margin-top: .75rem; }
+  .card { padding: 1rem; border-radius: 1.25rem; }
+  .subnav { margin-inline: .25rem; }
+  .bottom-nav { padding-inline: .5rem; }
+  .bottom-nav-inner { max-width: 34rem; }
+  .nav-item { min-width: 2.75rem; }
+  .nav-item i { width: 2.75rem; }
+  .nav-plus { width: 3.5rem; height: 3.5rem; }
+  .sheet-panel { padding-inline: 1rem; }
+  #quick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ai-chat-drawer { inset-inline: .4rem; border-radius: 1.25rem; }
+  .scroll-fabs { right: .5rem; }
+}
+
+@media (max-width: 380px) {
+  .app-header > div { padding-inline: .75rem; }
+  .logo-bubble.logo-sm { width: 2rem; height: 2rem; font-size: 1rem; }
+  .bottom-nav { padding-inline: .35rem; }
+  .bottom-nav-inner { border-radius: 1.35rem; }
+  .nav-item { font-size: .62rem; }
+  .nav-item i { width: 2.4rem; }
+  .nav-plus { width: 3.1rem; height: 3.1rem; }
+  #quick-grid { gap: .5rem; }
+}
+
+@media (min-width: 768px) {
+  .page { margin-top: 1.5rem; }
+  .card { padding: clamp(1.25rem, 2vw, 1.75rem); }
+  .bottom-nav-inner { max-width: 34rem; }
+  #reminder-banner { margin-top: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
