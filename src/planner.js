@@ -368,24 +368,24 @@ function renderTaskListHtml(dateStr) {
         const kindBadge = it.kind === 'workout'
           ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-green-800' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
           : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.weekPattern === 'once' ? 'bg-emerald-100 text-emerald-800 font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
-        return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-75' : 'border-lav-soft/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40">
+        return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-80' : 'border-lav-soft/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40 min-h-[44px]">
           <span class="flex items-start gap-2.5 min-w-0 flex-1">
             <input type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
             <span class="min-w-0 flex-1">
               <span class="flex flex-wrap items-center gap-1.5">
-                <span class="text-sm font-medium ${it.done ? 'line-through text-slate-400' : 'text-slate-800'}">${it.icon} ${esc(it.title)}</span>
-                ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">${esc(it.time)} น.</span>` : ''}
+                <span class="text-sm font-medium ${it.done ? 'line-through text-slate-500' : 'text-slate-800'}">${it.icon} ${esc(it.title)}</span>
+                ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700 tabular-nums">${esc(it.time)} น.</span>` : ''}
                 ${kindBadge}
               </span>
               ${it.sub && it.kind === 'workout' ? `<span class="block text-[11px] text-slate-500 mt-0.5">${esc(it.sub)}</span>` : ''}
             </span>
           </span>
           <span class="flex items-center gap-1 shrink-0">
-            ${it.kind === 'workout' ? `<button type="button" data-pl-edit-workout="${esc(it.id)}" class="text-[11px] text-brand-dark underline px-1">ดูแผน</button>` : ''}
+            ${it.kind === 'workout' ? `<button type="button" data-pl-edit-workout="${esc(it.id)}" class="min-h-[32px] text-[11px] text-brand-dark underline px-1.5 rounded-lg">ดูแผน</button>` : ''}
           </span>
         </label>`;
       }).join('')
-    : `<p class="text-xs text-slate-400 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจวัตรในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
+    : `<p class="text-xs text-slate-500 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจวัตรในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
 
   return `
     ${renderDayReminderBanner(dateStr)}
@@ -420,20 +420,20 @@ export function renderPlanner() {
   const rangeText = `${fmtDate(mon)} – ${fmtDate(sun)}`;
 
   const stripHtml = `
-    <div class="grid grid-cols-7 gap-1.5">
+    <div class="grid grid-cols-7 gap-1.5 tabular-nums">
       ${dayMeta.map(m => {
         const isSel = m.date === selectedDate;
         const isToday = m.date === today;
         const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" class="relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 text-xs transition ${
+        return `<button type="button" data-pl-day="${m.date}" class="relative flex flex-col items-center justify-center rounded-xl border py-2 px-0.5 min-h-[56px] text-xs transition ${
           isSel ? 'bg-brand text-white border-brand shadow-sm'
             : isToday ? 'bg-white border-brand/60 text-brand-dark font-semibold hover:bg-lav-soft/60'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
         }">
           ${m.remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ"></span>` : ''}
-          <span class="text-[11px] opacity-80">${m.wd}</span>
+          <span class="text-[11px] opacity-85">${m.wd}</span>
           <span class="text-sm font-bold leading-tight">${Number(m.date.slice(8))}</span>
-          <span class="text-[10px] mt-0.5 ${isSel ? 'text-white/90' : allDone ? 'text-emerald-600 font-semibold' : 'text-slate-400'}">
+          <span class="text-[10px] mt-0.5 ${isSel ? 'text-white/95' : allDone ? 'text-emerald-700 font-semibold' : 'text-slate-500'}">
             ${m.items.length ? `${m.done}/${m.items.length}` : '·'}
           </span>
         </button>`;
@@ -441,7 +441,7 @@ export function renderPlanner() {
     </div>`;
 
   const bodyHtml = viewMode === 'week'
-    ? `<div class="space-y-3">
+    ? `<div class="space-y-3 tabular-nums">
         ${dayMeta.map(m => {
           const isToday = m.date === today;
           return `<div class="rounded-2xl border ${isToday ? 'border-brand/50 bg-lav-soft/20' : 'border-slate-200/80 bg-slate-50/40'} p-3 space-y-2">
@@ -456,16 +456,16 @@ export function renderPlanner() {
     : `<div class="space-y-2.5">
         ${stripHtml}
         <div class="rounded-2xl border border-lav-soft/80 bg-slate-50/40 p-3 space-y-2.5">
-          <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
             <span class="text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
             <span class="text-xs text-slate-500">${itemsForDate(selectedDate).filter(x => x.done).length}/${itemsForDate(selectedDate).length} เสร็จ</span>
           </div>
           ${renderTaskListHtml(selectedDate)}
           <div class="flex flex-wrap gap-1.5 pt-1">
-            <button type="button" data-pl-once class="chip bg-emerald-100 text-emerald-800 font-semibold"><i class="fa-solid fa-plus"></i> กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
-            <button type="button" data-pl-routines class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> ตั้งกิจวัตร / สลับสัปดาห์</button>
-            <button type="button" data-pl-go="workout" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-dumbbell"></i> วางแผนออกกำลังกาย</button>
-            <button type="button" data-pl-go="remind" class="chip bg-amber-50 border border-amber-200 text-amber-900"><i class="fa-solid fa-thumbtack"></i> เพิ่มนัดหมาย</button>
+            <button type="button" data-pl-once class="chip min-h-[36px] bg-emerald-100 text-emerald-800 font-semibold"><i class="fa-solid fa-plus"></i> กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
+            <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> ตั้งกิจวัตร / สลับสัปดาห์</button>
+            <button type="button" data-pl-go="workout" class="chip min-h-[36px] bg-sky-soft text-blue-700"><i class="fa-solid fa-dumbbell"></i> วางแผนออกกำลังกาย</button>
+            <button type="button" data-pl-go="remind" class="chip min-h-[36px] bg-amber-50 border border-amber-200 text-amber-900"><i class="fa-solid fa-thumbtack"></i> เพิ่มนัดหมาย</button>
           </div>
         </div>
       </div>`;
@@ -475,31 +475,31 @@ export function renderPlanner() {
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
         <h2 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand mr-1"></i> Weekly Planner & กิจวัตร</h2>
-        <p class="text-xs text-slate-500">${esc(rangeText)} · เสร็จแล้ว ${doneAll}/${totalAll} รายการ</p>
+        <p class="text-xs text-slate-500 tabular-nums">${esc(rangeText)} · เสร็จแล้ว ${doneAll}/${totalAll} รายการ</p>
       </div>
       <div class="flex flex-wrap items-center gap-1.5">
         ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบสัปดาห์ ${weekCode}</span>
-        <button type="button" data-pl-flip-parity class="chip bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B"><i class="fa-solid fa-arrows-rotate"></i> สลับ A↔B</button>` : ''}
-        <button type="button" data-pl-routines class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> กิจวัตร (${routinesCount})</button>
+        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B"><i class="fa-solid fa-arrows-rotate"></i> สลับ A↔B</button>` : ''}
+        <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> กิจวัตร (${routinesCount})</button>
       </div>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-1.5">
-        <button type="button" data-pl-step="-1" class="chip bg-slate-100 text-slate-600" aria-label="สัปดาห์ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
-        <button type="button" data-pl-week="0" class="chip ${weekOffset === 0 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์นี้</button>
-        <button type="button" data-pl-week="1" class="chip ${weekOffset === 1 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์หน้า</button>
-        <button type="button" data-pl-step="1" class="chip bg-slate-100 text-slate-600" aria-label="สัปดาห์ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+        <button type="button" data-pl-step="-1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
+        <button type="button" data-pl-week="0" class="chip min-h-[36px] ${weekOffset === 0 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์นี้</button>
+        <button type="button" data-pl-week="1" class="chip min-h-[36px] ${weekOffset === 1 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์หน้า</button>
+        <button type="button" data-pl-step="1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
       </div>
       <div class="flex items-center gap-1.5">
-        <button type="button" data-pl-mode="day" class="chip ${viewMode === 'day' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">รายวัน</button>
-        <button type="button" data-pl-mode="week" class="chip ${viewMode === 'week' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">ดูทั้ง 7 วัน</button>
+        <button type="button" data-pl-mode="day" class="chip min-h-[36px] ${viewMode === 'day' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">รายวัน</button>
+        <button type="button" data-pl-mode="week" class="chip min-h-[36px] ${viewMode === 'week' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">ดูทั้ง 7 วัน</button>
       </div>
     </div>
 
     ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
       <span>💡 ตั้งกิจวัตรประจำสัปดาห์หรือตารางสลับสัปดาห์อัตโนมัติ (เช่น สัปดาห์ A จ-พ-ศ-อา / สัปดาห์ B อ-พฤ-ส) ครั้งเดียวใช้ได้ยาว</span>
-      <button type="button" data-pl-routines class="chip bg-white border border-amber-300 text-amber-900 font-semibold">ตั้งค่าเลย</button>
+      <button type="button" data-pl-routines class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold">ตั้งค่าเลย</button>
     </div>` : ''}
 
     ${bodyHtml}
@@ -511,14 +511,14 @@ export function renderPlanner() {
       <div class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
         <div class="flex items-center justify-between gap-2">
           <span class="text-xs font-bold text-slate-700">✅ กิจวัตรที่ทำล่าสุด (${recent.length} รายการ)</span>
-          <span class="text-[11px] text-slate-400">ไม่ซ้ำชื่อ</span>
+          <span class="text-[11px] text-slate-500">ไม่ซ้ำชื่อ</span>
         </div>
         <div class="flex flex-wrap gap-1.5">
           ${recent.map(item => `
             <span class="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1 text-xs text-slate-700">
               <span aria-hidden="true">${item.icon}</span>
               <span class="font-medium">${esc(item.title)}</span>
-              ${item.date ? `<span class="text-[10px] text-slate-400">· ${esc(fmtDate(item.date))}</span>` : ''}
+              ${item.date ? `<span class="text-[10px] text-slate-500 tabular-nums">· ${esc(fmtDate(item.date))}</span>` : ''}
             </span>`).join('')}
         </div>
       </div>`;
@@ -538,7 +538,7 @@ function openRoutinesModal(opts = {}) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3">
       <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-repeat text-brand mr-1"></i> กิจวัตร & ตารางสลับสัปดาห์</h3>
-      <button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+      <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <p class="text-xs text-slate-500 mb-3">รองรับทั้ง<b>ทุกสัปดาห์</b>, <b>สลับสัปดาห์ A ↔ B</b> และ<b>เฉพาะวันเดียว (ไม่ทำซ้ำ)</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
 
@@ -640,16 +640,16 @@ function openRoutinesModal(opts = {}) {
       return `
       <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
         <div class="min-w-0">
-          <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded">${esc(r.time)}</span>` : ''}</p>
+          <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded tabular-nums">${esc(r.time)}</span>` : ''}</p>
           <p class="text-[11px] text-slate-500">${esc(schedDesc)}</p>
         </div>
         <div class="flex gap-1.5 shrink-0">
-          <button type="button" data-rt-edit="${esc(r.id)}" class="chip bg-sky-soft text-blue-700 text-xs">แก้</button>
-          <button type="button" data-rt-del="${esc(r.id)}" class="chip bg-pink-soft text-rose-600 text-xs">ลบ</button>
+          <button type="button" data-rt-edit="${esc(r.id)}" class="chip min-h-[34px] bg-sky-soft text-blue-700 text-xs">แก้</button>
+          <button type="button" data-rt-del="${esc(r.id)}" class="chip min-h-[34px] bg-pink-soft text-rose-600 text-xs">ลบ</button>
         </div>
       </div>`;
     }).join('')
-      : '<p class="text-xs text-slate-400 text-center py-4">ยังไม่มีกิจวัตรที่ตั้งไว้</p>';
+      : '<p class="text-xs text-slate-500 text-center py-4">ยังไม่มีกิจวัตรที่ตั้งไว้</p>';
   };
 
   const syncIconBadge = (titleVal = '') => {
