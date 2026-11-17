@@ -138,7 +138,7 @@ export function renderHome() {
       <div class="flex flex-wrap items-start justify-between gap-2">
         <div class="home-hello">
           <p class="text-sm text-slate-500">${esc(dateText)}</p>
-          <h1 class="text-2xl font-bold text-slate-800">${hello}${name ? ', ' + esc(name) : ''} ${sun}</h1>
+          <h1 class="text-xl sm:text-2xl font-bold text-slate-800">${hello}${name ? ', ' + esc(name) : ''} ${sun}</h1>
         </div>
         <div id="home-push-slot" class="shrink-0"></div>
       </div>`;

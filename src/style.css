@@ -912,6 +912,29 @@ img, video, canvas, svg { max-width: 100%; }
 
 html[data-theme="pastel"] .desktop-nav { border-color: #F2E4F1; }
 html[data-theme="pastel"] .desktop-nav-item { color: #6E4760; }
+
+@media (max-width: 768px) {
+  #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 3.5rem); }
+  .page { margin-top: .5rem; padding-bottom: 1rem; }
+  .page > .card, .page .card { padding: .875rem; border-radius: 1.125rem; }
+  .card h1, .card h2 { font-size: clamp(1rem, 4.5vw, 1.25rem); line-height: 1.35; }
+  .card h3 { font-size: 1rem; line-height: 1.35; }
+  #home-head h1 { font-size: clamp(1.125rem, 5vw, 1.375rem); line-height: 1.35; }
+  .home-hello { padding: .125rem .125rem 0; }
+  #home-today, #summary-section { gap: .75rem; }
+  .tile, .card.food-today { padding: .875rem; }
+  .chip, .sub-chip { min-height: 2.75rem; }
+  .subnav-row { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+  .scroll-fabs { right: 5rem; bottom: calc(var(--nav-h) + var(--safe-b) + 1rem); gap: .4rem; }
+  .fab-scroll-btn { width: 2.75rem; height: 2.75rem; }
+}
+
+@media (max-width: 380px) {
+  .page { padding-inline: .75rem; }
+  .card h1, .card h2 { font-size: 1rem; }
+  #home-head h1 { font-size: 1.125rem; }
+  .scroll-fabs { right: 4.65rem; }
+}
 html[data-theme="pastel"] .desktop-nav-item.is-active { background: #F3E6F6; color: #8B4C72; }
 html[data-theme="dark"] .desktop-nav { background: rgb(28 25 22 / .94); border-color: #3b342e; }
 html[data-theme="dark"] .desktop-nav-item { color: #d6ccc2; }
