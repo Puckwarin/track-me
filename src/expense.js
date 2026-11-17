@@ -206,7 +206,7 @@ export function mountExpense(el) {
       <header class="space-y-1">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-wallet text-brand"></i> รายรับ-รายจ่าย</h2>
-          <span class="text-[11px] px-2 py-0.5 rounded-full bg-ok-soft text-green-800">🔒 สลิปอ่านเฉพาะในเครื่อง</span>
+          <span class="text-[11px] px-2 py-0.5 rounded-md bg-ok-soft text-green-800 font-medium">🔒 สลิปอ่านเฉพาะในเครื่อง</span>
         </div>
         <p class="text-xs text-slate-500">สแกนสลิปโอนเงินด้วย OCR ฟรีในเบราว์เซอร์ (ไม่มีการอัปโหลดหรือบันทึกรูปภาพลงระบบ)</p>
       </header>
@@ -222,12 +222,17 @@ export function mountExpense(el) {
         <p id="ex-ocr-status" class="hidden text-xs font-medium" aria-live="polite"></p>
       </div>
 
-      <section class="rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3 space-y-2">
-        <div class="flex items-center justify-between gap-2"><b class="text-sm text-slate-800">🏦 นำเข้า Statement (วางข้อความ)</b><span class="text-[10px] text-green-700">ประมวลผลในเบราว์เซอร์</span></div>
-        <p class="text-xs text-slate-500">คัดลอกข้อความหลายบรรทัดจาก PDF Statement แล้ววางที่นี่ ข้อมูลยอดคงเหลือและเลขบัญชีจะไม่ถูกนำไปบันทึก</p>
-        <textarea id="ex-statement-text" rows="6" class="input w-full text-xs" placeholder="วางข้อความ Statement ที่นี่..."></textarea>
-        <div class="flex items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">ประมวลผลข้อความ Statement</button></div>
-      </section>
+      <details id="ex-statement-box" class="rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3">
+        <summary class="cursor-pointer flex items-center justify-between gap-2 text-sm font-semibold text-slate-800 select-none">
+          <span>🏦 นำเข้า Statement (วางข้อความ)</span>
+          <span class="text-[11px] font-normal text-green-700">ประมวลผลในเครื่อง</span>
+        </summary>
+        <div class="mt-2.5 space-y-2">
+          <p class="text-xs text-slate-500">คัดลอกข้อความหลายบรรทัดจาก PDF Statement แล้ววางที่นี่ ข้อมูลยอดคงเหลือและเลขบัญชีจะไม่ถูกนำไปบันทึก</p>
+          <textarea id="ex-statement-text" rows="5" class="input w-full text-xs" placeholder="วางข้อความ Statement ที่นี่..."></textarea>
+          <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">ประมวลผลข้อความ Statement</button></div>
+        </div>
+      </details>
       <div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
         <button type="button" data-ex-type="expense" class="py-2 rounded-xl text-xs font-semibold transition">รายจ่าย (Expense)</button>
         <button type="button" data-ex-type="income" class="py-2 rounded-xl text-xs font-semibold transition">รายรับ (Income)</button>
@@ -920,11 +925,11 @@ function renderExpenseBudgets(month) {
     const message = over ? `เกินงบ ${fmtMoney(item.spent - item.amount)} ฿`
       : near ? `ใกล้ถึงงบ · เหลือ ${fmtMoney(item.remaining)} ฿`
         : `ใช้ไป ${fmtMoney(item.spent)} / ${fmtMoney(item.amount)} ฿`;
-    return `<div class="space-y-1">
+    return `<div class="space-y-1 tabular-nums">
       <div class="flex justify-between gap-2 text-xs"><b class="text-slate-700">${CAT_ICONS[item.category] || '💸'} ${esc(item.category)}</b><span class="${tone.split(' ')[0]}">${esc(message)}</span></div>
       <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${tone.split(' ')[1]}" style="width:${Math.min(100, percent)}%"></div></div>
     </div>`;
-  }).join('') : '<p class="text-xs text-slate-400">ยังไม่ได้ตั้งงบรายหมวดสำหรับเดือนนี้</p>';
+  }).join('') : '<p class="text-xs text-slate-500">ยังไม่ได้ตั้งงบรายหมวดสำหรับเดือนนี้</p>';
 }
 
 function openExpenseBudgetEditor() {
@@ -1123,22 +1128,23 @@ export function renderExpense() {
   const curMonth = $r('#ex-month')?.value || selectedMonth;
   const inMonth = monthItems(curMonth);
 
+  const hasMonthItems = inMonth.length > 0;
   const totalIncome = inMonth.filter(x => x.type === 'income').reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const totalExpense = inMonth.filter(x => x.type === 'expense').reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const net = totalIncome - totalExpense;
 
   $r('#ex-summary').innerHTML = `
-    <div class="rounded-2xl bg-ok-soft/70 p-3">
+    <div class="rounded-2xl bg-ok-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-green-800">รายรับ</p>
-      <p class="text-base sm:text-lg font-bold text-green-900">+${fmtMoney(totalIncome)} <small class="text-[11px] font-normal">฿</small></p>
+      <p class="text-base sm:text-lg font-bold text-green-900">${hasMonthItems ? `+${fmtMoney(totalIncome)} <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-green-800">ยังไม่มีรายการ</span>'}</p>
     </div>
-    <div class="rounded-2xl bg-pink-soft/70 p-3">
+    <div class="rounded-2xl bg-pink-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-rose-800">รายจ่าย</p>
-      <p class="text-base sm:text-lg font-bold text-rose-900">-${fmtMoney(totalExpense)} <small class="text-[11px] font-normal">฿</small></p>
+      <p class="text-base sm:text-lg font-bold text-rose-900">${hasMonthItems ? `-${fmtMoney(totalExpense)} <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-rose-800">ยังไม่มีรายการ</span>'}</p>
     </div>
-    <div class="rounded-2xl bg-sky-soft/70 p-3">
+    <div class="rounded-2xl bg-sky-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-blue-800">สุทธิ</p>
-      <p class="text-base sm:text-lg font-bold ${net >= 0 ? 'text-blue-900' : 'text-rose-700'}">${net >= 0 ? '+' : '-'}${fmtMoney(Math.abs(net))} <small class="text-[11px] font-normal">฿</small></p>
+      <p class="text-base sm:text-lg font-bold ${hasMonthItems ? (net >= 0 ? 'text-blue-900' : 'text-rose-700') : 'text-blue-800'}">${hasMonthItems ? `${net >= 0 ? '+' : '-'}${fmtMoney(Math.abs(net))} <small class="text-[11px] font-normal">฿</small>` : '—'}</p>
     </div>`;
 
   // สัดส่วนรายจ่ายตามหมวดในเดือนที่เลือก
@@ -1151,19 +1157,19 @@ export function renderExpense() {
   $r('#ex-breakdown').innerHTML = catEntries.length
     ? catEntries.slice(0, 6).map(([c, val]) => {
         const pct = totalExpense ? Math.round((val / totalExpense) * 100) : 0;
-        return `<div class="space-y-0.5 text-xs">
+        return `<div class="space-y-0.5 text-xs tabular-nums">
           <div class="flex justify-between text-slate-600"><span>${CAT_ICONS[c] || '💸'} ${esc(c)}</span><b>${fmtMoney(val)} ฿ (${round1(pct)}%)</b></div>
           <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full bg-brand/80" style="width:${pct}%"></div></div>
         </div>`;
       }).join('')
-    : '<p class="text-xs text-slate-400">ยังไม่มีรายจ่ายในเดือนนี้</p>';
+    : '<p class="text-xs text-slate-500">ยังไม่มีรายจ่ายในเดือนนี้</p>';
   renderExpenseBudgets(curMonth);
   const today = localDateStr();
   analyzedRecurringCandidates = detectRecurringExpenses(state.expenses || [], recurringExpenses);
   const monthlyEstimate = estimateMonthlyRecurringTotal(recurringExpenses, analyzedRecurringCandidates);
 
   const estimateBanner = (recurringExpenses.length || analyzedRecurringCandidates.length)
-    ? `<div class="rounded-xl bg-lav-soft/60 border border-brand/20 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+    ? `<div class="rounded-xl bg-lav-soft/60 border border-brand/20 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
         <span class="font-semibold text-slate-700">📌 ประมาณการรายจ่ายซ้ำต่อเดือน: <b class="text-brand-dark text-sm">${fmtMoney(monthlyEstimate.totalMonthly)} ฿/เดือน</b></span>
         <span class="text-slate-500">ตั้งไว้ ${fmtMoney(monthlyEstimate.plannedMonthly)} ฿${monthlyEstimate.detectedMonthly ? ` · วิเคราะห์เพิ่ม ~${fmtMoney(monthlyEstimate.detectedMonthly)} ฿` : ''}</span>
       </div>`
@@ -1171,7 +1177,7 @@ export function renderExpense() {
 
   const plannedHtml = recurringExpenses.map(plan => {
       const due = plan.nextDate <= today;
-      return `<article class="rounded-xl border ${due ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'} p-3 flex flex-wrap items-center justify-between gap-2">
+      return `<article class="rounded-xl border ${due ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'} p-3 flex flex-wrap items-center justify-between gap-2 tabular-nums">
         <div class="min-w-0"><b class="text-sm text-slate-800">${esc(plan.merchant)}</b>
           <p class="text-xs text-slate-500">${esc(plan.category)} · ${fmtMoney(plan.amount)} ฿ · ${plan.frequency === 'yearly' ? 'รายปี' : 'รายเดือน'} · ครบกำหนด ${esc(fmtDate(plan.nextDate))}</p>
           ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
@@ -1188,7 +1194,7 @@ export function renderExpense() {
     ? `<div class="pt-2 border-t border-slate-100 space-y-2">
         <p class="text-xs font-semibold text-slate-600">🔍 ระบบวิเคราะห์ยอดที่จ่ายซ้ำทุกเดือน (${analyzedRecurringCandidates.length} รายการ)</p>
         ${analyzedRecurringCandidates.map((cand, idx) => `
-          <article class="rounded-xl border border-dashed border-sky-300 bg-sky-50/40 p-2.5 flex flex-wrap items-center justify-between gap-2">
+          <article class="rounded-xl border border-dashed border-sky-300 bg-sky-50/40 p-2.5 flex flex-wrap items-center justify-between gap-2 tabular-nums">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-1.5">
                 <b class="text-xs sm:text-sm text-slate-800">${esc(cand.merchant)}</b>
@@ -1199,7 +1205,7 @@ export function renderExpense() {
             <button type="button" data-recurring-adopt="${idx}" class="btn btn-soft !py-1.5 !px-2.5 text-xs shrink-0">+ ตั้งเป็นประจำ</button>
           </article>`).join('')}
       </div>`
-    : (!recurringExpenses.length ? '<p class="text-xs text-slate-400">ยังไม่มีรายการประจำ (เมื่อมีรายจ่ายร้านเดิมซ้ำตั้งแต่ 2 เดือนขึ้นไป ระบบจะวิเคราะห์มาให้ที่นี่)</p>' : '');
+    : (!recurringExpenses.length ? '<p class="text-xs text-slate-500">ยังไม่มีรายการประจำ (เมื่อมีรายจ่ายร้านเดิมซ้ำตั้งแต่ 2 เดือนขึ้นไป ระบบจะวิเคราะห์มาให้ที่นี่)</p>' : '');
 
   $r('#ex-recurring-list').innerHTML = estimateBanner + plannedHtml + detectedHtml;
 
@@ -1225,13 +1231,13 @@ export function renderExpense() {
   $r('#ex-list').innerHTML = filtered.length ? filtered.map(x => {
     const isInc = x.type === 'income';
     const isTransfer = x.type === 'transfer';
-    return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2">
+    return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2 tabular-nums">
       <div class="flex items-center gap-2.5 min-w-0">
         <span class="emoji-bubble emoji-sm">${CAT_ICONS[x.category] || '💸'}</span>
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-1.5">
             <b class="text-sm text-slate-800 truncate">${esc(x.merchant || x.category)}</b>
-            <span class="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">${esc(x.category)}</span>
+            <span class="text-[11px] text-slate-500">· ${esc(x.category)}</span>
             ${x.source === 'slip_ocr' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">สลิป</span>' : ''}
             ${x.source === 'recurring' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">ประจำ</span>' : ''}
           </div>
@@ -1240,11 +1246,11 @@ export function renderExpense() {
       </div>
       <div class="text-right shrink-0 space-y-1">
         <p class="text-sm font-bold ${isInc ? 'text-green-700' : 'text-rose-700'}">${isInc ? '+' : isTransfer ? '↔ ' : '-'}${fmtMoney(x.amount)} ฿</p>
-        <div class="flex justify-end gap-1.5 text-[11px]">
-          <button type="button" data-ex-edit="${esc(x.id)}" class="text-blue-700 hover:underline">แก้</button>
-          <button type="button" data-ex-del="${esc(x.id)}" class="text-rose-500 hover:underline">ลบ</button>
+        <div class="flex justify-end gap-1 text-[11px]">
+          <button type="button" data-ex-edit="${esc(x.id)}" class="min-h-[32px] px-2 rounded-lg text-blue-700 hover:bg-sky-soft/70">แก้</button>
+          <button type="button" data-ex-del="${esc(x.id)}" class="min-h-[32px] px-2 rounded-lg text-rose-600 hover:bg-rose-50">ลบ</button>
         </div>
       </div>
     </article>`;
-  }).join('') : '<p class="text-xs text-slate-400 text-center py-6">ไม่มีรายการที่ตรงกับเงื่อนไข</p>';
+  }).join('') : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
 }
