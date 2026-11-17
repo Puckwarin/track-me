@@ -1,15 +1,19 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, localDateStr, monthEndDate, toast } from './util.js';
+import { $, esc, fmtDateTime, localDateStr, monthEndDate, toast } from './util.js';
 import { getTargets } from './profile.js';
-import { aggregateMonthlyOverview, buildMonthKeys } from './overviewLogic.js';
+import {
+  aggregateMonthlyOverview, buildMonthKeys, compactFoodForOverview, readOverviewCache, writeOverviewCache
+} from './overviewLogic.js';
 
 let root = null;
 let rangeMonths = 6;
 let seq = 0;
 let cachedRangeKey = '';
 let cachedFood = [];
+let cachedUpdatedAt = 0;
+let cachedFromStorage = false;
 let lastFoodError = '';
 let isLoading = false;
 
@@ -94,11 +98,27 @@ function renderWeightChart(months) {
 
 async function loadFoodForRange(forceRefresh = false) {
   if (!state.uid) return;
-  const keys = buildMonthKeys(rangeMonths, localDateStr());
+  const today = localDateStr();
+  const keys = buildMonthKeys(rangeMonths, today);
   const start = `${keys[0]}-01`;
   const end = monthEndDate(keys[keys.length - 1]);
   const key = `${state.uid}:${start}:${end}`;
   if (!forceRefresh && cachedRangeKey === key && !lastFoodError) return;
+
+  const storageHit = readOverviewCache(state.uid, rangeMonths, { today });
+  if (!forceRefresh && storageHit) {
+    cachedFood = storageHit.food;
+    cachedUpdatedAt = storageHit.updatedAt;
+    cachedFromStorage = true;
+    cachedRangeKey = key;
+    lastFoodError = '';
+    if (storageHit.fresh) {
+      renderView();
+      return;
+    }
+    // แคชหมดอายุแล้ว: แสดงทันทีระหว่างอัปเดตข้อมูลล่าสุดในพื้นหลัง
+    renderView();
+  }
 
   const mySeq = ++seq;
   isLoading = true;
@@ -112,11 +132,36 @@ async function loadFoodForRange(forceRefresh = false) {
       where('date', '<=', end)
     ));
     if (mySeq !== seq) return;
-    cachedFood = snap.docs.map(d => d.data());
+    const foodRows = compactFoodForOverview(snap.docs.map(d => d.data()));
+    cachedFood = foodRows;
     cachedRangeKey = key;
+    cachedUpdatedAt = Date.now();
+    cachedFromStorage = false;
+    const summarySnapshot = aggregateMonthlyOverview({
+      monthsCount: rangeMonths,
+      today,
+      food: foodRows,
+      workouts: state.workouts || [],
+      body: state.body || [],
+      expenses: state.expenses || []
+    });
+    writeOverviewCache(state.uid, rangeMonths, {
+      today,
+      food: foodRows,
+      overviewSummary: summarySnapshot,
+      now: cachedUpdatedAt
+    });
   } catch (err) {
     if (mySeq !== seq) return;
-    lastFoodError = 'โหลดข้อมูลแคลอรี่ย้อนหลังบางส่วนไม่สำเร็จ (แสดงเฉพาะข้อมูลที่มีในแคช)';
+    if (storageHit) {
+      cachedFood = storageHit.food;
+      cachedUpdatedAt = storageHit.updatedAt;
+      cachedFromStorage = true;
+      cachedRangeKey = key;
+      lastFoodError = 'โหลดข้อมูลล่าสุดไม่สำเร็จ กำลังแสดงยอดสรุปจากแคชในเครื่อง';
+    } else {
+      lastFoodError = 'โหลดข้อมูลแคลอรี่ย้อนหลังบางส่วนไม่สำเร็จ (แสดงเฉพาะข้อมูลที่มีในแคช)';
+    }
     if (forceRefresh) toast('รีเฟรชข้อมูลอาหารไม่สำเร็จ: ' + (err?.message || 'ตรวจสอบการเชื่อมต่อ'), 'err');
   } finally {
     if (mySeq === seq) {
@@ -151,6 +196,19 @@ function renderView() {
     refreshBtn.innerHTML = isLoading
       ? '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด...'
       : '<i class="fa-solid fa-rotate-right"></i> รีเฟรช';
+  }
+
+  const cacheInfoEl = $('#ov-cache-info', root);
+  if (cacheInfoEl) {
+    if (cachedUpdatedAt) {
+      cacheInfoEl.textContent = cachedFromStorage
+        ? `💾 แสดงผลจากแคชในเครื่อง (${fmtDateTime(cachedUpdatedAt)}) · กดรีเฟรชเพื่ออัปเดตจากเซิร์ฟเวอร์`
+        : `☁️ อัปเดตล่าสุดจากเซิร์ฟเวอร์ (${fmtDateTime(cachedUpdatedAt)})`;
+      cacheInfoEl.classList.remove('hidden');
+    } else {
+      cacheInfoEl.textContent = '';
+      cacheInfoEl.classList.add('hidden');
+    }
   }
 
   const noticeEl = $('#ov-notice', root);
@@ -239,6 +297,7 @@ export function mountOverview(el) {
           <button type="button" id="ov-refresh" class="btn btn-soft text-xs"><i class="fa-solid fa-rotate-right"></i> รีเฟรช</button>
         </div>
       </div>
+      <p id="ov-cache-info" class="hidden text-[11px] text-slate-500"></p>
       <p id="ov-notice" class="hidden text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2"></p>
       <div id="ov-kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
     </div>
@@ -292,6 +351,8 @@ export function renderOverview({ refreshFood = false } = {}) {
 export function resetOverviewState() {
   cachedRangeKey = '';
   cachedFood = [];
+  cachedUpdatedAt = 0;
+  cachedFromStorage = false;
   lastFoodError = '';
   isLoading = false;
   seq++;

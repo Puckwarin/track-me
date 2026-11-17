@@ -1,4 +1,4 @@
-import { $, esc, toNum, round1, openModal, toast } from './util.js';
+import { $, esc, toNum, round1, openModal } from './util.js';
 import {
   lookupPer100gWithProvider, getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError
 } from './nutrition.js';
@@ -15,7 +15,7 @@ export const SOURCES = {
   usda: 'USDA — วัตถุดิบทั่วไป (DEMO_KEY พร้อมใช้)',
   gemini: 'AI (Gemini → Groq → OpenRouter) — อาหารไทย/เมนูทั่วไป (ประมาณค่า)'
 };
-const K_USDA = 'usda_key', K_SRC = 'food_src', USDA_DEMO_KEY = 'DEMO_KEY';
+const K_USDA = 'usda_key', USDA_DEMO_KEY = 'DEMO_KEY';
 export const getUsdaKey = () => localStorage.getItem(K_USDA) || USDA_DEMO_KEY;
 export const setUsdaKey = k => k && k.trim() !== USDA_DEMO_KEY
   ? localStorage.setItem(K_USDA, k.trim())

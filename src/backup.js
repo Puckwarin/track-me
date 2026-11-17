@@ -4,9 +4,125 @@ import { state } from './state.js';
 import { $, esc, localDateStr, downloadFile, toast } from './util.js';
 import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
 
-const APP = 'Track Me', VERSION = '4.7.0';
-const toPlain = v => v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v;
+export const BACKUP_APP = 'Track Me';
+export const BACKUP_VERSION = '4.8.0';
+export const MAX_BACKUP_FILE_BYTES = 20 * 1024 * 1024;
+export const RESTORE_BATCH_LIMIT = 400;
+
+export const toPlain = v => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : v);
 let parsed = null;
+
+export async function collectBackupData(uid, cols, fetchCollectionDocs = c => getDocs(userCol(uid, c))) {
+  const out = {};
+  const legacyFallbackExpenses = [];
+  for (const c of cols) {
+    const snap = await fetchCollectionDocs(c);
+    if (c === 'settings') {
+      const cleanDocs = [];
+      for (const d of snap.docs) {
+        const data = d.data();
+        if (isSensitivePushSettingsDoc(data, d.id)) continue; // ไม่ส่งออก endpoint & subscription keys
+        if (isLegacyExpenseMonthDoc(data, d.id)) {
+          if (Array.isArray(data.items)) {
+            for (const item of data.items) {
+              if (item && typeof item === 'object') legacyFallbackExpenses.push(item);
+            }
+          }
+          continue;
+        }
+        cleanDocs.push({ id: d.id, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, toPlain(v)])) });
+      }
+      out[c] = cleanDocs;
+    } else {
+      out[c] = snap.docs.map(d => ({ id: d.id, ...Object.fromEntries(Object.entries(d.data()).map(([k, v]) => [k, toPlain(v)])) }));
+    }
+  }
+  if (cols.includes('expense_records') && legacyFallbackExpenses.length) {
+    const byId = new Map((out.expense_records || []).map(r => [r.id, r]));
+    for (const item of legacyFallbackExpenses) {
+      if (item.id && !byId.has(item.id)) byId.set(item.id, item);
+    }
+    out.expense_records = [...byId.values()];
+  }
+  return out;
+}
+
+export function buildBackupPayload(data, exportDate = localDateStr()) {
+  return { app: BACKUP_APP, version: BACKUP_VERSION, exportDate, data };
+}
+
+export function buildRestorePlan(rawText, fileSize = 0) {
+  if (fileSize > MAX_BACKUP_FILE_BYTES) throw new Error('ไฟล์ใหญ่เกินไป');
+  const json = JSON.parse(rawText);
+  if (json?.app !== BACKUP_APP || !json.data || typeof json.data !== 'object' || Array.isArray(json.data)) {
+    throw new Error('ไม่ใช่ไฟล์สำรองของ Track Me');
+  }
+  const plan = Object.fromEntries(Object.keys(SANITIZERS).map(k => [k, []]));
+  let bad = 0;
+
+  for (const c of Object.keys(SANITIZERS)) {
+    const list = Array.isArray(json.data[c]) ? json.data[c] : [];
+    for (const o of list) {
+      if (!o || typeof o !== 'object') { bad++; continue; }
+      if (c === 'settings') {
+        if (isSensitivePushSettingsDoc(o, o.id)) continue; // ข้าม settings/push เสมอ
+        if (isLegacyExpenseMonthDoc(o, o.id)) {
+          // แตกข้อมูลรายจ่ายแบบเก่าจากไฟล์สำรองเวอร์ชันก่อนหน้าเข้า expense_records อัตโนมัติ
+          const items = Array.isArray(o.items) ? o.items : [];
+          for (const item of items) {
+            const cleanExp = item && typeof item === 'object' ? SANITIZERS.expense_records(item) : null;
+            const expId = typeof item?.id === 'string' && /^[\w-]{1,80}$/.test(item.id) ? item.id : null;
+            if (!cleanExp || !expId) { bad++; continue; }
+            if (!plan.expense_records.some(r => r.id === expId)) {
+              plan.expense_records.push({ id: expId, data: cleanExp });
+            }
+          }
+          continue;
+        }
+      }
+      const clean = SANITIZERS[c](o);
+      const id = typeof o?.id === 'string' && /^[\w-]{1,80}$/.test(o.id) ? o.id : null;
+      const resolvedId = docIdFor(c, o, id);
+      if (!clean || !resolvedId) { bad++; continue; }
+      if (!plan[c].some(r => r.id === resolvedId)) {
+        plan[c].push({ id: resolvedId, data: clean });
+      }
+    }
+  }
+
+  return {
+    exportDate: json.exportDate || '-',
+    version: json.version || '?',
+    plan,
+    bad
+  };
+}
+
+export async function markExistingRestoreItems(plan, uid, fetchCollectionDocs = c => getDocs(userCol(uid, c))) {
+  for (const c of Object.keys(plan)) {
+    if (!plan[c].length) continue;
+    const have = new Set((await fetchCollectionDocs(c)).docs.map(d => d.id));
+    plan[c].forEach(r => { r.exists = have.has(r.id); });
+  }
+  return plan;
+}
+
+export function filterRestoreRows(plan, cols, mode = 'skip') {
+  return cols.flatMap(c => (plan?.[c] || []).filter(r => mode === 'overwrite' || !r.exists).map(r => ({ c, ...r })));
+}
+
+export async function commitRestoreRows(uid, rows, {
+  firestore = db,
+  createBatch = writeBatch,
+  docRef = userDoc,
+  batchSize = RESTORE_BATCH_LIMIT
+} = {}) {
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const b = createBatch(firestore);
+    rows.slice(i, i + batchSize).forEach(r => b.set(docRef(uid, r.c, r.id), r.data));
+    await b.commit();
+  }
+}
 
 export function mountBackup(el) {
   el.innerHTML = `
@@ -28,38 +144,8 @@ async function exportData(el) {
   const cols = selected(el);
   if (!cols.length) return toast('เลือกอย่างน้อย 1 หมวด', 'err');
   try {
-    const out = {};
-    const legacyFallbackExpenses = [];
-    for (const c of cols) {
-      const snap = await getDocs(userCol(state.uid, c));
-      if (c === 'settings') {
-        const cleanDocs = [];
-        for (const d of snap.docs) {
-          const data = d.data();
-          if (isSensitivePushSettingsDoc(data, d.id)) continue; // ไม่ส่งออก endpoint & subscription keys
-          if (isLegacyExpenseMonthDoc(data, d.id)) {
-            if (Array.isArray(data.items)) {
-              for (const item of data.items) {
-                if (item && typeof item === 'object') legacyFallbackExpenses.push(item);
-              }
-            }
-            continue;
-          }
-          cleanDocs.push({ id: d.id, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, toPlain(v)])) });
-        }
-        out[c] = cleanDocs;
-      } else {
-        out[c] = snap.docs.map(d => ({ id: d.id, ...Object.fromEntries(Object.entries(d.data()).map(([k, v]) => [k, toPlain(v)])) }));
-      }
-    }
-    if (cols.includes('expense_records') && legacyFallbackExpenses.length) {
-      const byId = new Map((out.expense_records || []).map(r => [r.id, r]));
-      for (const item of legacyFallbackExpenses) {
-        if (item.id && !byId.has(item.id)) byId.set(item.id, item);
-      }
-      out.expense_records = [...byId.values()];
-    }
-    downloadFile(`trackme-backup-${localDateStr()}.json`, JSON.stringify({ app: APP, version: VERSION, exportDate: localDateStr(), data: out }, null, 2), 'application/json');
+    const data = await collectBackupData(state.uid, cols);
+    downloadFile(`trackme-backup-${localDateStr()}.json`, JSON.stringify(buildBackupPayload(data), null, 2), 'application/json');
     toast('สำรองข้อมูลแล้ว — เก็บไฟล์นี้ให้ปลอดภัย');
   } catch (e) { toast('สำรองไม่สำเร็จ: ' + e.message, 'err'); }
 }
@@ -68,49 +154,12 @@ async function readFile(file, el) {
   const box = $('#bk-preview', el);
   box.classList.remove('hidden');
   try {
-    if (file.size > 20 * 1024 * 1024) throw new Error('ไฟล์ใหญ่เกินไป');
-    const json = JSON.parse(await file.text());
-    if (json?.app !== APP || typeof json.data !== 'object') throw new Error('ไม่ใช่ไฟล์สำรองของ Track Me');
-    const plan = Object.fromEntries(Object.keys(SANITIZERS).map(k => [k, []]));
-    let bad = 0;
-
-    for (const c of Object.keys(SANITIZERS)) {
-      const list = Array.isArray(json.data[c]) ? json.data[c] : [];
-      for (const o of list) {
-        if (!o || typeof o !== 'object') { bad++; continue; }
-        if (c === 'settings') {
-          if (isSensitivePushSettingsDoc(o, o.id)) continue; // ข้าม settings/push เสมอ
-          if (isLegacyExpenseMonthDoc(o, o.id)) {
-            // แตกข้อมูลรายจ่ายแบบเก่าจากไฟล์สำรองเวอร์ชันก่อนหน้าเข้า expense_records อัตโนมัติ
-            const items = Array.isArray(o.items) ? o.items : [];
-            for (const item of items) {
-              const cleanExp = item && typeof item === 'object' ? SANITIZERS.expense_records(item) : null;
-              const expId = typeof item?.id === 'string' && /^[\w-]{1,80}$/.test(item.id) ? item.id : null;
-              if (!cleanExp || !expId) { bad++; continue; }
-              if (!plan.expense_records.some(r => r.id === expId)) {
-                plan.expense_records.push({ id: expId, data: cleanExp });
-              }
-            }
-            continue;
-          }
-        }
-        const clean = SANITIZERS[c](o);
-        const id = typeof o?.id === 'string' && /^[\w-]{1,80}$/.test(o.id) ? o.id : null;
-        const resolvedId = docIdFor(c, o, id);
-        if (!clean || !resolvedId) { bad++; continue; }
-        if (!plan[c].some(r => r.id === resolvedId)) {
-          plan[c].push({ id: resolvedId, data: clean });
-        }
-      }
-    }
+    const rawText = await file.text();
+    const { exportDate, version, plan, bad } = buildRestorePlan(rawText, file.size);
     // ตรวจว่ามีอยู่แล้วกี่รายการ (กันนำเข้าซ้ำ)
-    for (const c of Object.keys(plan)) {
-      if (!plan[c].length) continue;
-      const have = new Set((await getDocs(userCol(state.uid, c))).docs.map(d => d.id));
-      plan[c].forEach(r => { r.exists = have.has(r.id); });
-    }
+    await markExistingRestoreItems(plan, state.uid);
     parsed = plan;
-    box.innerHTML = `<p class="font-semibold">ไฟล์สำรองวันที่ ${esc(json.exportDate || '-')} (v${esc(json.version || '?')})</p>
+    box.innerHTML = `<p class="font-semibold">ไฟล์สำรองวันที่ ${esc(exportDate)} (v${esc(version)})</p>
       <table class="text-xs"><tbody>${Object.entries(plan).filter(([, l]) => l.length).map(([c, l]) => `<tr><td class="pr-4">${COLLECTION_LABELS[c]}</td><td class="pr-4">ทั้งหมด ${l.length}</td><td class="pr-4 text-green-700">ใหม่ ${l.filter(r => !r.exists).length}</td><td class="text-amber-700">มีอยู่แล้ว ${l.filter(r => r.exists).length}</td></tr>`).join('') || '<tr><td>ไม่พบข้อมูลที่นำเข้าได้</td></tr>'}</tbody></table>
       ${bad ? `<p class="text-xs text-amber-700">ข้าม ${bad} รายการที่รูปแบบไม่ถูกต้อง</p>` : ''}
       <label class="block text-xs"><input type="radio" name="bk-mode" value="skip" checked> เพิ่มเฉพาะรายการใหม่ (แนะนำ — ไม่ทับของเดิม)</label>
@@ -125,15 +174,11 @@ async function restore(el, box) {
   if (!navigator.onLine) return toast('ต้องออนไลน์ระหว่างกู้คืน', 'err');
   const mode = box.querySelector('input[name="bk-mode"]:checked').value;
   const cols = selected(el);
-  const rows = cols.flatMap(c => (parsed[c] || []).filter(r => mode === 'overwrite' || !r.exists).map(r => ({ c, ...r })));
+  const rows = filterRestoreRows(parsed, cols, mode);
   if (!rows.length) return toast('ไม่มีรายการที่ต้องนำเข้า');
   if (!confirm(`นำเข้า ${rows.length} รายการ${mode === 'overwrite' ? ' (รวมเขียนทับของเดิม)' : ''} ยืนยันหรือไม่?`)) return;
   try {
-    for (let i = 0; i < rows.length; i += 400) {
-      const b = writeBatch(db);
-      rows.slice(i, i + 400).forEach(r => b.set(userDoc(state.uid, r.c, r.id), r.data));
-      await b.commit();
-    }
+    await commitRestoreRows(state.uid, rows);
     toast(`กู้คืนสำเร็จ ${rows.length} รายการ`);
     box.classList.add('hidden'); parsed = null;
   } catch (e) { toast('กู้คืนไม่สำเร็จ: ' + e.message, 'err'); }

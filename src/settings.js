@@ -12,7 +12,6 @@ import { signOutUser, lockCurrentApp } from './auth.js';
 import { state } from './state.js';
 import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
-import { openNotesAndFeedbackModal } from './chatWidget.js';
 import {
   hasEnvVapidKey,
   getVapidPublicKey,
@@ -326,13 +325,22 @@ export function mountSettings(el) {
     const fc = (state.userFeedback || []).length;
     nfSummary.textContent = `โน้ตที่จดไว้ ${nc} รายการ · Feedback ที่ส่งแล้ว ${fc} รายการ`;
   };
-  $('#st-open-notes', el)?.addEventListener('click', () => openNotesAndFeedbackModal('notes'));
-  $('#st-open-feedback', el)?.addEventListener('click', () => openNotesAndFeedbackModal('feedback'));
+  const openNotesModalLazy = async initialTab => {
+    try {
+      const { openNotesAndFeedbackModal } = await import('./chatWidget.js');
+      openNotesAndFeedbackModal(initialTab);
+    } catch (err) {
+      toast('เปิดหน้าต่างโน้ตไม่สำเร็จ: ' + (err?.message || 'โหลดโมดูลไม่ได้'), 'err');
+    }
+  };
+  $('#st-open-notes', el)?.addEventListener('click', () => void openNotesModalLazy('notes'));
+  $('#st-open-feedback', el)?.addEventListener('click', () => void openNotesModalLazy('feedback'));
   window.addEventListener('trackme:notes-change', updateNfSummary);
   updateNfSummary();
 
   mountBackup($('#st-backup', el));
   mountMigrate($('#st-migrate', el));
+  refreshAccount();
 }
 
 export function refreshAccount() {

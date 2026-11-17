@@ -3,6 +3,22 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v4.8.0] - 2026-11-17
+
+### Lazy Loading, แคชแดชบอร์ดรายเดือน, ทำความสะอาดโค้ด & Unit Tests
+- **Lazy Loading หน้าและโมดูลที่ยังไม่ได้เปิดใช้งาน (`src/app.js`, `src/home.js`, `src/care.js`, `src/inventory.js`, `src/settings.js`, `src/chatWidget.js`)**:
+  - แยกโหลดแบบ dynamic import เฉพาะเมื่อผู้ใช้คลิกเปิด/สลับเข้าเมนูสำหรับ **รายจ่าย (`expense.js`)**, **แชท AI (`chatWidget.js`)**, **สัตว์เลี้ยง (`care.js`)**, **ของใช้ (`inventory.js`)**, **ผลแล็บ (`lab.js`)** และ **แพลนเนอร์ (`planner.js`)** รวมถึง `food.js`, `weekly.js`, `remindLog.js`, `settings.js` (ร่วมกับ `overview.js`, `reports.js`, `workout.js` ที่แยกอยู่แล้ว)
+  - คงการอัปเดตการ์ดสรุปหน้า Home, กระดิ่งแจ้งเตือน, สรุปจำนวนผลแล็บ และ Share Target (`?shared-slip` โหลด `expense.js` เฉพาะเมื่อเปิดจาก Share Target) ให้ทำงานครบถ้วน; ลดขนาด JavaScript entry หลักเหลือ **`1,035.97 kB`** minified (**`273.19 kB`** gzip) จาก `1,326.07 kB` (`345.60 kB` gzip) ใน v4.1.0
+- **แคชยอดสรุปรายเดือนหน้าแดชบอร์ดใน `localStorage` (`src/overviewLogic.js`, `src/overview.js`, `src/foodService.js`)**:
+  - เพิ่มระบบแคชข้อมูลอาหารช่วงเดือนที่ย่อฟิลด์แล้วและยอดสรุปรายเดือนลง `trackme_overview_cache_v1` (TTL 24 ชม., จำกัดสูงสุด 6 รายการแบบตัดเก่าสุดอัตโนมัติ) เพื่อลดการอ่าน Firestore ซ้ำทุกครั้งที่เปิดแอป
+  - แสดงเวลาที่แคชใน `#ov-cache-info`, รองรับ fallback จากแคชเดิมเมื่อออฟไลน์/ดึงไม่สำเร็จ, คงปุ่ม `🔄 รีเฟรช`, และล้างแคชของผู้ใช้ (`clearOverviewCacheForUid`) อัตโนมัติเมื่อเพิ่ม/แก้ไข/ลบรายการอาหาร
+- **ทำความสะอาดโค้ด & เอกสาร (`src/food.js`, `src/foodsearch.js`, `src/period.js`, `src/profile.js`, `src/statementParser.js`, `docs/CHANGELOG.md`)**:
+  - ลบตัวแปรและ import ที่ไม่ใช้งานออกทั้งหมดจน `eslint src` ผ่านด้วย 0 errors / 0 warnings, ยืนยันว่า `src/dashboard.js` ถูกลบออกตั้งแต่ v4.7.0 (แทนที่ด้วย `src/overview.js`), และแก้ไขแถวตาราง v4.5.0/v4.4.0 ที่ติดกัน (`||`) ใน `docs/CHANGELOG.md`
+- **Unit Tests สำหรับ Backup, Restore, Sync & Overview Cache (`src/backup.js`, `src/sync.js`, `src/backup.test.js`, `src/sync.test.js`, `src/overviewLogic.test.js`)**:
+  - Export ฟังก์ชันหลักใน `backup.js` (`collectBackupData`, `buildBackupPayload`, `buildRestorePlan`, `markExistingRestoreItems`, `filterRestoreRows`, `commitRestoreRows`) และเพิ่ม environment guards ใน `sync.js` เพื่อทดสอบแบบ deterministic โดยไม่กระทบ UI จริง
+  - เพิ่ม `src/backup.test.js` (5 tests: ข้าม `settings/push`, แตก/รวม `expense_month`, Timestamp ISO, validate ไฟล์/ขนาด/ข้อมูลเสีย, filter `skip`/`overwrite`, batch 400 ops), `src/sync.test.js` (2 tests: `watch`, unsub listener เดิม, `lastSync` กับ `fromCache`/`hasPendingWrites`, `stopAll`, error report, สถานะออฟไลน์), และเทสต์แคชแดชบอร์ดใน `src/overviewLogic.test.js`
+
+---
 ## [v4.7.0] - 2026-11-17
 
 ### ลดการเรียก AI & เพิ่มระบบแคชในเครื่อง (5 กลุ่ม)

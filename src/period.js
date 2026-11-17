@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, parseLocal, daysBetween, addDays, toast } from './util.js';
+import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './util.js';
 import { selectDate } from './symptoms.js';
 
 let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();

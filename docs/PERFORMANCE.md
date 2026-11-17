@@ -27,3 +27,29 @@
 - การย้าย listener หรือ refactor data architecture เพื่อแยก Firebase ออกจาก entry หลักมีผลต่อการโหลด/แสดงข้อมูลหลายหน้า จึงไม่ทำใน Phase นี้
 - ไม่ได้วัด First Contentful Paint, Largest Contentful Paint, การใช้งานบนอุปกรณ์มือถือจริง หรือการติดตั้ง PWA บนทุก browser
 - การตรวจ PWA รอบนี้ยืนยันว่า build สร้าง Service Worker และ precache manifest ได้; ไม่ได้ทดสอบ offline end-to-end กับบัญชี Firebase จริง
+
+---
+
+## ผลหลังปรับ Lazy Loading ใน v4.8.0
+
+ขยายการทำ dynamic `import()` ให้ครอบคลุมหน้าและฟีเจอร์ที่ยังไม่ได้ใช้ตอนเปิดหน้า Home แรก (รายจ่าย, แชท AI, สัตว์เลี้ยง, ของใช้, ผลแล็บ, แพลนเนอร์, อาหาร, สรุปสัปดาห์, แจ้งเตือน, ตั้งค่า เพิ่มเติมจากแดชบอร์ด, รายงาน และออกกำลังกาย) พร้อมเพิ่มแคชข้อมูลรายเดือนของแดชบอร์ดลง `localStorage` (`trackme_overview_cache_v1`)
+
+| รายการ (`vite v6.4.6`) | v4.1.0 | v4.8.0 | เปลี่ยนแปลง |
+|---|---:|---:|---:|
+| JavaScript หลัก (`index`) minified | 1,326.07 kB | 1,035.97 kB | ลด 290.10 kB (ประมาณ 21.9%) |
+| JavaScript หลัก (`index`) gzip | 345.60 kB | 273.19 kB | ลด 72.41 kB (ประมาณ 21.0%) |
+| PWA precache | 34 รายการ / 4,003.03 KiB | 49 รายการ / 4,278.17 KiB | แยก chunk เพิ่ม 15 รายการ |
+
+### ขนาด Lazy Chunks หลักที่แยกออกจาก Entry (`v4.8.0`)
+
+- `workout`: `124.14 kB` (`33.00 kB` gzip) · `food`: `95.10 kB` (`25.86 kB` gzip) · `expense`: `73.50 kB` (`20.04 kB` gzip)
+- `aiAssistant`: `59.25 kB` (`16.76 kB` gzip) · `chatWidget`: `49.29 kB` (`13.31 kB` gzip) · `settings`: `33.24 kB` (`9.42 kB` gzip)
+- `planner`: `31.21 kB` (`9.21 kB` gzip) · `care`: `31.12 kB` (`9.28 kB` gzip) · `lab`: `29.01 kB` (`8.62 kB` gzip)
+- `remindLog`: `23.86 kB` (`6.79 kB` gzip) · `inventory`: `23.25 kB` (`7.31 kB` gzip) · `localAssistant`: `21.17 kB` (`7.06 kB` gzip)
+- `foodsearch`: `18.89 kB` (`6.98 kB` gzip) · `weekly`: `17.60 kB` (`5.78 kB` gzip) · `overview`: `13.31 kB` (`4.45 kB` gzip) · `reports`: `12.53 kB` (`4.42 kB` gzip)
+
+### ข้อสังเกตที่ยังคงอยู่หลัง v4.8.0
+
+- Entry หลัก (`1,035.97 kB` minified) ยังเกินคำเตือน Vite `500 kB` เนื่องจาก Firebase Auth/Firestore SDK ยังโหลดตั้งแต่เริ่มเพื่อคง data listeners และ offline cache หลัก
+- Vite ยังคงแจ้งเตือนเดิมว่า `src/workoutActive.js` ถูกทั้ง static และ dynamic import ภายใน `src/workout.js` (พฤติกรรมเดิมก่อน v4.8.0)
+- ค่าทั้งหมดเป็นผลจาก production build; ยังไม่ได้วัดเวลา FCP/LCP จริงบนอุปกรณ์มือถือหรือทดสอบ offline end-to-end กับบัญชี Firebase จริง

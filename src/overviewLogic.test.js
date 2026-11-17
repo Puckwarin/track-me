@@ -1,7 +1,31 @@
-import { describe, expect, it } from 'vitest';
-import { aggregateMonthlyOverview, buildMonthKeys } from './overviewLogic.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  OVERVIEW_CACHE_KEY,
+  OVERVIEW_CACHE_TTL_MS,
+  aggregateMonthlyOverview,
+  buildMonthKeys,
+  clearOverviewCacheForUid,
+  readOverviewCache,
+  writeOverviewCache
+} from './overviewLogic.js';
 
-describe('overviewLogic monthly dashboard aggregation', () => {
+describe('overviewLogic monthly dashboard aggregation and localStorage cache', () => {
+  beforeEach(() => {
+    if (!globalThis.localStorage) {
+      const store = new Map();
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: {
+          getItem: k => store.get(k) ?? null,
+          setItem: (k, v) => store.set(k, String(v)),
+          removeItem: k => store.delete(k),
+          clear: () => store.clear()
+        }
+      });
+    }
+    localStorage.clear();
+  });
+
   it('builds month keys across year boundaries for 3, 6, and 12 months', () => {
     expect(buildMonthKeys(3, '2026-02-15')).toEqual(['2025-12', '2026-01', '2026-02']);
     expect(buildMonthKeys(6, '2026-04-01')).toEqual([
@@ -91,5 +115,48 @@ describe('overviewLogic monthly dashboard aggregation', () => {
       totalWorkouts: 0,
       totalExpense: 0
     });
+  });
+
+  it('persists compact overview food and summary per uid/range in localStorage, expires after TTL, and clears per uid', () => {
+    const baseNow = 1_700_000_000_000;
+    const summarySnapshot = aggregateMonthlyOverview({
+      monthsCount: 6,
+      today: '2026-11-17',
+      food: [{ date: '2026-11-10', calories: 1500, protein: 70 }]
+    });
+
+    writeOverviewCache('u1', 6, {
+      today: '2026-11-17',
+      food: [{ id: 'ignored', date: '2026-11-10', calories: 1500, protein: 70, note: 'drop me' }],
+      overviewSummary: summarySnapshot,
+      now: baseNow
+    });
+
+    const hit = readOverviewCache('u1', 6, { today: '2026-11-17', now: baseNow + 60_000 });
+    expect(hit?.fresh).toBe(true);
+    expect(hit?.food).toEqual([{ date: '2026-11-10', calories: 1500, protein: 70 }]);
+    expect(hit?.overviewSummary?.summary?.avgCalPerDay).toBe(1500);
+
+    // Month window shift misses cache cleanly
+    expect(readOverviewCache('u1', 6, { today: '2026-12-01', now: baseNow + 60_000 })).toBeNull();
+
+    // Past TTL returns stale cache (`fresh: false`) so UI can still show offline fallback
+    const stale = readOverviewCache('u1', 6, {
+      today: '2026-11-17',
+      now: baseNow + OVERVIEW_CACHE_TTL_MS + 1000
+    });
+    expect(stale?.fresh).toBe(false);
+    expect(stale?.food).toHaveLength(1);
+
+    // Evicts oldest entries beyond cap (6 entries) and clears only target uid
+    for (let i = 0; i < 8; i++) {
+      writeOverviewCache(`u_${i}`, 3, { today: '2026-11-17', food: [], now: baseNow + i });
+    }
+    const stored = JSON.parse(localStorage.getItem(OVERVIEW_CACHE_KEY));
+    expect(Object.keys(stored).length).toBeLessThanOrEqual(6);
+
+    clearOverviewCacheForUid('u_7');
+    expect(readOverviewCache('u_7', 3, { today: '2026-11-17', now: baseNow + 100 })).toBeNull();
+    expect(readOverviewCache('u_6', 3, { today: '2026-11-17', now: baseNow + 100 })).not.toBeNull();
   });
 });

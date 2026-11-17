@@ -150,3 +150,103 @@ export function aggregateMonthlyOverview({
     }
   };
 }
+
+export const OVERVIEW_CACHE_KEY = 'trackme_overview_cache_v1';
+export const OVERVIEW_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const OVERVIEW_CACHE_MAX_ENTRIES = 6;
+
+export function compactFoodForOverview(foodList = []) {
+  return (Array.isArray(foodList) ? foodList : [])
+    .filter(r => r && typeof r.date === 'string' && r.date)
+    .map(r => ({
+      date: r.date,
+      calories: num(r.calories),
+      ...(r.protein != null ? { protein: num(r.protein) } : {})
+    }));
+}
+
+function readOverviewCacheStore() {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(OVERVIEW_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeOverviewCacheStore(store) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const keys = Object.keys(store).sort((a, b) => (store[a]?.updatedAt || 0) - (store[b]?.updatedAt || 0));
+    keys.slice(0, Math.max(0, keys.length - OVERVIEW_CACHE_MAX_ENTRIES)).forEach(k => delete store[k]);
+    localStorage.setItem(OVERVIEW_CACHE_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+}
+
+export function readOverviewCache(uid, monthsCount, {
+  today = localDateStr(),
+  now = Date.now(),
+  ttlMs = OVERVIEW_CACHE_TTL_MS
+} = {}) {
+  if (!uid) return null;
+  const count = [3, 6, 12].includes(Number(monthsCount)) ? Number(monthsCount) : 6;
+  const monthKeys = buildMonthKeys(count, today);
+  const startYm = monthKeys[0];
+  const endYm = monthKeys[monthKeys.length - 1];
+  const store = readOverviewCacheStore();
+  const entry = store[`${uid}:${count}`];
+  if (!entry || entry.startYm !== startYm || entry.endYm !== endYm || !Array.isArray(entry.food)) {
+    return null;
+  }
+  const updatedAt = Number(entry.updatedAt) || 0;
+  const fresh = updatedAt > 0 && (now - updatedAt) < ttlMs;
+  return {
+    startYm: entry.startYm,
+    endYm: entry.endYm,
+    updatedAt,
+    fresh,
+    food: entry.food,
+    overviewSummary: entry.overviewSummary || null
+  };
+}
+
+export function writeOverviewCache(uid, monthsCount, {
+  today = localDateStr(),
+  food = [],
+  overviewSummary = null,
+  now = Date.now()
+} = {}) {
+  if (!uid) return null;
+  const count = [3, 6, 12].includes(Number(monthsCount)) ? Number(monthsCount) : 6;
+  const monthKeys = buildMonthKeys(count, today);
+  const entry = {
+    startYm: monthKeys[0],
+    endYm: monthKeys[monthKeys.length - 1],
+    updatedAt: now,
+    food: compactFoodForOverview(food),
+    ...(overviewSummary ? { overviewSummary } : {})
+  };
+  const store = readOverviewCacheStore();
+  store[`${uid}:${count}`] = entry;
+  writeOverviewCacheStore(store);
+  return entry;
+}
+
+export function clearOverviewCacheForUid(uid) {
+  if (!uid) return;
+  const store = readOverviewCacheStore();
+  const prefix = `${uid}:`;
+  let changed = false;
+  for (const k of Object.keys(store)) {
+    if (k.startsWith(prefix)) {
+      delete store[k];
+      changed = true;
+    }
+  }
+  if (changed) writeOverviewCacheStore(store);
+}

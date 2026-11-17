@@ -279,15 +279,16 @@ function renderRolesBar() {
 }
 
 function ensureShell() {
-  if ($('#ai-chat-fab')) return;
+  if ($('#ai-chat-drawer')) return;
   const host = $('#app-shell') || document.body;
+  const hasFab = Boolean($('#ai-chat-fab'));
 
   const wrap = document.createElement('div');
   wrap.className = 'no-print';
   wrap.innerHTML = `
-    <button id="ai-chat-fab" type="button" class="ai-chat-fab" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
+    ${hasFab ? '' : `<button id="ai-chat-fab" type="button" class="ai-chat-fab" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
       <i class="fa-solid fa-comments"></i>
-    </button>
+    </button>`}
 
     <section id="ai-chat-drawer" class="ai-chat-drawer hidden" role="dialog" aria-modal="false" aria-labelledby="ai-chat-title">
       <header class="ai-chat-header">
@@ -651,6 +652,14 @@ async function handleSend(rawText) {
   }
 }
 
+export function openChatWidget() {
+  setOpen(true);
+}
+
+export function toggleChatWidget() {
+  setOpen(!isOpen);
+}
+
 export function mountChatWidget(goTo) {
   if (typeof goTo === 'function') goToFn = goTo;
   ensureShell();
@@ -658,10 +667,15 @@ export function mountChatWidget(goTo) {
   renderRolesBar();
   renderMessages();
 
-  if ($('#ai-chat-fab')?.dataset.bound) return;
-  $('#ai-chat-fab').dataset.bound = '1';
+  const drawer = $('#ai-chat-drawer');
+  if (drawer?.dataset.bound) return;
+  if (drawer) drawer.dataset.bound = '1';
 
-  $('#ai-chat-fab').addEventListener('click', () => setOpen(!isOpen));
+  const fab = $('#ai-chat-fab');
+  if (fab && !fab.dataset.lazyManaged && !fab.dataset.bound) {
+    fab.dataset.bound = '1';
+    fab.addEventListener('click', () => setOpen(!isOpen));
+  }
   $('#ai-chat-close').addEventListener('click', () => setOpen(false));
   $('#ai-chat-notes-btn')?.addEventListener('click', () => openNotesAndFeedbackModal('notes'));
   $('#ai-chat-clear').addEventListener('click', () => {

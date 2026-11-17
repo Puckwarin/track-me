@@ -352,7 +352,6 @@ function pickByLabel(v) {
 function applyPreset(p, setName = true) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  qtyMode = 'auto';
   $('#f-qty', root).value = p.defaultQuantity ?? 1;
   if (p.edibleFraction && p.gramsPerUnit > 0) {
     $('#f-gross', root).value = p.gramsPerUnit;
@@ -394,13 +393,12 @@ function clearFoodForm() {
   $('#f-photo-lib-bar', root)?.classList.add('hidden');
   setFoodScanStatus('', '');
   $('#f-qty',root).value=1;
-  base=null; qtyMode='auto';
+  base=null;
   syncFoodWeightForm();
   updateFoodPreview();
 }
 
 // ถ้าเมนูรู้น้ำหนักต่อหน่วย ผู้ใช้จะกรอกเป็นกรัมหรือจำนวนหน่วยก็ได้: ระบบใช้ขนาดของตัวเลขเดาโหมดเอง — เลข ≥ น้ำหนัก 1 หน่วย × 0.9 ถือเป็นกรัม เลขน้อยกว่านั้นถือเป็นจำนวนหน่วย
-let qtyMode = 'auto';
 // จำนวนหน่วยจริงที่จะบันทึก: ถ้าเมนูชั่งได้และค่าที่กรอกน่าจะเป็นกรัม ให้แปลงกลับเป็นหน่วย
 const formQty = () => foodQuantityFromInput(numField(root, 'f-qty'), base);
 

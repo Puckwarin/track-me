@@ -2,12 +2,83 @@
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toast } from './util.js';
 import { getTargets } from './profile.js';
-import { collectReminders } from './reminders.js';
+import { collectReminders, remindersForDate } from './reminders.js';
 import { CATEGORIES } from './categories.js';
-import { mountPlanner, renderPlanner } from './planner.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
+import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
 let go = () => {};
+let plannerFeature = null;
+let plannerMountPromise = null;
+let plannerExpanded = false;
+
+export function resetHomePlannerToToday() {
+  plannerFeature?.resetPlannerToToday?.();
+}
+
+export function resetHomePlannerState() {
+  plannerExpanded = false;
+}
+
+export function ensureHomePlannerLoaded() {
+  plannerExpanded = true;
+  const container = $('#home-planner');
+  if (!container) return Promise.resolve();
+  if (!plannerMountPromise) {
+    const btn = $('#home-planner-open', container);
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด Planner...';
+    }
+    plannerMountPromise = import('./planner.js')
+      .then(module => {
+        plannerFeature = module;
+        module.mountPlanner(container, go);
+        module.renderPlanner();
+      })
+      .catch(error => {
+        plannerMountPromise = null;
+        plannerExpanded = false;
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+        toast('เปิด Planner ไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+        renderHome();
+      });
+  } else if (plannerFeature) {
+    plannerFeature.mountPlanner(container, go);
+    plannerFeature.renderPlanner();
+  }
+  return plannerMountPromise;
+}
+
+function renderPlannerTeaser(el, today) {
+  const host = $('#home-planner', el);
+  if (!host) return;
+  const routines = Array.isArray(state.planner?.routines) ? state.planner.routines : [];
+  const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
+  const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned').length;
+  const dayReminders = remindersForDate(today);
+  const doneMapToday = Array.isArray(state.planner?.doneMap?.[today]) ? state.planner.doneMap[today].length : 0;
+
+  host.innerHTML = `
+  <section class="card space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand mr-1"></i> Weekly Planner & กิจวัตร</h2>
+        <p class="text-xs text-slate-500">
+          ${esc(fmtDate(today))} · แผนออกกำลังกาย ${doneWorkouts}/${todayWorkouts.length} · กิจวัตรที่ตั้งไว้ ${routines.length} รายการ${doneMapToday ? ` · เช็กวันนี้แล้ว ${doneMapToday}` : ''}
+        </p>
+      </div>
+      <button type="button" id="home-planner-open" class="btn btn-primary text-xs">
+        <i class="fa-solid fa-calendar-check"></i> เปิดเช็กลิสต์ Planner
+      </button>
+    </div>
+    ${dayReminders.length ? `
+    <div class="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 flex flex-wrap items-center gap-1.5 text-xs">
+      <span class="font-bold text-amber-900">🔔 นัดหมาย/เตือนวันนี้:</span>
+      ${dayReminders.slice(0, 3).map(r => `<span class="inline-flex items-center gap-1 rounded-lg bg-white border border-amber-200 px-2 py-0.5 text-amber-950 font-medium">${r.icon} ${esc(r.label)}</span>`).join('')}
+    </div>` : ''}
+  </section>`;
+}
 
 export function mountHome(navigate) {
   go = navigate;
@@ -17,9 +88,12 @@ export function mountHome(navigate) {
     <div id="home-planner"></div>
     <div id="home-rest" class="space-y-4"></div>`;
 
-  mountPlanner($('#home-planner', el), navigate);
-
   el.addEventListener('click', async e => {
+    const plannerBtn = e.target.closest('#home-planner-open');
+    if (plannerBtn) {
+      void ensureHomePlannerLoaded();
+      return;
+    }
     const pushBtn = e.target.closest('#home-push-btn');
     if (pushBtn) {
       pushBtn.disabled = true;
@@ -71,7 +145,13 @@ export function renderHome() {
     refreshHomePushBtn();
   }
 
-  renderPlanner();
+  if (plannerExpanded && plannerFeature) {
+    plannerFeature.renderPlanner();
+  } else if (plannerExpanded) {
+    void ensureHomePlannerLoaded();
+  } else {
+    renderPlannerTeaser(el, today);
+  }
 
   const foods = state.todayFood || [];
   const t = getTargets();

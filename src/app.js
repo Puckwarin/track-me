@@ -22,23 +22,13 @@ import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import './theme.js';
 import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
-import { mountHome, renderHome } from './home.js';
-import { resetPlannerToToday } from './planner.js';
-import { mountFood, watchDay, resetFoodToToday } from './food.js';
+import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
-import { mountCare, watchCare, resetCareToToday } from './care.js';
-import { mountInventory, watchInventory } from './inventory.js';
 import { mountBody, render as renderBody, resetBodyToToday } from './body.js';
-import { mountWeekly, renderWeekly, resetWeeklyToToday } from './weekly.js';
-import { render as renderLab } from './lab.js';
-import { mountRemind, renderRemind } from './remindLog.js';
 import { refreshProfile } from './profile.js';
-import { mountSettings, refreshAccount } from './settings.js';
 import { renderSummary, copySummary } from './summary.js';
 import { mountReminders, renderReminders, collectReminders } from './reminders.js';
-import { mountExpense, renderExpense, handleSharedSlipLaunch, resetExpenseToToday } from './expense.js';
-import { mountChatWidget } from './chatWidget.js';
 import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
 setRuntimeErrorSink((uid, reports) => {
@@ -90,61 +80,87 @@ function renderSubnav(group, name) {
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
-let reportFeature = null;
-let reportMountPromise = null;
-function ensureReportMounted() {
-  if (!reportMountPromise) {
-    reportMountPromise = import('./reports.js')
-      .then(module => {
-        reportFeature = module;
-        module.mountReport($('#tab-report'));
-      })
-      .catch(error => {
-        reportMountPromise = null;
-        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
-        console.error('Could not load health report:', error);
-        toast('เปิดรายงานสุขภาพไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
-      });
-  }
-  return reportMountPromise;
+function makeLazyFeature(loader, onMount, errorLabel) {
+  let feature = null;
+  let promise = null;
+  return {
+    get: () => feature,
+    ensure: () => {
+      if (!promise) {
+        promise = loader()
+          .then(module => {
+            feature = module;
+            onMount(module);
+            return module;
+          })
+          .catch(error => {
+            promise = null;
+            reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+            console.error(`Could not load ${errorLabel}:`, error);
+            toast(`เปิด${errorLabel}ไม่สำเร็จ: ` + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+            return null;
+          });
+      }
+      return promise;
+    }
+  };
 }
 
-let workoutFeature = null;
-let workoutMountPromise = null;
-function ensureWorkoutMounted() {
-  if (!workoutMountPromise) {
-    workoutMountPromise = import('./workout.js')
+const reportLoader = makeLazyFeature(() => import('./reports.js'), m => m.mountReport($('#tab-report')), 'รายงานสุขภาพ');
+const workoutLoader = makeLazyFeature(() => import('./workout.js'), m => m.mountWorkout($('#tab-workout')), 'หน้าออกกำลังกาย');
+const overviewLoader = makeLazyFeature(() => import('./overview.js'), m => m.mountOverview($('#tab-overview')), 'แดชบอร์ดภาพรวม');
+const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mountExpense($('#tab-expense')), 'หน้ารายรับ-รายจ่าย');
+const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
+const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
+const foodLoader = makeLazyFeature(() => import('./food.js'), m => { m.mountFood($('#tab-food')); m.watchDay(); }, 'หน้าอาหาร');
+const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#tab-weekly')), 'หน้าสรุปสัปดาห์');
+const remindLoader = makeLazyFeature(() => import('./remindLog.js'), m => m.mountRemind($('#tab-remind')), 'หน้าบันทึกเตือน');
+const settingsLoader = makeLazyFeature(() => import('./settings.js'), m => { m.mountSettings($('#tab-settings')); m.refreshAccount?.(); }, 'หน้าตั้งค่า');
+
+let chatFeature = null;
+let chatMountPromise = null;
+function ensureChatWidgetMounted(openAfterLoad = false) {
+  if (!chatMountPromise) {
+    const fab = $('#ai-chat-fab');
+    if (fab) fab.disabled = true;
+    chatMountPromise = import('./chatWidget.js')
       .then(module => {
-        workoutFeature = module;
-        module.mountWorkout($('#tab-workout'));
+        chatFeature = module;
+        module.mountChatWidget(goTo);
+        if (openAfterLoad) module.openChatWidget();
+        return module;
       })
       .catch(error => {
-        workoutMountPromise = null;
+        chatMountPromise = null;
         reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
-        console.error('Could not load workout feature:', error);
-        toast('เปิดหน้าออกกำลังกายไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+        console.error('Could not load AI chat widget:', error);
+        toast('เปิดผู้ช่วยแชทไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+        return null;
+      })
+      .finally(() => {
+        if (fab) fab.disabled = false;
       });
+  } else if (openAfterLoad && chatFeature) {
+    chatFeature.toggleChatWidget();
   }
-  return workoutMountPromise;
+  return chatMountPromise;
 }
 
-let overviewFeature = null;
-let overviewMountPromise = null;
-function ensureOverviewMounted() {
-  if (!overviewMountPromise) {
-    overviewMountPromise = import('./overview.js')
-      .then(module => {
-        overviewFeature = module;
-        module.mountOverview($('#tab-overview'));
-      })
-      .catch(error => {
-        overviewMountPromise = null;
-        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
-        console.error('Could not load overview dashboard:', error);
-        toast('เปิดแดชบอร์ดภาพรวมไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
-      });
-  }
-  return overviewMountPromise;
+function mountChatFab() {
+  if ($('#ai-chat-fab')) return;
+  const host = $('#app-shell') || document.body;
+  const wrap = document.createElement('div');
+  wrap.className = 'no-print';
+  wrap.innerHTML = `
+    <button id="ai-chat-fab" type="button" class="ai-chat-fab" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
+      <i class="fa-solid fa-comments"></i>
+    </button>`;
+  host.appendChild(wrap);
+  const fab = $('#ai-chat-fab');
+  fab?.addEventListener('click', () => {
+    if (chatFeature) chatFeature.toggleChatWidget();
+    else void ensureChatWidgetMounted(true);
+  });
 }
 
 export function showTab(name, { preserveDate = false } = {}) {
@@ -158,23 +174,26 @@ export function showTab(name, { preserveDate = false } = {}) {
   document.documentElement.dataset.page = name;
   renderSubnav(group, name);
   if (!preserveDate) {
-    if (name === 'home') resetPlannerToToday();
-    if (name === 'food') resetFoodToToday();
-    if (name === 'weekly') resetWeeklyToToday();
+    if (name === 'home') resetHomePlannerToToday();
     if (name === 'period') resetPeriodToToday();
     if (name === 'symptoms') resetSymptomsToToday();
-    if (name === 'care') resetCareToToday();
     if (name === 'body') resetBodyToToday();
-    if (name === 'expense') resetExpenseToToday();
   }
+  let pending = Promise.resolve();
   if (name === 'home') renderHome();
-  if (name === 'overview') void ensureOverviewMounted().then(() => overviewFeature?.renderOverview?.());
-  if (name === 'weekly') renderWeekly();
-  if (name === 'expense') renderExpense();
+  if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
+  if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderOverview?.());
+  if (name === 'weekly') pending = weeklyLoader.ensure().then(m => { if (!preserveDate) m?.resetWeeklyToToday?.(); m?.renderWeekly?.(); });
+  if (name === 'care') pending = careLoader.ensure().then(m => { if (!preserveDate) m?.resetCareToToday?.(); });
+  if (name === 'remind') pending = remindLoader.ensure().then(m => m?.renderRemind?.());
+  if (name === 'expense') pending = expenseLoader.ensure().then(m => { if (!preserveDate) m?.resetExpenseToToday?.(); m?.renderExpense?.(); });
+  if (name === 'inventory') pending = inventoryLoader.ensure().then(m => m?.renderInventory?.());
   if (name === 'notifications') renderReminders();
-  if (name === 'report') void ensureReportMounted().then(() => { if (!preserveDate) reportFeature?.resetReportToToday?.(); });
-  if (name === 'workout') void ensureWorkoutMounted().then(() => { if (!preserveDate) workoutFeature?.resetToToday?.(); });
+  if (name === 'settings') pending = settingsLoader.ensure().then(m => m?.refreshAccount?.());
+  if (name === 'report') pending = reportLoader.ensure().then(m => { if (!preserveDate) m?.resetReportToToday?.(); });
+  if (name === 'workout') pending = workoutLoader.ensure().then(m => { if (!preserveDate) m?.resetToToday?.(); });
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
+  return pending;
 }
 
 // เปิดกลุ่มเมนูจากแถบนำทางหลัก (จำหน้าย่อยล่าสุดของกลุ่ม)
@@ -184,8 +203,11 @@ function goToGroup(group) {
 }
 
 // เปิดหน้าแท็บเจาะจงแล้วเลื่อนไปที่ฟอร์มบันทึก (ไม่เขียนทับด้วย lastSub ของกลุ่ม)
-function goTo(name, focusId) {
-  showTab(name);
+async function goTo(name, focusId) {
+  await showTab(name);
+  if (name === 'care' && focusId && focusId.startsWith('lb-')) {
+    await careLoader.get()?.ensureLabMounted?.();
+  }
   if (!focusId) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   requestAnimationFrame(() => {
     const field = document.getElementById(focusId);
@@ -224,18 +246,11 @@ function mountAll() {
   if (mounted) return;
   mounted = true;
   mountHome(goTo);
-  mountFood($('#tab-food'));
-  mountWeekly($('#tab-weekly'));
   mountPeriod($('#tab-period'));
   mountSymptoms($('#tab-symptoms'));
-  mountCare($('#tab-care'));
-  mountRemind($('#tab-remind'));
-  mountExpense($('#tab-expense'));
-  mountInventory($('#tab-inventory'));
   mountBody($('#tab-body'));
-  mountSettings($('#tab-settings'));
   mountReminders($('#tab-notifications'));
-  mountChatWidget(goTo);
+  mountChatFab();
 }
 
 let expenseRecordsLoaded = false;
@@ -327,24 +342,36 @@ function startData() {
   legacyMigrationBlocked = false;
   state.loaded = { period: false, body: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); renderHome(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewFeature?.renderOverview?.(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderOverview?.(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
-  watchCare(uid);
-  watchInventory(uid);
+  for (const [key, col] of [['petProfiles', 'pet_profiles'], ['petCare', 'pet_care_records'], ['petFoods', 'pet_food_records']]) {
+    watch(`care:${col}`, userCol(uid, col), records => {
+      state[key] = records;
+      careLoader.get()?.renderCare?.();
+      window.dispatchEvent(new Event('trackme:data-change'));
+    });
+  }
+  for (const [key, col] of [['trackedProducts', 'tracked_products'], ['replacements', 'replacement_records'], ['skincareProducts', 'skincare_products'], ['ingredientBlacklist', 'ingredient_blacklist']]) {
+    watch(`inventory:${col}`, userCol(uid, col), rows => {
+      state[key] = rows;
+      inventoryLoader.get()?.renderInventory?.();
+      window.dispatchEvent(new Event('trackme:data-change'));
+    });
+  }
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutFeature?.render(); renderWeekly(); renderHome(); renderSummary(); overviewFeature?.renderOverview?.(); });
-  watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; renderLab(); });
-  watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutFeature?.render(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutLoader.get()?.render?.(); weeklyLoader.get()?.renderWeekly?.(); renderHome(); renderSummary(); overviewLoader.get()?.renderOverview?.(); });
+  watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; careLoader.get()?.onLabsUpdated?.(); });
+  watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutLoader.get()?.render?.(); });
   watch('expense_records', userCol(uid, 'expense_records'), list => {
     state.expenseRecords = list;
     expenseRecordsLoaded = true;
     mergeExpenses();
-    renderExpense();
+    expenseLoader.get()?.renderExpense?.();
     renderHome();
-    renderWeekly();
+    weeklyLoader.get()?.renderWeekly?.();
     renderSummary();
-    overviewFeature?.renderOverview?.();
+    overviewLoader.get()?.renderOverview?.();
     migrateLegacyExpensesIfNeeded(uid);
   });
   watch('settings', userCol(uid, 'settings'), list => {
@@ -367,17 +394,17 @@ function startData() {
     refreshProfile();
     emit('profile');
     emit('pushSettings');
-    renderExpense();
+    expenseLoader.get()?.renderExpense?.();
     renderHome();
-    renderWeekly();
+    weeklyLoader.get()?.renderWeekly?.();
     renderSummary();
-    overviewFeature?.renderOverview?.();
+    overviewLoader.get()?.renderOverview?.();
     window.dispatchEvent(new Event('trackme:push-change'));
     window.dispatchEvent(new Event('trackme:notes-change'));
     migrateLegacyExpensesIfNeeded(uid);
   });
   watchToday();
-  watchDay();
+  foodLoader.get()?.watchDay?.();
 }
 
 // อาหารของ "วันนี้" สำหรับหน้า Home (อ่านอย่างเดียว แยกจากวันที่ที่เลือกในหน้าอาหาร)
@@ -393,17 +420,20 @@ on('auth', user => {
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
-  overviewFeature?.resetOverviewState?.();
+  overviewLoader.get()?.resetOverviewState?.();
+  resetHomePlannerState();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   if (user) {
     mountAll();
-    refreshAccount();
+    settingsLoader.get()?.refreshAccount?.();
     renderSummary();
     startData();
     let start = null; try { start = sessionStorage.getItem('active_tab'); } catch (e) {}
-    showTab(start || 'home');
-    handleSharedSlipLaunch(showTab);
+    void showTab(start || 'home');
+    if (new URLSearchParams(window.location.search).has('shared-slip')) {
+      void expenseLoader.ensure().then(m => m?.handleSharedSlipLaunch?.(showTab));
+    }
   }
   renderSyncStatus();
 });
@@ -425,10 +455,10 @@ $('#quick-sheet').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
-window.addEventListener('trackme:data-change', () => { renderRemind(); renderReminders(); renderHome(); renderSummary(); });
+window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderSummary(); });
 window.addEventListener('trackme:reminders', updateBell);
 window.addEventListener('trackme:push-change', () => renderHome());
 navigator.serviceWorker?.addEventListener('message', e => {
-  if (e.data?.type === 'TRACKME_OPEN_TAB') showTab(e.data.tab);
+  if (e.data?.type === 'TRACKME_OPEN_TAB') void showTab(e.data.tab);
 });
 initAuth();

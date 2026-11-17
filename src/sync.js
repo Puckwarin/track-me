@@ -2,7 +2,11 @@ import { onSnapshot } from 'firebase/firestore';
 import { $, fmtDateTime } from './util.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
-export const syncState = { pending: {}, error: null, lastSync: Number(localStorage.getItem('last_sync') || 0) };
+export const syncState = {
+  pending: {},
+  error: null,
+  lastSync: Number((typeof localStorage !== 'undefined' ? localStorage.getItem('last_sync') : 0) || 0)
+};
 const unsubs = new Map();
 
 export function watch(key, q, cb) {
@@ -53,5 +57,7 @@ export function renderSyncStatus() {
   const line = $('#sum-sync');
   if (line) line.textContent = '🔄 ' + syncLineText();
 }
-window.addEventListener('online', renderSyncStatus);
-window.addEventListener('offline', renderSyncStatus);
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('online', renderSyncStatus);
+  window.addEventListener('offline', renderSyncStatus);
+}

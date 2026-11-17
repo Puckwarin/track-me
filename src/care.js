@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, toast, openModal } from './util.js';
 import { watch } from './sync.js';
 import { readPetFoodLabel, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
-import { mountLab, render as renderLab, resetLabToToday } from './lab.js';
+import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
 const PET_SYMPTOMS = [
   ['appetite', 'เบื่ออาหาร / กินน้อย'],
@@ -18,6 +18,7 @@ const PET_SX_LEVELS = ['ปกติ', 'เล็กน้อย', 'ปานก
 const PET_SX_COLORS = ['bg-slate-100 text-slate-600', 'bg-amber-100 text-amber-800', 'bg-orange-100 text-orange-800', 'bg-rose-100 text-rose-700 font-semibold'];
 
 let root, petFormDirty = false, editingSxId = null;
+let labFeature = null, labMountPromise = null;
 let petSxDraft = Object.fromEntries(PET_SYMPTOMS.map(([k]) => [k, 0]));
 const $r = s => $(s, root);
 const d = s => s ? new Date(`${s}T00:00:00`) : null;
@@ -78,7 +79,15 @@ export function mountCare(el) {
     </div>
   </section>
 
-  <div id="care-lab" class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-3 gap-6"></div>`;
+  <div id="care-lab" class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <section id="care-lab-teaser" class="card lg:col-span-3 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-vial text-brand"></i> บันทึกผลตรวจ / ผลเลือด</h3>
+        <p id="care-lab-summary" class="text-xs text-slate-500">กดเพื่อโหลดฟอร์มบันทึก เทมเพลตผลเลือด และตัวสแกนใบผลตรวจ</p>
+      </div>
+      <button type="button" id="care-lab-open" class="btn btn-soft text-xs"><i class="fa-solid fa-folder-open"></i> เปิดผลตรวจ / ผลเลือด</button>
+    </section>
+  </div>`;
 
   $r('#pet-save').onclick = savePet;
   $r('#pet-food-save').onclick = savePetFood;
@@ -112,15 +121,45 @@ export function mountCare(el) {
     renderPetSymptomGrid();
   });
   $r('#pet-sx-list').addEventListener('click', onPetSymptomListClick);
-  mountLab($r('#care-lab'));
+  $r('#care-lab-open')?.addEventListener('click', () => { void ensureLabMounted(); });
   renderAll();
+}
+
+export function ensureLabMounted() {
+  if (!root?.isConnected) return Promise.resolve();
+  if (!labMountPromise) {
+    const openBtn = $r('#care-lab-open');
+    if (openBtn) {
+      openBtn.disabled = true;
+      openBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด...';
+    }
+    labMountPromise = import('./lab.js')
+      .then(module => {
+        labFeature = module;
+        const container = $r('#care-lab');
+        if (container) {
+          module.mountLab(container);
+          module.render?.();
+        }
+      })
+      .catch(error => {
+        labMountPromise = null;
+        if (openBtn?.isConnected) {
+          openBtn.disabled = false;
+          openBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i> เปิดผลตรวจ / ผลเลือด';
+        }
+        reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
+        toast('เปิดบันทึกผลตรวจไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
+      });
+  }
+  return labMountPromise;
 }
 
 export function resetCareToToday() {
   if (root && $r('#pet-sx-date') && !editingSxId) {
     $r('#pet-sx-date').value = localDateStr();
   }
-  resetLabToToday();
+  labFeature?.resetLabToToday?.();
 }
 
 export function watchCare(uid) {
@@ -129,9 +168,27 @@ export function watchCare(uid) {
   }
 }
 
+export function renderCare() { renderAll(); }
+
+export function onLabsUpdated() {
+  if (!root?.isConnected) return;
+  if (labFeature) {
+    labFeature.render?.();
+    return;
+  }
+  const summaryEl = $r('#care-lab-summary');
+  if (summaryEl) {
+    const count = (state.labs || []).length;
+    summaryEl.textContent = count
+      ? `มีบันทึกผลตรวจ ${count} รายการ · กดเปิดเพื่อดูผลตรวจ เทมเพลต และสแกนใบผลเลือด`
+      : 'กดเพื่อโหลดฟอร์มบันทึก เทมเพลตผลเลือด และตัวสแกนใบผลตรวจ';
+  }
+}
+
 function renderAll() {
   if (!root?.isConnected) return;
-  renderPet(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList(); renderLab();
+  renderPet(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList();
+  onLabsUpdated();
 }
 
 function openPetFoodScanModal(results, errors) {

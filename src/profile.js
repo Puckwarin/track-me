@@ -1,6 +1,6 @@
 import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
-import { state, emit } from './state.js';
+import { state } from './state.js';
 import { $, esc, toNum, round1, toast } from './util.js';
 import { bodyLatest } from './body.js';
 

@@ -11,7 +11,7 @@ export function parseStatementLine(rawLine, lineNumber = 1) {
   const re = new RegExp('^(\\d{2})[\\/-](\\d{2})[\\/-](\\d{2,4})\\s+(\\d{2}:\\d{2})\\s+(.+?)\\s+(' + MONEY + ')\\s+(' + MONEY + ')(?:\\s+(.*))?$');
   const m = line.match(re);
   if (!m) return { lineNumber, error: 'ไม่รู้จักรูปแบบบรรทัด Statement' };
-  const [, dd, mm, yearText, time, description, amountText, _balance, tail = ''] = m;
+  const [, dd, mm, yearText, time, description, amountText, , tail = ''] = m;
   const yy = yearText.slice(-2);
   const shortYear = Number(yy);
   const year = shortYear >= 55 ? 2500 + shortYear - 543 : 2000 + shortYear;
