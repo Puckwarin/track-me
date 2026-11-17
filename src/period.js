@@ -69,14 +69,14 @@ export function mountPeriod(el) {
     </div>
 
     <div class="card space-y-3">
-      <div class="flex items-center justify-between">
-        <button id="c-prev" class="btn btn-ghost !px-3" aria-label="เดือนก่อน"><i class="fa-solid fa-chevron-left"></i></button>
-        <h3 id="c-title" class="font-bold text-slate-800"></h3>
-        <button id="c-next" class="btn btn-ghost !px-3" aria-label="เดือนถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+      <div class="flex items-center justify-between gap-2">
+        <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+        <h3 id="c-title" class="font-bold text-slate-800 text-center"></h3>
+        <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
       </div>
-      <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-400">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
-      <div id="c-grid" class="grid grid-cols-7 gap-1"></div>
-      <div class="flex flex-wrap gap-3 text-xs text-slate-500">
+      <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 font-medium">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
+      <div id="c-grid" class="grid grid-cols-7 gap-1 tabular-nums"></div>
+      <div class="flex flex-wrap gap-3 text-xs text-slate-600">
         <span><span class="inline-block w-3 h-3 rounded bg-pink-500 align-middle"></span> มีประจำเดือน</span>
         <span><span class="inline-block w-3 h-3 rounded border border-dashed border-pink-400 bg-pink-50 align-middle"></span> คาดการณ์ (ค่าประมาณ)</span>
         <span><span class="inline-block w-2 h-2 rounded-full bg-violet-600 align-middle"></span> มีบันทึกอาการ</span>
@@ -87,13 +87,13 @@ export function mountPeriod(el) {
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-pink-500"></i> ประวัติประจำเดือน</h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
         <thead class="bg-pink-soft/50 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
-        <tbody id="p-body" class="divide-y divide-slate-100"></tbody></table></div>
+        <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
     </div>
   </div>
   <div class="space-y-6"><div class="card space-y-3">
     <h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-simple text-pink-500"></i> สถิติรอบเดือน</h3>
-    <div id="p-stats" class="space-y-2 text-sm text-slate-700"></div>
-    <p class="text-xs text-slate-400">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
+    <div id="p-stats" class="space-y-2 text-sm text-slate-700 tabular-nums"></div>
+    <p class="text-xs text-slate-500">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
   </div></div>`;
   $('#p-start', root).value = localDateStr();
   $('#p-save', root).addEventListener('click', save);
@@ -161,19 +161,19 @@ export function render() {
   $('#p-body', root).innerHTML = desc.length ? desc.map((p, i) => {
     const older = desc[i + 1];
     const endCell = p.end ? esc(fmtDate(p.end)) : `<button data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700">หมดวันนี้</button>`;
-    return `<tr class="hover:bg-pink-soft/30"><td class="p-3 font-medium">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600">${endCell}</td>
-      <td class="p-3 text-right text-slate-600">${p.end ? daysBetween(p.start, p.end) + 1 : '-'}</td><td class="p-3 text-right text-slate-600">${older ? daysBetween(older.start, p.start) : '-'}</td>
+    return `<tr class="hover:bg-pink-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600 whitespace-nowrap">${endCell}</td>
+      <td class="p-3 text-right text-slate-600">${p.end ? daysBetween(p.start, p.end) + 1 : '—'}</td><td class="p-3 text-right text-slate-600">${older ? daysBetween(older.start, p.start) : '—'}</td>
       <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
-      <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`;
-  }).join('') : '<tr><td colspan="6" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูลประจำเดือน</td></tr>';
+      <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึกประจำเดือน"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</td></tr>';
 
   const s = periodStats(state.period), box = $('#p-stats', root);
-  if (!s) box.innerHTML = '<p class="text-xs text-slate-400">บันทึกอย่างน้อย 2 รอบเพื่อดูสถิติ</p>';
+  if (!s) box.innerHTML = '<p class="text-xs text-slate-500">บันทึกอย่างน้อย 2 รอบเพื่อดูสถิติ</p>';
   else {
-    const row = (a, b) => `<div class="flex justify-between"><span>${a}</span><b>${b}</b></div>`;
+    const row = (a, b) => `<div class="flex justify-between gap-2"><span>${a}</span><b>${b}</b></div>`;
     box.innerHTML = row('ครั้งล่าสุด', esc(fmtDate(s.lastStart))) + row('ผ่านมาแล้ว', daysBetween(s.lastStart, localDateStr()) + ' วัน') +
-      row('รอบเฉลี่ย', s.avgCycle ? s.avgCycle + ' วัน' : '-') + row('มาเฉลี่ย', s.avgDur ? s.avgDur + ' วัน' : '-') +
-      row('คาดว่ารอบหน้า', s.next ? '~ ' + esc(fmtDate(s.next)) : '-') + row('จำนวนรอบที่บันทึก', s.count);
+      row('รอบเฉลี่ย', s.avgCycle ? s.avgCycle + ' วัน' : '—') + row('มาเฉลี่ย', s.avgDur ? s.avgDur + ' วัน' : '—') +
+      row('คาดว่ารอบหน้า', s.next ? '~ ' + esc(fmtDate(s.next)) : '—') + row('จำนวนรอบที่บันทึก', s.count);
   }
   renderCalendar();
 }
