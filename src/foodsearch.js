@@ -342,11 +342,11 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       const nut = r.servingOnly ? r.perServing : r.per100;
       const basis = r.servingOnly ? `ต่อ ${esc(r.servingText || '1 หน่วย')}` : 'ต่อ 100 g';
       return `
-      <button data-i="${i}" class="w-full text-left py-2 px-1 hover:bg-lav-soft/50 rounded-lg">
-        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''} <span class="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">${esc(sourceLabel(r.source))}</span></p>
-        <p class="text-xs text-slate-500">${basis}: ${nut.calories} kcal · P ${nut.protein ?? '-'} · C ${nut.carbs ?? '-'} · F ${nut.fat ?? '-'}${!r.servingOnly && r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
+      <button data-i="${i}" class="w-full text-left py-2.5 px-2 hover:bg-lav-soft/50 rounded-lg min-h-[44px]">
+        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''}<span class="text-xs font-normal text-slate-500"> · ${esc(sourceLabel(r.source))}</span></p>
+        <p class="text-xs text-slate-500 tabular-nums mt-0.5">${basis}: ${nut.calories} kcal · P ${nut.protein ?? '-'} · C ${nut.carbs ?? '-'} · F ${nut.fat ?? '-'}${!r.servingOnly && r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
       </button>`;
-    }).join('') : '<p class="text-sm text-slate-400 py-2">ไม่พบผลลัพธ์ — ลองคำอื่น หรือใช้ปุ่มสแกนภาพ/ฉลาก</p>');
+    }).join('') : '<p class="text-sm text-slate-500 py-3">ไม่พบผลลัพธ์ — ลองคำอื่น หรือใช้ปุ่มสแกนภาพ/ฉลาก</p>');
   };
 
   const setStatus = text => { $('#os-res', m.el).innerHTML = `<p class="text-sm text-slate-500 py-2"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>${esc(text)}</p>`; };
