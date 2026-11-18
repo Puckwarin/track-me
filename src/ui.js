@@ -3,7 +3,56 @@
    Team 1: Design System & Shared UI Components
    ============================================================ */
 
-import { esc } from './util.js';
+import { esc, trapFocus } from './util.js';
+import { iconSvg } from './icons.js';
+
+function renderIcon(icon, size = 16) {
+  if (!icon) return '';
+  return iconSvg(icon, { size });
+}
+
+/* ---- Magic UI-inspired Vanilla JS Number Ticker ---- */
+export function animateNumberTicker(el, targetValue, {
+  decimals = 0,
+  prefix = '',
+  suffix = '',
+  duration = 380
+} = {}) {
+  if (!el) return;
+  const target = Number.isFinite(Number(targetValue)) ? Number(targetValue) : 0;
+  const fmt = v => {
+    const rounded = decimals > 0
+      ? Number(v.toFixed(decimals))
+      : Math.round(v);
+    return `${prefix}${rounded.toLocaleString('th-TH', decimals > 0 ? { minimumFractionDigits: decimals, maximumFractionDigits: decimals } : undefined)}${suffix}`;
+  };
+
+  const prevRaw = el.dataset.tickerValue;
+  const prev = prevRaw !== undefined ? Number(prevRaw) : null;
+  el.dataset.tickerValue = String(target);
+
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prev === null || !Number.isFinite(prev) || prev === target || reduced || typeof requestAnimationFrame !== 'function') {
+    el.textContent = fmt(target);
+    return;
+  }
+
+  if (el._tmTickerRaf) cancelAnimationFrame(el._tmTickerRaf);
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const delta = target - prev;
+  const step = now => {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmt(prev + delta * eased);
+    if (t < 1) {
+      el._tmTickerRaf = requestAnimationFrame(step);
+    } else {
+      el._tmTickerRaf = null;
+      el.textContent = fmt(target);
+    }
+  };
+  el._tmTickerRaf = requestAnimationFrame(step);
+}
 
 /* ---- Card ---- */
 export function card({ className = '', compact = false, flat = false, raised = false, id = '' } = {}) {
@@ -28,7 +77,7 @@ export function button({ label = '', icon = '', variant = 'primary', size = '', 
   if (id) attrs.push(`id="${esc(id)}"`);
   if (disabled) attrs.push('disabled');
   if (ariaLabel) attrs.push(`aria-label="${esc(ariaLabel)}"`);
-  const inner = icon ? `<i class="fa-solid ${esc(icon)}"></i> ${esc(label)}` : esc(label);
+  const inner = icon ? `${renderIcon(icon, 16)} ${esc(label)}` : esc(label);
   return `<button ${attrs.join(' ')}>${inner}</button>`;
 }
 
@@ -41,7 +90,7 @@ export function iconButton({ icon = '', id = '', variant = '', size = '', ariaLa
   const attrs = [`class="${cls.join(' ')}"`];
   if (id) attrs.push(`id="${esc(id)}"`);
   if (ariaLabel) attrs.push(`aria-label="${esc(ariaLabel)}"`);
-  return `<button type="button" ${attrs.join(' ')}><i class="fa-solid ${esc(icon)}"></i></button>`;
+  return `<button type="button" ${attrs.join(' ')}>${renderIcon(icon, 18)}</button>`;
 }
 
 /* ---- Input ---- */
@@ -77,7 +126,7 @@ export function chip({ label = '', icon = '', variant = 'default', id = '' } = {
   const cls = ['tm-chip', `tm-chip-${variant}`];
   const attrs = [`class="${cls.join(' ')}"`, 'type="button"'];
   if (id) attrs.push(`id="${esc(id)}"`);
-  const inner = icon ? `<i class="fa-solid ${esc(icon)}"></i> ${esc(label)}` : esc(label);
+  const inner = icon ? `${renderIcon(icon, 14)} ${esc(label)}` : esc(label);
   return `<button ${attrs.join(' ')}>${inner}</button>`;
 }
 
@@ -93,7 +142,7 @@ export function badge({ label = '', variant = 'info', dot = false } = {}) {
 /* ---- Section Header ---- */
 export function sectionHeader({ title = '', icon = '', subtitle = '' } = {}) {
   return `<div class="tm-section-header">
-    ${icon ? `<i class="fa-solid ${esc(icon)}"></i>` : ''}
+    ${renderIcon(icon, 18)}
     <span>${esc(title)}</span>
     ${subtitle ? `<span class="tm-section-header-sub">${esc(subtitle)}</span>` : ''}
   </div>`;
@@ -104,7 +153,7 @@ export function tabs({ items = [], activeIndex = 0, containerId = '' } = {}) {
   const buttons = items.map((item, i) => {
     const cls = ['tm-tab'];
     if (i === activeIndex) cls.push('is-active');
-    const icon = item.icon ? `<i class="fa-solid ${esc(item.icon)}"></i>` : '';
+    const icon = renderIcon(item.icon, 16);
     return `<button type="button" class="${cls.join(' ')}" data-tab-index="${i}">${icon}${esc(item.label)}</button>`;
   }).join('');
   const attrs = ['class="tm-tabs"'];
@@ -113,9 +162,9 @@ export function tabs({ items = [], activeIndex = 0, containerId = '' } = {}) {
 }
 
 /* ---- Empty State ---- */
-export function emptyState({ icon = 'fa-inbox', title = 'ยังไม่มีข้อมูล', description = '' } = {}) {
+export function emptyState({ icon = 'inbox', title = 'ยังไม่มีข้อมูล', description = '' } = {}) {
   return `<div class="tm-empty">
-    <div class="tm-empty-icon"><i class="fa-solid ${esc(icon)}"></i></div>
+    <div class="tm-empty-icon">${renderIcon(icon, 28)}</div>
     <div class="tm-empty-title">${esc(title)}</div>
     ${description ? `<div class="tm-empty-desc">${esc(description)}</div>` : ''}
   </div>`;
@@ -127,17 +176,17 @@ export function loadingState({ label = 'กำลังโหลด…' } = {}) 
 }
 
 /* ---- Error State ---- */
-export function errorState({ message = 'เกิดข้อผิดพลาด', icon = 'fa-circle-exclamation' } = {}) {
-  return `<div class="tm-error"><span class="tm-error-icon"><i class="fa-solid ${esc(icon)}"></i></span>${esc(message)}</div>`;
+export function errorState({ message = 'เกิดข้อผิดพลาด', icon = 'alert' } = {}) {
+  return `<div class="tm-error"><span class="tm-error-icon">${renderIcon(icon, 22)}</span>${esc(message)}</div>`;
 }
 
 /* ---- Success Inline ---- */
 export function successInline({ message = '' } = {}) {
-  return `<div class="tm-success-inline"><i class="fa-solid fa-check-circle"></i>${esc(message)}</div>`;
+  return `<div class="tm-success-inline">${iconSvg('check-circle', { size: 16 })}${esc(message)}</div>`;
 }
 
 /* ---- Modal (programmatic) ---- */
-export function openModal(innerHtml, { size = '', flush = false, staticBackdrop = false } = {}) {
+export function openModal(innerHtml, { size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop } = {}) {
   const sizeClass = size === 'xl' ? 'tm-modal-xl' : (size === 'lg' ? 'tm-modal-lg' : '');
   const flushClass = flush ? 'tm-modal-flush' : '';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -154,42 +203,23 @@ export function openModal(innerHtml, { size = '', flush = false, staticBackdrop 
     box.setAttribute('aria-label', 'หน้าต่างโต้ตอบ');
   }
   document.body.appendChild(el);
+  const releaseTrap = trapFocus(box);
   let closed = false;
+  const onKey = e => {
+    if (e.key === 'Escape' && closeOnEscape) {
+      e.preventDefault();
+      close();
+    }
+  };
   const close = () => {
     if (closed) return;
     closed = true;
-    el.remove();
+    releaseTrap();
     document.removeEventListener('keydown', onKey);
+    el.remove();
     if (trigger?.isConnected) trigger.focus();
   };
-  const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
-  const onKey = e => {
-    if (e.key === 'Escape' && !staticBackdrop) {
-      e.preventDefault();
-      close();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const nodes = [...box.querySelectorAll(focusableSelector)].filter(node => node.getClientRects().length);
-    if (!nodes.length) {
-      e.preventDefault();
-      box.focus();
-      return;
-    }
-    const first = nodes[0], last = nodes[nodes.length - 1];
-    if (e.shiftKey && (document.activeElement === first || !box.contains(document.activeElement))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
   document.addEventListener('keydown', onKey);
-  requestAnimationFrame(() => {
-    const first = [...box.querySelectorAll(focusableSelector)].find(node => node.getClientRects().length);
-    (first || box).focus();
-  });
   if (!staticBackdrop) {
     el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   }
@@ -199,23 +229,44 @@ export function openModal(innerHtml, { size = '', flush = false, staticBackdrop 
 
 /* ---- Bottom Sheet ---- */
 export function openBottomSheet(innerHtml) {
+  const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
   el.className = 'tm-sheet-backdrop';
-  el.innerHTML = `<div class="tm-sheet-panel"><div class="tm-sheet-handle" aria-hidden="true"></div>${innerHtml}</div>`;
+  el.innerHTML = `<div class="tm-sheet-panel" role="dialog" aria-modal="true"><div class="tm-sheet-handle" aria-hidden="true"></div>${innerHtml}</div>`;
+  const panel = el.querySelector('.tm-sheet-panel');
+  const heading = panel.querySelector('h1, h2, h3, h4, h5, h6');
+  panel.tabIndex = -1;
+  if (heading) {
+    if (!heading.id) heading.id = `tm-sheet-title-${crypto.randomUUID()}`;
+    panel.setAttribute('aria-labelledby', heading.id);
+  } else {
+    panel.setAttribute('aria-label', 'แผงตัวเลือก');
+  }
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('is-open'));
+  const releaseTrap = trapFocus(panel);
   let closed = false;
+  const onKey = e => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
+  };
   const close = () => {
     if (closed) return;
     closed = true;
+    releaseTrap();
+    document.removeEventListener('keydown', onKey);
     el.classList.remove('is-open');
-    setTimeout(() => el.remove(), 220);
+    setTimeout(() => {
+      el.remove();
+      if (trigger?.isConnected) trigger.focus();
+    }, 220);
   };
+  document.addEventListener('keydown', onKey);
   el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   el.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
-  const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
-  document.addEventListener('keydown', onKey);
-  return { el, close, panel: el.querySelector('.tm-sheet-panel') };
+  return { el, close, panel };
 }
 
 /* ---- Toast ---- */

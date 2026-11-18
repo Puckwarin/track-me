@@ -5,6 +5,7 @@ import { $, esc, localDateStr, round1, toast, openModal, isDateStr, addMonthsLoc
 import { watch } from './sync.js';
 import { estimateStockFromPhotos, explainGeminiError, formatImageProgress } from './nutrition.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
+import { iconSvg } from './icons.js';
 
 const categories = ['คน · อาหาร/ขนม','สัตว์เลี้ยง · อาหาร/ขนม','สกินแคร์/ของใช้คน','ของใช้สัตว์เลี้ยง','ของใช้ในบ้าน','อื่น ๆ'];
 const $r = s => $(s, root);
@@ -50,7 +51,7 @@ export function mountInventory(el) {
     </details>
     <div class="rounded-2xl border-2 border-dashed border-brand/35 bg-lav-soft/30 p-3.5">
       <label class="flex items-center justify-center sm:justify-start gap-2.5 text-sm font-semibold text-brand-dark cursor-pointer min-h-11">
-        <i class="fa-solid fa-images text-lg text-brand"></i>
+        ${iconSvg('images', { size: 18, className: 'text-brand shrink-0' })}
         <span>📷 ถ่ายหรือเลือกรูปสินค้า/วันหมดอายุ (เลือกได้หลายรูปพร้อมกัน)</span>
         <input id="inv-photo" type="file" accept="image/*" multiple class="hidden">
       </label>
@@ -139,7 +140,7 @@ function openBatchInventoryModal(results, errors) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
       <h3 class="font-bold text-lg text-slate-800">📦 ตรวจสอบผลสแกนสต๊อก (${results.length} รูป)</h3>
-      <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      <button data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ✓ ประมวลผลภาพเสร็จสิ้น ${results.length} รายการ${errors.length ? ` · อ่านไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บไฟล์รูปภาพในระบบ)
@@ -174,7 +175,7 @@ function openBatchInventoryModal(results, errors) {
     </div>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="bi-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกรายการที่เลือก</button>
+      <button type="button" id="bi-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการที่เลือก</button>
     </div>`, { wide: true });
 
   $('#bi-save', m.el).addEventListener('click', async () => {
@@ -228,7 +229,7 @@ function openBatchInventoryModal(results, errors) {
       toast(`บันทึกสต๊อกแล้ว (เพิ่มใหม่ ${added}${updated ? `, อัปเดตเดิม ${updated}` : ''})`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการที่เลือก';
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการที่เลือก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });

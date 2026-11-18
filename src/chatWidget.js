@@ -1,9 +1,10 @@
 import { deleteDoc, setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, openModal, toast } from './util.js';
+import { $, esc, fmtDate, localDateStr, openModal, toast, trapFocus } from './util.js';
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
 import { CHAT_ROLES, LOCAL_ROLE, LOCAL_HELP_TEXT, getAnyChatRole } from './services/chatRoles.js';
+import { iconSvg } from './icons.js';
 
 const STORAGE_KEYS = {
   history: 'trackme_ai_chat_history',
@@ -18,6 +19,8 @@ let isBusy = false;
 let isRolePanelOpen = false;
 let activeRequestController = null;
 let goToFn = () => {};
+let drawerTrigger = null;
+let releaseDrawerTrap = () => {};
 let activeRoleId = loadStoredString(STORAGE_KEYS.role, 'general');
 let customInstruction = loadStoredString(STORAGE_KEYS.customRole, '');
 let preferLocalPatterns = loadStoredString(STORAGE_KEYS.preferLocal, '1') !== '0';
@@ -287,13 +290,13 @@ function ensureShell() {
   wrap.className = 'no-print';
   wrap.innerHTML = `
     ${hasFab ? '' : `<button id="ai-chat-fab" type="button" class="ai-chat-fab" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
-      <i class="fa-solid fa-comments"></i>
+      ${iconSvg('chat', { size: 22 })}
     </button>`}
 
-    <section id="ai-chat-drawer" class="ai-chat-drawer hidden" role="dialog" aria-modal="false" aria-labelledby="ai-chat-title">
+    <section id="ai-chat-drawer" class="ai-chat-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="ai-chat-title" tabindex="-1">
       <header class="ai-chat-header">
         <div class="flex items-center gap-2.5 min-w-0">
-          <span class="emoji-bubble emoji-sm cat-symptoms !mr-0">🤖</span>
+          <span class="emoji-bubble emoji-sm cat-symptoms !mr-0">${iconSvg('chat', { size: 17 })}</span>
           <div class="min-w-0">
             <h2 id="ai-chat-title" class="text-sm font-bold text-slate-800 truncate">ผู้ช่วย Track Me</h2>
             <p id="ai-chat-subtitle" class="text-[11px] text-slate-500 truncate">คุยได้ทุกเรื่อง + ช่วยดูแลข้อมูล</p>
@@ -301,16 +304,16 @@ function ensureShell() {
         </div>
         <div class="flex items-center gap-1 shrink-0">
           <button id="ai-chat-notes-btn" type="button" class="icon-btn !w-10 !h-10 text-xs" title="โน้ตที่จดไว้ & ส่ง Feedback" aria-label="โน้ตที่จดไว้และส่ง Feedback">
-            <i class="fa-solid fa-note-sticky"></i>
+            ${iconSvg('note', { size: 16 })}
           </button>
           <button id="ai-chat-role-toggle" type="button" class="icon-btn !w-10 !h-10 text-xs" title="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-label="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-expanded="false">
-            <i class="fa-solid fa-sliders"></i>
+            ${iconSvg('sliders', { size: 16 })}
           </button>
           <button id="ai-chat-clear" type="button" class="icon-btn !w-10 !h-10 text-xs" title="เริ่มบทสนทนาใหม่" aria-label="เริ่มบทสนทนาใหม่">
-            <i class="fa-solid fa-rotate-right"></i>
+            ${iconSvg('rotate-right', { size: 16 })}
           </button>
           <button id="ai-chat-close" type="button" class="icon-btn !w-10 !h-10" aria-label="ปิดหน้าต่างแชท">
-            <i class="fa-solid fa-xmark"></i>
+            ${iconSvg('close', { size: 18 })}
           </button>
         </div>
       </header>
@@ -344,10 +347,10 @@ function ensureShell() {
       <form id="ai-chat-form" class="ai-chat-form">
         <textarea id="ai-chat-input" rows="1" class="input ai-chat-textarea flex-1 min-w-0" placeholder="คุยได้ทุกเรื่อง หรือสั่งจดข้อมูล Track Me…" autocomplete="off"></textarea>
         <button id="ai-chat-send" type="submit" class="btn btn-primary !px-3.5 !min-h-11 !min-w-11 shrink-0" aria-label="ส่งข้อความ">
-          <i class="fa-solid fa-paper-plane"></i>
+          ${iconSvg('send', { size: 17 })}
         </button>
         <button id="ai-chat-stop" type="button" class="btn btn-soft !px-3.5 !min-h-11 !min-w-11 shrink-0 hidden text-rose-600" aria-label="หยุดการตอบ">
-          <i class="fa-solid fa-stop"></i>
+          ${iconSvg('stop', { size: 16 })}
         </button>
       </form>
     </section>
@@ -484,7 +487,7 @@ function renderMessages() {
       <div class="ai-msg-row is-assistant">
         <div class="ai-bubble is-assistant">
           ${m.pending
-            ? '<span class="inline-flex items-center gap-2 text-xs text-slate-500"><i class="fa-solid fa-spinner fa-spin"></i> กำลังคิดและเตรียมคำตอบ…</span>'
+            ? `<span class="inline-flex items-center gap-2 text-xs text-slate-500">${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังคิดและเตรียมคำตอบ…</span>`
             : `<div class="ai-md-body text-sm leading-relaxed break-words">${formatMessageHtml(m.text)}</div>`
           }
           ${pendingHtml}
@@ -536,16 +539,27 @@ function setOpen(next) {
   const drawer = $('#ai-chat-drawer');
   const fab = $('#ai-chat-fab');
   if (!drawer || !fab) return;
+  if (isOpen) {
+    drawerTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : fab;
+  }
   drawer.classList.toggle('hidden', !isOpen);
   fab.setAttribute('aria-expanded', String(isOpen));
+  releaseDrawerTrap();
+  releaseDrawerTrap = () => {};
   if (isOpen) {
     renderKeyBanner();
     renderRolesBar();
     renderMessages();
     autoResizeInput();
+    releaseDrawerTrap = trapFocus(drawer, { autoFocus: false });
     if (matchMedia('(hover: hover)').matches) {
       setTimeout(() => $('#ai-chat-input')?.focus({ preventScroll: true }), 50);
+    } else {
+      drawer.focus({ preventScroll: true });
     }
+  } else {
+    if (drawerTrigger?.isConnected) drawerTrigger.focus({ preventScroll: true });
+    drawerTrigger = null;
   }
 }
 
@@ -945,8 +959,8 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
 
   const box = openModal(`
     <div class="flex justify-between items-center mb-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-note-sticky text-brand"></i> โน้ตผู้ช่วย &amp; Feedback</h3>
-      <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('note', { size: 17, className: 'text-brand' })}<span>โน้ตผู้ช่วย &amp; Feedback</span></h3>
+      <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="flex gap-2 mb-3">
       <button type="button" id="nf-tab-notes" class="chip text-xs"></button>
@@ -1002,8 +1016,8 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${n.date ? `<span class="text-[11px] text-slate-400 ml-1">${esc(fmtDate(n.date))}</span>` : ''}
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
-                  <button type="button" data-note-edit="${esc(n.id)}" class="text-slate-400 hover:text-brand p-1" aria-label="แก้ไข"><i class="fa-solid fa-pen"></i></button>
-                  <button type="button" data-note-del="${esc(n.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ"><i class="fa-solid fa-trash-can"></i></button>
+                  <button type="button" data-note-edit="${esc(n.id)}" class="text-slate-400 hover:text-brand p-1" aria-label="แก้ไข">${iconSvg('edit', { size: 14 })}</button>
+                  <button type="button" data-note-del="${esc(n.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ">${iconSvg('trash', { size: 14 })}</button>
                 </div>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(n.note || n.content || '')}</p>
@@ -1101,7 +1115,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${f.type ? `<span class="text-[11px] text-slate-500 ml-1">· ${esc(f.type)}</span>` : ''}
                   ${f.date ? `<span class="text-[11px] text-slate-400 ml-1">(${esc(fmtDate(f.date))})</span>` : ''}
                 </div>
-                <button type="button" data-fb-del="${esc(f.id)}" class="text-rose-400 hover:text-rose-600 p-1 shrink-0" aria-label="ลบ"><i class="fa-solid fa-trash-can"></i></button>
+                <button type="button" data-fb-del="${esc(f.id)}" class="text-rose-400 hover:text-rose-600 p-1 shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 14 })}</button>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(f.note || '')}</p>
             </div>

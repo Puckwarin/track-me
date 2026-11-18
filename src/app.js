@@ -6,9 +6,6 @@ import '@fontsource/prompt/latin-400.css';
 import '@fontsource/prompt/latin-500.css';
 import '@fontsource/prompt/latin-600.css';
 import '@fontsource/prompt/latin-700.css';
-import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
-import '@fortawesome/fontawesome-free/css/solid.min.css';
-import '@fortawesome/fontawesome-free/css/regular.min.css';
 import './style.css';
 import './design-tokens.css';
 import { registerSW } from 'virtual:pwa-register';
@@ -18,12 +15,14 @@ import { db, userCol, userDoc } from './firebase.js';
 import { initRuntimeErrorMonitoring, reportRuntimeError, setRuntimeErrorSink } from './runtimeErrorMonitor.js';
 import { state, on, emit } from './state.js';
 import { SANITIZERS } from './schema.js';
-import { $, localDateStr, addDays, toast } from './util.js';
+import { $, localDateStr, addDays, toast, trapFocus } from './util.js';
+import { APP_VERSION_LABEL } from './version.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
 import './theme.js';
 import { CATEGORIES, GROUPS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
+import { iconSvg, iconBubble } from './icons.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
@@ -45,6 +44,9 @@ setRuntimeErrorSink((uid, reports) => {
 });
 initRuntimeErrorMonitoring();
 registerSW({ immediate: true });
+document.querySelectorAll('.tm-app-version').forEach(el => {
+  el.textContent = APP_VERSION_LABEL;
+});
 
 const CHUNK_RELOAD_KEY = 'trackme-chunk-reloaded';
 try {
@@ -79,7 +81,7 @@ function renderSubnav(group, name) {
   const tabs = getSubnavTabs(group, preferences, name);
   nav.classList.toggle('hidden', tabs.length < 2);
   if (tabs.length < 2) { nav.innerHTML = ''; return; }
-  nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button data-sub="${item.tab}" class="sub-chip ${item.cat} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span>${item.emoji}</span>${item.label}</button>`).join('')}</div>`;
+  nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button data-sub="${item.tab}" class="sub-chip ${item.cat} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${item.label}</button>`).join('')}</div>`;
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
@@ -97,7 +99,7 @@ function renderHomeShortcuts() {
   const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
   section.classList.toggle('hidden', shortcuts.length === 0);
   section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
-  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span aria-hidden="true">${item.emoji}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
+  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut ${item.cat || ''}"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
 
 function makeLazyFeature(loader, onMount, errorLabel) {
@@ -173,7 +175,7 @@ function mountChatFab() {
   wrap.className = 'no-print';
   wrap.innerHTML = `
     <button id="ai-chat-fab" type="button" class="ai-chat-fab" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
-      <i class="fa-solid fa-comments"></i>
+      ${iconSvg('chat', { size: 22 })}
     </button>`;
   host.appendChild(wrap);
   const fab = $('#ai-chat-fab');
@@ -188,8 +190,10 @@ function updateStickyOffsets() {
   const desktopNav = $('#desktop-nav');
   const headerHeight = header?.getBoundingClientRect().height || 0;
   const safeArea = Number.parseFloat(header ? getComputedStyle(header).paddingTop : '0') || 0;
+  const navRect = desktopNav?.getBoundingClientRect();
+  const isVerticalRail = !!(desktopNav && getComputedStyle(desktopNav).position === 'fixed' && navRect && navRect.height > 120);
   document.documentElement.style.setProperty('--header-h', `${Math.max(0, headerHeight - safeArea)}px`);
-  document.documentElement.style.setProperty('--nav-bar-h', `${desktopNav?.getBoundingClientRect().height || 0}px`);
+  document.documentElement.style.setProperty('--nav-bar-h', `${isVerticalRail ? 0 : (navRect?.height || 0)}px`);
 }
 
 const stickyOffsetObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateStickyOffsets);
@@ -264,17 +268,23 @@ function updateBell() {
 }
 
 let quickTrigger = null;
+let releaseQuickTrap = () => {};
 function openQuick() {
   const sheet = $('#quick-sheet');
+  const panel = $('#quick-sheet .sheet-panel') || sheet;
   quickTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add');
-  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}"><span class="emoji-bubble">${c.emoji}</span><span>${c.label}</span></button>`).join('');
+  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${iconBubble(c.icon || c.key)}<span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   $('#btn-quick-add').setAttribute('aria-expanded', 'true');
+  releaseQuickTrap();
+  releaseQuickTrap = trapFocus(panel, { autoFocus: false });
   $('#quick-grid button')?.focus({ preventScroll: true });
 }
 function closeQuick() {
   const sheet = $('#quick-sheet');
+  releaseQuickTrap();
+  releaseQuickTrap = () => {};
   sheet.classList.remove('is-open');
   $('#btn-quick-add').setAttribute('aria-expanded', 'false');
   setTimeout(() => sheet.classList.add('hidden'), 200);
@@ -504,18 +514,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     e.preventDefault();
     closeQuick();
-    return;
-  }
-  if (e.key !== 'Tab') return;
-  const nodes = [...sheet.querySelectorAll('button:not(:disabled), [tabindex="0"]')].filter(node => node.getClientRects().length);
-  if (!nodes.length) return;
-  const first = nodes[0], last = nodes[nodes.length - 1];
-  if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) {
-    e.preventDefault();
-    first.focus();
   }
 });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));

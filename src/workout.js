@@ -7,6 +7,7 @@ import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl } from './workoutParser.js';
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
+import { iconSvg } from './icons.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
@@ -103,17 +104,17 @@ export function mountWorkout(el) {
   <div class="space-y-6">
     <div class="card space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-dumbbell text-brand"></i> บันทึก & วางแผนออกกำลังกาย</h2>
+        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 20, className: 'text-brand' })}<span>บันทึก & วางแผนออกกำลังกาย</span></h2>
         <span id="w-edit-badge" class="hidden text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800">กำลังแก้ไขบันทึกเดิม</span>
       </div>
 
       <div class="rounded-2xl border border-lav-soft bg-slate-50/70 p-3 space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="text-xs font-semibold text-slate-700"><i class="fa-solid fa-calendar-week text-brand mr-1"></i>วางแผนรายสัปดาห์ (จ–อา)</span>
+          <span class="text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('weekly', { size: 15, className: 'text-brand' })}<span>วางแผนรายสัปดาห์ (จ–อา)</span></span>
           <div class="flex items-center gap-1">
-            <button type="button" id="w-wk-prev" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์ก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+            <button type="button" id="w-wk-prev" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์ก่อน">${iconSvg('chevron-left', { size: 15 })}</button>
             <button type="button" id="w-wk-now" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">สัปดาห์นี้</button>
-            <button type="button" id="w-wk-next" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์หน้า"><i class="fa-solid fa-chevron-right"></i></button>
+            <button type="button" id="w-wk-next" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์หน้า">${iconSvg('chevron-right', { size: 15 })}</button>
           </div>
         </div>
         <div id="w-week-strip" class="grid grid-cols-7 gap-1.5"></div>
@@ -122,33 +123,33 @@ export function mountWorkout(el) {
 
       <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-violet-200 bg-lav-soft/60 p-3 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-xs font-semibold text-brand-dark"><i class="fa-solid fa-pen-to-square mr-1"></i>กำลังแก้ไขเทมเพลต:</span>
+          <span class="text-xs font-semibold text-brand-dark inline-flex items-center gap-1">${iconSvg('edit-square', { size: 14 })}<span>กำลังแก้ไขเทมเพลต:</span></span>
           <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต">
-          <button type="button" id="w-tpl-edit-save" class="btn btn-primary !py-1.5 !px-3 text-xs"><i class="fa-solid fa-floppy-disk"></i> บันทึกเทมเพลต</button>
+          <button type="button" id="w-tpl-edit-save" class="btn btn-primary !py-1.5 !px-3 text-xs">${iconSvg('save', { size: 14 })} บันทึกเทมเพลต</button>
           <button type="button" id="w-tpl-edit-cancel" class="btn btn-ghost !py-1.5 !px-2.5 text-xs">ยกเลิก</button>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
         <button type="button" id="w-import-toggle" class="chip bg-lav-soft text-brand-dark font-semibold border border-brand/25 hover:bg-brand/15">
-          <i class="fa-solid fa-paste"></i> 📋 วางข้อความ / ตารางเป็น Template
+          ${iconSvg('note', { size: 14 })} วางข้อความ / ตารางเป็น Template
         </button>
         <div class="flex flex-wrap gap-1.5">
-          <button type="button" id="w-fill-images" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-images"></i> เติมรูปที่ขาดอัตโนมัติ</button>
-          <button type="button" id="w-last" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-clock-rotate-left"></i> ใช้แผนล่าสุดของประเภทนี้</button>
-          <button type="button" id="w-clear" class="chip bg-slate-100 text-slate-600"><i class="fa-solid fa-eraser"></i> ล้างฟอร์ม</button>
+          <button type="button" id="w-fill-images" class="chip bg-sky-soft text-blue-700">${iconSvg('images', { size: 14 })} เติมรูปที่ขาดอัตโนมัติ</button>
+          <button type="button" id="w-last" class="chip bg-sky-soft text-blue-700">${iconSvg('rotate-left', { size: 14 })} ใช้แผนล่าสุดของประเภทนี้</button>
+          <button type="button" id="w-clear" class="chip bg-slate-100 text-slate-600">${iconSvg('eraser', { size: 14 })} ล้างฟอร์ม</button>
         </div>
       </div>
 
       <div id="w-import-panel" class="hidden rounded-2xl border border-brand/30 bg-lav-soft/35 p-3.5 space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-brand mr-1"></i> แปลงข้อความดิบ / ตาราง เป็น Template ออกกำลังกาย</h3>
+            <h3 class="text-sm font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 15, className: 'text-brand' })}<span>แปลงข้อความดิบ / ตาราง เป็น Template ออกกำลังกาย</span></h3>
             <p class="text-[11px] text-slate-500">วางข้อความดิบ, ตาราง Markdown หรือคัดลอกจาก Excel/Sheets ได้เลย ระบบจะจัดเป็น 3 ช่วง (Warm-up / Main / Cool-down) เก็บลิงก์รูปเข้ากรอบภาพประกอบ และประเมินค่าเริ่มต้นให้อัตโนมัติเมื่อข้อมูลขาด</p>
           </div>
           <div class="flex items-center gap-1.5">
             <button type="button" id="w-import-sample" class="chip bg-white border border-slate-200 text-slate-600 text-[11px]">ใส่ตัวอย่าง</button>
-            <button type="button" id="w-import-close" class="text-slate-400 hover:text-slate-600 px-1.5" aria-label="ปิดหน้าต่างนำเข้า"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" id="w-import-close" class="text-slate-400 hover:text-slate-600 px-1.5" aria-label="ปิดหน้าต่างนำเข้า">${iconSvg('close', { size: 16 })}</button>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
@@ -159,8 +160,8 @@ export function mountWorkout(el) {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <button type="button" id="w-import-clear" class="btn btn-ghost !py-1.5 !px-3 text-xs">ล้างข้อความ</button>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="w-import-ai" class="btn btn-soft !py-2 !px-3.5 text-xs"><i class="fa-solid fa-sparkles"></i> ให้ AI ช่วยจัดโครงสร้าง</button>
-            <button type="button" id="w-import-parse" class="btn btn-primary !py-2 !px-4 text-xs"><i class="fa-solid fa-table-list"></i> แปลงเป็น Template</button>
+            <button type="button" id="w-import-ai" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('sparkles', { size: 14 })} ให้ AI ช่วยจัดโครงสร้าง</button>
+            <button type="button" id="w-import-parse" class="btn btn-primary !py-2 !px-4 text-xs">${iconSvg('list-checks', { size: 14 })} แปลงเป็น Template</button>
           </div>
         </div>
         <div id="w-import-preview" class="hidden space-y-3 pt-2 border-t border-brand/20"></div>
@@ -181,18 +182,18 @@ export function mountWorkout(el) {
       <div><label class="lbl">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" id="w-edit-cancel" class="btn btn-ghost hidden">ยกเลิกการแก้ไข</button>
-        <button type="button" id="w-copy-tpl" class="btn btn-ghost"><i class="fa-regular fa-copy"></i> คัดลอก Template</button>
-        <button type="button" id="w-active" class="btn btn-soft"><i class="fa-solid fa-play"></i> เริ่มตามแผน</button>
-        <button type="button" id="w-tpl-save" class="btn btn-soft"><i class="fa-solid fa-bookmark"></i> บันทึกเป็นเทมเพลต</button>
-        <button type="button" id="w-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกการออกกำลังกาย</button>
+        <button type="button" id="w-copy-tpl" class="btn btn-ghost">${iconSvg('copy', { size: 15 })} คัดลอก Template</button>
+        <button type="button" id="w-active" class="btn btn-soft">${iconSvg('play', { size: 15 })} เริ่มตามแผน</button>
+        <button type="button" id="w-tpl-save" class="btn btn-soft">${iconSvg('bookmark', { size: 15 })} บันทึกเป็นเทมเพลต</button>
+        <button type="button" id="w-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกการออกกำลังกาย</button>
       </div>
       <datalist id="w-names"></datalist>
     </div>
   </div>
   <div class="space-y-6">
-    <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-simple text-brand"></i> 7 วันที่ผ่านมา</h3><div id="w-week" class="text-sm text-slate-700 space-y-1"></div></div>
+    <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 17, className: 'text-brand' })}<span>7 วันที่ผ่านมา</span></h3><div id="w-week" class="text-sm text-slate-700 space-y-1"></div></div>
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> ประวัติ & แผนที่บันทึก</h3>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>ประวัติ & แผนที่บันทึก</span></h3>
       <div id="w-hist-status-tabs" class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 text-xs" role="tablist" aria-label="กรองสถานะบันทึก">
         <button type="button" role="tab" aria-selected="true" data-hstatus="all" class="wa-sec-tab is-active flex-1 justify-center min-h-[36px] whitespace-nowrap">ทั้งหมด</button>
         <button type="button" role="tab" aria-selected="false" data-hstatus="planned" class="wa-sec-tab flex-1 justify-center min-h-[36px] whitespace-nowrap">แผนที่วางไว้</button>
@@ -493,8 +494,8 @@ function updateRecordEditUi() {
   $('#w-edit-badge', root).classList.toggle('hidden', !isEdit);
   $('#w-edit-cancel', root).classList.toggle('hidden', !isEdit);
   $('#w-save', root).innerHTML = isEdit
-    ? '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข'
-    : '<i class="fa-solid fa-check"></i> บันทึกการออกกำลังกาย';
+    ? `${iconSvg('save', { size: 15 })} บันทึกการแก้ไข`
+    : `${iconSvg('check', { size: 15 })} บันทึกการออกกำลังกาย`;
 }
 
 function startRecordEdit(id) {
@@ -716,7 +717,7 @@ function renderRefBadge(r, editKey = '', recordEditId = '') {
   if (url) {
     return `<div class="flex flex-wrap items-center gap-1.5 pt-0.5">
       <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2 py-0.5 text-[11px] text-blue-800 hover:bg-sky-soft">
-        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        ${iconSvg('external-link', { size: 11 })}
         <span class="truncate max-w-[230px]">${esc(title || url)}</span>
       </a>
     </div>`;
@@ -785,7 +786,7 @@ async function runAiImportFormat() {
   const btn = $('#w-import-ai', root);
   btn.disabled = true;
   const prevHtml = btn.innerHTML;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังจัดโครงสร้าง...';
+  btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังจัดโครงสร้าง...`;
   try {
     const { formatWorkoutPlanWithAi, explainGeminiError } = await import('./nutrition.js');
     const { result, provider } = await formatWorkoutPlanWithAi(text).catch(err => {
@@ -887,8 +888,8 @@ function renderImportPreview() {
     const sub = parsed.sectionNotes?.[k] ? ` <span class="text-xs font-normal text-slate-500">— ${esc(parsed.sectionNotes[k])}</span>` : '';
     return `<div class="rounded-xl bg-white border border-slate-200 p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
-        <p class="text-xs font-bold text-slate-700"><i class="fa-solid ${icon} text-brand mr-1"></i>${si + 1}. ${esc(title)}${sub}</p>
-        <button type="button" data-imp-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 !min-h-[34px] text-[11px]"><i class="fa-solid fa-plus"></i> เพิ่มท่า</button>
+        <p class="text-xs font-bold text-slate-700 inline-flex items-center gap-1">${iconSvg(icon, { size: 14, className: 'text-brand' })}<span>${si + 1}. ${esc(title)}${sub}</span></p>
+        <button type="button" data-imp-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 !min-h-[34px] text-[11px]">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
       </div>
       ${rows.length ? `<div class="space-y-2">
         ${rows.map((r, idx) => `
@@ -899,8 +900,8 @@ function renderImportPreview() {
                 <div class="flex items-center gap-1.5 min-w-0">
                   <span class="text-[11px] font-bold text-brand shrink-0 tabular-nums">${idx + 1}.</span>
                   <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="name" list="w-names" class="input !py-1.5 text-xs font-semibold flex-1 min-w-0" placeholder="ชื่อท่า" value="${esc(r.name || '')}">
-                  <button type="button" data-imp-media="${k}:${idx}" class="chip bg-sky-soft text-blue-700 !py-1 !px-2 !min-h-[34px] text-[11px] shrink-0" title="ค้นหารูปอัตโนมัติ"><i class="fa-solid fa-image"></i> หาภาพ</button>
-                  <button type="button" data-imp-rm="${k}:${idx}" class="text-rose-400 hover:text-rose-600 min-w-[34px] min-h-[34px] flex items-center justify-center shrink-0" aria-label="ลบท่า"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                  <button type="button" data-imp-media="${k}:${idx}" class="chip bg-sky-soft text-blue-700 !py-1 !px-2 !min-h-[34px] text-[11px] shrink-0" title="ค้นหารูปอัตโนมัติ">${iconSvg('image', { size: 13 })} หาภาพ</button>
+                  <button type="button" data-imp-rm="${k}:${idx}" class="text-rose-400 hover:text-rose-600 min-w-[34px] min-h-[34px] flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 13 })}</button>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
                   <div><label class="lbl text-[10px]">น้ำหนัก (kg)</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input !py-1 text-xs" value="${r.weightKg ?? ''}" placeholder="-"></div>
@@ -929,7 +930,7 @@ function renderImportPreview() {
   prevEl.innerHTML = `
     <div class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-xs font-bold text-green-800"><i class="fa-solid fa-circle-check mr-1"></i> Preview &amp; แก้ไขได้เลย (${parsed.totalExercises} ท่า)</span>
+        <span class="text-xs font-bold text-green-800 inline-flex items-center gap-1">${iconSvg('check-circle', { size: 14 })}<span>Preview &amp; แก้ไขได้เลย (${parsed.totalExercises} ท่า)</span></span>
         ${parsed.autoFilledCount ? `<span class="text-[11px] text-amber-800">✨ เติมค่าแนะนำให้ ${parsed.autoFilledCount} ท่า</span>` : ''}
       </div>
 
@@ -948,13 +949,13 @@ function renderImportPreview() {
 
       <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
         <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" id="w-import-copy" class="btn btn-ghost !py-2 !px-3 text-xs"><i class="fa-regular fa-copy"></i> คัดลอก Template</button>
+          <button type="button" id="w-import-copy" class="btn btn-ghost !py-2 !px-3 text-xs">${iconSvg('copy', { size: 14 })} คัดลอก Template</button>
           <button type="button" id="w-import-apply" class="btn btn-ghost !py-2 !px-3 text-xs">ส่งลงฟอร์มด้านล่าง</button>
         </div>
         <div class="flex flex-wrap items-center gap-2 ml-auto">
-          <button type="button" id="w-import-save-tpl" class="btn btn-soft !py-2 !px-3.5 text-xs"><i class="fa-solid fa-bookmark"></i> บันทึกเป็นเทมเพลต</button>
-          <button type="button" id="w-import-save-rec" class="btn btn-soft !py-2 !px-3.5 text-xs"><i class="fa-solid fa-calendar-check"></i> บันทึกแผน/ผล</button>
-          <button type="button" id="w-import-start" class="btn btn-primary !py-2 !px-4 text-xs"><i class="fa-solid fa-play"></i> เริ่มตามแผนทันที</button>
+          <button type="button" id="w-import-save-tpl" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('bookmark', { size: 14 })} บันทึกเป็นเทมเพลต</button>
+          <button type="button" id="w-import-save-rec" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('planner', { size: 14 })} บันทึกแผน/ผล</button>
+          <button type="button" id="w-import-start" class="btn btn-primary !py-2 !px-4 text-xs">${iconSvg('play', { size: 14 })} เริ่มตามแผนทันที</button>
         </div>
       </div>
     </div>`;
@@ -1044,7 +1045,7 @@ function saveImportAsTemplate() {
     return;
   }
   const { el, close } = openModal(`
-    <h3 class="font-bold text-slate-800 mb-3"><i class="fa-solid fa-bookmark text-brand mr-1"></i> ตั้งชื่อเทมเพลต</h3>
+    <h3 class="font-bold text-slate-800 mb-3 inline-flex items-center gap-1.5">${iconSvg('bookmark', { size: 16, className: 'text-brand' })}<span>ตั้งชื่อเทมเพลต</span></h3>
     <div class="space-y-3">
       <input id="wt-imp-name" class="input" placeholder="เช่น Day A — Lower Body">
       <div class="flex justify-end gap-2">
@@ -1106,8 +1107,8 @@ function renderSections() {
   $('#w-sections', root).innerHTML = SECTIONS.map(([k, title, icon], si) => `
     <div class="rounded-2xl border border-lav-soft bg-white p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
-        <h4 class="font-semibold text-slate-700 text-sm"><span class="text-brand mr-1">${si + 1}.</span><i class="fa-solid ${icon} text-brand"></i> ${title}</h4>
-        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs"><i class="fa-solid fa-plus"></i> เพิ่มท่า</button>
+        <h4 class="font-semibold text-slate-700 text-sm inline-flex items-center gap-1.5"><span class="text-brand">${si + 1}.</span>${iconSvg(icon, { size: 15, className: 'text-brand' })}<span>${title}</span></h4>
+        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
       </div>
       ${draft[k].length ? draft[k].map((r, i) => `
         <div data-row class="bg-slate-50/90 rounded-xl p-2.5 space-y-2 border border-slate-200/80">
@@ -1116,8 +1117,8 @@ function renderSections() {
             <div class="min-w-0 flex-1 space-y-2">
               <div class="flex gap-1.5 items-center">
                 <input data-sec="${k}" data-i="${i}" data-k="name" list="w-names" class="input font-semibold flex-1 min-w-0" placeholder="ชื่อท่า เช่น Goblet Squat" value="${esc(r.name)}">
-                <button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 !py-1.5 !px-2.5 shrink-0" title="ค้นหารูปท่านี้"><i class="fa-solid fa-image"></i><span class="hidden sm:inline"> หาภาพ</span></button>
-                <button type="button" data-rm="${k}:${i}" class="text-rose-400 hover:text-rose-600 px-2 min-w-[40px] min-h-[40px]" aria-label="ลบท่า"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                <button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 !py-1.5 !px-2.5 shrink-0" title="ค้นหารูปท่านี้">${iconSvg('image', { size: 14 })}<span class="hidden sm:inline"> หาภาพ</span></button>
+                <button type="button" data-rm="${k}:${i}" class="text-rose-400 hover:text-rose-600 px-2 min-w-[40px] min-h-[40px] inline-flex items-center justify-center" aria-label="ลบท่า">${iconSvg('trash', { size: 14 })}</button>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
                 <div><label class="lbl">น้ำหนัก (kg)</label><input data-sec="${k}" data-i="${i}" data-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input" value="${r.weightKg ?? ''}"></div>
@@ -1259,7 +1260,7 @@ function saveTemplatePrompt() {
     return;
   }
   const { el, close } = openModal(`
-    <h3 class="font-bold text-slate-800 mb-3"><i class="fa-solid fa-bookmark text-brand mr-1"></i> บันทึกเป็นเทมเพลตใหม่</h3>
+    <h3 class="font-bold text-slate-800 mb-3 inline-flex items-center gap-1.5">${iconSvg('bookmark', { size: 16, className: 'text-brand' })}<span>บันทึกเป็นเทมเพลตใหม่</span></h3>
     <div class="space-y-3">
       <div><label class="lbl">ชื่อเทมเพลต</label><input id="wt-name" class="input" value="${esc($('#w-title', root).value.trim())}" placeholder="เช่น Day A — Lower Body"></div>
       <div class="flex justify-end gap-2">
@@ -1336,10 +1337,10 @@ function renderWeekStrip() {
         ${w.note ? `<span class="text-slate-500 ml-1">${esc(w.note)}</span>` : ''}
       </div>
       <div class="flex flex-wrap gap-1.5 shrink-0">
-        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-play"></i> เริ่มตามแผน</button>` : ''}
-        ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700"><i class="fa-solid fa-check"></i> ทำเสร็จ</button>` : ''}
-        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-pen"></i> แก้ไข</button>
-        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'}นี้"><i class="fa-solid fa-trash-can"></i> ลบ</button>
+        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
+        ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">${iconSvg('check', { size: 13 })} ทำเสร็จ</button>` : ''}
+        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark">${iconSvg('edit', { size: 12 })} แก้ไข</button>
+        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'}นี้">${iconSvg('trash', { size: 12 })} ลบ</button>
       </div>
     </div>`;
   }).join('')
@@ -1453,11 +1454,11 @@ function renderHistory() {
     const titleStr = w.title ? `${esc(w.title)} <span class="text-xs font-normal text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : esc(TYPES[w.type] || w.type);
     const actionsHtml = `
       <div class="flex flex-wrap gap-2 ${isPlan ? 'pt-1' : 'mt-2.5'}">
-        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-play"></i> เริ่มตามแผน</button>` : ''}
-        ${isPlan ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700"><i class="fa-solid fa-check"></i> ทำเสร็จแล้ว</button>` : ''}
-        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-pen"></i> แก้ไข</button>
+        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
+        ${isPlan ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">${iconSvg('check', { size: 13 })} ทำเสร็จแล้ว</button>` : ''}
+        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark">${iconSvg('edit', { size: 12 })} แก้ไข</button>
         ${!isPlan ? `<button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button>` : ''}
-        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600"><i class="fa-solid fa-trash-can"></i> ลบ</button>
+        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">${iconSvg('trash', { size: 12 })} ลบ</button>
       </div>`;
 
     return `<div class="rounded-xl border border-lav-soft p-2.5 space-y-2">

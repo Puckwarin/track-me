@@ -2,6 +2,7 @@ import { setDoc, deleteDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, toast } from './util.js';
+import { iconSvg } from './icons.js';
 
 export const SYMPTOMS = [
   ['cramps', 'ปวดท้อง'], ['backache', 'ปวดหลัง'], ['headache', 'ปวดหัว'],
@@ -44,7 +45,7 @@ export function mountSymptoms(el) {
   root.innerHTML = `
     <div class="card space-y-4 lg:col-span-2">
       <div>
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-notes-medical text-pink-500"></i> บันทึกอาการรายวัน</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 18, className: 'text-pink-500' })}<span>บันทึกอาการรายวัน</span></h3>
         <p class="text-xs text-slate-500 mt-1">บันทึกได้ทุกวัน ไม่ว่าจะมีประจำเดือนหรือไม่</p>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
@@ -65,14 +66,14 @@ export function mountSymptoms(el) {
       </div>
       <div class="flex justify-end gap-2">
         <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
-        <button id="s-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการ</button>
+        <button id="s-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการ</button>
       </div>
       <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
     </div>
 
     <section class="card space-y-4 lg:col-span-2">
       <header>
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-face-smile text-rose-500"></i> บันทึกผิวรายวัน</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
         <p class="text-xs text-slate-500">รวมกับบันทึกอาการรายวัน เลือกวันเดียวกันเพื่อจดอาการและผลลัพธ์ต่อผิว</p>
       </header>
       <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
@@ -84,7 +85,7 @@ export function mountSymptoms(el) {
       </div>
       <div class="flex justify-end gap-2">
         <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
-        <button id="skin-save" class="btn btn-pink"><i class="fa-solid fa-floppy-disk"></i> บันทึกอาการผิว</button>
+        <button id="skin-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการผิว</button>
       </div>
       <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="space-y-1 text-sm"></div></div>
     </section>`;

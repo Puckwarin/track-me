@@ -1,11 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const BASE = process.env.GITHUB_ACTIONS ? '/track-me/' : '/';
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
   base: BASE,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version || '5.2.0')
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
@@ -25,8 +30,8 @@ export default defineConfig({
         start_url: BASE,
         scope: BASE,
         display: 'standalone',
-        background_color: '#FAF7F2',
-        theme_color: '#FAF7F2',
+        background_color: '#F4F8FC',
+        theme_color: '#F4F8FC',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }

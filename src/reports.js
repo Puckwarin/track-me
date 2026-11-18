@@ -9,6 +9,7 @@ import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
 import { syncLineText } from './sync.js';
 import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 import { labFlag, refText } from './lab.js';
+import { iconSvg } from './icons.js';
 
 let root, data = null;
 
@@ -17,7 +18,7 @@ export function mountReport(el) {
   root.innerHTML = `
   <div class="lg:col-span-3 space-y-6">
     <div class="card space-y-4 no-print">
-      <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-file-medical text-brand"></i> รายงานสุขภาพ (Health Report)</h2>
+      <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 19, className: 'text-brand' })}<span>รายงานสุขภาพ (Health Report)</span></h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div><label class="lbl">ตั้งแต่วันที่</label><input type="date" id="r-from" class="input"></div>
         <div><label class="lbl">ถึงวันที่</label><input type="date" id="r-to" class="input"></div>
@@ -32,10 +33,10 @@ export function mountReport(el) {
         <label><input type="checkbox" id="r-inc-lab" checked> ผลตรวจ</label>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button id="r-gen" class="btn btn-primary"><i class="fa-solid fa-file-lines"></i> สร้างรายงาน</button>
-        <button id="r-print" class="btn btn-soft" disabled><i class="fa-solid fa-print"></i> พิมพ์ / บันทึกเป็น PDF</button>
+        <button id="r-gen" class="btn btn-primary">${iconSvg('report', { size: 15 })} สร้างรายงาน</button>
+        <button id="r-print" class="btn btn-soft" disabled>${iconSvg('printer', { size: 15 })} พิมพ์ / บันทึกเป็น PDF</button>
         <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
-        <button id="r-csv" class="btn btn-ghost"><i class="fa-solid fa-file-csv"></i> ดาวน์โหลด CSV</button>
+        <button id="r-csv" class="btn btn-ghost">${iconSvg('csv', { size: 15 })} ดาวน์โหลด CSV</button>
       </div>
       <p class="text-xs text-slate-500">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
     </div>
@@ -74,10 +75,10 @@ async function generate() {
   const prevHtml = btn?.innerHTML;
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังสร้างรายงาน...';
+    btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังสร้างรายงาน...`;
   }
   if (preview) {
-    preview.innerHTML = '<p class="text-sm text-slate-500 py-4 text-center"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>กำลังดึงข้อมูลและจัดเตรียมรายงาน...</p>';
+    preview.innerHTML = `<p class="text-sm text-slate-500 py-4 text-center inline-flex items-center justify-center gap-1.5 w-full">${iconSvg('fa-spinner fa-spin', { size: 15 })}<span>กำลังดึงข้อมูลและจัดเตรียมรายงาน...</span></p>`;
   }
   try {
     data = await load();
@@ -148,7 +149,7 @@ async function csv() {
   const prevHtml = btn?.innerHTML;
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังเตรียม CSV...';
+    btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังเตรียม CSV...`;
   }
   let d;
   try {

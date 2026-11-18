@@ -1,11 +1,12 @@
 import { state } from './state.js';
 import { $, addDays, esc, localDateStr, openModal, round1, toast } from './util.js';
 import { getFoodRecordsInRange } from './foodService.js';
+import { iconSvg } from './icons.js';
 
 export function openFoodHistorySearch() {
   const today = localDateStr();
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg"><i class="fa-solid fa-magnifying-glass text-brand mr-1"></i> ค้นหาประวัติอาหารที่บันทึก</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg inline-flex items-center gap-1.5">${iconSvg('search', { size: 18, className: 'text-brand' })}<span>ค้นหาประวัติอาหารที่บันทึก</span></h3><button data-close class="text-slate-400 hover:text-slate-600 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
       <input id="fh-q" class="input" placeholder="🔍 ชื่อเมนู (เว้นว่าง = ดูทั้งหมด)">
       <input id="fh-from" type="date" class="input" value="${addDays(today, -30)}">

@@ -8,6 +8,8 @@ import { TYPES } from './workoutConstants.js';
 import { bodyLatest } from './body.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
+import { iconSvg, iconBubble } from './icons.js';
+import { animateNumberTicker } from './ui.js';
 
 export const HOME_WIDGET_IDS = ['daily-overview', 'quick-access', 'planner', 'daily-activity', 'reminders'];
 export const HOME_WIDGET_DEFS = [
@@ -81,7 +83,7 @@ export function ensureHomePlannerLoaded() {
     const btn = $('#home-planner-open', container);
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด Planner...';
+      btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังโหลด Planner...`;
     }
     plannerMountPromise = import('./planner.js')
       .then(module => {
@@ -121,13 +123,13 @@ function renderPlannerTeaser(host, today) {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="min-w-0">
         <h2 class="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
-          <span class="emoji-bubble emoji-sm cat-workout">🗓️</span>
+          ${iconBubble('planner', { small: true, cat: 'cat-workout' })}
           <span>Weekly Planner & กิจวัตร</span>
         </h2>
         <p class="text-xs text-slate-600 mt-1 tabular-nums">${metaParts.join(' · ')}</p>
       </div>
       <button type="button" id="home-planner-open" class="btn btn-primary text-xs shrink-0 whitespace-nowrap">
-        <i class="fa-solid fa-calendar-check"></i> เปิดเช็กลิสต์ Planner
+        ${iconSvg('planner', { size: 15 })} เปิดเช็กลิสต์ Planner
       </button>
     </div>
     ${dayReminders.length ? `
@@ -182,11 +184,11 @@ export function mountHome(navigate) {
 const num = v => (Number.isFinite(+v) ? +v : 0);
 function greeting() {
   const h = new Date().getHours();
-  if (h < 5) return ['ราตรีสวัสดิ์', '🌙'];
-  if (h < 12) return ['อรุณสวัสดิ์', '☀️'];
-  if (h < 17) return ['สวัสดีตอนบ่าย', '🌤️'];
-  if (h < 20) return ['สวัสดีตอนเย็น', '🌇'];
-  return ['ราตรีสวัสดิ์', '🌙'];
+  if (h < 5) return ['ราตรีสวัสดิ์', 'moon'];
+  if (h < 12) return ['อรุณสวัสดิ์', 'sun'];
+  if (h < 17) return ['สวัสดีตอนบ่าย', 'sun'];
+  if (h < 20) return ['สวัสดีตอนเย็น', 'moon'];
+  return ['ราตรีสวัสดิ์', 'moon'];
 }
 
 function buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, allReminders) {
@@ -298,11 +300,37 @@ function buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, all
     tone: overdueCount ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-100'
   });
 
+  const kcalGoal = Math.max(0, num(targets?.kcal));
+  const rawPct = kcalGoal > 0 ? Math.round((kcal / kcalGoal) * 100) : 0;
+  const ringPct = Math.max(0, Math.min(100, rawPct));
+  const radius = 32;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - ringPct / 100);
+  const isOver = kcalGoal > 0 && kcal > kcalGoal;
+  const ringStroke = !foods.length ? '#CBDCEB' : isOver ? '#F59E0B' : '#3E8FCF';
+
   return `
-    <section class="card cozy-hero space-y-3" aria-label="สรุปประจำวัน">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-sm font-bold text-slate-800">ภาพรวมวันนี้</h2>
-        <span class="text-xs text-slate-500">ข้อมูลจริงจากการบันทึก</span>
+    <section class="card cozy-hero card-shine space-y-3.5" aria-label="สรุปประจำวัน">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0 space-y-0.5">
+          <span class="text-xs font-medium text-slate-600">ภาพรวมวันนี้ · ข้อมูลจริงจากการบันทึก</span>
+          <div class="flex items-baseline gap-2 flex-wrap tabular-nums">
+            <span class="text-2xl sm:text-3xl font-bold tm-gradient-text">${foods.length ? `${rawPct}%` : 'พร้อมดูแล'}</span>
+            <span class="text-xs text-slate-600">${foods.length && kcalGoal ? `ของเป้า ${kcalGoal.toLocaleString()} kcal` : (kcalGoal ? `เป้าพลังงาน ${kcalGoal.toLocaleString()} kcal` : 'บันทึกสุขภาพประจำวันได้ทันที')}</span>
+          </div>
+        </div>
+        <div class="relative shrink-0 w-[78px] h-[78px] flex items-center justify-center" aria-hidden="true">
+          <svg class="tm-ring-svg w-[78px] h-[78px]" viewBox="0 0 78 78">
+            <circle cx="39" cy="39" r="${radius}" fill="none" stroke="rgba(96,178,236,0.22)" stroke-width="6.5"/>
+            <circle cx="39" cy="39" r="${radius}" fill="none" stroke="${ringStroke}" stroke-width="6.5" stroke-linecap="round"
+              stroke-dasharray="${circumference.toFixed(1)}" stroke-dashoffset="${dashOffset.toFixed(1)}"
+              transform="rotate(-90 39 39)"/>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center leading-tight tabular-nums">
+            <span id="home-kcal-ticker" class="text-sm font-bold text-slate-800">${foods.length ? kcal.toLocaleString('th-TH') : '—'}</span>
+            <span class="text-[10px] text-slate-500">kcal</span>
+          </div>
+        </div>
       </div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         ${pulseItems.map(item => `
@@ -336,7 +364,7 @@ function buildQuickAccessHtml(config) {
       <div class="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
         ${items.map(c => `
           <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="cat-tile ${c.cat} min-h-[44px]">
-            <span class="emoji-bubble" aria-hidden="true">${c.emoji}</span>
+            ${iconBubble(c.icon || c.key)}
             <span class="truncate max-w-full px-1">${esc(c.label)}</span>
           </button>`).join('')}
       </div>
@@ -355,7 +383,7 @@ function buildDailyActivityHtml(today, foods, targets, monthExps, todayExps) {
     <button type="button" data-go="food" class="card food-today cat-food w-full text-left flex flex-col justify-between">
       <div>
         <div class="flex items-center justify-between gap-2">
-          <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">🍙</span><span>อาหารวันนี้</span></span>
+          <span class="tile-head">${iconBubble('food', { small: true })}<span>อาหารวันนี้</span></span>
           <span class="text-xs text-slate-600 tabular-nums">${!foodLoaded && !foods.length ? 'กำลังโหลด...' : foods.length ? `${foods.length} รายการ` : 'ยังไม่บันทึก'}</span>
         </div>
         ${foods.length ? `
@@ -392,7 +420,7 @@ function buildDailyActivityHtml(today, foods, targets, monthExps, todayExps) {
   const activityCard = `
     <div class="card cat-workout flex flex-col justify-between space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">🏃‍♀️</span><span>กิจกรรม & ร่างกาย</span></span>
+        <span class="tile-head">${iconBubble('workout', { small: true })}<span>กิจกรรม & ร่างกาย</span></span>
         <button type="button" data-go="workout" class="text-xs font-medium text-brand-dark underline min-h-[32px]">เปิดบันทึก</button>
       </div>
       <div class="space-y-2 text-sm">
@@ -435,7 +463,7 @@ function buildDailyActivityHtml(today, foods, targets, monthExps, todayExps) {
   const financeCard = `
     <button type="button" data-go="expense" class="card cat-body sm:col-span-2 w-full text-left flex flex-wrap items-center justify-between gap-3">
       <div class="space-y-1 min-w-0">
-        <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">💸</span><span>การเงินเดือนนี้ & สแกนสลิป</span></span>
+        <span class="tile-head">${iconBubble('expense', { small: true })}<span>การเงินเดือนนี้ & สแกนสลิป</span></span>
         ${monthExps.length ? `
           <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 pt-1 tabular-nums">
             <span class="text-xl font-bold text-rose-700">จ่าย ฿${spentMonth.toLocaleString('th-TH', { maximumFractionDigits: 2 })}</span>
@@ -478,7 +506,7 @@ function buildRemindersHtml(today, reminders) {
     <section class="card space-y-3" aria-label="แจ้งเตือนและรายการสำคัญ">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="font-bold text-slate-800 flex items-center gap-2">
-          <span class="emoji-bubble emoji-sm cat-body" aria-hidden="true">🔔</span>
+          ${iconBubble('notifications', { small: true, cat: 'cat-lab' })}
           <span>ใกล้ถึงกำหนด</span>
         </h2>
         <div class="flex items-center gap-3 text-xs">
@@ -490,9 +518,11 @@ function buildRemindersHtml(today, reminders) {
         <div class="divide-y divide-slate-100">
           ${reminders.slice(0, 4).map(r => {
             const u = formatUrgency(r);
+            const rIcon = CATEGORIES.find(c => c.tab === r.tab)?.icon || 'notifications';
+            const rCat = CATEGORIES.find(c => c.tab === r.tab)?.cat || 'cat-lab';
             return `
               <button type="button" data-go="${esc(r.tab || 'notifications')}" class="w-full text-left flex items-center gap-3 py-2.5 first:pt-1 last:pb-1 hover:bg-lav-soft/30 rounded-xl px-1.5 transition-colors">
-                <span class="emoji-bubble emoji-sm" aria-hidden="true">${r.icon}</span>
+                ${iconBubble(rIcon, { small: true, cat: rCat })}
                 <span class="min-w-0 flex-1">
                   <span class="text-sm font-semibold text-slate-800 block truncate">${esc(r.label)}</span>
                   <span class="text-xs text-slate-600 block truncate">
@@ -520,8 +550,11 @@ export function renderHome() {
     head.innerHTML = `
       <div class="flex flex-wrap items-start justify-between gap-2">
         <div class="home-hello">
-          <p class="text-sm text-slate-600">${esc(dateText)}</p>
-          <h1 class="text-xl sm:text-2xl font-bold text-slate-800">${hello}${name ? ', ' + esc(name) : ''} ${sun}</h1>
+          <p class="text-sm text-slate-600 flex items-center gap-1.5">${esc(dateText)}</p>
+          <h1 class="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+            <span>${hello}${name ? ', ' + esc(name) : ''}</span>
+            <span class="text-brand inline-flex items-center" aria-hidden="true">${iconSvg(sun, { size: 22 })}</span>
+          </h1>
         </div>
         <div id="home-push-slot" class="shrink-0"></div>
       </div>`;
@@ -556,6 +589,11 @@ export function renderHome() {
 
   if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
     slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, reminders);
+    const tickerEl = $('#home-kcal-ticker', el);
+    if (foods.length && tickerEl) {
+      const totalKcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
+      animateNumberTicker(tickerEl, totalKcal);
+    }
   }
   if (slots['quick-access'] && !config.hidden.has('quick-access')) {
     slots['quick-access'].innerHTML = buildQuickAccessHtml(config);
@@ -587,8 +625,8 @@ async function refreshHomePushBtn() {
     return;
   }
   if (st.subscribedHere) {
-    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="chip bg-ok-soft text-green-800 min-h-[40px]"><i class="fa-solid fa-bell"></i> รับแจ้งเตือนแล้ว</button>`;
+    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="chip bg-ok-soft text-green-800 min-h-[40px]">${iconSvg('notifications', { size: 15 })}<span>รับแจ้งเตือนแล้ว</span></button>`;
   } else {
-    slot.innerHTML = `<button type="button" id="home-push-btn" class="chip bg-pink-soft text-rose-800 border border-pink-200 min-h-[40px]"><i class="fa-regular fa-bell"></i> เปิดรับการแจ้งเตือน</button>`;
+    slot.innerHTML = `<button type="button" id="home-push-btn" class="chip bg-sky-soft text-brand-dark border border-sky-200 min-h-[40px]">${iconSvg('notifications', { size: 15 })}<span>เปิดรับการแจ้งเตือน</span></button>`;
   }
 }

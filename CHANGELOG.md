@@ -3,6 +3,25 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.2.0] - 2026-11-18
+
+### 4-Theme System, Lucide Icons, Accessibility & UI Enhancements
+- **แยกธีมแอปเป็น 4 รูปแบบชัดเจน (`src/theme.js`, `src/settings.js`, `src/design-tokens.css`, `src/style.css`, `index.html`)**:
+  - **Baby Blue (`baby-blue`, ค่าเริ่มต้น)**: โทนฟ้าอ่อนตัดพื้นหลัง `#F4F8FC` (Ice Mist) และตัวอักษร slate คอนทราสต์สูง (ยังคง map ค่า `'minimal'` เดิมจาก `localStorage` มาที่ `'baby-blue'` อัตโนมัติ)
+  - **Pastel (`pastel`)**: โทนชมพูพาสเทล (`#FCF6FB` / `#C87FA8`) พร้อมคอนทราสต์ตัวอักษรที่อ่านง่ายบนพื้นหลังอ่อน
+  - **Cozy (`cozy`)**: คืนโทนน้ำตาลครีมอบอุ่นตามเดิม (`#FAF6F0` / `#FFFDF9` / `#8B5E3C` / `#3E2F26`) ครอบคลุมการ์ด, เมนู, Combobox, Slider, Chat Drawer และป้ายเวอร์ชัน
+  - **Dark mode (`dark`)**: พื้นหลังโทนน้ำเงินเข้ม (`#0F1622`) พร้อมปรับ contrast ของการ์ด ชิป และส่วนควบคุมทั้งหมด
+- **เปลี่ยนไอคอนทั้งแอปเป็น Lucide Inline SVG (`src/icons.js`, `package.json`, `package-lock.json`, ทุกโมดูลฟีเจอร์)**:
+  - ใช้ชุดไอคอนกลาง `src/icons.js` (`iconSvg`, `iconBubble`) จาก `lucide` v1.75.0 แบบ tree-shaken inline SVG ทำงานออฟไลน์ 100% แทน FontAwesome icon tags ทั่วทั้งแอป (รวมถึงหน้าอาหาร สุขภาพ ร่างกาย ประจำเดือน สัตว์เลี้ยง ของใช้ ผลแล็บ รายจ่าย แพลนเนอร์ สรุป แจ้งเตือน สำรอง/ย้ายข้อมูล โปรไฟล์ ตั้งค่า Navigation และ Widget settings)
+  - ใช้ SVG illustration ในเครื่องสำหรับหน้าเข้าสู่ระบบ, ล็อก PIN (`index.html`), และ Onboarding (`src/onboarding.js`) แทน emoji หลัก และลบ placeholder OG image ใน `index.html`
+- **แสดงเลขเวอร์ชันบนเว็บแอป (`src/version.js`, `vite.config.js`, `index.html`, `src/app.js`, `src/settings.js`, `src/style.css`)**:
+  - ดึงเวอร์ชันจาก `package.json` ผ่าน `__APP_VERSION__` ใน `vite.config.js` (fallback ใน `src/version.js` เป็น `5.2.0`) แสดงในหน้าเข้าสู่ระบบ, แถบนำทางด้านซ้าย (Desktop) และในหน้า **ตั้งค่า** (`.tm-app-version-pill`)
+- **ยกระดับ Accessibility และ Micro-interactions (`src/util.js`, `src/ui.js`, `src/app.js`, `src/onboarding.js`, `src/chatWidget.js`, `src/home.js`, `src/food.js`, `src/body.js`, `src/expense.js`)**:
+  - เพิ่ม `trapFocus()` พร้อมปิดด้วย `Escape`, คืน focus ให้ปุ่มที่เปิดหน้าต่างเมื่อปิด, และกำหนด `role="dialog"`, `aria-modal="true"`, `aria-labelledby` ให้ `openModal()`, `openBottomSheet()`, Onboarding dialog, AI Chat Drawer และ Quick Menu
+  - เพิ่มตัวนับเลขแบบนุ่มนวล `animateNumberTicker()` (เคารพ `prefers-reduced-motion`), ขอบการ์ดเรืองแสง `.card-shine` ในการ์ดสรุปหน้าหลัก, ช่องค้นหาอาหารแบบ Combobox พร้อม keyboard navigation (`#f-name-listbox`), แถบเลือกวัน 7 วัน `.tm-day-pill` ในหน้าอาหาร, และตัวเลื่อนชั่วโมงนอน `.tm-slider` ในหน้าร่างกาย
+- **ไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง**; อัปเดต `package.json`, `package-lock.json` (`lucide@^1.75.0` และเวอร์ชัน `5.2.0`), `src/version.js`, `vite.config.js` และเอกสารทั้งหมดให้ตรงกับพฤติกรรมปัจจุบัน
+
+---
 ## [v5.1.0] - 2026-11-18
 
 ### Responsive Layout, Dashboard Refinements & Sticky Navigation

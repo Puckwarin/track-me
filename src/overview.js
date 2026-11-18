@@ -6,6 +6,7 @@ import { getTargets } from './profile.js';
 import {
   aggregateMonthlyOverview, buildMonthKeys, compactFoodForOverview, readOverviewCache, writeOverviewCache
 } from './overviewLogic.js';
+import { iconSvg } from './icons.js';
 
 let root = null;
 let rangeMonths = 6;
@@ -193,8 +194,8 @@ function renderView() {
   if (refreshBtn) {
     refreshBtn.disabled = isLoading;
     refreshBtn.innerHTML = isLoading
-      ? '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด...'
-      : '<i class="fa-solid fa-rotate-right"></i> รีเฟรช';
+      ? `${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังโหลด...`
+      : `${iconSvg('rotate-right', { size: 14 })} รีเฟรช`;
   }
 
   const cacheInfoEl = $('#ov-cache-info', root);
@@ -219,9 +220,9 @@ function renderView() {
     noticeEl.classList.toggle('hidden', !lastFoodError);
   }
 
-  const kpi = (icon, label, value, sub) => `
+  const kpi = (iconName, colorCls, label, value, sub) => `
     <div class="bg-lav-soft/40 border border-slate-100 rounded-2xl p-3">
-      <p class="text-xs text-slate-600"><i class="${icon}"></i> ${label}</p>
+      <p class="text-xs text-slate-600 inline-flex items-center gap-1.5">${iconSvg(iconName, { size: 14, className: colorCls })}<span>${label}</span></p>
       <p class="text-base sm:text-lg font-bold text-slate-800 mt-0.5 tabular-nums">${value}</p>
       <p class="text-[11px] text-slate-500 mt-0.5 tabular-nums">${sub}</p>
     </div>`;
@@ -235,21 +236,21 @@ function renderView() {
     : (summary.avgCalPerDay !== null ? `${summary.avgCalPerDay.toLocaleString()} kcal` : 'ยังไม่มีข้อมูล');
 
   $('#ov-kpis', root).innerHTML = `
-    ${kpi('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', summary.latestWeight !== null ? `${summary.latestWeight} กก.` : 'ยังไม่มีข้อมูล', weightSub)}
-    ${kpi('fa-solid fa-fire text-brand', 'แคลอรี่เฉลี่ย/วันที่บันทึก', foodKpiValue, summary.totalLoggedDays ? `บันทึกแล้ว ${summary.totalLoggedDays} วัน · เป้า ${targets.kcal.toLocaleString()}` : (isLoading ? 'กำลังดึงรายการอาหาร...' : 'ยังไม่มีบันทึกอาหารในช่วงนี้'))}
-    ${kpi('fa-solid fa-dumbbell text-amber-600', 'ออกกำลังกายรวม', summary.totalWorkouts ? `${summary.totalWorkouts} ครั้ง` : 'ยังไม่มีบันทึก', summary.totalWorkoutMinutes ? `รวม ${summary.totalWorkoutMinutes.toLocaleString()} นาที` : 'ยังไม่มีบันทึกในช่วงเดือนนี้')}
-    ${kpi('fa-solid fa-wallet text-emerald-600', 'ค่าใช้จ่ายรวม', (summary.totalExpense || summary.totalIncome) ? `฿${fmtMoney(summary.totalExpense)}` : 'ยังไม่มีรายการ', summary.totalIncome ? `รายรับรวม ฿${fmtMoney(summary.totalIncome)}` : 'ยังไม่มีรายการรายรับ-รายจ่าย')}`;
+    ${kpi('body', 'text-blue-500', 'น้ำหนักล่าสุด', summary.latestWeight !== null ? `${summary.latestWeight} กก.` : 'ยังไม่มีข้อมูล', weightSub)}
+    ${kpi('flame', 'text-brand', 'แคลอรี่เฉลี่ย/วันที่บันทึก', foodKpiValue, summary.totalLoggedDays ? `บันทึกแล้ว ${summary.totalLoggedDays} วัน · เป้า ${targets.kcal.toLocaleString()}` : (isLoading ? 'กำลังดึงรายการอาหาร...' : 'ยังไม่มีบันทึกอาหารในช่วงนี้'))}
+    ${kpi('workout', 'text-amber-600', 'ออกกำลังกายรวม', summary.totalWorkouts ? `${summary.totalWorkouts} ครั้ง` : 'ยังไม่มีบันทึก', summary.totalWorkoutMinutes ? `รวม ${summary.totalWorkoutMinutes.toLocaleString()} นาที` : 'ยังไม่มีบันทึกในช่วงเดือนนี้')}
+    ${kpi('expense', 'text-emerald-600', 'ค่าใช้จ่ายรวม', (summary.totalExpense || summary.totalIncome) ? `฿${fmtMoney(summary.totalExpense)}` : 'ยังไม่มีรายการ', summary.totalIncome ? `รายรับรวม ฿${fmtMoney(summary.totalIncome)}` : 'ยังไม่มีรายการรายรับ-รายจ่าย')}`;
 
   $('#ov-charts', root).innerHTML = `
     <div class="card space-y-2">
-      <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนักเฉลี่ยรายเดือน (กก.)</h3>
+      <h3 class="font-bold text-slate-800 text-sm inline-flex items-center gap-1.5">${iconSvg('body', { size: 15, className: 'text-blue-500' })}<span>น้ำหนักเฉลี่ยรายเดือน (กก.)</span></h3>
       ${renderWeightChart(months)}
       <p class="text-[11px] text-slate-500">จุดบนเส้นแสดงค่าเฉลี่ยของแต่ละเดือน (แตะจุดเพื่อดูน้ำหนักล่าสุดของเดือน)</p>
     </div>
     <div class="card space-y-2">
-      <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-utensils text-brand"></i> แคลอรี่เฉลี่ยต่อวันที่บันทึก (kcal/วัน)</h3>
+      <h3 class="font-bold text-slate-800 text-sm inline-flex items-center gap-1.5">${iconSvg('food', { size: 15, className: 'text-brand' })}<span>แคลอรี่เฉลี่ยต่อวันที่บันทึก (kcal/วัน)</span></h3>
       ${isLoading && !cachedUpdatedAt
-        ? '<p class="text-xs text-slate-500 py-8 text-center"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลแคลอรี่...</p>'
+        ? `<p class="text-xs text-slate-500 py-8 text-center inline-flex items-center justify-center gap-1.5 w-full">${iconSvg('fa-spinner fa-spin', { size: 14 })}<span>กำลังโหลดข้อมูลแคลอรี่...</span></p>`
         : renderBarChart(months, 'calAvgPerLoggedDay', {
           color: '#a78bfa',
           emptyText: 'ยังไม่มีบันทึกอาหารในช่วงเวลานี้',
@@ -260,7 +261,7 @@ function renderView() {
       <p class="text-[11px] text-slate-500">คำนวณเฉพาะวันที่มีบันทึกอาหารในแต่ละเดือน</p>
     </div>
     <div class="card space-y-2">
-      <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-dumbbell text-amber-600"></i> การออกกำลังกายรายเดือน (ครั้ง)</h3>
+      <h3 class="font-bold text-slate-800 text-sm inline-flex items-center gap-1.5">${iconSvg('workout', { size: 15, className: 'text-amber-600' })}<span>การออกกำลังกายรายเดือน (ครั้ง)</span></h3>
       ${renderBarChart(months, 'workoutCount', {
         color: '#f59e0b',
         emptyText: 'ยังไม่มีบันทึกออกกำลังกายในช่วงเวลานี้',
@@ -269,7 +270,7 @@ function renderView() {
       <p class="text-[11px] text-slate-500">นับเฉพาะครั้งที่ทำจริง (ไม่รวมรายการที่สถานะเป็นแผนล่วงหน้า)</p>
     </div>
     <div class="card space-y-2">
-      <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-wallet text-emerald-600"></i> ค่าใช้จ่ายรายเดือน (บาท)</h3>
+      <h3 class="font-bold text-slate-800 text-sm inline-flex items-center gap-1.5">${iconSvg('expense', { size: 15, className: 'text-emerald-600' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>
       ${renderBarChart(months, 'expenseTotal', {
         color: '#10b981',
         emptyText: 'ยังไม่มีรายการรายจ่ายในช่วงเวลานี้',
@@ -295,14 +296,14 @@ export function mountOverview(el) {
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-chart-column text-brand"></i> แดชบอร์ดภาพรวมรายเดือน</h2>
+          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 19, className: 'text-brand' })}<span>แดชบอร์ดภาพรวมรายเดือน</span></h2>
           <p class="text-xs text-slate-600">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" data-ov-range="3" class="chip whitespace-nowrap">3 เดือน</button>
           <button type="button" data-ov-range="6" class="chip whitespace-nowrap">6 เดือน</button>
           <button type="button" data-ov-range="12" class="chip whitespace-nowrap">12 เดือน</button>
-          <button type="button" id="ov-refresh" class="btn btn-soft text-xs whitespace-nowrap"><i class="fa-solid fa-rotate-right"></i> รีเฟรช</button>
+          <button type="button" id="ov-refresh" class="btn btn-soft text-xs whitespace-nowrap">${iconSvg('rotate-right', { size: 14 })} รีเฟรช</button>
         </div>
       </div>
       <p id="ov-cache-info" class="hidden text-[11px] text-slate-500"></p>
@@ -311,7 +312,7 @@ export function mountOverview(el) {
     </div>
     <div id="ov-charts" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-table text-brand"></i> ตารางเปรียบเทียบรายเดือน</h3>
+      <h3 class="font-bold text-slate-800 text-sm inline-flex items-center gap-1.5">${iconSvg('table', { size: 15, className: 'text-brand' })}<span>ตารางเปรียบเทียบรายเดือน</span></h3>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs sm:text-sm">
           <thead class="bg-lav-soft/50 text-slate-600">

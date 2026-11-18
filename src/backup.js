@@ -3,6 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, localDateStr, downloadFile, toast } from './util.js';
 import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
+import { iconSvg } from './icons.js';
 
 export const BACKUP_APP = 'Track Me';
 export const BACKUP_VERSION = '4.8.0';
@@ -126,12 +127,12 @@ export async function commitRestoreRows(uid, rows, {
 
 export function mountBackup(el) {
   el.innerHTML = `
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-box-archive text-brand"></i> สำรอง & กู้คืนข้อมูล</h3>
+    <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('archive', { size: 17, className: 'text-brand shrink-0' })}<span>สำรอง & กู้คืนข้อมูล</span></h3>
     <p class="text-xs text-slate-500">ไฟล์สำรองเป็น JSON ไม่มี API Key ไม่มีรหัสผ่าน และ <b>ไม่รวม Token Push ของเครื่อง</b> แต่<b>มีข้อมูลสุขภาพส่วนบุคคล</b> โปรดเก็บรักษาให้ปลอดภัย</p>
     <div class="flex flex-wrap gap-3 text-sm" id="bk-cols">${Object.entries(COLLECTION_LABELS).map(([k, t]) => `<label><input type="checkbox" value="${k}" checked> ${t}</label>`).join('')}</div>
     <div class="flex flex-wrap gap-2">
-      <button id="bk-export" class="btn btn-primary"><i class="fa-solid fa-download"></i> สำรองข้อมูล (JSON)</button>
-      <label class="btn btn-soft cursor-pointer"><i class="fa-solid fa-upload"></i> เลือกไฟล์เพื่อกู้คืน<input id="bk-file" type="file" accept="application/json,.json" class="hidden"></label>
+      <button id="bk-export" class="btn btn-primary">${iconSvg('download', { size: 15 })} สำรองข้อมูล (JSON)</button>
+      <label class="btn btn-soft cursor-pointer">${iconSvg('upload', { size: 15 })} เลือกไฟล์เพื่อกู้คืน<input id="bk-file" type="file" accept="application/json,.json" class="hidden"></label>
     </div>
     <div id="bk-preview" class="hidden space-y-2 text-sm bg-lav-soft/50 rounded-xl p-3"></div>`;
   $('#bk-export', el).addEventListener('click', () => exportData(el));

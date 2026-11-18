@@ -1,7 +1,8 @@
 import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, toast } from './util.js';
+import { $, toast, trapFocus } from './util.js';
+import { iconSvg, iconBubble } from './icons.js';
 import { ACTIVITY, GOAL_PRESETS, refreshProfile } from './profile.js';
 import {
   getGeminiKey, setGeminiKey, testGeminiConnection,
@@ -54,6 +55,18 @@ let currentStep = 1;
 let profileDraft = {};
 let aiDrafts = {};
 let selectedAiProvider = 'gemini';
+let releaseFocusTrap = () => {};
+let escHandler = null;
+let triggerEl = null;
+
+function cleanupAccessibilityHandlers() {
+  releaseFocusTrap();
+  releaseFocusTrap = () => {};
+  if (escHandler) {
+    document.removeEventListener('keydown', escHandler);
+    escHandler = null;
+  }
+}
 
 function setStatus(element, message, kind = 'info') {
   element.className = `text-xs ${kind === 'error' ? 'text-rose-600' : kind === 'success' ? 'text-green-700' : 'text-slate-500'}`;
@@ -73,19 +86,35 @@ function advance() {
 }
 
 function render() {
+  cleanupAccessibilityHandlers();
   const root = $('#onboarding-root');
   const year = new Date().getFullYear();
   const progressPercent = Math.round(currentStep / ONBOARDING_STEP_COUNT * 100);
+  const welcomeIllustration = `
+    <div class="w-16 h-16 rounded-2xl bg-sky-soft/80 border border-sky-200/80 flex items-center justify-center text-brand-dark" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="17" fill="#E8F4FE" stroke="#93CEFA" stroke-width="1.5"/>
+        <path d="M20 30s-9-5.6-11.5-11.1C6.5 14.6 9.3 10.5 13.8 10.5c2.6 0 4.7 1.35 6.2 3.35 1.5-2 3.6-3.35 6.2-3.35 4.5 0 7.3 4.1 5.3 8.4C29 24.4 20 30 20 30Z" fill="#BAE2FF" stroke="#276594" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M13.2 19h2.8l1.9-3.2 2.4 5.8 1.9-2.6h4.6" stroke="#276594" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>`;
+  const readyIllustration = `
+    <div class="w-16 h-16 mx-auto rounded-2xl bg-ok-soft border border-emerald-200 flex items-center justify-center text-emerald-700" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="17" fill="#DCFCE7" stroke="#86EFAC" stroke-width="1.5"/>
+        <path d="M13 20.5 17.8 25 27.5 15" stroke="#15803D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>`;
   const stepContent = [
     `<div class="space-y-4">
-      <div class="text-4xl" aria-hidden="true">💗</div>
+      ${welcomeIllustration}
       <h2 id="onboarding-title" class="text-xl font-bold text-slate-800">ยินดีต้อนรับสู่ Track Me</h2>
       <p class="text-sm text-slate-600">ดูแลตัวเองได้ในที่เดียว ทั้งอาหาร สุขภาพ การออกกำลังกาย การเงิน และการดูแลสัตว์เลี้ยง</p>
-      <ul class="grid grid-cols-2 gap-2 text-xs text-slate-600">
-        <li class="rounded-xl bg-lav-soft/60 p-3">🍚 บันทึกอาหารและโภชนาการ</li>
-        <li class="rounded-xl bg-lav-soft/60 p-3">🌸 สุขภาพและรอบเดือน</li>
-        <li class="rounded-xl bg-lav-soft/60 p-3">🏃 ออกกำลังกายและน้ำหนัก</li>
-        <li class="rounded-xl bg-lav-soft/60 p-3">🐾 สัตว์เลี้ยงและของใช้</li>
+      <ul class="grid grid-cols-2 gap-2 text-xs text-slate-700">
+        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('food', { small: true, cat: 'cat-food' })}<span>บันทึกอาหารและโภชนาการ</span></li>
+        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('period', { small: true, cat: 'cat-period' })}<span>สุขภาพและรอบเดือน</span></li>
+        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('workout', { small: true, cat: 'cat-workout' })}<span>ออกกำลังกายและน้ำหนัก</span></li>
+        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('care', { small: true, cat: 'cat-care' })}<span>สัตว์เลี้ยงและของใช้</span></li>
       </ul>
       <p class="text-xs text-slate-500">ตั้งค่าแต่ละอย่างได้ตามสะดวก หรือข้ามไปเริ่มใช้งานได้เลย</p>
     </div>`,
@@ -117,11 +146,11 @@ function render() {
       <h2 id="onboarding-title" class="text-xl font-bold text-slate-800">การแจ้งเตือน (ไม่บังคับ)</h2>
       <p class="text-sm text-slate-600">เปิด Web Push เพื่อรับการเตือน Planner และนัดหมายเวลา 12:15 น. ระบบจะขอสิทธิ์จากเบราว์เซอร์เมื่อคุณกดปุ่มด้านล่างเท่านั้น</p>
       <div class="rounded-xl bg-sky-50 p-3 text-xs text-slate-600">ต้องใช้เบราว์เซอร์ที่รองรับและเปิดผ่าน HTTPS หากใช้ iPhone/iPad ต้องเพิ่มแอปลงหน้าจอโฮมก่อน การไม่อนุญาตยังสามารถใช้ Track Me ได้ตามปกติ</div>
-      <button id="onb-push-enable" class="btn btn-primary"><i class="fa-solid fa-bell"></i> เปิดการแจ้งเตือน</button>
+      <button id="onb-push-enable" class="btn btn-primary">${iconSvg('notifications', { size: 15 })} เปิดการแจ้งเตือน</button>
       <p id="onb-push-status" class="text-xs text-slate-500" aria-live="polite"></p>
     </div>`,
     `<div class="space-y-4 text-center">
-      <div class="text-5xl" aria-hidden="true">✨</div>
+      ${readyIllustration}
       <h2 id="onboarding-title" class="text-xl font-bold text-slate-800">พร้อมเริ่มใช้งานแล้ว</h2>
       <p class="text-sm text-slate-600">คุณสามารถแก้ไขโปรไฟล์ คีย์ AI และการแจ้งเตือนได้ภายหลังในหน้า “ตั้งค่า”</p>
       <p class="rounded-xl bg-lav-soft/60 p-3 text-xs text-slate-600">ข้อมูลโปรไฟล์จะซิงค์กับบัญชีของคุณ ส่วนความคืบหน้า onboarding เก็บไว้ในอุปกรณ์นี้</p>
@@ -129,7 +158,7 @@ function render() {
   ][currentStep - 1];
 
   root.innerHTML = `<div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-3 sm:p-6">
-    <section class="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <section id="onb-dialog" class="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" tabindex="-1">
       <div class="mb-5 space-y-2">
         <div class="flex items-center justify-between text-xs text-slate-500"><span>เริ่มต้นใช้งาน</span><span>ขั้น ${currentStep} จาก ${ONBOARDING_STEP_COUNT}</span></div>
         <div class="h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="ความคืบหน้า onboarding" aria-valuemin="1" aria-valuemax="${ONBOARDING_STEP_COUNT}" aria-valuenow="${currentStep}">
@@ -156,6 +185,19 @@ function render() {
   if (currentStep === 2) mountProfileFields(root);
   if (currentStep === 3) mountAiSetup(root);
   if (currentStep === 4) mountNotifications(root);
+
+  const dialog = $('#onb-dialog', root);
+  if (dialog) {
+    releaseFocusTrap = trapFocus(dialog, { autoFocus: false });
+  }
+  escHandler = e => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (currentStep < ONBOARDING_STEP_COUNT) advance();
+      else unmountOnboarding();
+    }
+  };
+  document.addEventListener('keydown', escHandler);
   $('#onb-next', root).focus();
 }
 
@@ -267,9 +309,7 @@ function handleNext() {
     if (!progressStore.complete(activeUid)) {
       toast('บันทึกสถานะเสร็จสิ้นไม่ได้ อาจแสดง onboarding อีกครั้งเมื่อเปิดแอปใหม่', 'err');
     }
-    $('#onboarding-root').classList.add('hidden');
-    $('#onboarding-root').replaceChildren();
-    activeUid = null;
+    unmountOnboarding();
     return;
   }
   advance();
@@ -281,6 +321,7 @@ export function mountOnboarding(user, profile) {
     unmountOnboarding();
     return;
   }
+  triggerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   activeUid = uid;
   if (!progressStore.begin(uid)) {
     toast('เบราว์เซอร์ไม่อนุญาตให้บันทึกความคืบหน้า onboarding; หากปิดแอปอาจต้องเริ่มขั้นตอนใหม่', 'err');
@@ -301,8 +342,11 @@ export function mountOnboarding(user, profile) {
 }
 
 export function unmountOnboarding() {
+  cleanupAccessibilityHandlers();
   const root = $('#onboarding-root');
   root.classList.add('hidden');
   root.replaceChildren();
   activeUid = null;
+  if (triggerEl?.isConnected) triggerEl.focus();
+  triggerEl = null;
 }

@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.1.0
+# Project Setup — ตั้งค่า Track Me v5.2.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,14 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.list`
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
+
+---
+
+## อัปเดต v5.2.0 (4 ธีม, Lucide Icons, Accessibility & แสดงเลขเวอร์ชัน)
+
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงทั้งหมดอยู่ในฝั่ง client (`src/theme.js`, `src/icons.js`, `src/version.js`, `src/ui.js`, `src/util.js`, `src/design-tokens.css`, `src/style.css` และหน้า UI ต่าง ๆ)
+- **ธีมแอป 4 รูปแบบ**: รองรับ **Baby Blue** (`baby-blue` ค่าเริ่มต้น), **Pastel** (`pastel`), **Cozy** (`cozy` โทนครีมน้ำตาลอบอุ่นเดิม) และ **Dark mode** (`dark`); หากเครื่องผู้ใช้เคยบันทึกค่า `'minimal'` ใน `localStorage` ระบบจะแปลงเป็น `'baby-blue'` ให้อัตโนมัติ
+- **Lucide Icons & แสดงเลขเวอร์ชัน**: เปลี่ยนไอคอนทั่วทั้งแอปมาใช้ชุด `lucide` (`src/icons.js` แบบ inline SVG) และแสดงเลขเวอร์ชันจาก `package.json` (`src/version.js`) ในหน้าล็อกอิน, แถบนำทางด้านซ้ายบน desktop และหน้าตั้งค่า (อัปเดต `package-lock.json` ให้ซิงค์กับ `lucide@^1.75.0` และเวอร์ชัน `5.2.0` แล้ว)
 
 ---
 

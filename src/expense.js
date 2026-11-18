@@ -3,6 +3,8 @@ import { deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
+import { iconSvg } from './icons.js';
+import { animateNumberTicker } from './ui.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
 import {
@@ -205,8 +207,8 @@ export function mountExpense(el) {
     <section class="card space-y-4">
       <header class="space-y-1">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-wallet text-brand"></i> รายรับ-รายจ่าย</h2>
-          <span class="text-[11px] px-2 py-0.5 rounded-md bg-ok-soft text-green-800 font-medium">🔒 สลิปอ่านเฉพาะในเครื่อง</span>
+          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('expense', { size: 19, className: 'text-brand' })}<span>รายรับ-รายจ่าย</span></h2>
+          <span class="text-[11px] px-2 py-0.5 rounded-md bg-ok-soft text-green-800 font-medium">สลิปอ่านเฉพาะในเครื่อง</span>
         </div>
         <p class="text-xs text-slate-500">สแกนสลิปโอนเงินด้วย OCR ฟรีในเบราว์เซอร์ (ไม่มีการอัปโหลดหรือบันทึกรูปภาพลงระบบ)</p>
       </header>
@@ -214,7 +216,7 @@ export function mountExpense(el) {
       <div class="rounded-2xl border border-dashed border-brand/40 bg-lav-soft/40 p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <label class="btn btn-primary !py-2 !px-3.5 text-xs cursor-pointer">
-            <i class="fa-solid fa-camera"></i> 📷 สแกนสลิป (เลือกได้หลายรูป)
+            ${iconSvg('camera', { size: 15 })} สแกนสลิป (เลือกได้หลายรูป)
             <input id="ex-slip-file" type="file" accept="image/*" multiple class="hidden">
           </label>
           <span class="text-[11px] text-slate-500">หรือกด แชร์ รูปจากแกลเลอรีเข้า Track Me</span>
@@ -224,7 +226,7 @@ export function mountExpense(el) {
 
       <details id="ex-statement-box" class="rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3">
         <summary class="cursor-pointer flex items-center justify-between gap-2 text-sm font-semibold text-slate-800 select-none">
-          <span>🏦 นำเข้า Statement (วางข้อความ)</span>
+          <span>นำเข้า Statement (วางข้อความ)</span>
           <span class="text-[11px] font-normal text-green-700">ประมวลผลในเครื่อง</span>
         </summary>
         <div class="mt-2.5 space-y-2">
@@ -253,7 +255,7 @@ export function mountExpense(el) {
 
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" id="ex-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
-        <button type="button" id="ex-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกรายการ</button>
+        <button type="button" id="ex-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการ</button>
       </div>
     </section>
   </div>
@@ -261,7 +263,7 @@ export function mountExpense(el) {
   <div class="lg:col-span-2 space-y-4">
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-pie text-brand"></i> สรุปประจำเดือน</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('overview', { size: 17, className: 'text-brand' })}<span>สรุปประจำเดือน</span></h3>
         <input id="ex-month" type="month" class="input !w-auto !py-1.5 text-xs">
       </div>
       <div id="ex-summary" class="grid grid-cols-3 gap-2.5"></div>
@@ -274,7 +276,7 @@ export function mountExpense(el) {
 
     <section class="card space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <div><h3 class="font-bold text-slate-800">🔁 รายจ่ายประจำ</h3><p class="text-xs text-slate-500">ถึงกำหนดแล้วจะรอให้คุณยืนยันก่อนบันทึก</p></div>
+        <div><h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('repeat', { size: 17, className: 'text-brand' })}<span>รายจ่ายประจำ</span></h3><p class="text-xs text-slate-500">ถึงกำหนดแล้วจะรอให้คุณยืนยันก่อนบันทึก</p></div>
         <button type="button" id="ex-recurring-add" class="btn btn-primary !py-1.5 !px-3 text-xs">เพิ่มรายการ</button>
       </div>
       <div id="ex-recurring-list" class="space-y-2"></div>
@@ -282,7 +284,7 @@ export function mountExpense(el) {
 
     <section id="ex-pending-card" class="card space-y-3 hidden">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800">🧐 กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
+        <h3 class="font-bold text-slate-800">กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างกล่องรอตรวจ</button>
           <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button>
@@ -292,10 +294,10 @@ export function mountExpense(el) {
     </section>
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-receipt text-brand"></i> ประวัติรายรับ-รายจ่าย</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ประวัติรายรับ-รายจ่าย</span></h3>
         <div class="flex items-center gap-2">
           <span id="ex-count" class="text-xs text-slate-500"></span>
-          <button type="button" id="ex-export-csv" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs"><i class="fa-solid fa-file-csv"></i> ส่งออก CSV</button>
+          <button type="button" id="ex-export-csv" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs">${iconSvg('csv', { size: 14 })} ส่งออก CSV</button>
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -509,7 +511,7 @@ function resetForm() {
   $r('#ex-time').value = nowTimeStr();
   $r('#ex-merchant').value = '';
   $r('#ex-note').value = '';
-  $r('#ex-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการ';
+  $r('#ex-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการ`;
   $r('#ex-cancel').classList.add('hidden');
   clearOcrStatus();
 }
@@ -525,7 +527,7 @@ function startEdit(item) {
   $r('#ex-time').value = item.time || '';
   $r('#ex-merchant').value = item.merchant || '';
   $r('#ex-note').value = item.note || '';
-  $r('#ex-save').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข';
+  $r('#ex-save').innerHTML = `${iconSvg('save', { size: 15 })} บันทึกการแก้ไข`;
   $r('#ex-cancel').classList.remove('hidden');
   root.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -619,11 +621,11 @@ function openBatchSlipsConfirmModal(results) {
   const failedItems = results.filter(r => !r.parsed);
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-receipt text-brand mr-1"></i> ตรวจสอบสลิปหลายใบ (${okItems.length} ใบ)</h3>
-      <button data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ตรวจสอบสลิปหลายใบ (${okItems.length} ใบ)</span></h3>
+      <button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
-      🔒 ประมวลผล OCR บนเครื่องเสร็จสิ้น ${okItems.length} ใบ และล้างรูปภาพออกจากหน่วยความจำแล้ว
+      ประมวลผล OCR บนเครื่องเสร็จสิ้น ${okItems.length} ใบ และล้างรูปภาพออกจากหน่วยความจำแล้ว
     </p>
     ${failedItems.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${failedItems.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.error || 'อ่านไม่สำเร็จ')}</p>`).join('')}</div>` : ''}
     <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
@@ -650,7 +652,7 @@ function openBatchSlipsConfirmModal(results) {
     </div>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="ms-confirm" class="btn btn-primary"><i class="fa-solid fa-check"></i> ยืนยันบันทึกรายจ่ายทั้งหมด</button>
+      <button type="button" id="ms-confirm" class="btn btn-primary">${iconSvg('check', { size: 15 })} ยืนยันบันทึกรายจ่ายทั้งหมด</button>
     </div>`, { wide: true });
 
   $('#ms-confirm', m.el).addEventListener('click', async () => {
@@ -689,12 +691,12 @@ function openBatchSlipsConfirmModal(results) {
       selectedMonth = records[0].date.slice(0, 7);
       if ($r('#ex-month')) $r('#ex-month').value = selectedMonth;
       const totalAmt = records.reduce((s, x) => s + x.amount, 0);
-      toast(`บันทึกรายจ่าย ${records.length} สลิป (${fmtMoney(totalAmt)} บาท) แล้ว 💸`);
+      toast(`บันทึกรายจ่าย ${records.length} สลิป (${fmtMoney(totalAmt)} บาท) แล้ว`);
       clearOcrStatus();
       m.close();
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-check"></i> ยืนยันบันทึกรายจ่ายทั้งหมด';
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} ยืนยันบันทึกรายจ่ายทั้งหมด`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });
@@ -703,11 +705,11 @@ function openBatchSlipsConfirmModal(results) {
 export function openSlipConfirmModal(parsed) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-receipt text-brand mr-1"></i> ตรวจสอบสลิปก่อนบันทึก</h3>
-      <button data-close class="text-slate-400" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ตรวจสอบสลิปก่อนบันทึก</span></h3>
+      <button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-800 bg-ok-soft rounded-xl px-3 py-2 mb-3">
-      🔒 ประมวลผล OCR บนเครื่องของคุณเท่านั้น และล้างรูปภาพออกจากหน่วยความจำแล้ว — บันทึกเฉพาะข้อความ/ตัวเลขเป็น <b>รายจ่าย (Expense)</b>
+      ประมวลผล OCR บนเครื่องของคุณเท่านั้น และล้างรูปภาพออกจากหน่วยความจำแล้ว — บันทึกเฉพาะข้อความ/ตัวเลขเป็น <b>รายจ่าย (Expense)</b>
     </p>
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-2.5">
@@ -738,7 +740,7 @@ export function openSlipConfirmModal(parsed) {
       </details>` : ''}
       <div class="flex justify-end gap-2 pt-1">
         <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-        <button type="button" id="sl-confirm" class="btn btn-primary"><i class="fa-solid fa-check"></i> ยืนยันบันทึกรายจ่าย</button>
+        <button type="button" id="sl-confirm" class="btn btn-primary">${iconSvg('check', { size: 15 })} ยืนยันบันทึกรายจ่าย</button>
       </div>
     </div>`, { wide: true });
 
@@ -937,7 +939,7 @@ function openExpenseBudgetEditor() {
     <div><label class="lbl">${CAT_ICONS[category] || '💸'} ${esc(category)}</label>
       <input id="ex-budget-${index}" type="number" min="0" max="100000000" step="0.01" inputmode="decimal" class="input" value="${expenseBudgets[category] ?? ''}" placeholder="ไม่ตั้งงบ"></div>`).join('');
   const modal = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตั้งงบรายเดือน</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตั้งงบรายเดือน</h3><button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-500 mb-3">งบใช้กับเดือนที่เลือกในหน้ารายจ่าย และจะแจ้งเตือนเมื่อใช้ถึง 80% หรือเกินงบ</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${fields}</div>
     <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="ex-budget-save" class="btn btn-primary">บันทึกงบ</button></div>`, { wide: true });
@@ -994,7 +996,7 @@ function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {
     `<option value="${esc(category)}"${category === plan?.category ? ' selected' : ''}>${esc(category)}</option>`
   ).join('');
   const modal = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${isEdit ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${isEdit ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <div class="space-y-3">
       <div><label class="lbl">ร้านค้า / รายการ *</label><input id="ex-recurring-merchant" class="input" maxlength="120" value="${esc(plan?.merchant || '')}" placeholder="เช่น ค่าเช่าบ้าน"></div>
       <div class="grid grid-cols-2 gap-2"><div><label class="lbl">จำนวนเงิน (บาท) *</label><input id="ex-recurring-amount" type="number" min="0" max="100000000" step="0.01" class="input" value="${plan?.amount ?? ''}"></div>
@@ -1136,16 +1138,23 @@ export function renderExpense() {
   $r('#ex-summary').innerHTML = `
     <div class="rounded-2xl bg-ok-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-green-800">รายรับ</p>
-      <p class="text-base sm:text-lg font-bold text-green-900">${hasMonthItems ? `+${fmtMoney(totalIncome)} <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-green-800">ยังไม่มีรายการ</span>'}</p>
+      <p class="text-base sm:text-lg font-bold text-green-900">${hasMonthItems ? `<span id="ex-sum-inc">+${fmtMoney(totalIncome)}</span> <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-green-800">ยังไม่มีรายการ</span>'}</p>
     </div>
     <div class="rounded-2xl bg-pink-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-rose-800">รายจ่าย</p>
-      <p class="text-base sm:text-lg font-bold text-rose-900">${hasMonthItems ? `-${fmtMoney(totalExpense)} <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-rose-800">ยังไม่มีรายการ</span>'}</p>
+      <p class="text-base sm:text-lg font-bold text-rose-900">${hasMonthItems ? `<span id="ex-sum-exp">-${fmtMoney(totalExpense)}</span> <small class="text-[11px] font-normal">฿</small>` : '<span class="text-sm font-medium text-rose-800">ยังไม่มีรายการ</span>'}</p>
     </div>
     <div class="rounded-2xl bg-sky-soft/70 p-3 tabular-nums">
       <p class="text-[11px] text-blue-800">สุทธิ</p>
-      <p class="text-base sm:text-lg font-bold ${hasMonthItems ? (net >= 0 ? 'text-blue-900' : 'text-rose-700') : 'text-blue-800'}">${hasMonthItems ? `${net >= 0 ? '+' : '-'}${fmtMoney(Math.abs(net))} <small class="text-[11px] font-normal">฿</small>` : '—'}</p>
+      <p class="text-base sm:text-lg font-bold ${hasMonthItems ? (net >= 0 ? 'text-blue-900' : 'text-rose-700') : 'text-blue-800'}">${hasMonthItems ? `<span id="ex-sum-net">${net >= 0 ? '+' : '-'}${fmtMoney(Math.abs(net))}</span> <small class="text-[11px] font-normal">฿</small>` : '—'}</p>
     </div>`;
+
+  if (hasMonthItems) {
+    const dec = n => (Math.abs(n % 1) > 0.005 ? 2 : 0);
+    animateNumberTicker($r('#ex-sum-inc'), totalIncome, { prefix: '+', decimals: dec(totalIncome) });
+    animateNumberTicker($r('#ex-sum-exp'), totalExpense, { prefix: '-', decimals: dec(totalExpense) });
+    animateNumberTicker($r('#ex-sum-net'), Math.abs(net), { prefix: net >= 0 ? '+' : '-', decimals: dec(net) });
+  }
 
   // สัดส่วนรายจ่ายตามหมวดในเดือนที่เลือก
   const byCat = {};

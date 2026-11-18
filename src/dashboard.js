@@ -2,6 +2,7 @@ import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, localDateStr, toNum, round1 } from './util.js';
+import { iconSvg } from './icons.js';
 
 let root, dashboardData = null, loading = false, activeSection = 'health';
 
@@ -26,7 +27,7 @@ export function mountDashboard(el) {
   <div class="space-y-5">
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-chart-line text-brand"></i> แดชบอร์ดภาพรวม</h2>
+        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('health', { size: 18, className: 'text-brand shrink-0' })}<span>แดชบอร์ดภาพรวม</span></h2>
         <div class="flex items-center gap-1.5">
           <button type="button" id="db-range-3" class="chip text-xs bg-slate-100 text-slate-600">3 เดือน</button>
           <button type="button" id="db-range-6" class="chip text-xs bg-brand text-white font-semibold">6 เดือน</button>
@@ -34,7 +35,7 @@ export function mountDashboard(el) {
         </div>
       </div>
       <p class="text-xs text-slate-500">สรุปตัวเลขสำคัญ แล้วเลือกดูแนวโน้มเฉพาะหมวดที่ต้องการ</p>
-      <button type="button" id="db-refresh" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล</button>
+      <button type="button" id="db-refresh" class="chip bg-lav-soft text-brand-dark">${iconSvg('rotate-right', { size: 14 })} รีเฟรชข้อมูล</button>
     </div>
     <div id="db-content" class="space-y-5"><p class="text-sm text-slate-400">กด "รีเฟรชข้อมูล" เพื่อโหลด</p></div>
   </div>`;
@@ -77,7 +78,7 @@ async function loadAndRender(monthCount) {
   if (loading) return;
   loading = true;
   const btn = $('#db-refresh', root);
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังโหลด…`; }
   $('#db-content', root).innerHTML = '<p class="text-sm text-slate-400">กำลังรวบรวมข้อมูล…</p>';
   try {
     dashboardData = await loadData(monthCount);
@@ -86,7 +87,7 @@ async function loadAndRender(monthCount) {
     $('#db-content', root).innerHTML = `<p class="text-sm text-rose-600">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`;
   } finally {
     loading = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `${iconSvg('rotate-right', { size: 14 })} รีเฟรชข้อมูล`; }
   }
 }
 
@@ -244,18 +245,18 @@ function render(monthCount) {
     </div>
 
     <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='health'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-weight-scale text-brand"></i> น้ำหนัก (กก.)</h3>${lineChart(d, 'weight', '#6366f1', 'กก.', 1)}</div>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('body', { size: 15, className: 'text-brand shrink-0' })}<span>น้ำหนัก (กก.)</span></h3>${lineChart(d, 'weight', '#6366f1', 'กก.', 1)}</div>
     </section>
     <section role="tabpanel" id="db-panel-nutrition" aria-labelledby="db-tab-nutrition" data-db-panel="nutrition" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='nutrition'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-fire text-orange-500"></i> แคลอรี่เฉลี่ย/วัน (kcal)</h3>${lineChart(d, 'avgKcal', '#f97316', 'kcal', 0)}</div>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('flame', { size: 15, className: 'text-orange-500 shrink-0' })}<span>แคลอรี่เฉลี่ย/วัน (kcal)</span></h3>${lineChart(d, 'avgKcal', '#f97316', 'kcal', 0)}</div>
     </section>
     <section role="tabpanel" id="db-panel-activity" aria-labelledby="db-tab-activity" data-db-panel="activity" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='activity'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-dumbbell text-emerald-600"></i> จำนวนครั้งออกกำลังกาย</h3>${barChart(d, 'workoutCount', '#10b981', 'ครั้ง', 0)}</div>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('workout', { size: 15, className: 'text-emerald-600 shrink-0' })}<span>จำนวนครั้งออกกำลังกาย</span></h3>${barChart(d, 'workoutCount', '#10b981', 'ครั้ง', 0)}</div>
     </section>
     <section role="tabpanel" id="db-panel-finance" aria-labelledby="db-tab-finance" data-db-panel="finance" class="space-y-4" ${activeSection!=='finance'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-wallet text-rose-500"></i> ค่าใช้จ่ายรายเดือน (บาท)</h3>${barChart(d, 'expenseTotal', '#f43f5e', 'บาท', 0)}</div>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('expense', { size: 15, className: 'text-rose-500 shrink-0' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>${barChart(d, 'expenseTotal', '#f43f5e', 'บาท', 0)}</div>
       <details class="card space-y-3">
-        <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm"><i class="fa-solid fa-table text-slate-600"></i> ตารางเปรียบเทียบรายเดือน <span class="ml-1 text-xs font-normal text-slate-500">แตะเพื่อดูรายละเอียด</span></summary>
+        <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน <span class="ml-1 text-xs font-normal text-slate-500">แตะเพื่อดูรายละเอียด</span></span></summary>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">
           <thead class="bg-lav-soft/50">

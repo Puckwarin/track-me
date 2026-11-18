@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsL
 import { getTargets } from './profile.js';
 import { TYPES } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
+import { iconSvg } from './icons.js';
 
 let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
@@ -15,7 +16,7 @@ function renderLoadingSkeleton(message) {
   if (!body) return;
   body.innerHTML = `
     <div class="card lg:col-span-3 py-10 text-center space-y-2 text-sm text-slate-600" role="status" aria-live="polite">
-      <p><i class="fa-solid fa-spinner fa-spin text-brand text-lg"></i></p>
+      <p class="flex justify-center text-brand">${iconSvg('fa-spinner fa-spin', { size: 22 })}</p>
       <p>${esc(message)}</p>
     </div>`;
 }
@@ -52,12 +53,12 @@ export function mountWeekly(el) {
         <button id="sum-month" type="button" class="chip whitespace-nowrap min-h-[38px]">รายเดือน</button>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <button id="wk-prev" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+        <button id="wk-prev" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงก่อน">${iconSvg('chevron-left', { size: 16 })}</button>
         <div class="text-center min-w-0">
-          <h2 id="wk-title" class="font-bold text-slate-800"><i class="fa-solid fa-chart-line text-brand"></i> สรุปสุขภาพ</h2>
+          <h2 id="wk-title" class="font-bold text-slate-800 inline-flex items-center justify-center gap-1.5">${iconSvg('health', { size: 18, className: 'text-brand' })}<span>สรุปสุขภาพ</span></h2>
           <p id="wk-range" class="text-sm text-slate-600 tabular-nums"></p>
         </div>
-        <button id="wk-next" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+        <button id="wk-next" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงถัดไป">${iconSvg('chevron-right', { size: 16 })}</button>
       </div>
     </div>
     <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
@@ -155,7 +156,7 @@ export async function renderWeekly() {
   $('#wk-body', root).innerHTML = `
     <div class="card space-y-3 lg:col-span-2">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-utensils text-brand"></i> อาหาร</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('food', { size: 17, className: 'text-brand' })}<span>อาหาร</span></h3>
         ${foodError ? '<span class="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">โหลดบันทึกอาหารไม่สำเร็จ</span>' : ''}
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -165,7 +166,7 @@ export async function renderWeekly() {
         ${stat('เกิน / ต่ำกว่าเป้า', logged.length ? `${over} / ${under} วัน` : '—', 'เกิน >110% · ต่ำ <80%')}
       </div>${chart}</div>
     <div class="space-y-6">
-      <div class="card space-y-3"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> น้ำหนัก · การนอน · ก้าวเดิน</h3>
+      <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('body', { size: 17, className: 'text-blue-500' })}<span>น้ำหนัก · การนอน · ก้าวเดิน</span></h3>
         ${wAvg === null ? '<p class="text-xs text-slate-500">ไม่มีการชั่งน้ำหนักในสัปดาห์นี้</p>' : `<p class="text-lg font-bold tabular-nums">${round1(wAvg)} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${wk.length} ครั้ง)</span></p>
         <p class="text-xs text-slate-600 tabular-nums">${wk.length > 1 ? `ต้นสัปดาห์ ${wk[0].weight} → ปลาย ${wk[wk.length - 1].weight} กก.` : ''}</p>
         <p class="text-xs tabular-nums ${wDelta === null ? 'text-slate-500' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}
@@ -173,17 +174,17 @@ export async function renderWeekly() {
           ${sleepAvg !== null ? `<p>นอนเฉลี่ย <b>${round1(sleepAvg)}</b> ชม./คืน (${sleepVals.length} วัน)</p>` : ''}
           ${stepsAvg !== null ? `<p>ก้าวเดินเฉลี่ย <b>${Math.round(stepsAvg).toLocaleString()}</b> ก้าว/วัน (รวม ${Math.round(stepsTotal).toLocaleString()})</p>` : ''}
         </div>` : ''}</div>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-dumbbell text-brand"></i> ออกกำลังกาย</h3>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 17, className: 'text-brand' })}<span>ออกกำลังกาย</span></h3>
         ${ws.length
           ? `<p class="text-lg font-bold tabular-nums">${ws.length} ครั้ง <span class="text-xs font-normal text-slate-500">${mins ? `· ${mins} นาที` : ''}${burn ? ` · เผาผลาญ ~${burn} kcal` : ''}</span></p>
              ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}`
           : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกออกกำลังกายในสัปดาห์นี้</p>'}
         ${sx ? `<p class="text-xs text-slate-500 pt-1 tabular-nums">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-wallet text-emerald-600"></i> การเงินสัปดาห์นี้</h3>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-emerald-600' })}<span>การเงินสัปดาห์นี้</span></h3>
         ${fin.count ? `<p class="text-sm tabular-nums">รับ <b class="text-emerald-700">฿${fmtMoney(fin.income)}</b> · จ่าย <b class="text-rose-600">฿${fmtMoney(fin.expense)}</b></p>
         <p class="text-xs text-slate-600 tabular-nums">สุทธิ: <b class="${fin.net < 0 ? 'text-rose-600' : 'text-emerald-700'}">${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</b> (${fin.count} รายการ)</p>
         ${fin.topCats.length ? `<p class="text-[11px] text-slate-500 tabular-nums">ใช้จ่ายหลัก: ${fin.topCats.map(([c, v]) => `${esc(c)} ฿${fmtMoney(v)}`).join(' · ')}</p>` : ''}` : '<p class="text-xs text-slate-500">ไม่มีรายการรายรับ-รายจ่ายในช่วงนี้</p>'}</div>
-      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-boxes-stacked text-sky-600"></i> สต๊อก & แจ้งเตือน</h3>
+      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-sky-600' })}<span>สต๊อก & แจ้งเตือน</span></h3>
         <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> · ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b></p>
         <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''} · ทั้งหมด ${invRem.scheduledTotal} กำหนดการ</p></div>
     </div>
@@ -237,11 +238,11 @@ async function renderMonthly() {
     ${(mSleep.length || mSteps.length) ? stat('การนอน / ก้าวเดิน', mSleep.length ? `${round1(avg(mSleep))} ชม.` : `${Math.round(avg(mSteps)).toLocaleString()} ก้าว`, `${mSleep.length ? `นอน ${mSleep.length} คืน` : ''}${mSleep.length && mSteps.length ? ' · ' : ''}${mSteps.length ? `เดินเฉลี่ย ${Math.round(avg(mSteps)).toLocaleString()} ก้าว/วัน` : ''}`) : ''}
   </div>${chart}<p class="text-xs text-slate-500">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
   <div class="space-y-6">
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-wallet text-emerald-600"></i> การเงินเดือนนี้</h3>
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-emerald-600' })}<span>การเงินเดือนนี้</span></h3>
       ${fin.count ? `${stat('รายรับ / รายจ่าย', `฿${fmtMoney(fin.income)} / ฿${fmtMoney(fin.expense)}`, `สุทธิ ${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)} (${fin.count} รายการ)`)}
       ${fin.topCats.length ? `<p class="text-xs text-slate-600 tabular-nums">หมวดใช้จ่ายสูง: ${fin.topCats.map(([c, v]) => `${esc(c)} (฿${fmtMoney(v)})`).join(', ')}</p>` : ''}`
         : '<p class="text-xs text-slate-500">ยังไม่มีรายการรายรับ-รายจ่ายในเดือนนี้</p>'}</div>
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-boxes-stacked text-sky-600"></i> สต๊อก & แจ้งเตือน</h3>
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-sky-600' })}<span>สต๊อก & แจ้งเตือน</span></h3>
       <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> รายการ (ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b>)</p>
       <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนที่ถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''}</p></div>
   </div>`;

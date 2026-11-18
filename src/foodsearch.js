@@ -4,6 +4,7 @@ import {
 } from './nutrition.js';
 import { state } from './state.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
+import { iconSvg } from './icons.js';
 
 // แหล่งข้อมูลโภชนาการ (ทุกแหล่งใช้ฟรี ไม่ต้องผูกบัตร)
 //  all    = ค้นตามลำดับ: คลังในเครื่อง → USDA → Open Food Facts → AI (Gemini → Groq → OpenRouter)
@@ -305,12 +306,12 @@ export async function detectBarcode(file) {
 // ---- UI ----
 export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, onSaveLibrary }) {
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 p-1"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 hover:text-slate-600 p-1 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <div class="flex flex-wrap gap-2"><input id="os-q" class="input min-w-[12rem] flex-1" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button><button id="os-test-connections" type="button" class="btn btn-soft shrink-0">ตรวจการเชื่อมต่อ</button></div>
     <p id="os-hint" class="text-xs text-slate-500 mt-2">ค้นหาอัตโนมัติตามลำดับ: คลังอาหารในเครื่อง → USDA (DEMO_KEY) → Open Food Facts → AI (Gemini → Groq → OpenRouter)</p>
     <p id="os-connection-status" class="text-xs text-slate-500" aria-live="polite"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
-    <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-forward"></i> ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
+    <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('forward', { size: 13 })} ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
     <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label id="os-g-lbl" class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" step="0.1" inputmode="decimal" class="input">
@@ -349,7 +350,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
     }).join('') : '<p class="text-sm text-slate-500 py-3">ไม่พบผลลัพธ์ — ลองคำอื่น หรือใช้ปุ่มสแกนภาพ/ฉลาก</p>');
   };
 
-  const setStatus = text => { $('#os-res', m.el).innerHTML = `<p class="text-sm text-slate-500 py-2"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>${esc(text)}</p>`; };
+  const setStatus = text => { $('#os-res', m.el).innerHTML = `<p class="text-sm text-slate-500 py-2 inline-flex items-center gap-1.5">${iconSvg('fa-spinner fa-spin', { size: 15 })}<span>${esc(text)}</span></p>`; };
 
   const runPipelineFromStage = async (q, startStage = 0, append = false) => {
     if (!append) results = [];

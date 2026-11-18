@@ -26,7 +26,8 @@
 | `auth.js`, `firebase.js` | Google Authentication, PIN lock และ Firebase helpers |
 | `state.js`, `sync.js` | in-memory app state, event bus, Firestore listeners, สถานะ offline/sync และ unit tests ใน `sync.test.js` |
 | `schema.js` | sanitizers, collection labels และ document ID สำหรับ backup/restore |
-| `util.js`, `style.css`, `theme.js` | utilities, local calendar date helpers (`localDateStr`, `localMonthStr`, `addDays`), shared styles และ theme |
+| `util.js`, `style.css`, `design-tokens.css`, `theme.js`, `ui.js`, `icons.js`, `version.js` | utilities (รวม `trapFocus`), local calendar date helpers (`localDateStr`, `localMonthStr`, `addDays`), shared styles, design tokens, ระบบ 4 ธีม (`baby-blue`, `pastel`, `cozy`, `dark`), shared UI components/ticker, Lucide inline SVGs และเลขเวอร์ชันเว็บแอป |
+| `navigation.js`, `navigationSettings.js`, `homeWidgetSettings.js` | จัดการเมนูย่อย ปุ่มลัดหน้า Home และการตั้งค่าแสดง/เรียงลำดับวิดเจ็ต |
 | `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, สแกนปุ่มเดียว (บาร์โค้ด → OCR ฉลากในเครื่อง → AI), โภชนาการ, AI consumers และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
 | `period.js`, `body.js`, `zeppParser.js`, `symptoms.js`, `profile.js`, `lab.js`, `labTemplates.js` | สุขภาพ, สัดส่วนร่างกาย + การนอน/ก้าวเดิน (กรอกเอง / นำเข้า Zepp CSV ฟรี), เป้าหมายและผลตรวจ (ชุดเทมเพลตแล็บ & วางหลายบรรทัดในเครื่อง + สแกนหลายภาพ) |
 | `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, วิเคราะห์จ่ายซ้ำรายเดือน, กฎหมวดหมู่, Statement และ OCR สลิป |

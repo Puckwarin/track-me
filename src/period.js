@@ -3,6 +3,7 @@ import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './util.js';
 import { selectDate } from './symptoms.js';
+import { iconSvg } from './icons.js';
 
 let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
@@ -58,21 +59,21 @@ export function mountPeriod(el) {
   root.innerHTML = `
   <div class="lg:col-span-2 space-y-6">
     <div class="card space-y-4">
-      <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-droplet text-pink-500"></i> บันทึกรอบเดือน</h2>
+      <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('period', { size: 19, className: 'text-pink-500' })}<span>บันทึกรอบเดือน</span></h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div><label class="lbl">วันแรกที่มา *</label><input type="date" id="p-start" class="input"></div>
         <div><label class="lbl">วันสุดท้าย (เว้นว่างได้ถ้ายังไม่หมด)</label><input type="date" id="p-end" class="input"></div>
         <div><label class="lbl">ปริมาณ</label><select id="p-flow" class="input"><option value="">ไม่ระบุ</option><option>น้อย</option><option>ปานกลาง</option><option>มาก</option></select></div>
         <div><label class="lbl">หมายเหตุ</label><input id="p-note" class="input" placeholder="เช่น มาช้ากว่าปกติ"></div>
       </div>
-      <div class="flex justify-end"><button id="p-save" class="btn btn-pink"><i class="fa-solid fa-plus"></i> บันทึกรอบเดือน</button></div>
+      <div class="flex justify-end"><button id="p-save" class="btn btn-pink">${iconSvg('plus', { size: 15 })} บันทึกรอบเดือน</button></div>
     </div>
 
     <div class="card space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+        <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน">${iconSvg('chevron-left', { size: 17 })}</button>
         <h3 id="c-title" class="font-bold text-slate-800 text-center"></h3>
-        <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+        <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป">${iconSvg('chevron-right', { size: 17 })}</button>
       </div>
       <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 font-medium">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
       <div id="c-grid" class="grid grid-cols-7 gap-1 tabular-nums"></div>
@@ -84,14 +85,14 @@ export function mountPeriod(el) {
     </div>
 
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-pink-500"></i> ประวัติประจำเดือน</h3>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-pink-500' })}<span>ประวัติประจำเดือน</span></h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
         <thead class="bg-pink-soft/50 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
     </div>
   </div>
   <div class="space-y-6"><div class="card space-y-3">
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-chart-simple text-pink-500"></i> สถิติรอบเดือน</h3>
+    <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('overview', { size: 17, className: 'text-pink-500' })}<span>สถิติรอบเดือน</span></h3>
     <div id="p-stats" class="space-y-2 text-sm text-slate-700 tabular-nums"></div>
     <p class="text-xs text-slate-500">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
   </div></div>`;
@@ -149,8 +150,12 @@ export function renderCalendar() {
   let html = '<div></div>'.repeat(first.getDay());
   for (let d = 1; d <= days; d++) {
     const ds = localDateStr(new Date(cal.y, cal.m, d));
-    const cls = ['cal-day', pd.has(ds) ? 'cal-period' : pr.has(ds) ? 'cal-pred' : '', ds === today ? 'cal-today' : '', ds === sel ? 'cal-sel' : ''].join(' ');
-    html += `<div class="${cls}" data-d="${ds}">${d}${sym.has(ds) ? '<span class="cal-dot"></span>' : ''}</div>`;
+    const isPeriod = pd.has(ds);
+    const isPred = pr.has(ds);
+    const cls = ['cal-day', isPeriod ? 'cal-period' : isPred ? 'cal-pred' : '', ds === today ? 'cal-today' : '', ds === sel ? 'cal-sel' : ''].join(' ');
+    const stateLabel = isPeriod ? ' มีประจำเดือน' : isPred ? ' คาดการณ์' : '';
+    const disabledAttr = ds > today ? ' disabled aria-disabled="true"' : '';
+    html += `<button type="button" class="${cls}" data-d="${ds}" aria-label="${esc(fmtDate(ds))}${stateLabel}"${disabledAttr}>${d}${sym.has(ds) ? '<span class="cal-dot"></span>' : ''}</button>`;
   }
   $('#c-grid', root).innerHTML = html;
 }
@@ -164,7 +169,7 @@ export function render() {
     return `<tr class="hover:bg-pink-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600 whitespace-nowrap">${endCell}</td>
       <td class="p-3 text-right text-slate-600">${p.end ? daysBetween(p.start, p.end) + 1 : '—'}</td><td class="p-3 text-right text-slate-600">${older ? daysBetween(older.start, p.start) : '—'}</td>
       <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
-      <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึกประจำเดือน"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`;
+      <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึกประจำเดือน">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
   }).join('') : '<tr><td colspan="6" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</td></tr>';
 
   const s = periodStats(state.period), box = $('#p-stats', root);

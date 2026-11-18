@@ -3,6 +3,7 @@ import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, toast } from './util.js';
 import { SANITIZERS } from './schema.js';
+import { iconSvg } from './icons.js';
 
 // ย้ายข้อมูลจากระบบเดิม (collection ระดับบนที่แยกด้วย room code) เข้ามาไว้ใต้บัญชีที่ล็อกอิน
 // ต้องทำ "ก่อน" เปลี่ยน Firestore Rules เป็นแบบใหม่ — ขั้นตอนอยู่ใน docs/SETUP.md
@@ -11,7 +12,7 @@ let found = null;
 
 export function mountMigrate(el) {
   el.innerHTML = `
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-truck-moving text-brand"></i> ย้ายข้อมูลจาก Room Code เดิม</h3>
+    <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('truck', { size: 17, className: 'text-brand shrink-0' })}<span>ย้ายข้อมูลจาก Room Code เดิม</span></h3>
     <p class="text-xs text-slate-500">ถ้าเคยบันทึกข้อมูลไว้ก่อนมีระบบล็อกอิน ใส่รหัสห้องเดิมเพื่อย้ายข้อมูลเข้าบัญชีนี้ (ย้ายซ้ำได้ ไม่เกิดข้อมูลซ้ำ) — ต้องใช้ Firestore Rules ชุดย้ายข้อมูล (firestore.rules.migration) ก่อน</p>
     <div class="flex gap-2"><input id="mg-room" class="input" placeholder="รหัสห้องเดิม" value="${esc(localStorage.getItem('room_code') || '')}"><button id="mg-scan" class="btn btn-soft whitespace-nowrap">ตรวจสอบ</button></div>
     <div id="mg-out" class="text-sm space-y-2"></div>`;

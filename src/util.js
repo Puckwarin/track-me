@@ -83,8 +83,39 @@ export function toast(msg, kind = 'ok') {
   setTimeout(() => el.remove(), 3200);
 }
 
+export function trapFocus(el, { autoFocus = true } = {}) {
+  const sel = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
+  const getNodes = () => [...el.querySelectorAll(sel)].filter(node => node.getClientRects().length);
+  if (autoFocus) {
+    requestAnimationFrame(() => {
+      if (!el.isConnected) return;
+      const nodes = getNodes();
+      (nodes[0] || el).focus();
+    });
+  }
+  const handler = e => {
+    if (e.key !== 'Tab') return;
+    const nodes = getNodes();
+    if (!nodes.length) {
+      e.preventDefault();
+      el.focus();
+      return;
+    }
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !el.contains(document.activeElement))) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+  el.addEventListener('keydown', handler);
+  return () => el.removeEventListener('keydown', handler);
+}
+
 // Modal เล็ก ๆ ใช้ซ้ำได้
-export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false } = {}) {
+export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop } = {}) {
   const widthClass = size === 'xl' ? 'max-w-5xl' : (size === 'lg' || wide ? 'max-w-2xl' : 'max-w-lg');
   const bodyClass = flush ? 'is-flush p-0 overflow-hidden flex flex-col' : 'overflow-y-auto p-6';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -101,39 +132,23 @@ export function openModal(innerHtml, { wide = false, size = '', flush = false, s
     box.setAttribute('aria-label', 'หน้าต่างโต้ตอบ');
   }
   document.body.appendChild(el);
-  const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
+  const releaseTrap = trapFocus(box);
+  let closed = false;
   const onKey = e => {
-    if (e.key === 'Escape' && !staticBackdrop) {
+    if (e.key === 'Escape' && closeOnEscape) {
       e.preventDefault();
       close();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const nodes = [...box.querySelectorAll(focusableSelector)].filter(node => node.getClientRects().length);
-    if (!nodes.length) {
-      e.preventDefault();
-      box.focus();
-      return;
-    }
-    const first = nodes[0], last = nodes[nodes.length - 1];
-    if (e.shiftKey && (document.activeElement === first || !box.contains(document.activeElement))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
-      e.preventDefault();
-      first.focus();
     }
   };
   const close = () => {
+    if (closed) return;
+    closed = true;
+    releaseTrap();
     document.removeEventListener('keydown', onKey);
     el.remove();
     if (trigger?.isConnected) trigger.focus();
   };
   document.addEventListener('keydown', onKey);
-  requestAnimationFrame(() => {
-    const first = [...box.querySelectorAll(focusableSelector)].find(node => node.getClientRects().length);
-    (first || box).focus();
-  });
   if (!staticBackdrop) {
     el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   }
@@ -150,9 +165,11 @@ export function confirmDialog({
 } = {}) {
   return new Promise(resolve => {
     let settled = false;
+    let onEsc = null;
     const finish = result => {
       if (settled) return;
       settled = true;
+      if (onEsc) document.removeEventListener('keydown', onEsc);
       close();
       resolve(result);
     };
@@ -166,19 +183,19 @@ export function confirmDialog({
           <button type="button" data-confirm-no class="btn btn-ghost min-h-[44px]">${esc(cancelText)}</button>
           <button type="button" data-confirm-yes class="btn ${danger ? 'btn-pink' : 'btn-primary'} min-h-[44px]">${esc(confirmText)}</button>
         </div>
-      </div>`, { staticBackdrop: true });
+      </div>`, { staticBackdrop: true, closeOnEscape: false });
     const yesBtn = $('[data-confirm-yes]', el);
     const noBtn = $('[data-confirm-no]', el);
     yesBtn?.addEventListener('click', () => finish(true));
     noBtn?.addEventListener('click', () => finish(false));
     el.addEventListener('mousedown', e => { if (e.target === el) finish(false); });
-    const onEsc = e => {
+    onEsc = e => {
       if (e.key === 'Escape') {
-        document.removeEventListener('keydown', onEsc);
+        e.preventDefault();
         finish(false);
       }
     };
     document.addEventListener('keydown', onEsc);
-    noBtn?.focus();
+    requestAnimationFrame(() => noBtn?.focus());
   });
 }

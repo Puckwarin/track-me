@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } from './util.js';
 import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
+import { iconSvg } from './icons.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -43,10 +44,10 @@ export function mountLab(el) {
   root.innerHTML = `
   <div class="lg:col-span-1 space-y-6">
     <div class="card space-y-3">
-      <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-vial text-brand"></i> บันทึกผลตรวจ / ผลเลือด</h2>
+      <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('stethoscope', { size: 18, className: 'text-brand shrink-0' })}<span>บันทึกผลตรวจ / ผลเลือด</span></h2>
       <label class="border-2 border-dashed border-lav-soft bg-lav-soft/40 rounded-xl p-3 text-center cursor-pointer block">
         <input type="file" id="lb-photo" accept="image/*" multiple class="hidden">
-        <i class="fa-solid fa-camera text-lg text-brand"></i>
+        <span class="flex justify-center text-brand mb-1">${iconSvg('camera', { size: 20 })}</span>
         <span class="block text-sm font-semibold text-slate-700">ถ่ายรูป / เลือกรูปใบผลตรวจ (เลือกได้หลายรูป)</span>
         <span class="block text-xs text-slate-500">แสดงความคืบหน้าและให้ AI อ่านค่าหลายรายการเพื่อตรวจยืนยันก่อนบันทึก</span>
       </label>
@@ -55,7 +56,7 @@ export function mountLab(el) {
         <p class="text-[11px] font-semibold text-slate-600">กรอกเร็วเป็นชุด (0 โทเค็น · ไม่ใช้ AI):</p>
         <div class="flex flex-wrap gap-1.5">
           ${LAB_PANEL_TEMPLATES.map(p => `<button type="button" data-lab-panel="${esc(p.id)}" class="chip bg-white border border-slate-200 hover:bg-lav-soft text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
-          <button type="button" id="lb-bulk-paste" class="chip bg-lav-soft text-brand-dark text-[11px]"><i class="fa-solid fa-paste"></i> วางหลายบรรทัด</button>
+          <button type="button" id="lb-bulk-paste" class="chip bg-lav-soft text-brand-dark text-[11px]">${iconSvg('note', { size: 13 })} วางหลายบรรทัด</button>
         </div>
       </div>
       <div><label class="lbl">วันที่ตรวจ</label><input id="lb-date" type="date" class="input"></div>
@@ -68,7 +69,7 @@ export function mountLab(el) {
       </div>
       <div><label class="lbl">คลินิก/โรงพยาบาล · หมายเหตุ</label><input id="lb-note" class="input" placeholder="ไม่บังคับ"></div>
       <p class="text-[11px] text-slate-500">ค่าอ้างอิงที่เติมให้เป็นค่าทั่วไปเท่านั้น — แก้ตามใบผลตรวจจริงทุกครั้ง ผลสูง/ต่ำเป็นการเทียบตัวเลข ควรให้สัตวแพทย์หรือแพทย์แปลผล</p>
-      <button id="lb-save" class="btn btn-primary w-full justify-center"><i class="fa-solid fa-plus"></i> บันทึกผล</button>
+      <button id="lb-save" class="btn btn-primary w-full justify-center">${iconSvg('plus', { size: 15 })} บันทึกผล</button>
     </div>
   </div>
   <div class="lg:col-span-2 space-y-4">
@@ -174,7 +175,7 @@ async function onScanLabPhoto(e) {
     const defaultDate = detectedDate || ($('#lb-date', root).value || localDateStr());
     const labName = labNames.join(', ');
     const m = openModal(`
-      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
       <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3">โปรดเทียบตัวเลขและค่าอ้างอิงกับใบผลตรวจจริงก่อนกดบันทึก</p>
       ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 mb-3">
@@ -259,7 +260,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
   const defaultDate = $('#lb-date', root)?.value || localDateStr();
   const defaultNote = $('#lb-note', root)?.value?.trim() || '';
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-3">กรอกเฉพาะรายการที่มีผลตรวจ (รายการที่เว้นว่างจะไม่ถูกบันทึก) — ค่าอ้างอิงดึงจากใบล่าสุดหรือค่าทั่วไป</p>
     <div class="grid grid-cols-2 gap-2 mb-3">
       <div><label class="lbl">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
@@ -282,7 +283,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
     </div>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="lbb-save" class="btn btn-primary"><i class="fa-solid fa-check"></i> บันทึกรายการที่กรอก</button>
+      <button type="button" id="lbb-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการที่กรอก</button>
     </div>`, { wide: true });
 
   $('#lbb-save', m.el).addEventListener('click', () => {
@@ -326,7 +327,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
       toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการที่กรอก';
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการที่กรอก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });
@@ -341,7 +342,7 @@ function openLabPasteModal() {
   ].join('\n');
 
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 mb-2">วางผลแล็บ 1 บรรทัดต่อ 1 รายการ (รองรับ copy จาก Excel/Google Sheets, แยกด้วยวรรค/Tab/: และช่วงอ้างอิงท้ายบรรทัด)</p>
     <div class="flex items-center justify-between mb-1">
       <label class="lbl !mb-0">ข้อความผลแล็บ</label>
@@ -450,6 +451,6 @@ export function render() {
     return `<details class="card !p-3" ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500 tabular-nums">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
       <div class="flex items-center gap-3 tabular-nums">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-500">${arrow}</span></p>${f ? `<span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
-      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}"><i class="fa-solid fa-trash-can text-xs"></i></button></span></div>`).join('')}</div></details>`;
+      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}">${iconSvg('trash', { size: 14 })}</button></span></div>`).join('')}</div></details>`;
   }).join('') : `<p class="text-sm text-slate-500 py-4 text-center">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : hasAny ? 'ไม่พบผลตรวจที่ตรงกับคำค้นหาหรือช่วงวันที่ที่เลือก' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย ใช้ชุดกรอกเร็ว หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
 }

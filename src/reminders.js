@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, daysBetween, toast, addMonthsLocal } fro
 import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
 import { syncPeriodRemindToPush } from './push.js';
 import { resolveRuleNextDate } from './reminderParser.js';
+import { iconSvg } from './icons.js';
 
 let root;
 const selectedKeys = new Set();
@@ -328,7 +329,7 @@ export function renderReminders() {
   root.innerHTML = `<div class="lg:col-span-3 space-y-5">
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-regular fa-bell text-brand"></i> แจ้งเตือนที่ถึงกำหนด (${active.length})</h2>
+        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('notifications', { size: 19, className: 'text-brand' })}<span>แจ้งเตือนที่ถึงกำหนด (${active.length})</span></h2>
       </div>
       <p class="text-xs text-slate-500">แสดงเฉพาะรายการที่อยู่ในช่วงแจ้งเตือนล่วงหน้าที่ตั้งค่าไว้ กด “รับทราบ / ปิดรอบนี้” เพื่อเคลียร์เลขบนกระดิ่งได้</p>
       <div class="space-y-3">${activeHtml || '<p class="rounded-2xl bg-ok-soft p-4 text-sm text-green-800">🌼 ยังไม่มีรายการแจ้งเตือนค้างอยู่ค่ะ</p>'}</div>

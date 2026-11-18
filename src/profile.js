@@ -3,6 +3,7 @@ import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, toNum, round1, toast } from './util.js';
 import { bodyLatest } from './body.js';
+import { iconSvg } from './icons.js';
 
 export const ACTIVITY = [
   ['sedentary', 'นั่งทำงานเป็นหลัก แทบไม่ออกกำลังกาย', 1.2],
@@ -52,7 +53,7 @@ let root, dirty = false, meals = [];
 export function mountProfile(el) {
   root = el;
   root.innerHTML = `
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-bullseye text-brand"></i> เป้าหมายพลังงาน (BMI / TDEE)</h3>
+    <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('target', { size: 17, className: 'text-brand shrink-0' })}<span>เป้าหมายพลังงาน (BMI / TDEE)</span></h3>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="lbl">เพศ (ใช้ในสูตร BMR)</label><select id="pf-sex" class="input"><option value="female">หญิง</option><option value="male">ชาย</option></select></div>
       <div><label class="lbl">ปีเกิด (ค.ศ.)</label><input id="pf-birth" type="number" inputmode="numeric" placeholder="เช่น 1995" class="input"></div>
@@ -69,11 +70,11 @@ export function mountProfile(el) {
     <div id="pf-result" class="rounded-xl bg-lav-soft/50 p-3 text-sm space-y-1"></div>
     <p class="text-xs text-slate-400">ค่าที่คำนวณเป็นค่าประมาณทั่วไป (สูตร Mifflin-St Jeor) ไม่ใช่คำแนะนำทางการแพทย์ — มีโรคประจำตัว ตั้งครรภ์ หรือต้องการลดน้ำหนักมาก ควรปรึกษาแพทย์/นักกำหนดอาหาร</p>
     <hr class="border-lav-soft">
-    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-utensils text-brand"></i> มื้ออาหารของฉัน</h3>
+    <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('food', { size: 17, className: 'text-brand shrink-0' })}<span>มื้ออาหารของฉัน</span></h3>
     <p class="text-xs text-slate-500">เพิ่ม/ลด/เปลี่ยนชื่อมื้อได้ (เช่น มื้อสาย มื้อบ่าย) — หน้าอาหารจะแสดงกราฟพลังงานที่กินแต่ละมื้อเปรียบเทียบกันเอง</p>
     <div id="pf-meals" class="space-y-2"></div>
-    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-plus"></i> เพิ่มมื้อ</button></div>
-    <div class="flex justify-end"><button id="pf-save" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกการตั้งค่า</button></div>`;
+    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip bg-lav-soft text-brand-dark">${iconSvg('plus', { size: 13 })} เพิ่มมื้อ</button></div>
+    <div class="flex justify-end"><button id="pf-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกการตั้งค่า</button></div>`;
   root.addEventListener('input', e => { dirty = true; if (e.target.closest('#pf-meals')) readMeals(); preview(); });
   root.addEventListener('change', e => {
     if (e.target.id === 'pf-goal') { const v = e.target.value; if (v !== 'custom') $('#pf-adj', root).value = v; }
@@ -110,7 +111,7 @@ function renderMeals() {
   $('#pf-meals', root).innerHTML = meals.map((m, i) => `
     <div class="flex items-center gap-2">
       <input data-k="name" data-i="${i}" class="input" value="${esc(m.name)}" maxlength="30" aria-label="ชื่อมื้อ">
-      <button data-rm="${i}" class="text-rose-400 hover:text-rose-600 p-2" aria-label="ลบมื้อ"><i class="fa-solid fa-trash-can text-xs"></i></button>
+      <button data-rm="${i}" class="text-rose-400 hover:text-rose-600 p-2 inline-flex items-center justify-center" aria-label="ลบมื้อ">${iconSvg('trash', { size: 14 })}</button>
     </div>`).join('');
   preview();
 }

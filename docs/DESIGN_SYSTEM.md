@@ -18,16 +18,16 @@ The design tokens CSS is auto-loaded via `src/app.js` — no additional import n
 
 | Token | Hex | Role |
 |---|---|---|
-| `--color-primary-300` | `#A9C9E8` | Soft Blue — Primary brand accent |
-| `--color-secondary-300` | `#A394CB` | Soft Lavender — Secondary accent |
-| `--color-accent-300` | `#E8B9C8` | Soft Pink — Gentle highlight |
-| `--color-sage-300` | `#A5BDA9` | Sage Green — Activity & positive states |
-| `--color-peach-300` | `#F5D8C5` | Pastel Peach — Warm category accent |
-| `--color-app-bg` | `#FAF8F5` | Warm Cream — Main background |
+| `--color-primary-300` | `#8ECDF7` | Baby Blue — Primary soft accent |
+| `--color-secondary-300` | `#B39EDB` | Soft Lavender — Secondary accent |
+| `--color-accent-300` | `#EDAFC0` | Soft Pink — Gentle highlight |
+| `--color-sage-300` | `#94D0B2` | Soft Mint — Activity & positive states |
+| `--color-peach-300` | `#F4C39E` | Pastel Peach — Warm category accent |
+| `--color-app-bg` | `#F4F8FC` | Ice Mist — Main background (Baby Blue default) |
 | `--color-surface` | `#FFFFFF` | Cards and input surfaces |
-| `--color-ink` | `#30313B` | Primary text |
+| `--color-ink` | `#1E293B` | Slate 800 — Primary text |
 
-Each color has a full ramp (50–900). Use semantic tokens (`--color-success`, `--color-error`, etc.) for state colors — they adapt to dark/pastel themes automatically.
+Each color has a full ramp (50–900). Use semantic tokens (`--color-success`, `--color-error`, etc.) for state colors — they adapt across all themes automatically.
 
 ### State Colors
 
@@ -56,12 +56,13 @@ Each color has a full ramp (50–900). Use semantic tokens (`--color-success`, `
 
 ### Theme Compatibility
 
-All tokens automatically adapt to:
-- **Cozy** (default): Warm cream background, warm browns
-- **Pastel**: Pink-tinted background, softer accents
-- **Dark**: Inverted surfaces, muted pastels on dark backgrounds
+All tokens automatically adapt to 4 themes (`src/theme.js`, `src/design-tokens.css`):
+- **Baby Blue** (`baby-blue`, default; legacy `'minimal'` maps here): Ice Mist background (`#F4F8FC`), Baby Blue accents (`#8ECDF7` / `#4A9AD6`), Slate text
+- **Pastel** (`pastel`): Soft pink-lavender background (`#FCF6FB`), muted rose/lavender accents
+- **Cozy** (`cozy`): Warm cream background (`#FAF6F0`), warm surface (`#FFFDF9`), brown accents (`#C7956D` / `#8B5E3C`)
+- **Dark** (`dark`): Deep slate-navy surfaces (`#0F1622` / `#182232`), accessible light text and softened accents
 
-Set theme via `document.documentElement.dataset.theme = 'cozy' | 'pastel' | 'dark'`.
+Set theme via `applyTheme('baby-blue' | 'pastel' | 'cozy' | 'dark')` or `document.documentElement.dataset.theme = 'baby-blue' | 'pastel' | 'cozy' | 'dark'`.
 
 ---
 
@@ -107,15 +108,15 @@ button({ label, icon, variant, size, full, id, type, disabled, ariaLabel })
 | Prop | Type | Default | Options |
 |---|---|---|---|
 | `label` | string | `''` | Button text |
-| `icon` | string | `''` | FontAwesome icon class (e.g. `'fa-plus'`) |
+| `icon` | string | `''` | Lucide icon key in `src/icons.js` (e.g. `'plus'`, `'save'`) |
 | `variant` | string | `'primary'` | `primary`, `secondary`, `accent`, `success`, `danger`, `soft`, `ghost` |
 | `size` | string | `''` | `''` (default), `'sm'`, `'lg'` |
 | `full` | boolean | `false` | Full width |
 | `disabled` | boolean | `false` | Disabled state |
 
 ```js
-button({ label: 'บันทึก', icon: 'fa-floppy-disk', variant: 'primary', full: true })
-// Output: <button class="tm-btn tm-btn-primary tm-btn-full" type="button"><i class="fa-solid fa-floppy-disk"></i> บันทึก</button>
+button({ label: 'บันทึก', icon: 'save', variant: 'primary', full: true })
+// Output renders inline Lucide SVG via iconSvg('save', { size: 16 })
 ```
 
 ### Icon Button
@@ -130,7 +131,7 @@ iconButton({ icon, id, variant, size, ariaLabel, active })
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `icon` | string | `''` | FontAwesome icon class |
+| `icon` | string | `''` | Lucide icon key in `src/icons.js` |
 | `size` | string | `''` | `''` or `'sm'` (2.25rem) |
 | `active` | boolean | `false` | Active/selected state |
 
@@ -224,7 +225,7 @@ sectionHeader({ title, icon, subtitle })
 **CSS class**: `.tm-section-header`
 
 ```js
-sectionHeader({ title: 'สรุปรายสัปดาห์', icon: 'fa-chart-line', subtitle: '11–17 พ.ย. 2026' })
+sectionHeader({ title: 'สรุปรายสัปดาห์', icon: 'weekly', subtitle: '11–17 พ.ย. 2026' })
 ```
 
 ### Tabs
@@ -267,7 +268,7 @@ emptyState({ icon, title, description })
 **CSS class**: `.tm-empty`
 
 ```js
-emptyState({ icon: 'fa-bowl-food', title: 'ยังไม่มีมื้ออาหารวันนี้', description: 'กดปุ่ม + เพื่อเพิ่มมื้อแรก' })
+emptyState({ icon: 'food', title: 'ยังไม่มีมื้ออาหารวันนี้', description: 'กดปุ่ม + เพื่อเพิ่มมื้อแรก' })
 ```
 
 ### Loading State
@@ -319,7 +320,8 @@ const { el, close, box } = openModal(innerHtml, { size, flush, staticBackdrop })
 | `staticBackdrop` | boolean | `false` | Prevent close on backdrop click |
 
 - Returns `{ el, close, box }`
-- Auto-closes on Escape (unless `staticBackdrop`) and backdrop click
+- Sets `role="dialog"`, `aria-modal="true"`, auto-wires `aria-labelledby` from the first heading (or `aria-label` fallback), and traps Tab focus via `trapFocus()` (`src/util.js`)
+- Auto-closes on Escape (unless `staticBackdrop` / `closeOnEscape: false`) and backdrop click, and returns focus to the trigger element on close
 - Elements with `[data-close]` auto-close the modal
 
 ```js
@@ -347,6 +349,7 @@ const { el, close, panel } = openBottomSheet(innerHtml);
 ```
 
 - Slides up from bottom on mobile, centered on desktop
+- Sets `role="dialog"`, `aria-modal="true"`, auto-wires `aria-labelledby`, traps Tab focus via `trapFocus()`, and returns focus to the trigger element on close
 - Auto-closes on Escape and backdrop click
 - Elements with `[data-close]` auto-close
 
@@ -386,6 +389,16 @@ chartContainer({
 })
 ```
 
+### Number Ticker
+
+```js
+import { animateNumberTicker } from './ui.js';
+
+animateNumberTicker(el, targetValue, { decimals: 0, prefix: '', suffix: '', duration: 380 });
+```
+
+Animates numeric KPI updates smoothly via `requestAnimationFrame`, respects `prefers-reduced-motion: reduce`, and formats numbers using Thai locale (`th-TH`).
+
 ---
 
 ## Accessibility
@@ -393,24 +406,24 @@ chartContainer({
 - All interactive elements have `min-height: 2.75rem` (44px touch target)
 - Focus-visible outline on all interactive elements
 - `aria-label` supported on all button/icon components
-- Modals/sheets: `role="dialog"`, `aria-modal="true"`, Escape-to-close
+- Modals/sheets/drawers: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, Tab focus trapping (`trapFocus`), Escape-to-close, and trigger focus restoration
 - Screen-reader-only utility: `.tm-sr-only`
 - Color is never the sole indicator — badges include icons or dots
-- WCAG 2.2 AA contrast verified for all text/surface combinations
+- WCAG 2.2 AA contrast verified for text/surface combinations across themes
 
-### Contrast Verification
+### Contrast Verification (Default Baby Blue Theme)
 
-| Combination | Ratio | Status |
+| Combination | Foreground / Background | Status |
 |---|---|---|
-| `--color-ink` (#30313B) on `--color-surface` (#FFFFFF) | 12.3:1 | AAA |
-| `--color-ink` on `--color-app-bg` (#FAF8F5) | 11.8:1 | AAA |
-| `--color-ink-muted` (#6B6C76) on `--color-surface` | 5.1:1 | AA |
-| `--color-primary-700` (#4A6E8C) on `--color-primary-50` (#F0F6FC) | 5.4:1 | AA |
-| `--color-success-fg` (#2D5A3E) on `--color-success-bg` (#F2F7F3) | 6.8:1 | AA |
-| `--color-error-fg` (#8B3A3A) on `--color-error-bg` (#FDF2F2) | 5.6:1 | AA |
-| `--color-warning-fg` (#7E5C48) on `--color-warning-bg` (#FDF7F3) | 5.2:1 | AA |
-| `--color-ink` on `--color-primary-300` (#A9C9E8) | 5.8:1 | AA |
-| `--color-ink` on `--color-accent-300` (#E8B9C8) | 5.6:1 | AA |
+| `--color-ink` on `--color-surface` | `#1E293B` on `#FFFFFF` | Pass (AAA) |
+| `--color-ink` on `--color-app-bg` | `#1E293B` on `#F4F8FC` | Pass (AAA) |
+| `--color-ink-muted` on `--color-surface` | `#526277` on `#FFFFFF` | Pass (AA) |
+| `--color-primary-700` on `--color-primary-50` | `#276594` on `#EFF7FE` | Pass (AA) |
+| `--color-success-fg` on `--color-success-bg` | `#22563E` on `#F0FAF4` | Pass (AAA) |
+| `--color-error-fg` on `--color-error-bg` | `#8B2F3D` on `#FDF2F4` | Pass (AA) |
+| `--color-warning-fg` on `--color-warning-bg` | `#7D421B` on `#FFF8F2` | Pass (AA) |
+| `--color-ink` on `--color-primary-300` | `#1E293B` on `#8ECDF7` | Pass (AA) |
+| `--color-ink` on `--color-accent-300` | `#1E293B` on `#EDAFC0` | Pass (AA) |
 
 ---
 
@@ -438,17 +451,19 @@ Key responsive behaviors:
 
 | File | Purpose |
 |---|---|
-| `src/design-tokens.css` | Design tokens (colors, spacing, radius, shadows) + component utility classes |
-| `src/ui.js` | Shared UI component factory functions (JS → HTML string) |
+| `src/design-tokens.css` | Design tokens (colors, spacing, radius, shadows, 4-theme overrides) + component utility classes |
+| `src/ui.js` | Shared UI component factory functions (JS → HTML string) and `animateNumberTicker` |
+| `src/icons.js` | Central Lucide inline SVG registry (`iconSvg`, `iconBubble`) |
+| `src/theme.js` | 4-theme switcher (`baby-blue`, `pastel`, `cozy`, `dark`) + legacy `'minimal'` mapping |
 | `docs/DESIGN_SYSTEM.md` | This document |
 
 ## Integration Notes
 
 1. **Import CSS**: `src/design-tokens.css` is loaded by `src/app.js` — no manual import needed.
-2. **Import components**: `import { ... } from './ui.js'` in any feature module.
+2. **Import components**: `import { ... } from './ui.js'` and `import { iconSvg } from './icons.js'` in any feature module.
 3. **Backward compatibility**: Existing `.card`, `.btn`, `.input`, `.chip`, `.modal-backdrop` classes in `style.css` are preserved. New `tm-` prefixed classes are additive — no existing markup breaks.
-4. **Theme switching**: Uses existing `html[data-theme]` attribute. New tokens auto-adapt.
-5. **No new dependencies**: Uses only Tailwind CSS v4 (already installed) and FontAwesome (already imported).
+4. **Theme switching**: Uses `html[data-theme]` attribute (`baby-blue`, `pastel`, `cozy`, `dark`). Tokens in `design-tokens.css` and utilities in `style.css` adapt per theme.
+5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken `lucide` inline SVGs (`src/icons.js`); UI markup does not depend on FontAwesome webfonts.
 
 ## Known Limitations
 

@@ -1,6 +1,7 @@
 import { openModal, confirmDialog, esc } from './util.js';
 import { safeHttpUrl } from './workoutParser.js';
 import { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
+import { iconSvg } from './icons.js';
 
 export { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep };
 
@@ -109,7 +110,7 @@ function refMarkup(r) {
   if (url) {
     return `<div class="pt-0.5 max-w-full min-w-0">
       <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-lg bg-sky-soft/80 border border-sky-200 px-2.5 py-1 text-xs text-blue-800 hover:bg-sky-soft">
-        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] shrink-0" aria-hidden="true"></i>
+        ${iconSvg('external-link', { size: 12, className: 'shrink-0' })}
         <span class="truncate min-w-0">${esc(title || url)}</span>
       </a>
     </div>`;
@@ -153,7 +154,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       const checks = Array.from({ length: count }, (_, si) => `
         <label class="wa-set-btn" data-set-label="${ri}:${si}">
           <input type="checkbox" data-done data-ri="${ri}" data-si="${si}" class="sr-only">
-          <i class="fa-regular fa-circle text-xs opacity-60 shrink-0" data-set-icon aria-hidden="true"></i>
+          <span class="inline-flex shrink-0 opacity-60" data-set-icon aria-hidden="true">${iconSvg('circle', { size: 14 })}</span>
           <span class="whitespace-nowrap">เซต ${si + 1}</span>
         </label>`).join('');
 
@@ -224,7 +225,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
             <span class="block text-[11px] text-slate-500 leading-none">เวลาฝึก</span>
             <b id="active-time" class="text-xl sm:text-2xl font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
           </div>
-          <button type="button" data-wa-close class="icon-btn min-w-[44px] min-h-[44px]" aria-label="ปิดหน้าต่างฝึก"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" data-wa-close class="icon-btn min-w-[44px] min-h-[44px]" aria-label="ปิดหน้าต่างฝึก">${iconSvg('close', { size: 18 })}</button>
         </div>
       </div>
 
@@ -261,14 +262,14 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       <span id="active-summary" class="text-xs sm:text-sm font-medium text-slate-600 tabular-nums">ทำแล้ว 0 / ${totalSetsAll} เซต</span>
       <div class="flex items-center gap-2 ml-auto">
         <button type="button" data-wa-close class="btn btn-ghost min-h-[44px]">ปิด</button>
-        <button type="button" id="active-finish" class="btn btn-primary min-h-[44px]"><i class="fa-solid fa-check"></i> จบและประเมินผล</button>
+        <button type="button" id="active-finish" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} จบและประเมินผล</button>
       </div>
     </footer>
     <footer id="wa-reflect-footer" class="wa-footer hidden shrink-0 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
       <button type="button" id="wa-back-play" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">← กลับไปแก้ไขเซต</button>
       <div class="flex items-center gap-2 ml-auto">
         <button type="button" id="wa-skip-save" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">ข้ามและบันทึกเลย</button>
-        <button type="button" id="wa-save-all" class="btn btn-primary min-h-[44px]"><i class="fa-solid fa-check"></i> บันทึกผลทั้งหมด</button>
+        <button type="button" id="wa-save-all" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} บันทึกผลทั้งหมด</button>
       </div>
     </footer>`,
     { size: 'xl', flush: true, staticBackdrop: true }
@@ -364,9 +365,8 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         const done = !!cb?.checked;
         lbl.classList.toggle('is-done', done);
         if (icon) {
-          icon.className = done
-            ? 'fa-solid fa-circle-check text-xs shrink-0'
-            : 'fa-regular fa-circle text-xs opacity-60 shrink-0';
+          icon.className = done ? 'inline-flex shrink-0' : 'inline-flex shrink-0 opacity-60';
+          icon.innerHTML = iconSvg(done ? 'check-circle' : 'circle', { size: 14 });
         }
       });
     });
@@ -520,7 +520,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     skipSaveBtn.disabled = true;
     const activeBtn = skipReflection ? skipSaveBtn : saveAllBtn;
     const prevHtml = activeBtn.innerHTML;
-    activeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...';
+    activeBtn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังบันทึก...`;
 
     const exerciseFeedback = skipReflection
       ? []

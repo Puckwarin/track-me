@@ -1,6 +1,7 @@
 import { CATEGORIES } from './categories.js';
 import { HOME_WIDGET_DEFS, getHomeWidgetConfig, saveHomeWidgetConfig } from './home.js';
 import { toast } from './util.js';
+import { iconSvg } from './icons.js';
 
 function render(root, config) {
   root.innerHTML = `
@@ -17,8 +18,8 @@ function render(root, config) {
           return `<div class="nav-pref-row">
             <label class="nav-pref-label"><input type="checkbox" data-widget-visible="${id}" ${hidden ? '' : 'checked'}><span>${widget.label}</span></label>
             <div class="nav-pref-actions">
-              <button type="button" class="nav-pref-move" data-widget-move="${id}" data-direction="-1" aria-label="ย้าย ${widget.label} ขึ้น" ${index === 0 ? 'disabled' : ''}><i class="fa-solid fa-chevron-up" aria-hidden="true"></i></button>
-              <button type="button" class="nav-pref-move" data-widget-move="${id}" data-direction="1" aria-label="ย้าย ${widget.label} ลง" ${index === config.order.length - 1 ? 'disabled' : ''}><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>
+              <button type="button" class="nav-pref-move" data-widget-move="${id}" data-direction="-1" aria-label="ย้าย ${widget.label} ขึ้น" ${index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button>
+              <button type="button" class="nav-pref-move" data-widget-move="${id}" data-direction="1" aria-label="ย้าย ${widget.label} ลง" ${index === config.order.length - 1 ? 'disabled' : ''}>${iconSvg('chevron-down', { size: 13 })}</button>
             </div>
           </div>`;
         }).join('')}

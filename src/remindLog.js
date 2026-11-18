@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
+import { iconSvg } from './icons.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -102,7 +103,7 @@ export function mountRemind(el) {
   <div class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-5 gap-6">
     <section class="card space-y-4 lg:col-span-2 self-start">
       <header>
-        <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-brand"></i> บันทึกแจ้งเตือนอัจฉริยะ</h2>
+        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 19, className: 'text-brand' })}<span>บันทึกแจ้งเตือนอัจฉริยะ</span></h2>
         <p class="text-xs text-slate-500 mt-1">พิมพ์ประโยคเดียวได้เลย ระบบจะแยกชื่อรายการ หมวดหมู่ วันที่ เวลา รอบทำซ้ำ เงื่อนไขเชื่อมโยง และวันเตือนล่วงหน้าให้ทันที</p>
       </header>
 
@@ -138,13 +139,13 @@ export function mountRemind(el) {
 
       <div class="flex flex-wrap justify-end gap-2">
         <button id="rm-cancel" type="button" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
-        <button id="rm-save" class="btn btn-primary"><i class="fa-solid fa-plus"></i> บันทึกแจ้งเตือน</button>
+        <button id="rm-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกแจ้งเตือน</button>
       </div>
     </section>
 
     <section class="card space-y-4 lg:col-span-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand"></i> รายการที่บันทึกไว้</h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>รายการที่บันทึกไว้</span></h3>
         <label class="text-xs text-slate-600 flex items-center gap-1.5 cursor-pointer"><input id="rm-show-done" type="checkbox"> แสดงที่ทำเสร็จแล้ว</label>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -269,7 +270,7 @@ function updateSmartPreview(reparse = true) {
   box.classList.remove('hidden');
   box.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-1">
-      <span class="font-bold text-green-700"><i class="fa-solid fa-circle-check mr-1"></i>ระบบเข้าใจว่า:</span>
+      <span class="font-bold text-green-700 inline-flex items-center gap-1">${iconSvg('check-circle', { size: 14 })}<span>ระบบเข้าใจว่า:</span></span>
       <span class="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">${esc(effective.kind)}</span>
     </div>
     <p class="text-sm font-bold text-slate-800">${esc(effective.title)}</p>
@@ -290,7 +291,7 @@ function resetForm() {
   $r('#rm-smart').value = '';
   ['rm-ov-title', 'rm-ov-kind', 'rm-ov-remind', 'rm-ov-next', 'rm-ov-time', 'rm-ov-note'].forEach(id => { $r('#' + id).value = ''; });
   $r('#rm-adjust-box').open = false;
-  $r('#rm-save').innerHTML = '<i class="fa-solid fa-plus"></i> บันทึกแจ้งเตือน';
+  $r('#rm-save').innerHTML = `${iconSvg('plus', { size: 15 })} บันทึกแจ้งเตือน`;
   $r('#rm-cancel').classList.add('hidden');
   updateSmartPreview();
 }
@@ -427,7 +428,7 @@ async function onListClick(e) {
     $r('#rm-ov-note').value = manualOverrides['rm-ov-note'];
     currentDraft = item.rule ? { ...parseSmartReminder($r('#rm-smart').value, rawItems(), localDateStr()), rule: item.rule } : null;
     updateSmartPreview(!currentDraft);
-    $r('#rm-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกการแก้ไข';
+    $r('#rm-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกการแก้ไข`;
     $r('#rm-cancel').classList.remove('hidden');
     root.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;

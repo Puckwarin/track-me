@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
+import { iconSvg } from './icons.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const DEFAULT_ALT_ANCHOR = '2026-01-05'; // วันจันทร์อ้างอิงสำหรับสลับสัปดาห์ A / B
@@ -462,10 +463,10 @@ export function renderPlanner() {
           </div>
           ${renderTaskListHtml(selectedDate)}
           <div class="flex flex-wrap gap-1.5 pt-1">
-            <button type="button" data-pl-once class="chip min-h-[36px] bg-emerald-100 text-emerald-800 font-semibold"><i class="fa-solid fa-plus"></i> กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
-            <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> ตั้งกิจวัตร / สลับสัปดาห์</button>
-            <button type="button" data-pl-go="workout" class="chip min-h-[36px] bg-sky-soft text-blue-700"><i class="fa-solid fa-dumbbell"></i> วางแผนออกกำลังกาย</button>
-            <button type="button" data-pl-go="remind" class="chip min-h-[36px] bg-amber-50 border border-amber-200 text-amber-900"><i class="fa-solid fa-thumbtack"></i> เพิ่มนัดหมาย</button>
+            <button type="button" data-pl-once class="chip min-h-[36px] bg-emerald-100 text-emerald-800 font-semibold">${iconSvg('plus', { size: 13 })} กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
+            <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark">${iconSvg('repeat', { size: 13 })} ตั้งกิจวัตร / สลับสัปดาห์</button>
+            <button type="button" data-pl-go="workout" class="chip min-h-[36px] bg-sky-soft text-blue-700">${iconSvg('workout', { size: 13 })} วางแผนออกกำลังกาย</button>
+            <button type="button" data-pl-go="remind" class="chip min-h-[36px] bg-amber-50 border border-amber-200 text-amber-900">${iconSvg('pin', { size: 13 })} เพิ่มนัดหมาย</button>
           </div>
         </div>
       </div>`;
@@ -474,22 +475,22 @@ export function renderPlanner() {
   <section class="card space-y-3.5">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <h2 class="text-base sm:text-lg font-bold text-slate-800"><i class="fa-solid fa-calendar-check text-brand mr-1"></i> Weekly Planner & กิจวัตร</h2>
+        <h2 class="text-base sm:text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>Weekly Planner & กิจวัตร</span></h2>
         <p class="text-xs text-slate-500 tabular-nums">${esc(rangeText)} · เสร็จแล้ว ${doneAll}/${totalAll} รายการ</p>
       </div>
       <div class="flex flex-wrap items-center gap-1.5">
         ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบสัปดาห์ ${weekCode}</span>
-        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B"><i class="fa-solid fa-arrows-rotate"></i> สลับ A↔B</button>` : ''}
-        <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark"><i class="fa-solid fa-repeat"></i> กิจวัตร (${routinesCount})</button>
+        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} สลับ A↔B</button>` : ''}
+        <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark">${iconSvg('repeat', { size: 13 })} กิจวัตร (${routinesCount})</button>
       </div>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-1.5">
-        <button type="button" data-pl-step="-1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
+        <button type="button" data-pl-step="-1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
         <button type="button" data-pl-week="0" class="chip min-h-[36px] ${weekOffset === 0 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์นี้</button>
         <button type="button" data-pl-week="1" class="chip min-h-[36px] ${weekOffset === 1 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์หน้า</button>
-        <button type="button" data-pl-step="1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+        <button type="button" data-pl-step="1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
       </div>
       <div class="flex items-center gap-1.5">
         <button type="button" data-pl-mode="day" class="chip min-h-[36px] ${viewMode === 'day' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">รายวัน</button>
@@ -537,8 +538,8 @@ function openRoutinesModal(opts = {}) {
   const recentRoutines = getRecentCompletedRoutines(getPlanner(), 10);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3">
-      <h3 class="font-bold text-lg text-slate-800"><i class="fa-solid fa-repeat text-brand mr-1"></i> กิจวัตร & ตารางสลับสัปดาห์</h3>
-      <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('repeat', { size: 18, className: 'text-brand' })}<span>กิจวัตร & ตารางสลับสัปดาห์</span></h3>
+      <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-slate-500 mb-3">รองรับทั้ง<b>ทุกสัปดาห์</b>, <b>สลับสัปดาห์ A ↔ B</b> และ<b>เฉพาะวันเดียว (ไม่ทำซ้ำ)</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
 
@@ -591,8 +592,8 @@ function openRoutinesModal(opts = {}) {
       </div>
       <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
         <button type="button" id="rt-cancel-edit" class="btn btn-ghost hidden text-xs">ยกเลิกแก้ไข</button>
-        <button type="button" id="rt-create-pair" class="btn btn-sky text-xs" title="สร้างรอบสัปดาห์ A ตามวันที่เลือก และสร้างรอบ B เป็นวันที่เหลือให้อัตโนมัติ"><i class="fa-solid fa-arrows-left-right"></i> สร้างคู่สลับ A ↔ B</button>
-        <button type="button" id="rt-save" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> เพิ่มกิจวัตร</button>
+        <button type="button" id="rt-create-pair" class="btn btn-sky text-xs" title="สร้างรอบสัปดาห์ A ตามวันที่เลือก และสร้างรอบ B เป็นวันที่เหลือให้อัตโนมัติ">${iconSvg('swap', { size: 14 })} สร้างคู่สลับ A ↔ B</button>
+        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มกิจวัตร</button>
       </div>
     </div>
 
@@ -665,7 +666,7 @@ function openRoutinesModal(opts = {}) {
     $('#rt-title', m.el).value = '';
     $('#rt-time', m.el).value = '';
     $('#rt-once-date', m.el).value = defaultOnceDate;
-    $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-plus"></i> เพิ่มกิจวัตร';
+    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มกิจวัตร`;
     $('#rt-cancel-edit', m.el).classList.add('hidden');
     syncIconBadge('');
     renderPattern();
@@ -730,7 +731,7 @@ function openRoutinesModal(opts = {}) {
       $('#rt-time', m.el).value = r.time || '';
       if (isDateStr(r.date)) $('#rt-once-date', m.el).value = r.date;
       syncIconBadge(r.title);
-      $('#rt-save', m.el).innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข';
+      $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึกการแก้ไข`;
       $('#rt-cancel-edit', m.el).classList.remove('hidden');
       renderPattern();
       renderDays();

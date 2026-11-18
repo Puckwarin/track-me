@@ -3,6 +3,7 @@ import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
+import { iconSvg } from './icons.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
@@ -51,8 +52,9 @@ export function mountBody(el) {
   root = el;
   root.innerHTML = `
   <div class="space-y-6">
+    <div id="b-snapshot" class="grid grid-cols-3 gap-2.5"></div>
     <div class="card space-y-4">
-      <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> บันทึกน้ำหนัก & สัดส่วน</h2>
+      <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-blue-500' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div><label class="lbl">วันที่</label><input type="date" id="b-date" class="input"></div>
         <div><label class="lbl">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
@@ -64,27 +66,31 @@ export function mountBody(el) {
         <div class="sm:col-span-2"><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
       </div>
       <p class="text-xs text-slate-500">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
-      <div class="flex justify-end"><button id="b-save" class="btn btn-sky"><i class="fa-solid fa-plus"></i> บันทึก</button></div>
+      <div class="flex justify-end"><button id="b-save" class="btn btn-sky">${iconSvg('plus', { size: 15 })} บันทึก</button></div>
     </div>
 
     <div class="card space-y-4">
       <div class="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-bed text-indigo-500"></i> การนอน & ก้าวเดิน <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
+          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-indigo-500' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
           <p class="text-xs text-slate-500 mt-0.5">เว็บแอปบนเบราว์เซอร์ไม่สามารถเชื่อมต่อเข้าแอป Zepp บนมือถือโดยตรงได้ — เลือกบันทึกเอง หรือนำเข้าไฟล์ CSV (3 รูปแบบ ไม่ใช้ AI) ที่ Export จาก Zepp ได้ทันที</p>
         </div>
       </div>
 
       <div class="flex flex-wrap gap-2">
         <label class="btn btn-soft text-xs cursor-pointer">
-          <i class="fa-solid fa-file-csv text-emerald-600"></i> นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
+          ${iconSvg('csv', { size: 15, className: 'text-emerald-600' })} นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
           <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
         </label>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div><label class="lbl">วันที่</label><input type="date" id="bz-date" class="input"></div>
-        <div><label class="lbl">ชั่วโมงนอน (ชม.)</label><input type="number" step="0.1" min="0" max="24" inputmode="decimal" id="bz-sleep" class="input" placeholder="เช่น 7.5"></div>
+        <div>
+          <label class="lbl" for="bz-sleep">ชั่วโมงนอน (ชม.)</label>
+          <input type="number" step="0.1" min="0" max="24" inputmode="decimal" id="bz-sleep" class="input" placeholder="เช่น 7.5">
+          <input type="range" id="bz-sleep-slider" class="tm-slider" min="0" max="14" step="0.5" value="0" aria-label="ปรับชั่วโมงนอนแบบเลื่อน">
+        </div>
         <div><label class="lbl">จำนวนก้าว</label><input type="number" step="1" min="0" inputmode="numeric" id="bz-steps" class="input" placeholder="เช่น 8420"></div>
         <div><label class="lbl">เวลาเข้านอน</label><input type="time" id="bz-bed" class="input"></div>
         <div><label class="lbl">เวลาตื่นนอน</label><input type="time" id="bz-wake" class="input"></div>
@@ -92,7 +98,7 @@ export function mountBody(el) {
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="text-[11px] text-slate-500">รองรับ Zepp CSV : ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY) — เลือกพร้อมกันได้ ระบบรวมวันเดียวกันให้อัตโนมัติ</span>
-        <button id="bz-save" class="btn btn-primary text-xs shrink-0"><i class="fa-solid fa-plus"></i> บันทึกนอน / ก้าวเดิน</button>
+        <button id="bz-save" class="btn btn-primary text-xs shrink-0">${iconSvg('plus', { size: 15 })} บันทึกนอน / ก้าวเดิน</button>
       </div>
 
       <div class="border-t border-slate-100 pt-3 space-y-2">
@@ -102,7 +108,7 @@ export function mountBody(el) {
     </div>
 
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-blue-500"></i> ประวัติน้ำหนัก & สัดส่วน</h3>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-blue-500' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
         <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="b-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
@@ -110,14 +116,14 @@ export function mountBody(el) {
   </div>
   <div class="space-y-6">
     <div class="card space-y-3">
-      <h3 id="b-chart-title" class="font-bold text-slate-800"><i class="fa-solid fa-chart-line text-blue-500"></i> แนวโน้มน้ำหนัก & สัดส่วน</h3>
+      <h3 id="b-chart-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('health', { size: 17, className: 'text-blue-500' })}<span>แนวโน้มน้ำหนัก & สัดส่วน</span></h3>
       <div id="b-chart-tabs" class="flex flex-wrap gap-1.5"></div>
       <div id="b-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
       <div id="b-chart"></div>
     </div>
 
     <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-moon text-indigo-500"></i> แนวโน้มการนอน & ก้าวเดิน</h3>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('moon', { size: 17, className: 'text-indigo-500' })}<span>แนวโน้มการนอน & ก้าวเดิน</span></h3>
       <div id="bz-chart-tabs" class="flex flex-wrap gap-1.5"></div>
       <div id="bz-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
       <div id="bz-chart"></div>
@@ -128,6 +134,13 @@ export function mountBody(el) {
   $('#bz-date', root).value = localDateStr();
   $('#b-save', root).addEventListener('click', save);
   $('#bz-save', root).addEventListener('click', saveSleepSteps);
+  $('#bz-sleep-slider', root).addEventListener('input', e => {
+    $('#bz-sleep', root).value = Number(e.target.value) > 0 ? e.target.value : '';
+  });
+  $('#bz-sleep', root).addEventListener('input', e => {
+    const v = Number(e.target.value);
+    $('#bz-sleep-slider', root).value = Number.isFinite(v) ? String(Math.max(0, Math.min(14, Math.round(v * 2) / 2))) : '0';
+  });
   $('#bz-csv', root).addEventListener('change', handleCsvImport);
 
   $('#b-chart-tabs', root).addEventListener('click', e => {
@@ -287,7 +300,7 @@ function renderSleepStepsList(desc) {
           ${stageParts.length ? `<p class="text-[11px] text-slate-500">${esc(stageParts.join(' · '))}</p>` : ''}
           ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
         </div>
-        <button type="button" data-ss-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px] shrink-0" aria-label="ลบ"><i class="fa-solid fa-trash-can"></i></button>
+        <button type="button" data-ss-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px] shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
       </div>
     `;
   }).join('');
@@ -295,6 +308,20 @@ function renderSleepStepsList(desc) {
 
 export function render() {
   if (!root) return;
+  const snap = $('#b-snapshot', root);
+  if (snap) {
+    const latest = bodyLatest(state.body || []);
+    const snapTile = (label, val, sub, iconName, colorCls) => `
+      <div class="card !p-3 space-y-1 tabular-nums">
+        <div class="flex items-center justify-between gap-1 text-[11px] text-slate-500"><span class="truncate">${esc(label)}</span><span class="${colorCls}">${iconSvg(iconName, { size: 14 })}</span></div>
+        <p class="text-sm sm:text-base font-bold text-slate-800 truncate">${esc(val)}</p>
+        <p class="text-[10px] text-slate-500 truncate">${esc(sub)}</p>
+      </div>`;
+    snap.innerHTML =
+      snapTile('น้ำหนักล่าสุด', latest.weight ? `${latest.weight.v} กก.` : 'ยังไม่บันทึก', latest.weight ? fmtDate(latest.weight.d) : 'ชั่งและจดได้เลย', 'body', 'text-blue-500') +
+      snapTile('การนอนล่าสุด', latest.sleepHours ? `${round1(latest.sleepHours.v)} ชม.` : 'ยังไม่บันทึก', latest.sleepHours ? fmtDate(latest.sleepHours.d) : 'กรอกหรือนำเข้า CSV', 'sleep', 'text-indigo-500') +
+      snapTile('ก้าวเดินล่าสุด', latest.steps ? `${Math.round(latest.steps.v).toLocaleString()} ก้าว` : 'ยังไม่บันทึก', latest.steps ? fmtDate(latest.steps.d) : 'ติดตามการเดินรายวัน', 'steps', 'text-emerald-600');
+  }
   const desc = sortBodyDesc(state.body);
   const weightRows = desc.filter(hasBodyMeasurement);
   const cell = v => (typeof v === 'number' ? v : '—');
@@ -307,7 +334,7 @@ export function render() {
     }
     return `<tr class="hover:bg-sky-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(r.date))}${r.note ? `<div class="text-xs text-slate-500 font-normal">${esc(r.note)}</div>` : ''}</td>
       <td class="p-3 text-right">${cell(r.weight)}${delta}</td><td class="p-3 text-right text-slate-600">${cell(r.bust)}</td><td class="p-3 text-right text-slate-600">${cell(r.waist)}</td><td class="p-3 text-right text-slate-600">${cell(r.hip)}</td><td class="p-3 text-right text-slate-600">${cell(r.arm)}</td><td class="p-3 text-right text-slate-600">${cell(r.thigh)}</td>
-      <td class="p-3 text-center"><button data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึก"><i class="fa-solid fa-trash-can text-xs"></i></button></td></tr>`;
+      <td class="p-3 text-center"><button data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึก">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
   }).join('') : '<tr><td colspan="8" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</td></tr>';
   renderSleepStepsList(desc);
   renderChart();
@@ -360,8 +387,8 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   const modalRes = openModal(`
     <div id="zepp-preview-box">
       <div class="flex justify-between items-center mb-2">
-        <h3 class="font-bold text-slate-800"><i class="fa-solid fa-file-import text-indigo-500"></i> ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</h3>
-        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('upload', { size: 17, className: 'text-indigo-500' })}<span>ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</span></h3>
+        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
       <div class="space-y-2 max-h-72 overflow-y-auto pr-0.5">
@@ -499,6 +526,7 @@ function saveSleepSteps() {
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
 
   ['bz-sleep', 'bz-steps', 'bz-bed', 'bz-wake', 'bz-note'].forEach(id => { $('#' + id, root).value = ''; });
+  if ($('#bz-sleep-slider', root)) $('#bz-sleep-slider', root).value = '0';
   $('#bz-date', root).value = localDateStr();
   toast('บันทึกการนอน & ก้าวเดินแล้ว');
 }
