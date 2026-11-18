@@ -1,15 +1,10 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, addDays, toNum, round1, toast } from './util.js';
-import { TYPES } from './workoutConstants.js';
+import { $, esc, localDateStr, toNum, round1 } from './util.js';
 
 let root, dashboardData = null, loading = false, activeSection = 'health';
 
-function localMonthStr(s) {
-  const d = new Date(s + '-01');
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
 function monthLabel(ms) {
   const [y, m] = ms.split('-');
   const d = new Date(+y, +m - 1, 1);
@@ -204,7 +199,6 @@ function barChart(data, valueKey, color, unit, decimals = 0) {
     return `<rect x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" opacity="0.85"><title>${esc(d.label)}: ${fmtV(v)} ${esc(unit)}</title></rect>`;
   }).join('');
   const labels = data.map((d, i) => `<text x="${(x(i) + bw / 2).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#94a3b8" text-anchor="middle">${esc(d.label)}</text>`).join('');
-  const topVal = data.reduce((a, d) => Math.max(a, d[valueKey] || 0), 0);
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
     ${bars}
     <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#64748b">${esc(fmtV(max))}</text>

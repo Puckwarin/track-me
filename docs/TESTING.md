@@ -23,7 +23,7 @@ Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines
 - รัน `npm test` ในเครื่อง: ผ่าน 132 tests จาก 29 test files; ข้าม Firestore Rules 5 tests เนื่องจาก environment ไม่มี Java Runtime
 - GitHub Actions run `44239422504` สำหรับ PR #20: `npm run test:coverage` ผ่าน 132 tests และ `npm run test:rules` ผ่านครบ 5 tests บน Java 21 + Firestore Emulator
 - `npm run lock:check` และ `npm run build` ในเครื่อง: ผ่าน
-- `npm run lint` ผ่านโดยไม่มี errors แต่รายงาน 6 warnings (`no-unused-vars`) ใน `src/dashboard.js`; GitHub Actions แสดง warnings ชุดเดียวกัน
+- `npm run lint` ล่าสุดหลังแก้ warnings: ผ่านโดยไม่มี errors และ warnings; ก่อนแก้พบ `no-unused-vars` 6 รายการใน `src/dashboard.js` ซึ่งลบ imports/helper/ตัวแปรที่ไม่ได้ใช้ออกโดยไม่เปลี่ยน logic
 - `src/firestoreRules.test.js` ครอบคลุมสิทธิ์เจ้าของข้อมูล, การปฏิเสธผู้ใช้ที่ไม่ล็อกอิน/ข้ามผู้ใช้/collection ที่ไม่รู้จัก, การตรวจ ownership/type/ขนาดเอกสาร, runtime error logs และ migration rules
 
 ข้อจำกัดการตรวจรับ: ไม่มีบัญชีทดสอบและ credentials ที่อนุญาตให้ใช้ จึงไม่ได้ทดสอบ Google sign-in/sign-out, การอ่าน/เขียนข้อมูลจริงแยกผู้ใช้, CRUD ของ Food/Health/Care/Expenses, การตั้งค่า Home, backup/restore, CSV import/export หรือการแยกข้อมูลระหว่างบัญชี เบราว์เซอร์ตรวจได้เฉพาะหน้าล็อกอินที่ viewport 300×600 (dark mode); ไม่ได้ทดสอบ navigation หลัง authentication, network requests ของ workflow ที่ต้องล็อกอิน หรือ console ระหว่างใช้งานจริง
