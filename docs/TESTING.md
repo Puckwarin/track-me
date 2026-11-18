@@ -18,9 +18,19 @@ Install dependencies with `npm ci`, then run:
 
 Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover local date helpers (`localDateStr`, `localMonthStr`, `addDays` in `src/util.test.js`), parsers (food, workout, reminder, statement, slip OCR, Zepp CSV), schema sanitizers, backup/restore planning & batched commits (`src/backup.test.js`), Firestore snapshot listener lifecycle & offline/pending sync indicators (`src/sync.test.js`), expense rules/budgets/recurrence, monthly overview dashboard aggregation & `localStorage` caching (`src/overviewLogic.test.js`), TDEE calculations, cycle statistics, food validation, nutrition/USDA/OFF/exercise image persistent caches (`src/nutrition.test.js`, `src/foodsearch.test.js`, `src/exerciseMedia.test.js`), local OCR sufficiency threshold, AI per-model & provider fallback/cooldown/model routing, 0-token local assistant & fuzzy food matching (`src/services/localAssistant.test.js`), AI assistant roles/tools/notes/feedback/markdown sanitization/write rollback, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 15 active tests, `src/services/aiAssistant.test.js` has 13 active tests, `src/services/localAssistant.test.js` has 7 active tests, `src/util.test.js` has 6 active tests, `src/zeppParser.test.js` has 9 active tests, `src/nutrition.test.js` has 5 active tests, `src/backup.test.js` has 5 active tests, `src/overviewLogic.test.js` has 4 active tests, `src/sync.test.js` has 2 active tests, `src/foodsearch.test.js` has 2 active tests, `src/exerciseMedia.test.js` has 1 active test, and `src/schema.test.js` has 7 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
 
-Latest local validation completed with 122 tests passing across 27 test files and 5 Firestore Rules tests skipped (`src/firestoreRules.test.js`). `npm run test:rules` could not run on the validation machine because no Java Runtime / Firebase Emulator was running.
+ผลตรวจสอบล่าสุดสำหรับ PR #20 (commit `b83bb97`, 2026-11-18):
 
-*หมายเหตุ (v4.8.0):* การทดสอบในเครื่องล่าสุดผ่าน 122 unit tests (27 ไฟล์, `eslint src` มี 0 errors/warnings) และข้าม `src/firestoreRules.test.js` 5 tests เนื่องจากไม่มี Java Runtime / Firestore Emulator ในเครื่องทดสอบ (ต้องรัน `npm run test:rules` บนเครื่องที่มี Java 21+ หรือผ่าน CI)
+- รัน `npm test` ในเครื่อง: ผ่าน 132 tests จาก 29 test files; ข้าม Firestore Rules 5 tests เนื่องจาก environment ไม่มี Java Runtime
+- GitHub Actions run `44239422504` สำหรับ PR #20: `npm run test:coverage` ผ่าน 132 tests และ `npm run test:rules` ผ่านครบ 5 tests บน Java 21 + Firestore Emulator
+- `npm run lock:check` และ `npm run build` ในเครื่อง: ผ่าน
+- `npm run lint` ล่าสุดหลังแก้ warnings: ผ่านโดยไม่มี errors และ warnings; ก่อนแก้พบ `no-unused-vars` 6 รายการใน `src/dashboard.js` ซึ่งลบ imports/helper/ตัวแปรที่ไม่ได้ใช้ออกโดยไม่เปลี่ยน logic
+- `src/firestoreRules.test.js` ครอบคลุมสิทธิ์เจ้าของข้อมูล, การปฏิเสธผู้ใช้ที่ไม่ล็อกอิน/ข้ามผู้ใช้/collection ที่ไม่รู้จัก, การตรวจ ownership/type/ขนาดเอกสาร, runtime error logs และ migration rules
+
+ข้อจำกัดการตรวจรับ: ไม่มีบัญชีทดสอบและ credentials ที่อนุญาตให้ใช้ จึงไม่ได้ทดสอบ Google sign-in/sign-out, การอ่าน/เขียนข้อมูลจริงแยกผู้ใช้, CRUD ของ Food/Health/Care/Expenses, การตั้งค่า Home, backup/restore, CSV import/export หรือการแยกข้อมูลระหว่างบัญชี เบราว์เซอร์ตรวจได้เฉพาะหน้าล็อกอินที่ viewport 300×600 (dark mode); ไม่ได้ทดสอบ navigation หลัง authentication, network requests ของ workflow ที่ต้องล็อกอิน หรือ console ระหว่างใช้งานจริง
+
+จากการตรวจ diff ของ PR #20 ไม่พบการเปลี่ยน `firestore.rules`, `firestore.rules.migration`, `firebase.json` หรือ `src/schema.js` ทั้งนี้การตรวจ diff ไม่ได้ทดแทนการทดสอบบนบัญชีจริง
+
+*หมายเหตุสำหรับการเตรียม v5.0.0:* ผลข้างต้นเป็นหลักฐานตรวจสอบ PR #20 เท่านั้น ไม่ได้หมายความว่า release ถูกเผยแพร่แล้ว; ดูรายการ draft ใน `CHANGELOG.md` และอัปเดตผลตรวจนี้อีกครั้งหากมี commit ใหม่ก่อน merge.
 
 Run a focused test while iterating:
 

@@ -10,6 +10,7 @@ export const state = {
   templates: [],
   labs: [],
   profile: null,
+  homeWidgets: null,
   planner: null,
   pushSettings: null,
   expenses: [],

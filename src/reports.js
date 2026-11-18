@@ -37,9 +37,9 @@ export function mountReport(el) {
         <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
         <button id="r-csv" class="btn btn-ghost"><i class="fa-solid fa-file-csv"></i> ดาวน์โหลด CSV</button>
       </div>
-      <p class="text-xs text-slate-400">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
+      <p class="text-xs text-slate-500">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
     </div>
-    <div id="report-preview" class="card"><p class="text-sm text-slate-400">เลือกช่วงวันที่แล้วกด "สร้างรายงาน"</p></div>
+    <div id="report-preview" class="card"><p class="text-sm text-slate-500">เลือกช่วงวันที่แล้วกด "สร้างรายงาน"</p></div>
   </div>`;
   $('#r-from', root).value = addDays(localDateStr(), -90);
   $('#r-to', root).value = localDateStr();
@@ -69,61 +69,99 @@ async function load() {
 }
 
 async function generate() {
-  try { data = await load(); } catch (e) { return toast(e.message, 'err'); }
+  const btn = $('#r-gen', root);
+  const preview = $('#report-preview', root);
+  const prevHtml = btn?.innerHTML;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังสร้างรายงาน...';
+  }
+  if (preview) {
+    preview.innerHTML = '<p class="text-sm text-slate-500 py-4 text-center"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>กำลังดึงข้อมูลและจัดเตรียมรายงาน...</p>';
+  }
+  try {
+    data = await load();
+  } catch (e) {
+    if (preview) preview.innerHTML = `<p class="text-sm text-rose-700 bg-rose-50 rounded-xl p-3">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`;
+    toast(e.message, 'err');
+    return;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = prevHtml;
+    }
+  }
   const d = data, inc = k => $('#r-inc-' + k, root).checked;
   const name = $('#r-name', root).value.trim();
   const sec = (title, body) => `<section class="report-section mt-6"><h3 class="font-bold text-slate-800 border-b border-lav-soft pb-1 mb-2">${title}</h3>${body}</section>`;
-  const tbl = (head, rows) => `<table class="w-full text-left text-sm"><thead class="bg-lav-soft/50"><tr>${head.map(h => `<th class="p-2">${h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100">${rows.map(r => `<tr>${r.map(c => `<td class="p-2">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const tbl = (head, rows) => `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-lav-soft/50"><tr>${head.map(h => `<th class="p-2 whitespace-nowrap">${h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100 tabular-nums">${rows.map(r => `<tr>${r.map(c => `<td class="p-2">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   let h = `<div><h2 class="text-xl font-bold text-brand-dark">รายงานสุขภาพ Track Me</h2>
-    <p class="text-sm text-slate-600">${name ? 'ชื่อ: ' + esc(name) + ' · ' : ''}ช่วงข้อมูล: ${esc(fmtDate(d.from))} – ${esc(fmtDate(d.to))}</p>
-    <p class="text-xs text-slate-500">ออกรายงานเมื่อ ${esc(fmtDateTime(Date.now()))} · ${esc(syncLineText())}</p></div>`;
+    <p class="text-sm text-slate-600 tabular-nums">${name ? 'ชื่อ: ' + esc(name) + ' · ' : ''}ช่วงข้อมูล: ${esc(fmtDate(d.from))} – ${esc(fmtDate(d.to))}</p>
+    <p class="text-xs text-slate-500 tabular-nums">ออกรายงานเมื่อ ${esc(fmtDateTime(Date.now()))} · ${esc(syncLineText())}</p></div>`;
 
   if (inc('period')) {
     const s = periodStats(state.period);
     const all = state.period.slice().sort((a, b) => a.start.localeCompare(b.start));
-    h += sec('ประจำเดือน', (s ? `<p class="text-sm mb-2"><b>ครั้งล่าสุด (LMP):</b> ${esc(fmtDate(s.lastStart))} (${daysBetween(s.lastStart, localDateStr())} วันที่แล้ว) · <b>รอบเฉลี่ย:</b> ${s.avgCycle ? s.avgCycle + ' วัน' : '-'} · <b>มาเฉลี่ย:</b> ${s.avgDur ? s.avgDur + ' วัน' : '-'}</p>` : '') +
+    h += sec('ประจำเดือน', (s ? `<p class="text-sm mb-2 tabular-nums"><b>ครั้งล่าสุด (LMP):</b> ${esc(fmtDate(s.lastStart))} (${daysBetween(s.lastStart, localDateStr())} วันที่แล้ว) · <b>รอบเฉลี่ย:</b> ${s.avgCycle ? s.avgCycle + ' วัน' : '—'} · <b>มาเฉลี่ย:</b> ${s.avgDur ? s.avgDur + ' วัน' : '—'}</p>` : '') +
       (d.period.length ? tbl(['เริ่ม', 'สิ้นสุด', 'มา (วัน)', 'รอบ (วัน)', 'ปริมาณ/หมายเหตุ'], d.period.map(p => {
         const i = all.findIndex(x => x.id === p.id);
-        return [esc(fmtDate(p.start)), esc(fmtDate(p.end)), p.end ? daysBetween(p.start, p.end) + 1 : '-', i > 0 ? daysBetween(all[i - 1].start, p.start) : '-', esc([p.flow, p.note].filter(Boolean).join(' · '))];
-      })) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>'));
+        return [esc(fmtDate(p.start)), esc(fmtDate(p.end)), p.end ? daysBetween(p.start, p.end) + 1 : '—', i > 0 ? daysBetween(all[i - 1].start, p.start) : '—', esc([p.flow, p.note].filter(Boolean).join(' · '))];
+      })) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>'));
   }
   if (inc('sym')) {
     const rows = d.symptoms.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [esc(fmtDate(r.date)),
-      esc(SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ') || '-'),
-      esc(MOODS[r.mood] || '-'), esc(STRESS[r.stress] || '-'), esc(r.note || '')]);
-    h += sec('อาการรายวัน', rows.length ? tbl(['วันที่', 'อาการ (ความรุนแรง)', 'อารมณ์', 'เครียด', 'หมายเหตุ'], rows) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+      esc(SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ') || '—'),
+      esc(MOODS[r.mood] || '—'), esc(STRESS[r.stress] || '—'), esc(r.note || '')]);
+    h += sec('อาการรายวัน', rows.length ? tbl(['วันที่', 'อาการ (ความรุนแรง)', 'อารมณ์', 'เครียด', 'หมายเหตุ'], rows) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('body')) {
-    const desc = sortBodyDesc(d.body), c = v => (typeof v === 'number' ? v : '-');
-    h += sec('น้ำหนักและสัดส่วน', (desc.length ? `<div class="max-w-md">${weightChartSvg(d.body)}</div>` + tbl(['วันที่', 'น้ำหนัก (กก.)', 'อก', 'เอว', 'สะโพก', 'แขน', 'ขา (ซม.)'], desc.map(r => [esc(fmtDate(r.date)), c(r.weight), c(r.bust), c(r.waist), c(r.hip), c(r.arm), c(r.thigh)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>'));
+    const desc = sortBodyDesc(d.body), c = v => (typeof v === 'number' ? v : '—');
+    h += sec('น้ำหนักและสัดส่วน', (desc.length ? `<div class="max-w-md">${weightChartSvg(d.body)}</div>` + tbl(['วันที่', 'น้ำหนัก (กก.)', 'อก', 'เอว', 'สะโพก', 'แขน', 'ขา (ซม.)'], desc.map(r => [esc(fmtDate(r.date)), c(r.weight), c(r.bust), c(r.waist), c(r.hip), c(r.arm), c(r.thigh)])) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>'));
   }
   if (inc('food')) {
     const by = {};
     d.food.forEach(f => { const x = by[f.date] ||= { cal: 0, p: 0, c: 0, f: 0, n: 0 }; x.cal += f.calories || 0; x.p += f.protein || 0; x.c += f.carbs || 0; x.f += f.fat || 0; x.n++; });
     const days = Object.keys(by).sort(), n = days.length || 1, avg = k => round1(days.reduce((a, k2) => a + by[k2][k], 0) / n);
-    h += sec('อาหารและสารอาหาร', days.length ? `<p class="text-sm mb-2">บันทึก ${days.length} วัน · <b>เฉลี่ยต่อวัน:</b> ${Math.round(avg('cal'))} kcal · โปรตีน ${avg('p')} g · คาร์บ ${avg('c')} g · ไขมัน ${avg('f')} g</p>` +
-      tbl(['วันที่', 'รายการ', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน'], days.map(k => [esc(fmtDate(k)), by[k].n, Math.round(by[k].cal), round1(by[k].p), round1(by[k].c), round1(by[k].f)])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+    h += sec('อาหารและสารอาหาร', days.length ? `<p class="text-sm mb-2 tabular-nums">บันทึก ${days.length} วัน · <b>เฉลี่ยต่อวัน:</b> ${Math.round(avg('cal')).toLocaleString()} kcal · โปรตีน ${avg('p')} g · คาร์บ ${avg('c')} g · ไขมัน ${avg('f')} g</p>` +
+      tbl(['วันที่', 'รายการ', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน'], days.map(k => [esc(fmtDate(k)), by[k].n, Math.round(by[k].cal), round1(by[k].p), round1(by[k].c), round1(by[k].f)])) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('workout')) {
     const ws = d.workouts.filter(w => w.status !== 'planned').slice().sort((a, b) => a.date.localeCompare(b.date)), by = {};
     ws.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
     const rowT = r => `${esc(r.name)} — ${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
-    h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2">${ws.length} ครั้ง · ${Object.entries(by).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
-      tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '-',
-        SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '-'])) : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+    h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2 tabular-nums">${ws.length} ครั้ง · ${Object.entries(by).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
+      tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '—',
+        SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '—'])) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('lab')) {
     const labs = state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.name.localeCompare(b.name, 'th') || a.date.localeCompare(b.date));
     const FL = { low: 'ต่ำกว่าเกณฑ์', high: 'สูงกว่าเกณฑ์', ok: 'ในเกณฑ์' };
-    h += sec('ผลตรวจทางห้องปฏิบัติการ', labs.length ? tbl(['วันที่', 'รายการ', 'ผล', 'ค่าอ้างอิง', 'เทียบเกณฑ์'], labs.map(l => [esc(fmtDate(l.date)), esc(l.name), `<b>${esc(l.value)}</b> ${esc(l.unit)}`, esc(refText(l)), esc(FL[labFlag(l)] || '-')])) + '<p class="text-xs text-slate-400 mt-1">ค่าอ้างอิงตามที่ผู้ใช้กรอกจากใบผลตรวจ — ให้แพทย์เป็นผู้แปลผล</p>' : '<p class="text-sm text-slate-400">ไม่มีข้อมูลในช่วงนี้</p>');
+    h += sec('ผลตรวจทางห้องปฏิบัติการ', labs.length ? tbl(['วันที่', 'รายการ', 'ผล', 'ค่าอ้างอิง', 'เทียบเกณฑ์'], labs.map(l => [esc(fmtDate(l.date)), esc(l.name), `<b>${esc(l.value)}</b> ${esc(l.unit)}`, esc(refText(l)), esc(FL[labFlag(l)] || '—')])) + '<p class="text-xs text-slate-500 mt-1">ค่าอ้างอิงตามที่ผู้ใช้กรอกจากใบผลตรวจ — ให้แพทย์เป็นผู้แปลผล</p>' : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
-  h += `<p class="text-xs text-slate-400 mt-6">ข้อมูลนี้ผู้ใช้บันทึกเอง ค่าคาดการณ์เป็นการประมาณ ไม่ใช่การวินิจฉัยทางการแพทย์</p>`;
+  h += `<p class="text-xs text-slate-500 mt-6">ข้อมูลนี้ผู้ใช้บันทึกเอง ค่าคาดการณ์เป็นการประมาณ ไม่ใช่การวินิจฉัยทางการแพทย์</p>`;
   $('#report-preview', root).innerHTML = h;
   $('#r-print', root).disabled = false;
 }
 
 async function csv() {
-  let d; try { d = await load(); } catch (e) { return toast(e.message, 'err'); }
+  const btn = $('#r-csv', root);
+  const prevHtml = btn?.innerHTML;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังเตรียม CSV...';
+  }
+  let d;
+  try {
+    d = await load();
+  } catch (e) {
+    toast(e.message, 'err');
+    return;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = prevHtml;
+    }
+  }
   const kind = $('#r-csv-kind', root).value;
   const rows = {
     period: [['เริ่ม', 'สิ้นสุด', 'ปริมาณ', 'หมายเหตุ'], ...d.period.map(p => [p.start, p.end || '', p.flow || '', p.note || ''])],

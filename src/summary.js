@@ -11,7 +11,6 @@ const cacheKey = () => 'summary_cache_' + state.uid;
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const fmtMoney = n => Math.round(n || 0).toLocaleString();
 
-
 export function clearSummaryCache() { if (state.uid) localStorage.removeItem(cacheKey()); }
 
 function buildLiveSummary() {
@@ -87,8 +86,8 @@ export function renderSummary() {
   current = s;
 
   const card = (icon, title, main, sub) => `<div class="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-    <div class="text-xs text-slate-500 mb-1"><i class="${icon}"></i> ${title}</div><div class="text-sm sm:text-base font-bold text-slate-800">${main}</div><div class="text-[11px] text-slate-500 mt-0.5">${sub}</div></div>`;
-  const empty = '<span class="text-slate-400 font-normal text-sm">ยังไม่มีข้อมูล</span>';
+    <div class="text-xs text-slate-600 mb-1"><i class="${icon}"></i> ${title}</div><div class="text-sm sm:text-base font-bold text-slate-800 tabular-nums">${main}</div><div class="text-[11px] text-slate-500 mt-0.5 tabular-nums">${sub}</div></div>`;
+  const empty = '<span class="text-slate-500 font-normal text-sm">ยังไม่มีข้อมูล</span>';
 
   const p = s?.period, b = s?.body || {};
   let c1, c2;
@@ -98,23 +97,28 @@ export function renderSummary() {
     c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', p.avgCycle ? p.avgCycle + ' วัน' : empty, p.next ? 'คาดรอบหน้า ~ ' + esc(fmtDate(p.next)) : 'ต้องมีอย่างน้อย 2 รอบ');
   } else {
     c1 = card('fa-solid fa-droplet text-pink-500', 'ประจำเดือนล่าสุด', empty, 'บันทึกได้ที่แท็บประจำเดือน');
-    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', empty, '');
+    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', empty, 'รอรอบเดือนที่บันทึก');
   }
 
-  const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : '');
+  const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : 'บันทึกได้ที่แท็บน้ำหนัก');
   const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip'], ['แขน', 'arm'], ['ขา', 'thigh']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
   const sleepStepsSub = [
-    b.sleepHours ? `😴 ${round1(b.sleepHours.v)} ชม. (${esc(fmtDate(b.sleepHours.d))})` : '',
-    b.steps ? `👣 ${Math.round(b.steps.v).toLocaleString()} ก้าว` : ''
+    b.sleepHours ? `นอน ${round1(b.sleepHours.v)} ชม. (${esc(fmtDate(b.sleepHours.d))})` : '',
+    b.steps ? `${Math.round(b.steps.v).toLocaleString()} ก้าว` : ''
   ].filter(Boolean).join(' · ');
-  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วน · นอน/ก้าว', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), (b.bust || b.waist || b.hip || b.arm || b.thigh) ? sleepStepsSub : '');
+  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วน · นอน/ก้าว', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), (b.bust || b.waist || b.hip || b.arm || b.thigh) ? sleepStepsSub : (sleepStepsSub ? '' : 'รอกรอกสัดส่วนหรือชั่วโมงนอน'));
 
   const nut = s?.nutrition;
+  const hasFoodToday = !!(nut && nut.count > 0);
   const c5 = card(
     'fa-solid fa-bowl-food text-brand',
     'โภชนาการวันนี้',
-    nut ? `${nut.cal.toLocaleString()} <span class="text-xs font-normal text-slate-500">/ ${nut.targetCal.toLocaleString()} kcal</span>` : empty,
-    nut ? `P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g (${nut.count} รายการ)` : ''
+    hasFoodToday
+      ? `${nut.cal.toLocaleString()} <span class="text-xs font-normal text-slate-500">/ ${nut.targetCal.toLocaleString()} kcal</span>`
+      : empty,
+    hasFoodToday
+      ? `P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g (${nut.count} รายการ)`
+      : (nut ? `เป้าหมาย ${nut.targetCal.toLocaleString()} kcal · P ${nut.targetProtein}g` : 'ยังไม่ได้บันทึกวันนี้')
   );
 
   const fin = s?.finance;
@@ -129,22 +133,28 @@ export function renderSummary() {
   );
 
   const wo = s?.workouts;
+  const hasWorkouts = !!(wo && (wo.doneCount > 0 || wo.plannedCount > 0));
   const c7 = card(
     'fa-solid fa-dumbbell text-amber-600',
     'ออกกำลังกายสัปดาห์นี้',
-    wo ? `${wo.doneCount} ครั้ง${wo.minutes ? ` <span class="text-xs font-normal text-slate-500">(${wo.minutes} น.)</span>` : ''}` : empty,
-    wo ? `${wo.kcal ? `เผาผลาญ ~${wo.kcal} kcal` : 'บันทึกเวลาแล้ว'}${wo.plannedCount ? ` · แผนอีก ${wo.plannedCount}` : ''}` : ''
+    hasWorkouts
+      ? `${wo.doneCount} ครั้ง${wo.minutes ? ` <span class="text-xs font-normal text-slate-500">(${wo.minutes} น.)</span>` : ''}`
+      : empty,
+    hasWorkouts
+      ? `${wo.kcal ? `เผาผลาญ ~${wo.kcal} kcal` : (wo.doneCount ? 'บันทึกเวลาแล้ว' : 'มีเฉพาะแผนที่วางไว้')}${wo.plannedCount ? ` · แผนอีก ${wo.plannedCount}` : ''}`
+      : 'ยังไม่มีบันทึกสัปดาห์นี้'
   );
 
   const inv = s?.inventory;
   const rem = s?.reminders;
+  const hasInvOrRem = !!((inv && inv.total > 0) || (rem && (rem.activeCount > 0 || rem.scheduledTotal > 0)));
   const c8 = card(
     'fa-solid fa-boxes-stacked text-sky-600',
     'สต๊อก & แจ้งเตือน',
-    inv ? `สต๊อก ${inv.total} · เตือน ${rem?.activeCount ?? 0}` : empty,
-    inv
-      ? `ใกล้หมด ${inv.lowCount} · ใกล้หมดอายุ ${inv.expiringCount}${(rem?.overdueCount || 0) > 0 ? ` · <span class="text-rose-600 font-semibold">เลยกำหนด ${rem.overdueCount}</span>` : ''}`
-      : ''
+    hasInvOrRem ? `สต๊อก ${inv?.total ?? 0} · เตือน ${rem?.activeCount ?? 0}` : empty,
+    hasInvOrRem
+      ? `ใกล้หมด ${inv?.lowCount ?? 0} · ใกล้หมดอายุ ${inv?.expiringCount ?? 0}${(rem?.overdueCount || 0) > 0 ? ` · <span class="text-rose-600 font-semibold">เลยกำหนด ${rem.overdueCount}</span>` : ''}`
+      : 'เพิ่มของใช้หรือกำหนดเตือนในแท็บดูแล'
   );
 
   grid.innerHTML = c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8;
@@ -171,11 +181,11 @@ export function copySummary() {
     ].filter(Boolean);
     L.push(ss.join(' · '));
   }
-  if (nut) L.push(`🍙 โภชนาการวันนี้: ${nut.cal}/${nut.targetCal} kcal (P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g)`);
+  if (nut && nut.count > 0) L.push(`🍙 โภชนาการวันนี้: ${nut.cal}/${nut.targetCal} kcal (P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g)`);
   if (fin && fin.count) L.push(`💰 การเงินเดือนนี้: รับ ${fmtMoney(fin.income)} · จ่าย ${fmtMoney(fin.expense)} · สุทธิ ${fin.net >= 0 ? '+' : ''}${fmtMoney(fin.net)} บาท`);
-  if (wo) L.push(`💪 ออกกำลังกายสัปดาห์นี้: ${wo.doneCount} ครั้ง (${wo.minutes} นาที · ~${wo.kcal} kcal${wo.plannedCount ? ` · แผนค้าง ${wo.plannedCount}` : ''})`);
-  if (inv) L.push(`📦 สต๊อกของใช้: ทั้งหมด ${inv.total} ชิ้น (ใกล้หมด ${inv.lowCount} · ใกล้หมดอายุ ${inv.expiringCount})`);
-  if (rem) L.push(`🔔 แจ้งเตือนที่ถึงกำหนด: ${rem.activeCount} รายการ${rem.overdueCount ? ` (เลยกำหนด ${rem.overdueCount})` : ''} จากทั้งหมด ${rem.scheduledTotal} กำหนดการ`);
+  if (wo && (wo.doneCount || wo.plannedCount)) L.push(`💪 ออกกำลังกายสัปดาห์นี้: ${wo.doneCount} ครั้ง (${wo.minutes} นาที · ~${wo.kcal} kcal${wo.plannedCount ? ` · แผนค้าง ${wo.plannedCount}` : ''})`);
+  if (inv && inv.total) L.push(`📦 สต๊อกของใช้: ทั้งหมด ${inv.total} ชิ้น (ใกล้หมด ${inv.lowCount} · ใกล้หมดอายุ ${inv.expiringCount})`);
+  if (rem && (rem.activeCount || rem.scheduledTotal)) L.push(`🔔 แจ้งเตือนที่ถึงกำหนด: ${rem.activeCount} รายการ${rem.overdueCount ? ` (เลยกำหนด ${rem.overdueCount})` : ''} จากทั้งหมด ${rem.scheduledTotal} กำหนดการ`);
   L.push(syncLineText());
   const text = L.join('\n');
   if (navigator.clipboard?.writeText) {
@@ -187,7 +197,7 @@ export function copySummary() {
 
 function showCopyFallback(text) {
   openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-base">คัดลอกสรุป</h3><button data-close class="text-slate-400"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-base">คัดลอกสรุป</h3><button data-close class="text-slate-500 min-w-[40px] min-h-[40px]" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button></div>
     <textarea class="input min-h-48 text-xs font-mono" readonly>${esc(text)}</textarea>
     <div class="flex justify-end mt-3"><button data-close class="btn btn-primary text-xs">ปิด</button></div>
   `);

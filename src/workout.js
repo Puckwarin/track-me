@@ -8,7 +8,7 @@ import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl 
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 
-import { formatFeelingLabel, summarizeSessionNextStep } from './workoutActive.js';
+import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
 export { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
@@ -111,9 +111,9 @@ export function mountWorkout(el) {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs font-semibold text-slate-700"><i class="fa-solid fa-calendar-week text-brand mr-1"></i>วางแผนรายสัปดาห์ (จ–อา)</span>
           <div class="flex items-center gap-1">
-            <button type="button" id="w-wk-prev" class="chip bg-white border border-slate-200 text-slate-600" aria-label="สัปดาห์ก่อน"><i class="fa-solid fa-chevron-left"></i></button>
-            <button type="button" id="w-wk-now" class="chip bg-lav-soft text-brand-dark">สัปดาห์นี้</button>
-            <button type="button" id="w-wk-next" class="chip bg-white border border-slate-200 text-slate-600" aria-label="สัปดาห์หน้า"><i class="fa-solid fa-chevron-right"></i></button>
+            <button type="button" id="w-wk-prev" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์ก่อน"><i class="fa-solid fa-chevron-left"></i></button>
+            <button type="button" id="w-wk-now" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">สัปดาห์นี้</button>
+            <button type="button" id="w-wk-next" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์หน้า"><i class="fa-solid fa-chevron-right"></i></button>
           </div>
         </div>
         <div id="w-week-strip" class="grid grid-cols-7 gap-1.5"></div>
@@ -194,15 +194,20 @@ export function mountWorkout(el) {
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-list text-brand"></i> ประวัติ & แผนที่บันทึก</h3>
       <div id="w-hist-status-tabs" class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 text-xs" role="tablist" aria-label="กรองสถานะบันทึก">
-        <button type="button" role="tab" aria-selected="true" data-hstatus="all" class="wa-sec-tab is-active flex-1 justify-center">ทั้งหมด</button>
-        <button type="button" role="tab" aria-selected="false" data-hstatus="planned" class="wa-sec-tab flex-1 justify-center">แผนที่วางไว้</button>
-        <button type="button" role="tab" aria-selected="false" data-hstatus="done" class="wa-sec-tab flex-1 justify-center">ทำแล้ว</button>
+        <button type="button" role="tab" aria-selected="true" data-hstatus="all" class="wa-sec-tab is-active flex-1 justify-center min-h-[36px] whitespace-nowrap">ทั้งหมด</button>
+        <button type="button" role="tab" aria-selected="false" data-hstatus="planned" class="wa-sec-tab flex-1 justify-center min-h-[36px] whitespace-nowrap">แผนที่วางไว้</button>
+        <button type="button" role="tab" aria-selected="false" data-hstatus="done" class="wa-sec-tab flex-1 justify-center min-h-[36px] whitespace-nowrap">ทำแล้ว</button>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <input id="w-hist-q" class="input text-xs sm:col-span-3" placeholder="🔍 ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต">
-        <div><label class="lbl">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
-        <div><label class="lbl">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
-        <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-600 w-full justify-center py-2">ล้างตัวกรอง</button></div>
+      <div class="space-y-2">
+        <input id="w-hist-q" class="input text-xs" placeholder="ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต">
+        <details class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <summary class="cursor-pointer text-xs font-medium text-slate-600 select-none">กรองตามช่วงวันที่</summary>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2.5">
+            <div><label class="lbl">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
+            <div><label class="lbl">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
+            <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-700 w-full justify-center py-2 min-h-[38px]">ล้างตัวกรอง</button></div>
+          </div>
+        </details>
       </div>
       <div id="w-history" class="space-y-2"></div>
       <div id="w-tpl-list" class="pt-3 border-t border-slate-100 space-y-1.5"></div>
@@ -1134,7 +1139,7 @@ function renderSections() {
             </div>
           </details>
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
-        </div>`).join('') : '<p class="text-xs text-slate-400">ยังไม่มีท่า</p>'}
+        </div>`).join('') : '<p class="text-xs text-slate-500">ยังไม่มีท่าในช่วงนี้</p>'}
     </div>`).join('');
 }
 
@@ -1324,11 +1329,11 @@ function renderWeekStrip() {
   const dayList = byDate[selected] || [];
   $('#w-day-plans', root).innerHTML = dayList.length ? dayList.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
-    return `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-lav-soft px-3 py-2 text-xs">
+    return `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-lav-soft px-3 py-2 text-xs tabular-nums">
       <div class="min-w-0 flex-1 break-words">
         <span class="font-semibold mr-1 ${w.status === 'planned' ? 'text-amber-700' : 'text-green-700'}">[${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}]</span>
-        <b>${esc(w.title || TYPES[w.type] || w.type)}</b>${w.title ? ` <span class="text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
-        ${w.note ? `<span class="text-slate-400 ml-1">${esc(w.note)}</span>` : ''}
+        <b>${esc(w.title || TYPES[w.type] || w.type)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
+        ${w.note ? `<span class="text-slate-500 ml-1">${esc(w.note)}</span>` : ''}
       </div>
       <div class="flex flex-wrap gap-1.5 shrink-0">
         ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-play"></i> เริ่มตามแผน</button>` : ''}
@@ -1338,7 +1343,7 @@ function renderWeekStrip() {
       </div>
     </div>`;
   }).join('')
-    : `<p class="text-[11px] text-slate-400">ยังไม่มีแผนหรือบันทึกในวันที่ ${esc(fmtDate(selected))} — เลือกท่าด้านล่างแล้วบันทึกเป็น "ทำจริงแล้ว" หรือ "วางแผนไว้" ได้เลย</p>`;
+    : `<p class="text-[11px] text-slate-500">ยังไม่มีแผนหรือบันทึกในวันที่ ${esc(fmtDate(selected))} — เลือกท่าด้านล่างแล้วบันทึกเป็น "ทำจริงแล้ว" หรือ "วางแผนไว้" ได้เลย</p>`;
 }
 
 export function render() {
@@ -1350,13 +1355,13 @@ export function render() {
   const sortedTpl = state.templates.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
   $('#w-tpl', root).innerHTML = '<option value="">เลือกเทมเพลต…</option>' + sortedTpl.map(t => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(TYPES[t.type] || '')})</option>`).join('');
   $('#w-tpl-list', root).innerHTML = sortedTpl.length
-    ? '<p class="text-xs font-semibold text-slate-500">เทมเพลตของฉัน</p>' + sortedTpl.map(t => `
+    ? '<p class="text-xs font-semibold text-slate-600">เทมเพลตของฉัน</p>' + sortedTpl.map(t => `
       <div class="flex justify-between items-center gap-2 text-sm py-1">
-        <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1">${esc(t.name)} <span class="text-xs text-slate-400">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
+        <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1 min-h-[36px]">${esc(t.name)} <span class="text-xs text-slate-500">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
         <div class="flex items-center gap-2 shrink-0 text-xs">
-          <button type="button" data-tstart="${esc(t.id)}" class="text-blue-700 font-medium hover:underline">▶ เริ่ม</button>
-          <button type="button" data-tedit="${esc(t.id)}" class="text-brand-dark hover:underline">แก้ไข</button>
-          <button type="button" data-tdel="${esc(t.id)}" class="text-rose-400 hover:underline">ลบ</button>
+          <button type="button" data-tstart="${esc(t.id)}" class="text-blue-700 font-medium hover:underline min-h-[36px] px-1">เริ่ม</button>
+          <button type="button" data-tedit="${esc(t.id)}" class="text-brand-dark hover:underline min-h-[36px] px-1">แก้ไข</button>
+          <button type="button" data-tdel="${esc(t.id)}" class="text-rose-500 hover:underline min-h-[36px] px-1">ลบ</button>
         </div>
       </div>`).join('')
     : '';
@@ -1369,9 +1374,9 @@ export function render() {
   const by = {}; wk.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
   const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0), burn = wk.reduce((a, w) => a + (w.estKcal || 0), 0);
   $('#w-week', root).innerHTML = (wk.length
-    ? `<p><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}${burn ? ` · เผาผลาญประมาณ ${burn} kcal` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-500">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('')
-    : '<p class="text-xs text-slate-400">ยังไม่มีการออกกำลังกายที่ทำแล้วใน 7 วันนี้</p>')
-    + (plannedCount ? `<p class="text-xs text-amber-700 pt-1">📅 มีแผนที่วางไว้ ${plannedCount} รายการ</p>` : '');
+    ? `<p class="tabular-nums"><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}${burn ? ` · เผาผลาญประมาณ ${burn} kcal` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('')
+    : '<p class="text-xs text-slate-500">ยังไม่มีการออกกำลังกายที่ทำแล้วใน 7 วันนี้</p>')
+    + (plannedCount ? `<p class="text-xs text-amber-800 pt-1 tabular-nums">มีแผนที่วางไว้ ${plannedCount} รายการ</p>` : '');
 
   renderHistory();
   $$('[data-hint]', root).forEach(h => { const n = h.closest('[data-row]')?.querySelector('[data-k="name"]'); if (n) h.textContent = lastHint(n.value); });
@@ -1457,10 +1462,10 @@ function renderHistory() {
 
     return `<div class="rounded-xl border border-lav-soft p-2.5 space-y-2">
       <details>
-        <summary class="cursor-pointer text-sm break-words">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
-        <div class="mt-1.5">${detail || '<p class="text-xs text-slate-400">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-500 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : actionsHtml}</div>
+        <summary class="cursor-pointer text-sm break-words tabular-nums">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
+        <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : actionsHtml}</div>
       </details>
       ${isPlan ? actionsHtml : ''}
     </div>`;
-  }).join('') : `<p class="text-xs text-slate-400">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึก'}</p>`;
+  }).join('') : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
 }

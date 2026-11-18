@@ -1,5 +1,8 @@
 import { openModal, confirmDialog, esc } from './util.js';
 import { safeHttpUrl } from './workoutParser.js';
+import { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
+
+export { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep };
 
 const SECTION_ORDER = ['warmup', 'main', 'cooldown'];
 const SECTION_TITLES = {
@@ -12,13 +15,6 @@ const SECTION_SHORT = {
   main: '2. ท่าหลัก',
   cooldown: '3. คูลดาวน์'
 };
-
-export const WORKOUT_FEELINGS = [
-  { id: 'energized', icon: '⚡', label: 'สดชื่น มีพลัง' },
-  { id: 'good', icon: '😊', label: 'กำลังดี' },
-  { id: 'tired', icon: '😮‍💨', label: 'เหนื่อยตึง' },
-  { id: 'exhausted', icon: '🥵', label: 'ล้ามาก' }
-];
 
 export const RPE_CHOICES = [
   { val: 5, label: '5 เบามาก' },
@@ -36,11 +32,6 @@ export const RIR_CHOICES = [
   { val: 3, label: '3 ครั้ง' },
   { val: 4, label: '4+ ครั้ง' }
 ];
-
-export function formatFeelingLabel(id) {
-  const f = WORKOUT_FEELINGS.find(x => x.id === id);
-  return f ? `${f.icon} ${f.label}` : '';
-}
 
 export function suggestNextProgression({ rpe = null, rir = null, completedSets = 0, plannedSets = 1 } = {}) {
   const hasRpe = Number.isFinite(rpe);
@@ -85,15 +76,6 @@ export function buildExerciseFeedbackSummary(rows = [], feedbackMap = {}, checke
     });
   });
   return out;
-}
-
-export function summarizeSessionNextStep(exerciseFeedback = []) {
-  if (!Array.isArray(exerciseFeedback) || !exerciseFeedback.length) return '';
-  const inc = exerciseFeedback.filter(x => x.nextAction === 'increase').length;
-  const deload = exerciseFeedback.filter(x => x.nextAction === 'deload').length;
-  if (deload > 0 && deload >= inc) return `แนะนำพักฟื้น/ลดโหลดใน ${deload} ท่า`;
-  if (inc > 0) return `พร้อมเพิ่มความท้าทายใน ${inc} ท่า`;
-  return 'รักษาระดับปัจจุบันในรอบถัดไป';
 }
 
 export function formatExercisePrescription(r = {}) {

@@ -286,25 +286,34 @@ export function renderReminders() {
     ? ({ granted: 'อนุญาตการแจ้งเตือนแล้ว', denied: 'ถูกบล็อกในเบราว์เซอร์', default: 'ยังไม่ได้อนุญาต' }[Notification.permission] || '')
     : 'เบราว์เซอร์ไม่รองรับ';
 
-  const activeHtml = active.map(x => {
+  const renderActiveCard = x => {
     const diff = daysBetween(today, x.date);
+    const isOverdue = x.kind !== 'low' && diff < 0;
+    const isToday = x.kind === 'low' || diff === 0;
     const when = x.kind === 'low' ? 'ถึงเกณฑ์เตือนสต๊อก' : diff < 0 ? `เลยกำหนด ${-diff} วัน` : diff === 0 ? 'ครบกำหนดวันนี้' : `อีก ${diff} วัน`;
-    return `<article class="rounded-2xl bg-slate-50 border border-slate-100 p-3 flex flex-wrap items-center justify-between gap-3">
+    return `<article class="rounded-2xl border p-3 flex flex-wrap items-center justify-between gap-3 tabular-nums ${isOverdue ? 'border-rose-200 bg-rose-50/50' : isToday ? 'border-amber-200 bg-amber-50/45' : 'bg-slate-50 border-slate-100'}">
       <div class="flex gap-3 items-center min-w-0">
         <span class="emoji-bubble">${x.icon}</span>
         <div class="min-w-0">
-          <b class="text-sm block truncate">${esc(x.label)}</b>
-          <p class="text-xs text-slate-600">${esc(fmtDate(x.date))}${x.dueTime ? ` · ⏰ ${esc(x.dueTime)} น.` : ''} · <span class="${diff < 0 ? 'text-rose-600 font-semibold' : ''}">${esc(when)}</span> · ${esc(x.detail)}</p>
+          <b class="text-sm block truncate text-slate-800">${esc(x.label)}</b>
+          <p class="text-xs text-slate-600">${esc(fmtDate(x.date))}${x.dueTime ? ` · ⏰ ${esc(x.dueTime)} น.` : ''} · <span class="${isOverdue ? 'text-rose-700 font-semibold' : isToday ? 'text-amber-800 font-semibold' : ''}">${esc(when)}</span> · ${esc(x.detail)}</p>
         </div>
       </div>
-      <button data-nt-dismiss="${esc(x.uidKey)}" class="chip bg-white border border-slate-200 text-slate-600 shrink-0">รับทราบ / ปิดรอบนี้</button>
+      <button data-nt-dismiss="${esc(x.uidKey)}" class="chip min-h-[38px] bg-white border border-slate-200 text-slate-700 shrink-0">รับทราบ / ปิดรอบนี้</button>
     </article>`;
-  }).join('');
+  };
+
+  const urgentRows = active.filter(x => x.kind === 'low' || daysBetween(today, x.date) <= 0);
+  const upcomingRows = active.filter(x => x.kind !== 'low' && daysBetween(today, x.date) > 0);
+  const activeHtml = active.length
+    ? `${urgentRows.length ? `<div class="space-y-2"><p class="text-xs font-semibold text-rose-700">⚡ เลยกำหนด / ถึงกำหนดวันนี้ (${urgentRows.length})</p>${urgentRows.map(renderActiveCard).join('')}</div>` : ''}
+       ${upcomingRows.length ? `<div class="space-y-2 ${urgentRows.length ? 'pt-2 border-t border-slate-100' : ''}"><p class="text-xs font-semibold text-slate-600">📅 กำลังจะถึงเร็ว ๆ นี้ (${upcomingRows.length})</p>${upcomingRows.map(renderActiveCard).join('')}</div>` : ''}`
+    : '';
 
   const configHtml = sources.map(x => {
     const diff = daysBetween(today, x.date);
-    return `<div class="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 flex flex-wrap items-center justify-between gap-2">
-      <label class="flex items-center gap-2.5 min-w-0 cursor-pointer">
+    return `<div class="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 flex flex-wrap items-center justify-between gap-2 tabular-nums">
+      <label class="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1 min-h-[40px]">
         <input type="checkbox" data-nt-sel="${esc(x.uidKey)}" ${selectedKeys.has(x.uidKey) ? 'checked' : ''}>
         <span class="text-base">${x.icon}</span>
         <span class="min-w-0">
@@ -319,23 +328,23 @@ export function renderReminders() {
   root.innerHTML = `<div class="lg:col-span-3 space-y-5">
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-bold"><i class="fa-regular fa-bell text-brand"></i> แจ้งเตือนที่ถึงกำหนด (${active.length})</h2>
+        <h2 class="text-lg font-bold text-slate-800"><i class="fa-regular fa-bell text-brand"></i> แจ้งเตือนที่ถึงกำหนด (${active.length})</h2>
       </div>
       <p class="text-xs text-slate-500">แสดงเฉพาะรายการที่อยู่ในช่วงแจ้งเตือนล่วงหน้าที่ตั้งค่าไว้ กด “รับทราบ / ปิดรอบนี้” เพื่อเคลียร์เลขบนกระดิ่งได้</p>
-      <div class="space-y-2">${activeHtml || '<p class="rounded-2xl bg-ok-soft p-4 text-sm text-green-800">🌼 ยังไม่มีรายการแจ้งเตือนค้างอยู่ค่ะ</p>'}</div>
+      <div class="space-y-3">${activeHtml || '<p class="rounded-2xl bg-ok-soft p-4 text-sm text-green-800">🌼 ยังไม่มีรายการแจ้งเตือนค้างอยู่ค่ะ</p>'}</div>
     </section>
 
     <section class="card space-y-3">
       <h3 class="font-bold text-slate-800">🌸 แจ้งเตือนรอบเดือน</h3>
-      <div class="rounded-2xl bg-pink-soft/50 border border-pink-100 p-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="rounded-2xl bg-pink-soft/50 border border-pink-100 p-3 flex flex-wrap items-center justify-between gap-3 tabular-nums">
         <div class="text-sm space-y-0.5">
           <p class="font-semibold text-slate-800">${cycle?.next ? `คาดการณ์รอบถัดไป ~ ${esc(fmtDate(cycle.next))} (อีก ${daysBetween(today, cycle.next)} วัน)` : 'บันทึกรอบเดือนอย่างน้อย 2 ครั้งเพื่อคำนวณวันคาดการณ์'}</p>
           <p class="text-xs text-slate-500">ค่าประมาณจากค่าเฉลี่ยรอบที่ผ่านมา · สถานะแจ้งเตือนของเครื่อง: ${esc(notifState)}</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="nt-period-days" class="input !w-auto text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${pLead === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
-          <button id="nt-notif-perm" type="button" class="chip bg-white border border-pink-200 text-pink-700">อนุญาตแจ้งเตือน</button>
-          ${cycle?.next && pLead >= 0 && !pDismissed ? '<button id="nt-period-dismiss" type="button" class="chip bg-white border border-slate-200 text-slate-600">ปิดเตือนรอบนี้</button>' : ''}
+          <button id="nt-notif-perm" type="button" class="chip min-h-[38px] bg-white border border-pink-200 text-pink-700">อนุญาตแจ้งเตือน</button>
+          ${cycle?.next && pLead >= 0 && !pDismissed ? '<button id="nt-period-dismiss" type="button" class="chip min-h-[38px] bg-white border border-slate-200 text-slate-600">ปิดเตือนรอบนี้</button>' : ''}
         </div>
       </div>
     </section>
@@ -345,14 +354,14 @@ export function renderReminders() {
         <h3 class="font-bold text-slate-800">⚙️ ตั้งค่าระยะเวลาแจ้งเตือนล่วงหน้า (รายตัว / หลายรายการ)</h3>
         <p class="text-xs text-slate-500">เลือกปรับแจ้งเตือนล่วงหน้า 2 เดือน, 1 เดือน, 2 วีค, 1 วีค, 3 วัน, 2 วัน, 1 วัน หรือปิดแจ้งเตือนได้ทั้งรายตัวและหลายรายการพร้อมกัน</p>
       </div>
-      <div class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs">
-        <label class="flex items-center gap-1.5 cursor-pointer"><input id="nt-sel-all" type="checkbox" ${sources.length > 0 && sources.every(x => selectedKeys.has(x.uidKey)) ? 'checked' : ''} ${sources.length === 0 ? 'disabled' : ''}> เลือกทั้งหมด (${sources.length})</label>
+      <div class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
+        <label class="flex items-center gap-1.5 cursor-pointer min-h-[36px]"><input id="nt-sel-all" type="checkbox" ${sources.length > 0 && sources.every(x => selectedKeys.has(x.uidKey)) ? 'checked' : ''} ${sources.length === 0 ? 'disabled' : ''}> เลือกทั้งหมด (${sources.length})</label>
         <span class="text-slate-500">เลือกแล้ว <b>${selectedKeys.size}</b></span>
         <select id="nt-bulk-days" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        <button id="nt-bulk-apply" type="button" class="chip bg-sky-soft text-blue-700" ${selectedKeys.size === 0 ? 'disabled' : ''}>ตั้งเตือนรายการที่เลือก</button>
+        <button id="nt-bulk-apply" type="button" class="chip min-h-[36px] bg-sky-soft text-blue-700" ${selectedKeys.size === 0 ? 'disabled' : ''}>ตั้งเตือนรายการที่เลือก</button>
       </div>
-      <div class="space-y-2">${configHtml || '<p class="text-xs text-slate-400">ยังไม่มีรายการที่มีวันครบกำหนดในบันทึกเตือนหรือสต๊อก</p>'}</div>
-      <p class="text-[11px] text-slate-400">สามารถเปิดรับการแจ้งเตือนอัตโนมัติเวลา 12:15 น. แม้ไม่ได้เปิดแอปได้ที่ปุ่ม “เปิดรับการแจ้งเตือน” บนหน้า Home หรือในหน้า ตั้งค่า</p>
+      <div class="space-y-2">${configHtml || '<p class="text-xs text-slate-500 py-2">ยังไม่มีรายการที่มีวันครบกำหนดในบันทึกเตือนหรือสต๊อก</p>'}</div>
+      <p class="text-[11px] text-slate-500">สามารถเปิดรับการแจ้งเตือนอัตโนมัติเวลา 12:15 น. แม้ไม่ได้เปิดแอปได้ที่ปุ่ม “เปิดรับการแจ้งเตือน” บนหน้า Home หรือในหน้า ตั้งค่า</p>
     </section>
   </div>`;
 }

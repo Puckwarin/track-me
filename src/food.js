@@ -27,36 +27,39 @@ export function mountFood(el) {
   <div class="lg:col-span-2 space-y-6">
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <button data-day="-1" class="chip bg-slate-100 text-slate-700">เมื่อวาน</button>
-        <button data-day="0" class="chip bg-lav-soft text-brand-dark">วันนี้</button>
-        <button data-day="1" class="chip bg-sky-soft text-blue-700">พรุ่งนี้ (วางแผน)</button>
+        <button data-day="-1" type="button" class="chip bg-slate-100 text-slate-700 min-h-[38px] whitespace-nowrap">เมื่อวาน</button>
+        <button data-day="0" type="button" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">วันนี้</button>
+        <button data-day="1" type="button" class="chip bg-sky-soft text-blue-700 min-h-[38px] whitespace-nowrap">พรุ่งนี้ (วางแผน)</button>
         <input type="date" id="f-date" class="input !w-auto ml-auto" aria-label="เลือกวันที่">
       </div>
-      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-2">
-        <div><span id="f-daylabel" class="block text-xs text-brand font-medium">แคลอรี่รวมวันนี้</span><span id="f-total" class="text-lg font-bold text-brand-dark">0 / 2,000</span></div>
-        <span id="f-remain" class="text-xs text-slate-600 text-right"></span>
+      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-2.5">
+        <div class="min-w-0">
+          <span id="f-daylabel" class="block text-xs text-brand-dark font-medium">แคลอรี่รวมวันนี้</span>
+          <span id="f-total" class="text-lg font-bold text-brand-dark tabular-nums">กำลังโหลด...</span>
+        </div>
+        <span id="f-remain" class="text-xs text-slate-600 text-right tabular-nums shrink-0"></span>
       </div>
       <div id="f-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1"></div>
-      <p id="f-burn" class="hidden text-xs text-slate-500"></p>
+      <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
     </div>
 
     <div class="card space-y-4">
       <div class="flex flex-wrap justify-between items-center gap-2">
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-circle-plus text-brand"></i> บันทึกมื้ออาหาร</h2>
-        <div class="flex flex-wrap gap-2">
-          <button id="f-bulk-log" type="button" class="chip bg-amber-100 text-amber-900"><i class="fa-solid fa-bolt"></i> เพิ่มหลายเมนูพร้อมกัน</button>
-          <button id="f-online" class="chip bg-sky-soft text-blue-700"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
-          <button id="f-hiwpinto-sync" class="chip bg-emerald-100 text-emerald-800"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Data Hiwpinto</button>
-          <button id="f-library" class="chip bg-lav-soft text-brand-dark"><i class="fa-solid fa-book-bookmark"></i> คลังอาหารของฉัน</button>
+        <div class="flex flex-wrap gap-1.5">
+          <button id="f-bulk-log" type="button" class="chip bg-amber-100 text-amber-900 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-bolt"></i> เพิ่มหลายเมนู</button>
+          <button id="f-online" type="button" class="chip bg-sky-soft text-blue-700 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
+          <button id="f-hiwpinto-sync" type="button" class="chip bg-emerald-100 text-emerald-800 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Hiwpinto</button>
+          <button id="f-library" type="button" class="chip bg-lav-soft text-brand-dark min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-book-bookmark"></i> คลังอาหาร</button>
         </div>
       </div>
 
       <div class="space-y-1.5">
-        <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition">
+        <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
           <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
           <i class="fa-solid fa-camera-retro text-xl text-brand"></i>
-          <span class="block text-sm font-semibold text-slate-800 mt-1">📷 ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
-          <span class="block text-xs text-slate-500">ปุ่มเดียวครบ — ลองอ่านบาร์โค้ดและ OCR ฉลากในเครื่องก่อน (ฟรี) ใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
+          <span class="block text-sm font-semibold text-slate-800 mt-1">ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
+          <span class="block text-xs text-slate-600 mt-0.5">ลองอ่านบาร์โค้ดและ OCR ฉลากในเครื่องก่อน (ฟรี) และใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
         </label>
         <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
       </div>
@@ -118,7 +121,7 @@ export function mountFood(el) {
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-clock text-brand"></i> พลังงานแต่ละมื้อ</h3>
       <div id="f-meals" class="space-y-3"></div>
-      <p id="f-meals-note" class="text-[11px] text-slate-400"></p>
+      <p id="f-meals-note" class="text-[11px] text-slate-500"></p>
     </div>
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800"><i class="fa-solid fa-lightbulb text-brand"></i> คำแนะนำจากเกณฑ์ที่ตั้งไว้</h3>
@@ -607,53 +610,60 @@ function renderDay() {
     const mealCalories = rows.reduce((sum, i) => sum + num(i.calories), 0);
     const mealProtein = rows.reduce((sum, i) => sum + num(i.protein), 0);
     return `<tr class="${tone.header}"><th colspan="5" class="p-2.5 text-left">
-      <div class="flex items-center justify-between gap-2"><span><i class="fa-solid ${tone.icon} mr-1.5"></i>${esc(meal)}</span><span class="text-xs font-medium">${rows.length} รายการ · ${Math.round(mealCalories)} kcal · โปรตีน ${round1(mealProtein)} g</span></div>
+      <div class="flex items-center justify-between gap-2"><span><i class="fa-solid ${tone.icon} mr-1.5"></i>${esc(meal)}</span><span class="text-xs font-medium tabular-nums">${rows.length} รายการ · ${Math.round(mealCalories)} kcal · โปรตีน ${round1(mealProtein)} g</span></div>
     </th></tr>` + rows.map(i => `
       <tr class="${tone.row} hover:bg-white/80">
-      <td class="p-2 text-center align-middle"><input type="checkbox" data-food-sel="${esc(i.id)}" class="accent-violet-500" aria-label="เลือก ${esc(foodLogName(i.name))}" ${selectedFoodIds.has(i.id) ? 'checked' : ''}></td>
+      <td class="p-2 text-center align-middle"><input type="checkbox" data-food-sel="${esc(i.id)}" class="accent-violet-500 w-4 h-4" aria-label="เลือก ${esc(foodLogName(i.name))}" ${selectedFoodIds.has(i.id) ? 'checked' : ''}></td>
       <td class="p-2 sm:p-2.5 min-w-0 max-w-0 font-medium text-slate-800" title="${esc(foodLogName(i.name))}"><span class="block truncate">${esc(foodLogName(i.name))}</span>${foodLogPortion(i, getPresets()) ? `<span class="block truncate text-[11px] font-normal text-slate-500">${esc(foodLogPortion(i, getPresets()))}</span>` : ''}</td>
-      <td class="p-2 text-right font-bold text-slate-700 whitespace-nowrap">${esc(i.calories)}</td>
-      <td class="p-2 text-right text-slate-600 whitespace-nowrap">${esc(i.protein)}g</td>
-      <td class="p-1.5 text-center"><div class="flex justify-center gap-1"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-move-log="${esc(i.id)}" class="text-sky-600 hover:text-sky-800 p-1" aria-label="ย้ายมื้อ ${esc(foodLogName(i.name))}" title="ย้ายไปมื้ออื่น"><i class="fa-solid fa-right-left text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
+      <td class="p-2 text-right font-bold text-slate-700 whitespace-nowrap tabular-nums">${esc(i.calories)}</td>
+      <td class="p-2 text-right text-slate-600 whitespace-nowrap tabular-nums">${esc(i.protein)}g</td>
+      <td class="p-1.5 text-center"><div class="flex justify-center gap-0.5"><button data-edit-log="${esc(i.id)}" class="text-brand hover:text-brand-dark p-1.5 min-w-[30px] min-h-[30px]" aria-label="แก้จำนวน ${esc(foodLogName(i.name))}" title="แก้จำนวน"><i class="fa-solid fa-pen-to-square text-xs"></i></button><button data-move-log="${esc(i.id)}" class="text-sky-600 hover:text-sky-800 p-1.5 min-w-[30px] min-h-[30px]" aria-label="ย้ายมื้อ ${esc(foodLogName(i.name))}" title="ย้ายไปมื้ออื่น"><i class="fa-solid fa-right-left text-xs"></i></button><button data-del="${esc(i.id)}" class="text-rose-500 hover:text-rose-700 p-1.5 min-w-[30px] min-h-[30px]" aria-label="ลบ ${esc(foodLogName(i.name))}" title="ลบ"><i class="fa-solid fa-trash-can text-xs"></i></button></div></td></tr>`).join('');
   }).join('')
-    : '<tr><td colspan="5" class="p-4 text-center text-slate-400 text-xs">ยังไม่มีรายการอาหารในวันนี้</td></tr>';
+    : '<tr><td colspan="5" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีรายการอาหารในวันที่เลือก — เพิ่มจากฟอร์มด้านบน สแกนรูป หรือดึงจากคลังอาหารได้เลย</td></tr>';
 
   const sum = k => items.reduce((a, i) => a + num(i[k]), 0);
   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
-  $('#f-total', root).textContent = `${Math.round(t.cal)} / ${targets.kcal.toLocaleString()}`;
+  const hasItems = items.length > 0;
+  $('#f-total', root).textContent = hasItems
+    ? `${Math.round(t.cal).toLocaleString()} / ${targets.kcal.toLocaleString()}`
+    : 'ยังไม่ได้บันทึก';
   const today = localDateStr(), date = $('#f-date', root).value, future = date > today;
   $$('[data-day]', root).forEach(b => { const on_ = addDays(today, +b.dataset.day) === date; b.classList.toggle('ring-2', on_); b.classList.toggle('ring-brand', on_); });
   $('#f-daylabel', root).textContent = future ? 'แคลอรี่ที่วางแผนไว้' : date === today ? 'แคลอรี่รวมวันนี้' : 'แคลอรี่รวมของวันที่เลือก';
   const left = targets.kcal - t.cal;
-  $('#f-remain', root).innerHTML = left >= 0 ? `เหลืออีก <b>${Math.round(left)}</b> kcal` : `<span class="text-amber-700">เกินเป้า <b>${Math.round(-left)}</b> kcal</span>`;
-  // พลังงานแต่ละมื้อ: กราฟแท่งเทียบกันเองระหว่างมื้อ (ไม่อิงเป้าหมาย)
+  $('#f-remain', root).innerHTML = !hasItems
+    ? `เป้าหมาย <b>${targets.kcal.toLocaleString()}</b> kcal`
+    : left >= 0
+      ? `เหลืออีก <b>${Math.round(left).toLocaleString()}</b> kcal`
+      : `<span class="text-amber-800">เกินเป้า <b>${Math.round(-left).toLocaleString()}</b> kcal</span>`;
+
   const mealList = getMeals();
   const eatenBy = name => items.filter(i => (i.meal || '') === name).reduce((a, i) => a + num(i.calories), 0);
   const known = new Set(mealList.map(m => m.name));
   const otherKcal = items.filter(i => !known.has(i.meal || '')).reduce((a, i) => a + num(i.calories), 0);
-  const mealRows = mealList.map(m => ({ name: m.name, kcal: Math.round(eatenBy(m.name)) }));
-  if (otherKcal) mealRows.push({ name: 'มื้ออื่น ๆ', kcal: Math.round(otherKcal) });
+  const mealRows = mealList.map(m => ({ name: m.name, kcal: Math.round(eatenBy(m.name)), count: items.filter(i => (i.meal || '') === m.name).length }));
+  if (otherKcal) mealRows.push({ name: 'มื้ออื่น ๆ', kcal: Math.round(otherKcal), count: items.filter(i => !known.has(i.meal || '')).length });
   const maxMeal = Math.max(...mealRows.map(m => m.kcal), 1);
   $('#f-meals', root).innerHTML = mealRows.map(m => `
-    <div><div class="flex justify-between items-center text-xs font-semibold mb-1"><span>${esc(m.name)}</span><span>${m.kcal} kcal</span></div>
-      <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden"><div class="bg-violet-400 h-full transition-all" style="width:${Math.max(m.kcal / maxMeal * 100, m.kcal ? 3 : 0)}%"></div></div>
-      <button data-meal="${esc(m.name)}" class="text-brand underline text-[11px] mt-0.5">+ เพิ่มในมื้อนี้</button></div>`).join('');
+    <div><div class="flex justify-between items-center text-xs font-semibold mb-1"><span>${esc(m.name)}</span><span class="tabular-nums ${m.count ? 'text-slate-800' : 'text-slate-500 font-normal'}">${m.count ? `${m.kcal.toLocaleString()} kcal` : 'ยังไม่บันทึก'}</span></div>
+      <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div class="bg-violet-400 h-full transition-all" style="width:${Math.max(m.kcal / maxMeal * 100, m.kcal ? 3 : 0)}%"></div></div>
+      <button data-meal="${esc(m.name)}" type="button" class="text-brand underline text-[11px] mt-1 min-h-[28px]">+ เพิ่มในมื้อนี้</button></div>`).join('');
   $('#f-meals-note', root).textContent = mealRows.some(m => m.kcal > 0) ? 'เทียบสัดส่วนพลังงานระหว่างมื้อจากที่บันทึกในวันนี้' : 'ยังไม่มีบันทึกอาหารในวันนี้ — มื้อไหนมีรายการแล้วกราฟจะเริ่มแสดง';
   const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
   const burnEl = $('#f-burn', root);
   burnEl.classList.toggle('hidden', !burned);
-  if (burned) burnEl.textContent = `🏃 ออกกำลังกายวันนี้เผาผลาญเพิ่มประมาณ ${burned} kcal (ค่าประมาณ — ยังไม่ได้บวกเข้าเป้าอัตโนมัติ)`;
+  if (burned) burnEl.textContent = `ออกกำลังกายวันนี้เผาผลาญเพิ่มประมาณ ${burned} kcal (ค่าประมาณ — ยังไม่ได้บวกเข้าเป้าอัตโนมัติ)`;
   const macroCard = (name, v, goal, color) => `
-    <div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-500"><span>${name}</span></div>
-    <p class="text-sm font-bold text-slate-800">${round1(v)} <span class="text-[11px] font-normal text-slate-500">/ ${goal} g</span></p>
-    <div class="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1"><div class="${color} h-full transition-all" style="width:${Math.min(v / goal * 100, 100)}%"></div></div></div>`;
+    <div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-600"><span>${name}</span></div>
+    <p class="text-sm font-bold text-slate-800 tabular-nums">${hasItems ? round1(v) : '—'} <span class="text-[11px] font-normal text-slate-500">/ ${goal} g</span></p>
+    <div class="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1"><div class="${color} h-full transition-all" style="width:${hasItems ? Math.min(v / goal * 100, 100) : 0}%"></div></div></div>`;
   $('#f-stats', root).innerHTML = macroCard('โปรตีน', t.p, targets.protein, 'bg-blue-400') + macroCard('คาร์บ', t.c, targets.carbs, 'bg-violet-400') + macroCard('ไขมัน', t.f, targets.fat, 'bg-pink-400') +
-    `<div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-500"><span>น้ำตาล · โซเดียม</span></div>
-    <p class="text-sm font-bold text-slate-800">${round1(t.sugar)} g · ${Math.round(t.na)} mg</p>
-    <p class="text-[11px] text-slate-400">เฉพาะรายการที่กรอกค่านี้</p></div>`;
-  $('#f-advice', root).textContent = t.cal === 0 ? 'ยังไม่มีข้อมูลวันนี้ เริ่มบันทึกมื้อแรกกันเลย!'
-    : t.p < targets.protein * 0.5 ? '⚠️ วันนี้โปรตีนค่อนข้างน้อย ลองเสริมไข่ อกไก่ หรือปลาในมื้อถัดไป'
-    : '✨ สารอาหารวันนี้อยู่ในเกณฑ์ดี รักษาระดับไว้นะ';
+    `<div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-600"><span>น้ำตาล · โซเดียม</span></div>
+    <p class="text-sm font-bold text-slate-800 tabular-nums">${hasItems ? `${round1(t.sugar)} g · ${Math.round(t.na)} mg` : '—'}</p>
+    <p class="text-[11px] text-slate-500">เฉพาะรายการที่กรอกค่านี้</p></div>`;
+  $('#f-advice', root).textContent = !hasItems ? 'ยังไม่มีข้อมูลวันนี้ เริ่มบันทึกมื้อแรกกันเลย!'
+    : t.p < targets.protein * 0.5 ? 'วันนี้โปรตีนค่อนข้างน้อย ลองเสริมไข่ อกไก่ หรือปลาในมื้อถัดไป'
+    : 'สารอาหารวันนี้อยู่ในเกณฑ์ดี รักษาระดับไว้นะ';
 }
 
 // ---------- Gemini: photo / online search ----------
@@ -852,7 +862,7 @@ function openBatchFoodScanModal(results, errors) {
         return `<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-bfs-row="${i}">
           <label class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
             <span class="flex items-center gap-2"><input type="checkbox" class="bfs-chk" checked> รูปที่ ${i + 1} (${esc(r.fileName)})</span>
-            <span class="text-[11px] px-2 py-0.5 rounded-full ${badgeCls}">${badgeText}</span>
+            <span class="text-[11px] font-semibold ${badgeCls} px-2 py-0.5 rounded-md">${badgeText}</span>
           </label>
           ${d.notes ? `<p class="text-[11px] text-slate-500">${esc(d.notes)}</p>` : ''}
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
@@ -1087,12 +1097,12 @@ export function openLibrary(onPick) {
     $('#lib-list', m.el).innerHTML = presets.map((p, i) => `
       <div class="food-library-item py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 md:border-b md:border-slate-100 md:py-4">
         <div class="min-w-0 flex items-start gap-2"><input type="checkbox" class="lib-select mt-1 shrink-0 accent-violet-500" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}><div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${p.favorite ? '⭐ ' : ''}${esc(label(p))}</p>
-        <p class="text-xs text-slate-500"><span class="inline-block rounded-full bg-slate-100 px-2 py-0.5 mr-1">${esc(p.category || guessFoodCategory(p.name))}</span>${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
+        <p class="text-xs text-slate-500 tabular-nums">${esc(p.category || guessFoodCategory(p.name))} · ${p.calories} kcal · P ${p.protein ?? '-'} · C ${p.carbs ?? '-'} · F ${p.fat ?? '-'}${p.sugar != null ? ' · น้ำตาล ' + p.sugar : ''}${p.sodium != null ? ' · Na ' + p.sodium : ''}</p></div>
         </div><div class="flex flex-wrap gap-1 sm:shrink-0">
           <button data-pick="${i}" class="chip bg-ok-soft text-green-800">เลือก</button>
           ${p.custom ? `${p.hiwpinto ? `<button data-hp="${esc(p.id)}" class="chip bg-amber-100 text-amber-900">ปรับข้าว</button>` : ''}<button data-fav="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button><button data-edit="${esc(p.id)}" class="chip bg-sky-soft text-blue-700">แก้ไข</button><button data-rm="${esc(p.id)}" class="chip bg-pink-soft text-rose-600">ลบ</button>` : `<button data-fav-default="${esc(p.id)}" class="chip bg-lav-soft" title="โปรด">${p.favorite ? '★' : '☆'}</button>`}
         </div>
-      </div>`).join('') || '<p class="text-sm text-slate-400 py-4 text-center">ไม่พบรายการ</p>';
+      </div>`).join('') || '<p class="text-sm text-slate-500 py-4 text-center">ไม่พบรายการที่ตรงกับเงื่อนไข</p>';
   };
   $('#lib-q', m.el).addEventListener('input', render);
   $('#lib-category', m.el).addEventListener('change', render);
@@ -1251,7 +1261,7 @@ export function openLibrary(onPick) {
 
 function renderFoodBulkPreview(container, { items: parsedItems, errors }) {
   if (!parsedItems.length && !errors.length) {
-    container.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">วางข้อความด้านบนเพื่อดูตารางตัวอย่างแบบเรียลไทม์ (ไม่ใช้ AI)</p>';
+    container.innerHTML = '<p class="text-xs text-slate-500 text-center py-3">วางข้อความด้านบนเพื่อดูตารางตัวอย่างแบบเรียลไทม์ (ไม่ใช้ AI)</p>';
     return;
   }
   const totals = parsedItems.reduce((a, r) => ({
@@ -1265,13 +1275,13 @@ function renderFoodBulkPreview(container, { items: parsedItems, errors }) {
     : '';
   const tableHtml = parsedItems.length
     ? `<div class="rounded-xl border border-slate-200 overflow-x-auto">
-        <div class="bg-lav-soft/40 px-3 py-1.5 text-xs font-semibold text-brand-dark flex flex-wrap justify-between gap-2">
+        <div class="bg-lav-soft/40 px-3 py-1.5 text-xs font-semibold text-brand-dark flex flex-wrap justify-between gap-2 tabular-nums">
           <span>แปลงได้ ${parsedItems.length} รายการ</span>
           <span>รวม ${Math.round(totals.kcal)} kcal · P ${round1(totals.p)}g · C ${round1(totals.c)}g · F ${round1(totals.f)}g</span>
         </div>
         <table class="w-full text-xs text-left">
-          <thead class="bg-slate-50 text-slate-500"><tr><th class="p-2">ชื่อเมนู</th><th class="p-2">ปริมาณ</th><th class="p-2 text-right">kcal</th><th class="p-2 text-right">P</th><th class="p-2 text-right">C</th><th class="p-2 text-right">F</th></tr></thead>
-          <tbody class="divide-y divide-slate-100">${parsedItems.map(r => `
+          <thead class="bg-slate-50 text-slate-600"><tr><th class="p-2">ชื่อเมนู</th><th class="p-2">ปริมาณ</th><th class="p-2 text-right">kcal</th><th class="p-2 text-right">P</th><th class="p-2 text-right">C</th><th class="p-2 text-right">F</th></tr></thead>
+          <tbody class="divide-y divide-slate-100 tabular-nums">${parsedItems.map(r => `
             <tr><td class="p-2 font-medium text-slate-800">${esc(r.name)}</td><td class="p-2 text-slate-500">${esc(r.amountDisplay)}</td><td class="p-2 text-right font-semibold">${esc(r.calories)}</td><td class="p-2 text-right">${esc(r.protein)}</td><td class="p-2 text-right">${esc(r.carbs)}</td><td class="p-2 text-right">${esc(r.fat)}</td></tr>`).join('')}
           </tbody>
         </table>
