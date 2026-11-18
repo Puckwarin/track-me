@@ -3,7 +3,7 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
-## [v5.0.0] - Draft (เตรียมปล่อย; PR #20 ยังรออนุมัติ merge)
+## [v5.0.0]
 
 ### Major UI/UX Redesign & Integration QA
 - **ปรับโฉม UI และระบบนำทาง (`src/design-tokens.css`, `src/style.css`, `src/navigation.js`, `src/navigationSettings.js`, `src/ui.js`)**:
