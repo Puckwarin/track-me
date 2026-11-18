@@ -12,7 +12,6 @@
 - **ลดความรกของสรุป Home** (`src/summary.js`, `src/style.css`): ซ่อนการ์ดที่ยังไม่มีข้อมูลเมื่อแสดงเป็น sidebar บนหน้าจอใหญ่
 - **เพิ่ม contrast ของเมนู desktop ที่เลือกอยู่** ด้วย inset border ที่มองเห็นชัดขึ้น
 - **ไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง**; ปรับเอกสารและ package version เป็น v5.1.0
-- **สถานะ Release:** draft สำหรับ branch นี้; ต้อง merge และทำ release/deploy ตามขั้นตอนของ repository ก่อนถือว่าเผยแพร่แล้ว
 
 ---
 ## [v5.0.0]
