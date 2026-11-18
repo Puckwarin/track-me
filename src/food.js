@@ -24,7 +24,7 @@ const num = v => (typeof v === 'number' ? v : 0);
 export function mountFood(el) {
   root = el;
   root.innerHTML = `
-  <div class="lg:col-span-2 space-y-6">
+  <div class="space-y-6">
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <button data-day="-1" type="button" class="chip bg-slate-100 text-slate-700 min-h-[38px] whitespace-nowrap">เมื่อวาน</button>

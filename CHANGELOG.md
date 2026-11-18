@@ -3,6 +3,18 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.1.0] - 2026-11-18
+
+### Responsive Layout, Dashboard Refinements & Sticky Navigation
+- **แก้ตำแหน่ง subnav และ scroll target ตามความสูง header จริง** (`src/app.js`, `src/style.css`, `src/design-tokens.css`): วัด header และ desktop navigation ด้วย `ResizeObserver` และอัปเดต CSS variables เมื่อขนาดหน้าจอเปลี่ยน
+- **ปรับ layout สำหรับ tablet/desktop** (`index.html`, `src/food.js`, `src/workout.js`, `src/body.js`): หน้า Home, อาหาร, ออกกำลังกาย และร่างกายใช้ sidebar ที่ breakpoint 768px พร้อมขยาย sidebar บน desktop
+- **จัดกลุ่มปุ่มลอยบน desktop**: เว้นพื้นที่ให้ quick-add และจัดปุ่มเลื่อน/ผู้ช่วย AI เรียงแนวตั้ง โดยไม่พึ่งความสูง bottom navigation ที่ไม่มีบน desktop
+- **ลดความรกของสรุป Home** (`src/summary.js`, `src/style.css`): ซ่อนการ์ดที่ยังไม่มีข้อมูลเมื่อแสดงเป็น sidebar บนหน้าจอใหญ่
+- **เพิ่ม contrast ของเมนู desktop ที่เลือกอยู่** ด้วย inset border ที่มองเห็นชัดขึ้น
+- **ไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง**; ปรับเอกสารและ package version เป็น v5.1.0
+- **สถานะ Release:** draft สำหรับ branch นี้; ต้อง merge และทำ release/deploy ตามขั้นตอนของ repository ก่อนถือว่าเผยแพร่แล้ว
+
+---
 ## [v5.0.0]
 
 ### Major UI/UX Redesign & Integration QA
@@ -17,7 +29,7 @@
 - **เก็บกวาดโค้ดและ Lint (`src/dashboard.js`)**:
   - ลบ imports/helper/ตัวแปรที่ไม่ได้ใช้งาน 6 จุด; `npm run lint` ผ่านโดยไม่มี warnings
   - เพิ่ม tests สำหรับ navigation และยืนยัน workflow ผ่าน CI; ไม่ได้เปลี่ยน Firestore Rules, Firebase configuration หรือ schema ใน PR นี้
-- **สถานะ Release:** รายการนี้เป็น draft ตาม PR #20; ยังไม่ใช่ release และยังไม่เปลี่ยนเลขเวอร์ชันแอปจาก v4.8.0 จนกว่าจะอนุมัติ merge และจัดทำ release อย่างเป็นทางการ
+- **สถานะ Release:** รายการนี้เป็น draft ตาม PR #20 และยังไม่เผยแพร่แยก; branch ปัจจุบันเตรียม v5.1.0 โดยต้อง merge และทำ release/deploy ตามขั้นตอนของ repository ก่อนถือว่าเผยแพร่แล้ว
 
 ---
 ## [v4.8.0] - 2026-11-17

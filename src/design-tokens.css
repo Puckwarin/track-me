@@ -167,7 +167,7 @@
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
   padding: var(--space-5);
-  scroll-margin-top: 5.5rem;
+  scroll-margin-top: calc(var(--header-h, 3.6rem) + var(--nav-bar-h, 0px) + env(safe-area-inset-top) + 1rem);
 }
 .tm-card-compact { padding: var(--space-4); border-radius: var(--radius-xl); }
 .tm-card-flat { box-shadow: none; border-color: var(--color-divider); }

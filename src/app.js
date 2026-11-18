@@ -183,6 +183,23 @@ function mountChatFab() {
   });
 }
 
+function updateStickyOffsets() {
+  const header = $('.app-header');
+  const desktopNav = $('#desktop-nav');
+  const headerHeight = header?.getBoundingClientRect().height || 0;
+  const safeArea = Number.parseFloat(header ? getComputedStyle(header).paddingTop : '0') || 0;
+  document.documentElement.style.setProperty('--header-h', `${Math.max(0, headerHeight - safeArea)}px`);
+  document.documentElement.style.setProperty('--nav-bar-h', `${desktopNav?.getBoundingClientRect().height || 0}px`);
+}
+
+const stickyOffsetObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateStickyOffsets);
+const stickyHeader = $('.app-header');
+const stickyDesktopNav = $('#desktop-nav');
+if (stickyHeader) stickyOffsetObserver?.observe(stickyHeader);
+if (stickyDesktopNav) stickyOffsetObserver?.observe(stickyDesktopNav);
+window.addEventListener('resize', updateStickyOffsets, { passive: true });
+updateStickyOffsets();
+
 export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
   TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== name); });
@@ -448,6 +465,7 @@ on('auth', user => {
   window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
     mountAll();
+    updateStickyOffsets();
     settingsLoader.get()?.refreshAccount?.();
     renderSummary();
     startData();

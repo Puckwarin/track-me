@@ -50,7 +50,7 @@ function formatDurationTh(hours, minutes) {
 export function mountBody(el) {
   root = el;
   root.innerHTML = `
-  <div class="lg:col-span-2 space-y-6">
+  <div class="space-y-6">
     <div class="card space-y-4">
       <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-weight-scale text-blue-500"></i> บันทึกน้ำหนัก & สัดส่วน</h2>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
