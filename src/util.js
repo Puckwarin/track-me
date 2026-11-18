@@ -87,18 +87,53 @@ export function toast(msg, kind = 'ok') {
 export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false } = {}) {
   const widthClass = size === 'xl' ? 'max-w-5xl' : (size === 'lg' || wide ? 'max-w-2xl' : 'max-w-lg');
   const bodyClass = flush ? 'is-flush p-0 overflow-hidden flex flex-col' : 'overflow-y-auto p-6';
+  const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
   el.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4';
   el.innerHTML = `<div class="modal-box bg-white w-full ${widthClass} ${bodyClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
+  const box = el.firstElementChild;
+  const heading = box.querySelector('h1, h2, h3, h4, h5, h6');
+  box.tabIndex = -1;
+  if (heading) {
+    if (!heading.id) heading.id = `modal-title-${crypto.randomUUID()}`;
+    box.setAttribute('aria-labelledby', heading.id);
+  } else {
+    box.setAttribute('aria-label', 'หน้าต่างโต้ตอบ');
+  }
   document.body.appendChild(el);
+  const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
   const onKey = e => {
-    if (e.key === 'Escape' && !staticBackdrop) close();
+    if (e.key === 'Escape' && !staticBackdrop) {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const nodes = [...box.querySelectorAll(focusableSelector)].filter(node => node.getClientRects().length);
+    if (!nodes.length) {
+      e.preventDefault();
+      box.focus();
+      return;
+    }
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !box.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+      e.preventDefault();
+      first.focus();
+    }
   };
   const close = () => {
     document.removeEventListener('keydown', onKey);
     el.remove();
+    if (trigger?.isConnected) trigger.focus();
   };
   document.addEventListener('keydown', onKey);
+  requestAnimationFrame(() => {
+    const first = [...box.querySelectorAll(focusableSelector)].find(node => node.getClientRects().length);
+    (first || box).focus();
+  });
   if (!staticBackdrop) {
     el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   }

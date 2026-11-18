@@ -263,8 +263,10 @@ function updateBell() {
   badge.classList.toggle('hidden', !n);
 }
 
+let quickTrigger = null;
 function openQuick() {
   const sheet = $('#quick-sheet');
+  quickTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add');
   $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}"><span class="emoji-bubble">${c.emoji}</span><span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
@@ -276,6 +278,8 @@ function closeQuick() {
   sheet.classList.remove('is-open');
   $('#btn-quick-add').setAttribute('aria-expanded', 'false');
   setTimeout(() => sheet.classList.add('hidden'), 200);
+  if (quickTrigger?.isConnected) quickTrigger.focus({ preventScroll: true });
+  quickTrigger = null;
 }
 
 let mounted = false;
@@ -494,7 +498,26 @@ $('#quick-sheet').addEventListener('click', e => {
   const b = e.target.closest('[data-quick]');
   if (b) { closeQuick(); goTo(b.dataset.quick, b.dataset.focus); }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#quick-sheet').classList.contains('hidden')) closeQuick(); });
+document.addEventListener('keydown', e => {
+  const sheet = $('#quick-sheet');
+  if (sheet.classList.contains('hidden')) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeQuick();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const nodes = [...sheet.querySelectorAll('button:not(:disabled), [tabindex="0"]')].filter(node => node.getClientRects().length);
+  if (!nodes.length) return;
+  const first = nodes[0], last = nodes[nodes.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !sheet.contains(document.activeElement))) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (document.activeElement === last || !sheet.contains(document.activeElement))) {
+    e.preventDefault();
+    first.focus();
+  }
+});
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
 window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderHomeShortcuts(); renderSummary(); });
 window.addEventListener('trackme:navigation-change', () => {
