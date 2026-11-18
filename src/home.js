@@ -18,7 +18,7 @@ export const HOME_WIDGET_DEFS = [
   { id: 'reminders', label: 'แจ้งเตือนที่ต้องดูแล' }
 ];
 
-const WIDGET_STORAGE_KEY = 'trackme_home_widgets';
+const WIDGET_STORAGE_KEY = 'trackme_home_widgets:v1:';
 
 let go = () => {};
 let plannerFeature = null;
@@ -26,22 +26,43 @@ let plannerMountPromise = null;
 let plannerExpanded = false;
 
 export function getHomeWidgetConfig() {
-  let raw = state.homeWidgets || state.profile?.homeWidgets || null;
-  if (!raw) {
+  let raw = null;
+  if (state.uid && typeof localStorage !== 'undefined') {
     try {
-      const stored = localStorage.getItem(WIDGET_STORAGE_KEY);
+      const stored = localStorage.getItem(WIDGET_STORAGE_KEY + state.uid);
       if (stored) raw = JSON.parse(stored);
     } catch { raw = null; }
   }
-  const hiddenSet = new Set(Array.isArray(raw?.hidden) ? raw.hidden : []);
-  const requestedOrder = Array.isArray(raw?.order) ? raw.order.filter(id => HOME_WIDGET_IDS.includes(id)) : [];
+  raw ||= state.homeWidgets || state.profile?.homeWidgets || null;
+  const hiddenSet = new Set(Array.isArray(raw?.hidden) ? raw.hidden.filter(id => HOME_WIDGET_IDS.includes(id)) : []);
+  const requestedOrder = Array.isArray(raw?.order) ? [...new Set(raw.order.filter(id => HOME_WIDGET_IDS.includes(id)))] : [];
   const order = [...requestedOrder, ...HOME_WIDGET_IDS.filter(id => !requestedOrder.includes(id))];
-  const pinnedShortcuts = Array.isArray(raw?.pinnedShortcuts) ? raw.pinnedShortcuts.filter(Boolean) : [];
-  return {
-    order,
-    hidden: hiddenSet,
-    pinnedShortcuts
+  const validShortcuts = new Set(CATEGORIES.flatMap(category => [category.key, category.tab]));
+  const pinnedShortcuts = Array.isArray(raw?.pinnedShortcuts)
+    ? [...new Set(raw.pinnedShortcuts.filter(item => validShortcuts.has(item)))]
+    : [];
+  return { order, hidden: hiddenSet, pinnedShortcuts };
+}
+
+export function saveHomeWidgetConfig(config) {
+  if (!state.uid || typeof localStorage === 'undefined') return false;
+  const requestedOrder = Array.isArray(config?.order) ? [...new Set(config.order.filter(id => HOME_WIDGET_IDS.includes(id)))] : [];
+  const validShortcuts = new Set(CATEGORIES.flatMap(category => [category.key, category.tab]));
+  const safe = {
+    order: [...requestedOrder, ...HOME_WIDGET_IDS.filter(id => !requestedOrder.includes(id))],
+    hidden: [...new Set(Array.isArray(config?.hidden) ? config.hidden.filter(id => HOME_WIDGET_IDS.includes(id)) : [])],
+    pinnedShortcuts: Array.isArray(config?.pinnedShortcuts)
+      ? [...new Set(config.pinnedShortcuts.filter(item => validShortcuts.has(item)))]
+      : []
   };
+  try {
+    localStorage.setItem(WIDGET_STORAGE_KEY + state.uid, JSON.stringify(safe));
+  } catch {
+    return false;
+  }
+  state.homeWidgets = safe;
+  if (typeof document !== 'undefined') renderHome();
+  return true;
 }
 
 export function resetHomePlannerToToday() {

@@ -11,6 +11,7 @@ import { checkReminder, REMIND_OPTIONS, getPeriodRemindDays, setPeriodRemindDays
 import { signOutUser, lockCurrentApp } from './auth.js';
 import { state } from './state.js';
 import { mountNavigationSettings } from './navigationSettings.js';
+import { mountHomeWidgetSettings } from './homeWidgetSettings.js';
 import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
 import {
@@ -61,6 +62,11 @@ export function mountSettings(el) {
       <div><h4 class="text-sm font-semibold text-slate-700 mb-2">เมนูย่อย</h4><p class="text-xs text-slate-500 mb-2">จัดลำดับหรือซ่อนรายการเสริมได้ ตั้งค่าและแจ้งเตือนยังคงเข้าถึงได้เสมอ</p><div id="st-nav-submenus" class="space-y-4"></div></div>
       <button type="button" id="st-nav-reset" class="btn btn-ghost text-sm">รีเซ็ตเมนูเป็นค่าเริ่มต้น</button>
       <p class="text-xs text-slate-500" id="st-nav-storage-note">การปรับแต่งเมนูจะไม่เปลี่ยนข้อมูลสุขภาพหรือบัญชี</p>
+    </section>
+
+    <section class="card space-y-4 lg:col-span-2" id="st-home-widget-settings" aria-labelledby="st-home-widget-title">
+      <header><h3 id="st-home-widget-title" class="font-bold text-slate-800"><i class="fa-solid fa-table-cells-large text-brand"></i> ปรับแต่งหน้าแรก</h3></header>
+      <div id="st-home-widget-controls"></div>
     </section>
 
     <div class="card space-y-3">
@@ -218,6 +224,7 @@ export function mountSettings(el) {
   theme.value = savedTheme === 'minimal' ? 'cozy' : (savedTheme && Object.hasOwn(THEMES, savedTheme) ? savedTheme : 'cozy');
   theme.addEventListener('change', () => applyTheme(theme.value));
   mountNavigationSettings($('#st-nav-customize', el));
+  mountHomeWidgetSettings($('#st-home-widget-controls', el));
   const pinState = $('#st-pin-state', el), updatePinState = () => { const active = hasDevicePin(state.uid); pinState.textContent = active ? 'เปิดใช้ PIN บนอุปกรณ์นี้แล้ว' : 'ยังไม่ได้ตั้ง PIN'; $('#st-lock-now', el).disabled = !active; $('#st-pin-remove', el).disabled = !active; };
   $('#st-pin-save', el).addEventListener('click', async () => {
     const pin = $('#st-pin', el).value, confirmPin = $('#st-pin-confirm', el).value;

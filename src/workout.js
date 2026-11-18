@@ -8,7 +8,7 @@ import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl 
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 
-import { formatFeelingLabel, summarizeSessionNextStep } from './workoutActive.js';
+import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
 export { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];

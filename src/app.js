@@ -438,14 +438,14 @@ function watchToday() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); renderSummary(); } });
 
 on('auth', user => {
-  window.dispatchEvent(new Event('trackme:auth-change'));
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
   overviewLoader.get()?.resetOverviewState?.();
   resetHomePlannerState();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
+  window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
     mountAll();
     settingsLoader.get()?.refreshAccount?.();
