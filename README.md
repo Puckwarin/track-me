@@ -2,7 +2,7 @@
 
 เว็บแอปจัดการชีวิตและบันทึกสุขภาพส่วนตัว ครอบคลุมอาหาร การออกกำลังกาย รายรับ-รายจ่าย ประจำเดือน อาการและผิว น้ำหนักและสัดส่วน สัตว์เลี้ยงและผลตรวจ บันทึกแจ้งเตือน และของใช้ ซิงค์ข้อมูลส่วนตัวผ่าน Google Sign-in และ Firebase Firestore พร้อมใช้งานแบบ PWA
 
-- **เวอร์ชันใน branch นี้:** v5.1.0 (เตรียมเผยแพร่; ยังไม่ Deploy)
+- **เวอร์ชัน:** v5.1.0
 - **เทคโนโลยี:** Vanilla JavaScript (ES modules), Vite, Tailwind CSS, Firebase Authentication/Firestore, Vitest และ Vite PWA/Workbox
 - **ใช้งานแอป:** https://puckwarin.github.io/track-me/
 - **คู่มือการตั้งค่า (Setup Guide):** [docs/SETUP.md](docs/SETUP.md)
