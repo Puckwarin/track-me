@@ -29,7 +29,6 @@
 - **เก็บกวาดโค้ดและ Lint (`src/dashboard.js`)**:
   - ลบ imports/helper/ตัวแปรที่ไม่ได้ใช้งาน 6 จุด; `npm run lint` ผ่านโดยไม่มี warnings
   - เพิ่ม tests สำหรับ navigation และยืนยัน workflow ผ่าน CI; ไม่ได้เปลี่ยน Firestore Rules, Firebase configuration หรือ schema ใน PR นี้
-- **สถานะ Release:** รายการนี้เป็น draft ตาม PR #20 และยังไม่เผยแพร่แยก; branch ปัจจุบันเตรียม v5.1.0 โดยต้อง merge และทำ release/deploy ตามขั้นตอนของ repository ก่อนถือว่าเผยแพร่แล้ว
 
 ---
 ## [v4.8.0] - 2026-11-17
