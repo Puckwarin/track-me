@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v4.8.0
+# Project Setup — ตั้งค่า Track Me v5.1.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,14 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
    - `datastore.entities.list`
    - `datastore.entities.update` *(ใช้เฉพาะตอนลบ Push Endpoint ที่หมดอายุ 404/410 ออกจาก `settings/push`)*
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
+
+---
+
+## อัปเดต v5.1.0 (Responsive Layout & Desktop Navigation)
+
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การปรับครั้งนี้เปลี่ยนเฉพาะ layout, sticky offsets และการแสดง summary cards ใน client
+- **Tablet/desktop**: Home, อาหาร, ออกกำลังกาย และร่างกายเปลี่ยนเป็น layout เนื้อหาหลักพร้อม sidebar ตั้งแต่ความกว้าง 768px; หน้าอื่นยังคง layout เดิม
+- **อัปเดตเว็บ**: ปิด/เปิดหน้าเว็บหรือ reload ให้ browser รับ assets รุ่นใหม่; ข้อมูลบัญชีไม่ต้องล้าง
 
 ---
 

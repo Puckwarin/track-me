@@ -85,7 +85,7 @@ export function renderSummary() {
   }
   current = s;
 
-  const card = (icon, title, main, sub) => `<div class="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+  const card = (icon, title, main, sub, hasValue = true) => `<div class="summary-kpi bg-slate-50 border border-slate-100 rounded-2xl p-3${hasValue ? '' : ' summary-kpi-empty'}">
     <div class="text-xs text-slate-600 mb-1"><i class="${icon}"></i> ${title}</div><div class="text-sm sm:text-base font-bold text-slate-800 tabular-nums">${main}</div><div class="text-[11px] text-slate-500 mt-0.5 tabular-nums">${sub}</div></div>`;
   const empty = '<span class="text-slate-500 font-normal text-sm">ยังไม่มีข้อมูล</span>';
 
@@ -93,20 +93,22 @@ export function renderSummary() {
   let c1, c2;
   if (p) {
     c1 = card('fa-solid fa-droplet text-pink-500', 'ประจำเดือนล่าสุด', esc(fmtDate(p.lastStart)),
-      `${daysBetween(p.lastStart, localDateStr())} วันที่แล้ว${p.lastEnd ? ' · มา ' + (daysBetween(p.lastStart, p.lastEnd) + 1) + ' วัน' : ''}`);
-    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', p.avgCycle ? p.avgCycle + ' วัน' : empty, p.next ? 'คาดรอบหน้า ~ ' + esc(fmtDate(p.next)) : 'ต้องมีอย่างน้อย 2 รอบ');
+      `${daysBetween(p.lastStart, localDateStr())} วันที่แล้ว${p.lastEnd ? ' · มา ' + (daysBetween(p.lastStart, p.lastEnd) + 1) + ' วัน' : ''}`, true);
+    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', p.avgCycle ? p.avgCycle + ' วัน' : empty, p.next ? 'คาดรอบหน้า ~ ' + esc(fmtDate(p.next)) : 'ต้องมีอย่างน้อย 2 รอบ', !!p.avgCycle);
   } else {
-    c1 = card('fa-solid fa-droplet text-pink-500', 'ประจำเดือนล่าสุด', empty, 'บันทึกได้ที่แท็บประจำเดือน');
-    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', empty, 'รอรอบเดือนที่บันทึก');
+    c1 = card('fa-solid fa-droplet text-pink-500', 'ประจำเดือนล่าสุด', empty, 'บันทึกได้ที่แท็บประจำเดือน', false);
+    c2 = card('fa-solid fa-rotate text-pink-500', 'รอบเฉลี่ย', empty, 'รอรอบเดือนที่บันทึก', false);
   }
 
-  const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : 'บันทึกได้ที่แท็บน้ำหนัก');
+  const c3 = card('fa-solid fa-weight-scale text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : 'บันทึกได้ที่แท็บน้ำหนัก', !!b.weight);
   const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip'], ['แขน', 'arm'], ['ขา', 'thigh']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
   const sleepStepsSub = [
     b.sleepHours ? `นอน ${round1(b.sleepHours.v)} ชม. (${esc(fmtDate(b.sleepHours.d))})` : '',
     b.steps ? `${Math.round(b.steps.v).toLocaleString()} ก้าว` : ''
   ].filter(Boolean).join(' · ');
-  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วน · นอน/ก้าว', (b.bust || b.waist || b.hip || b.arm || b.thigh) ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), (b.bust || b.waist || b.hip || b.arm || b.thigh) ? sleepStepsSub : (sleepStepsSub ? '' : 'รอกรอกสัดส่วนหรือชั่วโมงนอน'));
+  const hasBodyMeasurements = !!(b.bust || b.waist || b.hip || b.arm || b.thigh);
+  const hasBodySummary = hasBodyMeasurements || !!sleepStepsSub;
+  const c4 = card('fa-solid fa-ruler text-blue-500', 'สัดส่วน · นอน/ก้าว', hasBodyMeasurements ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), hasBodyMeasurements ? sleepStepsSub : (sleepStepsSub ? '' : 'รอกรอกสัดส่วนหรือชั่วโมงนอน'), hasBodySummary);
 
   const nut = s?.nutrition;
   const hasFoodToday = !!(nut && nut.count > 0);
@@ -118,7 +120,8 @@ export function renderSummary() {
       : empty,
     hasFoodToday
       ? `P ${nut.protein} · C ${nut.carbs} · F ${nut.fat} g (${nut.count} รายการ)`
-      : (nut ? `เป้าหมาย ${nut.targetCal.toLocaleString()} kcal · P ${nut.targetProtein}g` : 'ยังไม่ได้บันทึกวันนี้')
+      : (nut ? `เป้าหมาย ${nut.targetCal.toLocaleString()} kcal · P ${nut.targetProtein}g` : 'ยังไม่ได้บันทึกวันนี้'),
+    hasFoodToday
   );
 
   const fin = s?.finance;
@@ -129,7 +132,8 @@ export function renderSummary() {
     fin && fin.count ? `จ่าย ฿${fmtMoney(fin.expense)}` : empty,
     fin && fin.count
       ? `รับ ฿${fmtMoney(fin.income)} · <span class="${netCls} font-semibold">สุทธิ ${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</span>`
-      : 'ยังไม่มีรายการเดือนนี้'
+      : 'ยังไม่มีรายการเดือนนี้',
+    !!(fin && fin.count)
   );
 
   const wo = s?.workouts;
@@ -142,7 +146,8 @@ export function renderSummary() {
       : empty,
     hasWorkouts
       ? `${wo.kcal ? `เผาผลาญ ~${wo.kcal} kcal` : (wo.doneCount ? 'บันทึกเวลาแล้ว' : 'มีเฉพาะแผนที่วางไว้')}${wo.plannedCount ? ` · แผนอีก ${wo.plannedCount}` : ''}`
-      : 'ยังไม่มีบันทึกสัปดาห์นี้'
+      : 'ยังไม่มีบันทึกสัปดาห์นี้',
+    hasWorkouts
   );
 
   const inv = s?.inventory;
@@ -154,7 +159,8 @@ export function renderSummary() {
     hasInvOrRem ? `สต๊อก ${inv?.total ?? 0} · เตือน ${rem?.activeCount ?? 0}` : empty,
     hasInvOrRem
       ? `ใกล้หมด ${inv?.lowCount ?? 0} · ใกล้หมดอายุ ${inv?.expiringCount ?? 0}${(rem?.overdueCount || 0) > 0 ? ` · <span class="text-rose-600 font-semibold">เลยกำหนด ${rem.overdueCount}</span>` : ''}`
-      : 'เพิ่มของใช้หรือกำหนดเตือนในแท็บดูแล'
+      : 'เพิ่มของใช้หรือกำหนดเตือนในแท็บดูแล',
+    hasInvOrRem
   );
 
   grid.innerHTML = c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8;

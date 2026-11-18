@@ -140,9 +140,19 @@ export function successInline({ message = '' } = {}) {
 export function openModal(innerHtml, { size = '', flush = false, staticBackdrop = false } = {}) {
   const sizeClass = size === 'xl' ? 'tm-modal-xl' : (size === 'lg' ? 'tm-modal-lg' : '');
   const flushClass = flush ? 'tm-modal-flush' : '';
+  const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
   el.className = 'tm-modal-backdrop';
   el.innerHTML = `<div class="tm-modal-box ${sizeClass} ${flushClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
+  const box = el.firstElementChild;
+  const heading = box.querySelector('h1, h2, h3, h4, h5, h6');
+  box.tabIndex = -1;
+  if (heading) {
+    if (!heading.id) heading.id = `tm-modal-title-${crypto.randomUUID()}`;
+    box.setAttribute('aria-labelledby', heading.id);
+  } else {
+    box.setAttribute('aria-label', 'หน้าต่างโต้ตอบ');
+  }
   document.body.appendChild(el);
   let closed = false;
   const close = () => {
@@ -150,9 +160,36 @@ export function openModal(innerHtml, { size = '', flush = false, staticBackdrop 
     closed = true;
     el.remove();
     document.removeEventListener('keydown', onKey);
+    if (trigger?.isConnected) trigger.focus();
   };
-  const onKey = e => { if (e.key === 'Escape' && !staticBackdrop) close(); };
+  const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]';
+  const onKey = e => {
+    if (e.key === 'Escape' && !staticBackdrop) {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const nodes = [...box.querySelectorAll(focusableSelector)].filter(node => node.getClientRects().length);
+    if (!nodes.length) {
+      e.preventDefault();
+      box.focus();
+      return;
+    }
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !box.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
   document.addEventListener('keydown', onKey);
+  requestAnimationFrame(() => {
+    const first = [...box.querySelectorAll(focusableSelector)].find(node => node.getClientRects().length);
+    (first || box).focus();
+  });
   if (!staticBackdrop) {
     el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   }

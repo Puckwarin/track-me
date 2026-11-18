@@ -100,7 +100,7 @@ export function mountWorkout(el) {
   const today = localDateStr();
   weekStart = mondayOf(today);
   root.innerHTML = `
-  <div class="lg:col-span-2 space-y-6">
+  <div class="space-y-6">
     <div class="card space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-dumbbell text-brand"></i> บันทึก & วางแผนออกกำลังกาย</h2>
