@@ -25,34 +25,44 @@ const num = v => (typeof v === 'number' ? v : 0);
 export function mountFood(el) {
   root = el;
   root.innerHTML = `
-  <div class="space-y-6">
-    <div class="card space-y-3">
+  <div class="md:col-span-2 space-y-4">
+    <section class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <button data-day="-1" type="button" class="chip bg-slate-100 text-slate-700 min-h-[38px] whitespace-nowrap">เมื่อวาน</button>
         <button data-day="0" type="button" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">วันนี้</button>
         <button data-day="1" type="button" class="chip bg-sky-soft text-blue-700 min-h-[38px] whitespace-nowrap">พรุ่งนี้ (วางแผน)</button>
         <input type="date" id="f-date" class="input !w-auto ml-auto" aria-label="เลือกวันที่">
       </div>
-      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-2.5">
+      <div class="flex items-center justify-between gap-3 bg-lav-soft rounded-xl px-4 py-3">
         <div class="min-w-0">
           <span id="f-daylabel" class="block text-xs text-brand-dark font-medium">แคลอรี่รวมวันนี้</span>
           <span id="f-total" class="text-lg font-bold text-brand-dark tabular-nums">กำลังโหลด...</span>
         </div>
         <span id="f-remain" class="text-xs text-slate-600 text-right tabular-nums shrink-0"></span>
       </div>
-      <div id="f-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1"></div>
-      <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
-    </div>
+    </section>
 
+    <fieldset class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
+      <legend class="sr-only">เลือกมุมมองอาหาร</legend>
+      <input id="f-view-log" type="radio" name="food-view" value="log" class="sr-only" checked>
+      <label for="f-view-log" class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-semibold text-slate-600 transition">บันทึกอาหาร</label>
+      <input id="f-view-summary" type="radio" name="food-view" value="summary" class="sr-only">
+      <label for="f-view-summary" class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-semibold text-slate-600 transition">สรุปโภชนาการ</label>
+    </fieldset>
+
+    <section id="f-log-panel" aria-labelledby="f-view-log" class="space-y-4">
     <div class="card space-y-4">
       <div class="flex flex-wrap justify-between items-center gap-2">
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-circle-plus text-brand"></i> บันทึกมื้ออาหาร</h2>
-        <div class="flex flex-wrap gap-1.5">
-          <button id="f-bulk-log" type="button" class="chip bg-amber-100 text-amber-900 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-bolt"></i> เพิ่มหลายเมนู</button>
-          <button id="f-online" type="button" class="chip bg-sky-soft text-blue-700 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
-          <button id="f-hiwpinto-sync" type="button" class="chip bg-emerald-100 text-emerald-800 min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Hiwpinto</button>
-          <button id="f-library" type="button" class="chip bg-lav-soft text-brand-dark min-h-[36px] whitespace-nowrap"><i class="fa-solid fa-book-bookmark"></i> คลังอาหาร</button>
-        </div>
+        <details class="relative">
+          <summary class="chip bg-slate-100 text-slate-700 min-h-[36px] whitespace-nowrap list-none cursor-pointer"><i class="fa-solid fa-ellipsis"></i> เครื่องมือเพิ่มเติม</summary>
+          <div class="absolute right-0 top-full z-10 mt-2 flex min-w-52 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <button id="f-bulk-log" type="button" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]"><i class="fa-solid fa-bolt"></i> เพิ่มหลายเมนู</button>
+            <button id="f-online" type="button" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]"><i class="fa-solid fa-globe"></i> ค้นหาโภชนาการ</button>
+            <button id="f-hiwpinto-sync" type="button" class="chip justify-start bg-emerald-100 text-emerald-800 min-h-[40px]"><i class="fa-solid fa-cloud-arrow-down"></i> Sync Hiwpinto</button>
+            <button id="f-library" type="button" class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]"><i class="fa-solid fa-book-bookmark"></i> คลังอาหาร</button>
+          </div>
+        </details>
       </div>
 
       <div class="space-y-1.5">
@@ -116,18 +126,28 @@ export function mountFood(el) {
         <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
       </table></div>
     </div>
-  </div>
+    </section>
 
-  <div class="space-y-6">
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-clock text-brand"></i> พลังงานแต่ละมื้อ</h3>
-      <div id="f-meals" class="space-y-3"></div>
-      <p id="f-meals-note" class="text-[11px] text-slate-500"></p>
-    </div>
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800"><i class="fa-solid fa-lightbulb text-brand"></i> คำแนะนำจากเกณฑ์ที่ตั้งไว้</h3>
-      <div id="f-advice" class="bg-ok-soft/60 p-3 rounded-xl text-xs text-green-900 leading-relaxed"></div>
-    </div>
+    <section id="f-summary-panel" aria-labelledby="f-view-summary" class="space-y-4">
+      <div class="card space-y-3">
+        <header class="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 class="text-lg font-bold text-slate-800">ภาพรวมสารอาหาร</h2><p class="text-xs text-slate-500">เทียบปริมาณที่บันทึกกับเป้าหมายในวันที่เลือก</p></div>
+          <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
+        </header>
+        <div id="f-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card space-y-3">
+          <h3 class="font-bold text-slate-800"><i class="fa-solid fa-clock text-brand"></i> พลังงานแต่ละมื้อ</h3>
+          <div id="f-meals" class="space-y-3"></div>
+          <p id="f-meals-note" class="text-[11px] text-slate-500"></p>
+        </div>
+        <div class="card space-y-3">
+          <h3 class="font-bold text-slate-800"><i class="fa-solid fa-lightbulb text-brand"></i> คำแนะนำจากเกณฑ์ที่ตั้งไว้</h3>
+          <div id="f-advice" class="bg-ok-soft/60 p-3 rounded-xl text-xs text-green-900 leading-relaxed"></div>
+        </div>
+      </div>
+    </section>
   </div>`;
 
   $('#f-date', root).value = localDateStr();

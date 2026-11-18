@@ -687,6 +687,19 @@ html[data-theme="dark"] .ai-chat-quick { background: #221e1c; border-color: #3b3
 html[data-theme="dark"] .ai-quick-btn { background: #2c2724; border-color: #453c35; color: #e2e8f0; }
 html[data-theme="dark"] .ai-quick-btn:hover { background: #3a2e29; color: #f3c3a6; }
 
+#tab-food:has(#f-view-log:checked) #f-log-panel,
+#tab-food:has(#f-view-summary:checked) #f-summary-panel { display: block; }
+#tab-food:has(#f-view-log:checked) #f-summary-panel,
+#tab-food:has(#f-view-summary:checked) #f-log-panel { display: none; }
+#tab-food:has(#f-view-log:checked) label[for="f-view-log"],
+#tab-food:has(#f-view-summary:checked) label[for="f-view-summary"] {
+  background: #fff;
+  color: var(--color-brand-dark);
+  box-shadow: 0 1px 2px rgb(30 41 59 / .12);
+}
+#tab-food fieldset:has(#f-view-log:focus-visible) label[for="f-view-log"],
+#tab-food fieldset:has(#f-view-summary:focus-visible) label[for="f-view-summary"] { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+
 /* ---------- Active Workout Player UI ---------- */
 .modal-box.is-flush { max-height: min(90dvh, 56rem); }
 .wa-header { background: #FCFEFF; border-bottom: 1px solid #EFE5DA; }
