@@ -129,7 +129,7 @@ function makeLazyFeature(loader, onMount, errorLabel) {
 
 const reportLoader = makeLazyFeature(() => import('./reports.js'), m => m.mountReport($('#tab-report')), 'รายงานสุขภาพ');
 const workoutLoader = makeLazyFeature(() => import('./workout.js'), m => m.mountWorkout($('#tab-workout')), 'หน้าออกกำลังกาย');
-const overviewLoader = makeLazyFeature(() => import('./overview.js'), m => m.mountOverview($('#tab-overview')), 'แดชบอร์ดภาพรวม');
+const overviewLoader = makeLazyFeature(() => import('./dashboard.js'), m => m.mountDashboard($('#tab-overview')), 'แดชบอร์ดภาพรวม');
 const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mountExpense($('#tab-expense')), 'หน้ารายรับ-รายจ่าย');
 const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
 const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
@@ -220,7 +220,7 @@ export function showTab(name, { preserveDate = false } = {}) {
   let pending = Promise.resolve();
   if (name === 'home') { renderHome(); renderHomeShortcuts(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
-  if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderOverview?.());
+  if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderDashboard?.());
   if (name === 'weekly') pending = weeklyLoader.ensure().then(m => { if (!preserveDate) m?.resetWeeklyToToday?.(); m?.renderWeekly?.(); });
   if (name === 'care') pending = careLoader.ensure().then(m => { if (!preserveDate) m?.resetCareToToday?.(); });
   if (name === 'remind') pending = remindLoader.ensure().then(m => m?.renderRemind?.());

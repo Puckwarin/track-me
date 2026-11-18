@@ -2,6 +2,7 @@ import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, localDateStr, toNum, round1 } from './util.js';
+import { isDemoMode } from './demo.js';
 
 let root, dashboardData = null, loading = false, activeSection = 'health';
 
@@ -84,6 +85,10 @@ export function resetDashboardToToday() {
   if (root) loadAndRender(6);
 }
 
+export function renderDashboard() {
+  if (root && !loading) void loadAndRender(6);
+}
+
 async function loadAndRender(monthCount) {
   if (loading) return;
   loading = true;
@@ -110,7 +115,9 @@ async function loadData(monthCount) {
     .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
     .catch(() => []);
 
-  const [food, workouts] = await Promise.all([rangeQuery('food_records'), rangeQuery('workout_records')]);
+  const [food, workouts] = isDemoMode()
+    ? [state.demoFoodRecords || [], state.workouts || []].map(rows => rows.filter(row => row.date >= from && row.date <= to))
+    : await Promise.all([rangeQuery('food_records'), rangeQuery('workout_records')]);
   const body = state.body.filter(b => b.date >= from && b.date <= to);
   const expenses = (state.expenses || []).filter(e => (e.date || '') >= from && (e.date || '') <= to);
 
