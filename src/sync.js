@@ -1,6 +1,7 @@
 import { onSnapshot } from 'firebase/firestore';
 import { $, fmtDateTime } from './util.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
+import { isDemoMode } from './demo.js';
 
 export const syncState = {
   pending: {},
@@ -38,6 +39,7 @@ function onSyncError(err) {
 }
 
 export function syncLineText() {
+  if (isDemoMode()) return 'โหมดตัวอย่าง · แสดงข้อมูลสมมติและไม่ได้ซิงค์กับบัญชี';
   const pending = Object.values(syncState.pending).some(Boolean);
   let t = syncState.lastSync ? `ซิงค์กับเซิร์ฟเวอร์ล่าสุด: ${fmtDateTime(syncState.lastSync)}` : 'ยังไม่เคยซิงค์กับเซิร์ฟเวอร์';
   if (!navigator.onLine) t += ' · ออฟไลน์ (แสดงข้อมูลที่จำไว้ในเครื่อง)';
@@ -47,6 +49,14 @@ export function syncLineText() {
 
 export function renderSyncStatus() {
   const online = navigator.onLine;
+  if (isDemoMode()) {
+    const dot = $('#sync-dot'), text = $('#sync-text');
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+    if (text) text.textContent = 'โหมดตัวอย่าง';
+    const line = $('#sum-sync');
+    if (line) line.textContent = syncLineText();
+    return;
+  }
   const pending = Object.values(syncState.pending).some(Boolean);
   const dot = $('#sync-dot'), text = $('#sync-text');
   if (!dot || !text) return;

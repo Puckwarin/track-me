@@ -26,6 +26,7 @@
       <div class="flex justify-center gap-2 text-xl" aria-hidden="true"><span class="emoji-bubble cat-food">🍙</span><span class="emoji-bubble cat-workout">🏃‍♀️</span><span class="emoji-bubble cat-period">🌸</span><span class="emoji-bubble cat-body">⚖️</span><span class="emoji-bubble cat-care">🐾</span></div>
       <p class="text-xs text-slate-500">อาหาร ออกกำลังกาย ประจำเดือน น้ำหนัก และสัตว์เลี้ยง<br>ข้อมูลเป็นของคุณคนเดียว ผูกกับบัญชี Google</p>
       <button id="btn-google" class="btn btn-primary w-full justify-center !py-3"><b>G</b> เข้าสู่ระบบด้วย Google</button>
+      <button id="btn-demo" type="button" class="hidden btn btn-soft w-full justify-center !py-3">ดูตัวอย่างโดยไม่เข้าสู่ระบบ</button>
       <p id="login-error" class="text-xs text-rose-600"></p>
       <p class="text-xs text-slate-400">ล็อกอินครั้งแรกต้องออนไลน์ หลังจากนั้นใช้งานออฟไลน์ได้</p>
     </div>
@@ -45,6 +46,10 @@
   </div>
 
   <div id="app-shell" class="hidden">
+    <div id="demo-banner" class="hidden sticky top-0 z-50 flex items-center justify-between gap-3 bg-amber-100 px-4 py-2 text-xs font-medium text-amber-950" role="status">
+      <span>โหมดตัวอย่าง · ข้อมูลสมมติเท่านั้น · ปิดการบันทึกและแก้ไข</span>
+      <button id="demo-exit" type="button" class="rounded-lg border border-amber-300 px-3 py-1.5 font-semibold">ออกจากตัวอย่าง</button>
+    </div>
     <div id="onboarding-root" class="hidden"></div>
     <header class="app-header sticky top-0 z-40">
       <div class="max-w-6xl mx-auto px-4 py-2.5 flex justify-between items-center gap-2">

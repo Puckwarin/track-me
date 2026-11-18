@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, addMonthsLocal, mondayOf } from './util.js';
 import { periodStats } from './period.js';
 import { bodyLatest } from './body.js';
@@ -79,7 +80,9 @@ export function renderSummary() {
   let s = null;
   if (live) {
     s = buildLiveSummary();
-    try { localStorage.setItem(cacheKey(), JSON.stringify(s)); } catch {}
+    if (!isDemoMode()) {
+      try { localStorage.setItem(cacheKey(), JSON.stringify(s)); } catch {}
+    }
   } else {
     try { s = JSON.parse(localStorage.getItem(cacheKey()) || 'null'); } catch { s = null; }
   }

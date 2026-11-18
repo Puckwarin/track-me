@@ -1,5 +1,6 @@
 // หน้า Home: Daily Overview, Quick Access, Planner, Daily Activity และ Reminders
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, round1, toast, daysBetween } from './util.js';
 import { getTargets } from './profile.js';
 import { collectReminders, remindersForDate } from './reminders.js';
@@ -302,7 +303,7 @@ function buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, all
     <section class="card cozy-hero space-y-3" aria-label="สรุปประจำวัน">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-sm font-bold text-slate-800">ภาพรวมวันนี้</h2>
-        <span class="text-xs text-slate-500">ข้อมูลจริงจากการบันทึก</span>
+        <span class="text-xs text-slate-500">${isDemoMode() ? 'ข้อมูลตัวอย่าง' : 'ข้อมูลจริงจากการบันทึก'}</span>
       </div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         ${pulseItems.map(item => `
@@ -509,7 +510,7 @@ function buildRemindersHtml(today, reminders) {
 
 export function renderHome() {
   const el = $('#home-today');
-  if (!el || !state.uid) return;
+  if (!el || (!state.uid && !isDemoMode())) return;
   const today = localDateStr();
   const [hello, sun] = greeting();
   const name = (state.user?.displayName || '').split(' ')[0];
@@ -582,6 +583,10 @@ async function refreshHomePushBtn() {
   if (!slot) return;
   const st = await getPushStatus();
   if (!slot.isConnected) return;
+  if (isDemoMode()) {
+    slot.innerHTML = '<span class="rounded-full bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">แจ้งเตือนปิดในโหมดตัวอย่าง</span>';
+    return;
+  }
   if (!st.supported && !st.needsIosInstall) {
     slot.innerHTML = '';
     return;

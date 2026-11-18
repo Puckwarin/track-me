@@ -5,6 +5,7 @@ import { $, toast } from './util.js';
 import { clearSummaryCache } from './summary.js';
 import { hasDevicePin, showDeviceLock, removeDevicePin } from './local-lock.js';
 import { reportRuntimeError, setRuntimeErrorUser } from './runtimeErrorMonitor.js';
+import { enterDemoMode, exitDemoMode, isDemoAvailable, isDemoMode } from './demo.js';
 
 let signedInUser = null;
 
@@ -23,6 +24,30 @@ export function lockCurrentApp() {
 }
 
 export function initAuth() {
+  const demoButton = $('#btn-demo');
+  const demoBanner = $('#demo-banner');
+  if (isDemoAvailable()) demoButton?.classList.remove('hidden');
+  demoButton?.addEventListener('click', () => {
+    if (!enterDemoMode()) return;
+    const demoUser = { uid: null, displayName: 'ผู้ใช้ตัวอย่าง', email: 'demo@example.invalid', isDemo: true };
+    state.user = demoUser;
+    state.uid = null;
+    $('#login-error').textContent = '';
+    $('#login-screen').classList.add('hidden');
+    $('#app-lock').classList.add('hidden');
+    $('#app-shell').classList.remove('hidden');
+    demoBanner?.classList.remove('hidden');
+    emit('auth', demoUser);
+  });
+  $('#demo-exit')?.addEventListener('click', () => {
+    exitDemoMode();
+    demoBanner?.classList.add('hidden');
+    $('#app-shell').classList.add('hidden');
+    $('#login-screen').classList.remove('hidden');
+    state.user = null;
+    state.uid = null;
+    emit('auth', null);
+  });
   $('#btn-google').addEventListener('click', async () => {
     $('#login-error').textContent = '';
     try { await signInWithPopup(auth, provider); }
@@ -43,6 +68,11 @@ export function initAuth() {
   });
   // Firebase เก็บ session ในเครื่อง → เปิดแอปตอนออฟไลน์ก็ยังถือว่าล็อกอินอยู่
   onAuthStateChanged(auth, user => {
+    if (isDemoMode() && !user) return;
+    if (user && isDemoMode()) {
+      exitDemoMode();
+      $('#demo-banner')?.classList.add('hidden');
+    }
     setRuntimeErrorUser(user?.uid || null);
     signedInUser = user;
     state.user = user;
