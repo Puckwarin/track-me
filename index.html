@@ -127,13 +127,10 @@
       </div>
     </div>
 
-    <!-- ปุ่มลอยเลื่อนขึ้นบนสุด / ลงล่างสุด -->
+    <!-- ปุ่มลอยเลื่อนขึ้นบนสุด แสดงเมื่อเลื่อนลงจากด้านบน -->
     <div id="scroll-fabs" class="scroll-fabs no-print" aria-label="ตัวช่วยเลื่อนหน้าจอ">
-      <button id="fab-top" type="button" class="fab-scroll-btn" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด">
-        <i class="fa-solid fa-arrow-up"></i>
-      </button>
-      <button id="fab-bottom" type="button" class="fab-scroll-btn" aria-label="เลื่อนลงล่างสุด" title="ลงล่างสุด">
-        <i class="fa-solid fa-arrow-down"></i>
+      <button id="fab-top" type="button" class="fab-scroll-btn is-hidden" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด" aria-hidden="true" tabindex="-1">
+        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
       </button>
     </div>
   </div>

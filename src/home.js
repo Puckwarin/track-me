@@ -10,12 +10,12 @@ import { bodyLatest } from './body.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 
-export const HOME_WIDGET_IDS = ['daily-overview', 'quick-access', 'planner', 'daily-activity', 'reminders'];
+export const HOME_WIDGET_IDS = ['daily-overview', 'quick-access', 'daily-activity', 'planner', 'reminders'];
 export const HOME_WIDGET_DEFS = [
   { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
   { id: 'quick-access', label: 'ทางลัดบันทึกด่วน' },
-  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
   { id: 'daily-activity', label: 'กิจกรรม & บันทึกล่าสุด' },
+  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
   { id: 'reminders', label: 'แจ้งเตือนที่ต้องดูแล' }
 ];
 

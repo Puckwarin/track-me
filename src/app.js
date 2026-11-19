@@ -492,8 +492,16 @@ $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
-$('#fab-top')?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-$('#fab-bottom')?.addEventListener('click', () => window.scrollTo({ top: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight), behavior: 'smooth' }));
+  const fabTop = $('#fab-top');
+  const updateFabTop = () => {
+    const visible = window.scrollY >= 400;
+    fabTop?.classList.toggle('is-hidden', !visible);
+    fabTop?.setAttribute('aria-hidden', String(!visible));
+    fabTop?.setAttribute('tabindex', visible ? '0' : '-1');
+  };
+  fabTop?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  window.addEventListener('scroll', updateFabTop, { passive: true });
+  updateFabTop();
 $('#btn-quick-add').addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {

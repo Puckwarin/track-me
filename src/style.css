@@ -157,8 +157,10 @@ input.input::-webkit-datetime-edit { padding: 0; }
 
 /* ---------- เมนูย่อย (ชิปเลื่อนแนวนอน) ---------- */
 .page { margin-top: 1rem; }
-.subnav { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top)); z-index: 35; margin-top: .5rem; padding-block: .25rem; background: color-mix(in srgb, var(--color-app-bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.subnav-row { display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; padding: .15rem .1rem .35rem; scroll-snap-type: x proximity; }
+ .subnav { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top)); z-index: 35; margin-top: .5rem; padding-block: .25rem; background: color-mix(in srgb, var(--color-app-bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+ .subnav-row { display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; padding: .15rem .1rem .35rem; scroll-snap-type: x proximity; }
+ .subnav:has(.subnav-row) { position: sticky; }
+ .subnav:has(.subnav-row)::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 2.25rem; pointer-events: none; background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-app-bg) 96%, transparent) 88%); }
 .subnav-row::-webkit-scrollbar { display: none; }
 .sub-chip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; padding: .55rem .95rem; border-radius: 9999px; font-size: .82rem; font-weight: 500; background: #fff; color: #6F6259; border: 1px solid #F0E7DD; scroll-snap-align: center; transition: background .15s; cursor: pointer; }
 .sub-chip.is-active { background: var(--c-bg); color: var(--c-fg); border-color: var(--c-ring); font-weight: 600; box-shadow: 0 2px 8px -4px var(--c-ring); }
@@ -953,14 +955,15 @@ html[data-theme="pastel"] .desktop-nav-item { color: #6E4760; }
   #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 3.5rem); }
   .page { margin-top: .5rem; padding-bottom: 1rem; }
   .page > .card, .page .card { padding: .875rem; border-radius: 1.125rem; }
-  .card h1, .card h2 { font-size: clamp(1rem, 4.5vw, 1.25rem); line-height: 1.35; }
+  .card h2 { font-size: clamp(1.05rem, 4.5vw, 1.15rem); line-height: 1.35; }
   .card h3 { font-size: 1rem; line-height: 1.35; }
   #home-head h1 { font-size: clamp(1.125rem, 5vw, 1.375rem); line-height: 1.35; }
   .home-hello { padding: .125rem .125rem 0; }
   #home-today, #summary-section { gap: .75rem; }
   .tile, .card.food-today { padding: .875rem; }
   .chip, .sub-chip { min-height: 2.75rem; }
-  .subnav-row { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+  .subnav-row { gap: .375rem; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+  .sub-chip { gap: .3rem; padding-inline: .75rem; font-size: .78rem; }
   .scroll-fabs { right: 5rem; bottom: calc(var(--nav-h) + var(--safe-b) + 1rem); gap: .4rem; }
   .fab-scroll-btn { width: 2.75rem; height: 2.75rem; }
 }
