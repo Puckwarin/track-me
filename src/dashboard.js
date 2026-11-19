@@ -37,7 +37,12 @@ export function mountDashboard(el) {
           <button type="button" id="db-range-6" aria-pressed="true">6 เดือน</button>
           <button type="button" id="db-range-12" aria-pressed="false">12 เดือน</button>
         </div>
-        <button type="button" id="db-refresh" class="db-refresh"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>รีเฟรช</span></button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="db-view-overview" data-page-go="overview" aria-pressed="true" class="db-refresh">ภาพรวม</button>
+          <button type="button" id="db-view-weekly" data-page-go="weekly" aria-pressed="false" class="db-refresh">สรุปสัปดาห์</button>
+          <button type="button" data-page-go="report" class="db-refresh"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>รายงาน</span></button>
+          <button type="button" id="db-refresh" class="db-refresh"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>รีเฟรช</span></button>
+        </div>
       </div>
     </header>
     <section class="db-welcome" aria-label="คำแนะนำการใช้งานแดชบอร์ด">
@@ -49,6 +54,7 @@ export function mountDashboard(el) {
       <span class="db-welcome-mark" aria-hidden="true"><i class="fa-solid fa-heart-pulse"></i></span>
     </section>
     <div id="db-content" class="db-content" aria-live="polite"><p class="db-loading">กำลังรวบรวมข้อมูล…</p></div>
+    <div id="db-weekly" class="hidden lg:col-span-3 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8" aria-live="polite"></div>
   </div>`;
 
   let monthCount = 6;

@@ -102,7 +102,7 @@ export function seedDemoState() {
 }
 
 function isDemoNavigation(target) {
-  return Boolean(target.closest('[data-nav], [data-sub], [data-go], [data-day], [data-ov-range], [data-db-section], #db-range-3, #db-range-6, #db-range-12, #db-refresh, #btn-logo, #btn-bell, #btn-settings, #demo-exit, #ov-refresh, #sum-week, #sum-month, #wk-prev, #wk-next, #r-gen, #r-print, #r-csv, details > summary'));
+  return Boolean(target.closest('[data-nav], [data-sub], [data-go], [data-page-go], [data-day], [data-ov-range], [data-db-section], #db-range-3, #db-range-6, #db-range-12, #db-refresh, #btn-logo, #btn-bell, #btn-settings, #demo-exit, #ov-refresh, #sum-week, #sum-month, #wk-prev, #wk-next, #r-gen, #r-print, #r-csv, details > summary'));
 }
 
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {

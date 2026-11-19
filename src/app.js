@@ -134,7 +134,7 @@ const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mount
 const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
 const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
 const foodLoader = makeLazyFeature(() => import('./food.js'), m => { m.mountFood($('#tab-food')); m.watchDay(); }, 'หน้าอาหาร');
-const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#tab-weekly')), 'หน้าสรุปสัปดาห์');
+const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#db-weekly')), 'หน้าสรุปสัปดาห์');
 const remindLoader = makeLazyFeature(() => import('./remindLog.js'), m => m.mountRemind($('#tab-remind')), 'หน้าบันทึกเตือน');
 const settingsLoader = makeLazyFeature(() => import('./settings.js'), m => { m.mountSettings($('#tab-settings')); m.refreshAccount?.(); }, 'หน้าตั้งค่า');
 
@@ -203,14 +203,19 @@ updateStickyOffsets();
 
 export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
-  TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== name); });
+  const visibleTab = name === 'weekly' ? 'overview' : name;
+  TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== visibleTab); });
   const group = groupOf(name);
-  lastSub[group] = name;
+  lastSub[group] = name === 'weekly' || name === 'report' ? 'overview' : name;
   document.querySelectorAll('[data-nav]').forEach(b => { const on_ = b.dataset.nav === group; b.classList.toggle('is-active', on_); if (on_) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   $('#btn-bell').classList.toggle('is-active', name === 'notifications');
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
-  renderSubnav(group, name);
+  renderSubnav(group, lastSub[group]);
+  $('#db-content')?.classList.toggle('hidden', name === 'weekly');
+  $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
+  $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
+  $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
   if (!preserveDate) {
     if (name === 'home') resetHomePlannerToToday();
     if (name === 'period') resetPeriodToToday();
@@ -220,8 +225,19 @@ export function showTab(name, { preserveDate = false } = {}) {
   let pending = Promise.resolve();
   if (name === 'home') { renderHome(); renderHomeShortcuts(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
-  if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderDashboard?.());
-  if (name === 'weekly') pending = weeklyLoader.ensure().then(m => { if (!preserveDate) m?.resetWeeklyToToday?.(); m?.renderWeekly?.(); });
+  if (name === 'overview' || name === 'weekly') {
+    pending = overviewLoader.ensure().then(async m => {
+      m?.renderDashboard?.();
+      $('#db-content')?.classList.toggle('hidden', name === 'weekly');
+      $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
+      $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
+      $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
+      if (name !== 'weekly') return;
+      const weekly = await weeklyLoader.ensure();
+      if (!preserveDate) weekly?.resetWeeklyToToday?.();
+      weekly?.renderWeekly?.();
+    });
+  }
   if (name === 'care') pending = careLoader.ensure().then(m => { if (!preserveDate) m?.resetCareToToday?.(); });
   if (name === 'remind') pending = remindLoader.ensure().then(m => m?.renderRemind?.());
   if (name === 'expense') pending = expenseLoader.ensure().then(m => { if (!preserveDate) m?.resetExpenseToToday?.(); m?.renderExpense?.(); });
@@ -256,6 +272,11 @@ async function goTo(name, focusId) {
     if (matchMedia('(hover: hover)').matches) field.focus({ preventScroll: true });
   });
 }
+
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-page-go]');
+  if (button && TABS.includes(button.dataset.pageGo)) void goTo(button.dataset.pageGo);
+});
 
 function updateBell() {
   const n = collectReminders().length;

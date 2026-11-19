@@ -48,7 +48,9 @@ export function mountWeekly(el) {
   root.innerHTML = `
   <div class="lg:col-span-3 space-y-6">
     <div class="card space-y-3">
-      <div class="flex justify-center gap-2">
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <button type="button" data-page-go="overview" class="chip whitespace-nowrap min-h-[38px]">แดชบอร์ดภาพรวม</button>
+        <button type="button" data-page-go="report" class="chip whitespace-nowrap min-h-[38px]">รายงาน</button>
         <button id="sum-week" type="button" class="chip whitespace-nowrap min-h-[38px]">รายสัปดาห์</button>
         <button id="sum-month" type="button" class="chip whitespace-nowrap min-h-[38px]">รายเดือน</button>
       </div>

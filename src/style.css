@@ -390,6 +390,8 @@ html[data-theme="dark"] .bell-badge { border-color: var(--color-app-bg); }
   transition: transform .12s, background .15s, color .15s;
   cursor: pointer;
 }
+.fab-scroll-btn { transition: opacity .2s ease, transform .2s ease, background .15s ease, color .15s ease; }
+.fab-scroll-btn.is-hidden { opacity: 0; transform: scale(.8); pointer-events: none; }
 .fab-scroll-btn:hover { background: var(--color-lav-soft); color: var(--color-brand-dark); }
 .fab-scroll-btn:active { transform: scale(.92); }
 html[data-theme="pastel"] .fab-scroll-btn { border-color: #F0DFEE; color: #6E4760; }

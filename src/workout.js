@@ -1416,9 +1416,9 @@ function renderHistory() {
   const sorted = filtered.slice().sort((a, b) => historyStatusFilter === 'planned'
     ? (a.date || '').localeCompare(b.date || '')
     : (b.date || '').localeCompare(a.date || ''));
-  const rows = sorted.slice(0, filtering ? 50 : 15);
-
-  $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
+  const rows = sorted.slice(0, filtering ? 50 : sorted.length);
+  const showAllHistory = filtering || Boolean($('#w-history-more', root)?.open);
+  const renderedRows = rows.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
     const isPlan = w.status === 'planned';
     const fbList = Array.isArray(w.exerciseFeedback) ? w.exerciseFeedback : [];
@@ -1467,5 +1467,10 @@ function renderHistory() {
       </details>
       ${isPlan ? actionsHtml : ''}
     </div>`;
-  }).join('') : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
+  });
+  const recentRows = showAllHistory ? renderedRows.join('') : renderedRows.slice(0, 5).join('');
+  const olderRows = showAllHistory ? '' : renderedRows.slice(5).join('');
+  $('#w-history', root).innerHTML = rows.length
+    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 space-y-2">${olderRows}</div></details>` : ''}`
+    : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
 }

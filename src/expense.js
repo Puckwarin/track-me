@@ -247,8 +247,13 @@ export function mountExpense(el) {
           <div><label class="lbl">วันที่ *</label><input id="ex-date" type="date" class="input"></div>
           <div><label class="lbl">เวลา</label><input id="ex-time" type="time" class="input"></div>
         </div>
-        <div><label class="lbl">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="ex-merchant" class="input" placeholder="เช่น 7-Eleven, ค่าอาหาร, เงินเดือน"></div>
-        <div><label class="lbl">หมายเหตุ</label><input id="ex-note" class="input" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"></div>
+        <details id="ex-optional-fields" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ตัวเลือกเพิ่มเติม · ร้านค้าและหมายเหตุ</summary>
+          <div class="mt-3 space-y-3">
+            <div><label class="lbl" for="ex-merchant">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="ex-merchant" class="input" placeholder="เช่น 7-Eleven, ค่าอาหาร, เงินเดือน"></div>
+            <div><label class="lbl" for="ex-note">หมายเหตุ</label><input id="ex-note" class="input" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"></div>
+          </div>
+        </details>
       </div>
 
       <div class="flex flex-wrap justify-end gap-2">
@@ -509,6 +514,7 @@ function resetForm() {
   $r('#ex-time').value = nowTimeStr();
   $r('#ex-merchant').value = '';
   $r('#ex-note').value = '';
+  $r('#ex-optional-fields').open = false;
   $r('#ex-save').innerHTML = '<i class="fa-solid fa-check"></i> บันทึกรายการ';
   $r('#ex-cancel').classList.add('hidden');
   clearOcrStatus();
@@ -525,6 +531,7 @@ function startEdit(item) {
   $r('#ex-time').value = item.time || '';
   $r('#ex-merchant').value = item.merchant || '';
   $r('#ex-note').value = item.note || '';
+  $r('#ex-optional-fields').open = Boolean(item.merchant || item.note);
   $r('#ex-save').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข';
   $r('#ex-cancel').classList.remove('hidden');
   root.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1228,12 +1235,15 @@ export function renderExpense() {
   });
 
   $r('#ex-count').textContent = `${filtered.length} รายการ`;
-  $r('#ex-list').innerHTML = filtered.length ? filtered.map(x => {
+  const sorted = filtered.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.time || '').localeCompare(String(a.time || '')));
+  const filterActive = Boolean(q || fType !== 'all' || fCat);
+  const showAllHistory = filterActive || Boolean($r('#ex-history-more')?.open);
+  const renderExpenseRow = x => {
     const isInc = x.type === 'income';
     const isTransfer = x.type === 'transfer';
     return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2 tabular-nums">
       <div class="flex items-center gap-2.5 min-w-0">
-        <span class="emoji-bubble emoji-sm">${CAT_ICONS[x.category] || '💸'}</span>
+        <span class="emoji-bubble emoji-sm" aria-hidden="true">${CAT_ICONS[x.category] || '💸'}</span>
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-1.5">
             <b class="text-sm text-slate-800 truncate">${esc(x.merchant || x.category)}</b>
@@ -1252,5 +1262,8 @@ export function renderExpense() {
         </div>
       </div>
     </article>`;
-  }).join('') : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
+  };
+  const recent = showAllHistory ? sorted : sorted.slice(0, 5);
+  const older = showAllHistory ? [] : sorted.slice(5);
+  $r('#ex-list').innerHTML = sorted.length ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${older.length})</summary><div class="mt-2 space-y-2">${older.map(renderExpenseRow).join('')}</div></details>` : ''}` : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
 }

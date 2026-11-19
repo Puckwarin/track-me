@@ -394,7 +394,10 @@ function buildDailyActivityHtml(today, foods, targets, monthExps, todayExps) {
     <div class="card cat-workout flex flex-col justify-between space-y-3">
       <div class="flex items-center justify-between gap-2">
         <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">🏃‍♀️</span><span>กิจกรรม & ร่างกาย</span></span>
-        <button type="button" data-go="workout" class="text-xs font-medium text-brand-dark underline min-h-[32px]">เปิดบันทึก</button>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" data-go="settings" data-focus="st-home-widget-settings" class="min-h-[36px] min-w-[36px] rounded-lg text-brand-dark hover:bg-white/70" aria-label="ปรับแต่งการ์ดหน้าแรก" title="ปรับแต่งการ์ดหน้าแรก"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+          <button type="button" data-go="workout" class="text-xs font-medium text-brand-dark underline min-h-[32px]">เปิดบันทึก</button>
+        </div>
       </div>
       <div class="space-y-2 text-sm">
         ${latestWorkout ? `
