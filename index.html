@@ -61,6 +61,7 @@
           <span class="sync-pill" title="สถานะการซิงค์"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="sync-dot"></span><span id="sync-text">กำลังเชื่อมต่อ...</span></span>
           <button id="btn-bell" class="icon-btn relative" aria-label="แจ้งเตือน"><i class="fa-regular fa-bell"></i><span id="bell-badge" class="bell-badge hidden"></span></button>
           <button id="btn-settings" class="icon-btn" aria-label="ตั้งค่า"><i class="fa-solid fa-gear"></i></button>
+          <button id="ai-chat-fab" type="button" class="icon-btn" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI"><i class="fa-solid fa-comments"></i></button>
         </div>
       </div>
     </header>
@@ -108,10 +109,10 @@
         <button data-nav="home" class="nav-item"><i class="fa-solid fa-house"></i><span>หน้าหลัก</span></button>
         <button data-nav="food" class="nav-item"><i class="fa-solid fa-bowl-food"></i><span>อาหาร</span></button>
         <button data-nav="health" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>สุขภาพ</span></button>
+        <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"><i class="fa-solid fa-plus"></i></button>
         <button data-nav="care" class="nav-item"><i class="fa-solid fa-paw"></i><span>ดูแล</span></button>
         <button data-nav="more" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>เพิ่มเติม</span></button>
       </div>
-      <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"><i class="fa-solid fa-plus"></i></button>
     </nav>
 
     <!-- แผ่นเลือกหมวดเพื่อบันทึกด่วน -->
@@ -126,10 +127,9 @@
       </div>
     </div>
 
-    <!-- ปุ่มลอยเลื่อนขึ้นบนสุด แสดงเมื่อเลื่อนลงจากด้านบน -->
     <div id="scroll-fabs" class="scroll-fabs no-print" aria-label="ตัวช่วยเลื่อนหน้าจอ">
-      <button id="fab-top" type="button" class="fab-scroll-btn is-hidden" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด" aria-hidden="true" tabindex="-1">
-        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+      <button id="fab-scroll" type="button" class="fab-scroll-btn is-hidden" aria-label="เลื่อนลงด้านล่าง" title="เลื่อนลงด้านล่าง" aria-hidden="true" tabindex="-1">
+        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
       </button>
     </div>
   </div>

@@ -168,17 +168,10 @@ function ensureChatWidgetMounted(openAfterLoad = false) {
 }
 
 function mountChatFab() {
-  if ($('#ai-chat-fab')) return;
-  const host = $('#app-shell') || document.body;
-  const wrap = document.createElement('div');
-  wrap.className = 'no-print';
-  wrap.innerHTML = `
-    <button id="ai-chat-fab" type="button" class="ai-chat-fab" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
-      <i class="fa-solid fa-comments"></i>
-    </button>`;
-  host.appendChild(wrap);
   const fab = $('#ai-chat-fab');
-  fab?.addEventListener('click', () => {
+  if (!fab || fab.dataset.chatBound === 'true') return;
+  fab.dataset.chatBound = 'true';
+  fab.addEventListener('click', () => {
     if (chatFeature) chatFeature.toggleChatWidget();
     else void ensureChatWidgetMounted(true);
   });
@@ -513,16 +506,33 @@ $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
-  const fabTop = $('#fab-top');
-  const updateFabTop = () => {
-    const visible = window.scrollY >= 400;
-    fabTop?.classList.toggle('is-hidden', !visible);
-    fabTop?.setAttribute('aria-hidden', String(!visible));
-    fabTop?.setAttribute('tabindex', visible ? '0' : '-1');
+  const scrollFab = $('#fab-scroll');
+  const updateScrollFab = () => {
+    if (!scrollFab) return;
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const canScroll = maxScroll > 2;
+    const nearBottom = window.scrollY >= maxScroll - 80;
+    const direction = nearBottom ? 'up' : 'down';
+    scrollFab.dataset.direction = direction;
+    scrollFab.setAttribute('aria-label', nearBottom ? 'เลื่อนขึ้นบนสุด' : 'เลื่อนลงด้านล่าง');
+    scrollFab.title = nearBottom ? 'เลื่อนขึ้นบนสุด' : 'เลื่อนลงด้านล่าง';
+    scrollFab.innerHTML = `<i class="fa-solid fa-arrow-${direction}" aria-hidden="true"></i>`;
+    scrollFab.classList.toggle('is-hidden', !canScroll);
+    scrollFab.setAttribute('aria-hidden', String(!canScroll));
+    scrollFab.setAttribute('tabindex', canScroll ? '0' : '-1');
   };
-  fabTop?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-  window.addEventListener('scroll', updateFabTop, { passive: true });
-  updateFabTop();
+  scrollFab?.addEventListener('click', () => {
+    const atBottom = scrollFab.dataset.direction === 'up';
+    window.scrollTo({ top: atBottom ? 0 : document.documentElement.scrollHeight, behavior: 'smooth' });
+  });
+  window.addEventListener('scroll', updateScrollFab, { passive: true });
+  window.addEventListener('resize', updateScrollFab, { passive: true });
+  if (typeof ResizeObserver !== 'undefined') {
+    const scrollHeightObserver = new ResizeObserver(updateScrollFab);
+    const appShell = $('#app-shell');
+    if (appShell) scrollHeightObserver.observe(appShell);
+  }
+  updateScrollFab();
 $('#btn-quick-add').addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {

@@ -16,14 +16,6 @@ const PET_SYMPTOMS = [
 ];
 const PET_SX_LEVELS = ['ปกติ', 'เล็กน้อย', 'ปานกลาง', 'มาก'];
 const PET_SX_COLORS = ['bg-slate-100 text-slate-600', 'bg-amber-100 text-amber-800', 'bg-orange-100 text-orange-800', 'bg-rose-100 text-rose-700 font-semibold'];
-const DAILY_PET_CARE = [
-  { key: 'feeding', label: 'ให้อาหาร', icon: 'fa-bowl-food' },
-  { key: 'teeth', label: 'แปรงฟัน', icon: 'fa-tooth' },
-  { key: 'walk', label: 'พาเดินเล่น', icon: 'fa-person-walking' },
-  { key: 'groom', label: 'แปรงขน', icon: 'fa-brush' }
-];
-const pendingPetCare = new Set();
-
 let root, petFormDirty = false, editingSxId = null;
 let labFeature = null, labMountPromise = null;
 let petSxDraft = Object.fromEntries(PET_SYMPTOMS.map(([k]) => [k, 0]));
@@ -47,11 +39,6 @@ export function mountCare(el) {
         <button id="pet-save" class="btn btn-primary">บันทึกข้อมูลน้อง/น้ำหนัก</button>
       </div>
     </details>
-    <section id="pet-daily-care" class="rounded-2xl border border-amber-200 bg-amber-50/50 p-3 space-y-3" aria-labelledby="pet-daily-care-title">
-      <div class="flex items-start justify-between gap-2"><div><h3 id="pet-daily-care-title" class="font-semibold text-sm text-slate-800">วันนี้ดูแลอะไรแล้วบ้าง</h3><p class="text-xs text-slate-500">แตะครั้งเดียวเพื่อบันทึกงานประจำวัน</p></div><span id="pet-care-done-count" class="shrink-0 rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-700"></span></div>
-      <div id="pet-care-actions" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
-      <div id="pet-care-timeline" class="space-y-2"></div>
-    </section>
     <div class="rounded-xl border border-slate-200 p-3"><h3 class="font-semibold text-slate-800">แนวโน้มน้ำหนัก</h3><p class="text-xs text-slate-500">บันทึกน้ำหนักได้วันละครั้ง กราฟจะเก็บประวัติไว้กับโปรไฟล์น้อง</p><div id="pet-weight-chart" class="mt-2 overflow-x-auto tabular-nums"></div></div>
 
     <div class="border-t pt-3 space-y-3">
@@ -129,11 +116,6 @@ export function mountCare(el) {
   ['#pet-name', '#pet-kind', '#pet-birth', '#pet-weight', '#pet-life'].forEach(sel => $r(sel).addEventListener('input', () => { petFormDirty = true; renderPetEstimate(); }));
   $r('#pet-food-kcal').addEventListener('input', renderPetEstimate);
   $r('#pet-sx-date').value = localDateStr();
-  $r('#pet-daily-care').addEventListener('click', event => {
-    const button = event.target.closest('[data-pet-care-action]');
-    const task = DAILY_PET_CARE.find(item => item.key === button?.dataset.petCareAction);
-    if (task) void savePetDailyCare(task);
-  });
   $r('#pet-sx-save').addEventListener('click', savePetSymptom);
   $r('#pet-sx-cancel').addEventListener('click', resetPetSymptomForm);
   $r('#pet-sx-grid').addEventListener('click', e => {
@@ -209,7 +191,7 @@ export function onLabsUpdated() {
 
 function renderAll() {
   if (!root?.isConnected) return;
-  renderPet(); renderPetDailyCare(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList();
+  renderPet(); renderPetWeight(); renderPetFoods(); renderPetSymptomGrid(); renderPetSymptomsList();
   onLabsUpdated();
 }
 
@@ -393,61 +375,6 @@ function renderPetFoodPresets() {
       ${unique.map(x => `<button type="button" data-pf-preset="${esc(String(x.name || '').trim().toLowerCase())}" class="chip bg-slate-100 hover:bg-lav-soft text-slate-700 text-[11px]">🐾 ${esc(x.name)}${x.kcalPer100 != null ? ` (${x.kcalPer100} kcal/100g)` : ''}</button>`).join('')}
     </div>
   `;
-}
-
-async function savePetDailyCare(task) {
-  const pet = (state.petProfiles || [])[0];
-  if (!pet) return toast('บันทึกโปรไฟล์น้องก่อนเริ่มบันทึกกิจวัตรค่ะ', 'err');
-  const today = localDateStr();
-  const pendingKey = `${pet.id}:${task.key}:${today}`;
-  if (pendingPetCare.has(pendingKey)) return;
-  const existing = (state.petCare || []).find(record => record.petId === pet.id && record.date === today && record.type === task.label && record.recordKind !== 'symptom');
-  if (existing?.done) return toast(`บันทึก${task.label}วันนี้แล้ว`);
-
-  pendingPetCare.add(pendingKey);
-  renderPetDailyCare();
-  try {
-    if (existing) {
-      await updateDoc(userDoc(state.uid, 'pet_care_records', existing.id), { done: true, dismissedFor: null, updatedAt: new Date() });
-      state.petCare = (state.petCare || []).map(record => record.id === existing.id ? { ...record, done: true, dismissedFor: null, updatedAt: new Date() } : record);
-    } else {
-      const record = { petId: pet.id, category: 'สัตว์เลี้ยง', type: task.label, date: today, nextDate: null, done: true, createdAt: new Date() };
-      const saved = await addDoc(userCol(state.uid, 'pet_care_records'), record);
-      state.petCare = [...(state.petCare || []), { ...record, id: saved.id }];
-    }
-    toast(`บันทึก${task.label}แล้ว`);
-  } catch (error) {
-    toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
-  } finally {
-    pendingPetCare.delete(pendingKey);
-    renderPetDailyCare();
-  }
-}
-
-function renderPetDailyCare() {
-  const actions = $r('#pet-care-actions');
-  if (!actions) return;
-  const pet = (state.petProfiles || [])[0];
-  const today = localDateStr();
-  const doneCount = DAILY_PET_CARE.filter(task => (state.petCare || []).some(record => record.petId === pet?.id && record.date === today && record.type === task.label && record.done)).length;
-  $r('#pet-care-done-count').textContent = `${doneCount}/${DAILY_PET_CARE.length} แล้ว`;
-  actions.innerHTML = DAILY_PET_CARE.map(task => {
-    const key = `${pet?.id || ''}:${task.key}:${today}`;
-    const done = (state.petCare || []).some(record => record.petId === pet?.id && record.date === today && record.type === task.label && record.done);
-    const pending = pendingPetCare.has(key);
-    return `<button type="button" data-pet-care-action="${task.key}" ${!pet || done || pending ? 'disabled' : ''} aria-label="${done ? `บันทึก${task.label}แล้ววันนี้` : `${task.label}วันนี้`}" class="min-h-16 rounded-xl border px-2.5 py-2 text-left transition ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300'} disabled:cursor-default">
-      <span class="flex items-center justify-between gap-1"><i class="fa-solid ${task.icon} text-brand"></i><span class="text-[11px] font-semibold ${done ? 'text-emerald-700' : pending ? 'text-amber-700' : 'text-slate-500'}">${done ? '✓ เสร็จ' : pending ? 'บันทึก…' : 'รอทำ'}</span></span>
-      <span class="mt-1 block text-xs font-semibold">${task.label}</span>
-    </button>`;
-  }).join('');
-  const timeline = $r('#pet-care-timeline');
-  if (!timeline) return;
-  if (!pet) {
-    timeline.innerHTML = '<p class="text-xs text-slate-500">บันทึกโปรไฟล์น้องเพื่อเริ่มใช้ปุ่มดูแลประจำวัน</p>';
-    return;
-  }
-  const rows = (state.petCare || []).filter(record => record.petId === pet.id && record.recordKind !== 'symptom').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 4);
-  timeline.innerHTML = rows.length ? `<ol class="space-y-1.5" aria-label="กิจกรรมดูแลล่าสุด">${rows.map(record => `<li class="flex items-center gap-2 rounded-xl bg-white/80 px-2.5 py-2 text-xs"><span class="h-2 w-2 shrink-0 rounded-full ${record.done ? 'bg-emerald-500' : 'bg-amber-400'}"></span><span class="font-medium text-slate-700">${esc(record.type || 'ดูแลสัตว์เลี้ยง')}</span><span class="ml-auto whitespace-nowrap text-slate-500 tabular-nums">${esc(fmtDate(record.date))}</span><span class="text-[11px] font-medium ${record.done ? 'text-emerald-700' : 'text-amber-800'}">${record.done ? 'เสร็จแล้ว' : 'รอดำเนินการ'}</span></li>`).join('')}</ol>` : '<p class="text-xs text-slate-500">กิจกรรมที่บันทึกจะแสดงที่นี่</p>';
 }
 
 function renderPetFoods() {
