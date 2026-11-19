@@ -1,7 +1,7 @@
 // หน้า Home: Daily Overview, Quick Access, Planner, Daily Activity และ Reminders
 import { state } from './state.js';
 import { isDemoMode } from './demo.js';
-import { $, esc, fmtDate, localDateStr, round1, toast, daysBetween } from './util.js';
+import { $, esc, localDateStr, round1, toast, daysBetween } from './util.js';
 import { getTargets } from './profile.js';
 import { collectReminders, remindersForDate } from './reminders.js';
 import { CATEGORIES } from './categories.js';
@@ -82,7 +82,7 @@ export function ensureHomePlannerLoaded() {
     const btn = $('#home-planner-open', container);
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด Planner...';
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> กำลังโหลด Planner...';
     }
     plannerMountPromise = import('./planner.js')
       .then(module => {
@@ -104,53 +104,290 @@ export function ensureHomePlannerLoaded() {
   return plannerMountPromise;
 }
 
+const num = v => (Number.isFinite(+v) ? +v : 0);
+const baht = (v, digits = 0) => `฿${num(v).toLocaleString('th-TH', { maximumFractionDigits: digits })}`;
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return 'ราตรีสวัสดิ์';
+  if (h < 12) return 'อรุณสวัสดิ์';
+  if (h < 17) return 'สวัสดีตอนบ่าย';
+  if (h < 20) return 'สวัสดีตอนเย็น';
+  return 'ราตรีสวัสดิ์';
+}
+
+function moodLine(pct, hasFood) {
+  if (!hasFood) return ['เริ่มวันใหม่แบบสบาย ๆ', 'จดมื้อแรกของวัน แล้วค่อย ๆ ดูแลตัวเองไปด้วยกัน'];
+  if (pct < 40) return ['เริ่มต้นได้ดีแล้ว', 'อย่าลืมกินให้พอดีกับเป้าหมายของวันนี้นะ'];
+  if (pct <= 100) return ['วันนี้ดูแลตัวเองได้ดี', 'พลังงานกำลังพอดี ไปต่อแบบนี้เลย'];
+  return ['วันนี้กินเกินเป้าเล็กน้อย', 'ไม่เป็นไร ลองขยับร่างกายเพิ่มอีกนิดก็พอ'];
+}
+
+function progressRing(pct, label, sub) {
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  const shown = Math.max(0, Math.min(100, pct));
+  const offset = c - (shown / 100) * c;
+  return `
+    <div class="hx-ring" role="img" aria-label="${esc(label)} ${pct}% ${esc(sub)}">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="hx-ring-track" cx="60" cy="60" r="${r}" />
+        <circle class="hx-ring-bar ${pct > 100 ? 'is-over' : ''}" cx="60" cy="60" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" />
+      </svg>
+      <div class="hx-ring-center">
+        <span class="hx-ring-value tabular-nums">${pct}<small>%</small></span>
+        <span class="hx-ring-label">${esc(label)}</span>
+      </div>
+    </div>`;
+}
+
+function buildDailyOverviewHtml(today, foods, targets) {
+  const foodLoaded = !!state.loaded?.todayFood;
+  const sum = k => foods.reduce((a, i) => a + num(i[k]), 0);
+  const kcal = Math.round(sum('calories'));
+  const goal = num(targets.kcal) || 0;
+  const pct = goal ? Math.round((kcal / goal) * 100) : 0;
+  const left = goal - kcal;
+  const [title, subtitle] = moodLine(pct, foods.length > 0);
+
+  const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
+  const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned');
+  const moveMin = doneWorkouts.reduce((a, w) => a + num(w.durationMin), 0);
+  const body = bodyLatest(state.body || []);
+
+  const stats = [
+    { tab: 'food', icon: 'fa-bowl-food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: 'kcal' },
+    { tab: 'workout', icon: 'fa-person-running', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : 'แผน' },
+    { tab: 'body', icon: 'fa-moon', label: 'นอน', value: body.sleepHours ? `${round1(body.sleepHours.v)}` : '—', sub: 'ชม.' },
+    { tab: 'body', icon: 'fa-weight-scale', label: 'น้ำหนัก', value: body.weight ? `${body.weight.v}` : '—', sub: 'กก.' }
+  ];
+
+  const macroTile = (tone, label, v, g) => {
+    const p = g ? Math.min(100, Math.round((v / g) * 100)) : 0;
+    return `
+      <div class="hx-macro ${tone}">
+        <span class="hx-macro-label">${label}</span>
+        <span class="hx-macro-value tabular-nums">${foods.length ? Math.round(v) : 0}<small> / ${g ?? '-'} g</small></span>
+        <span class="hx-macro-bar" aria-hidden="true"><span style="width:${p}%"></span></span>
+      </div>`;
+  };
+
+  return `
+    <section class="hx-hero" aria-label="สรุปประจำวัน">
+      <div class="hx-hero-top">
+        <div class="hx-hero-copy">
+          <h2 class="hx-hero-title">${esc(title)}</h2>
+          <p class="hx-hero-sub">${esc(subtitle)}</p>
+          <button type="button" data-go="food" class="hx-hero-kcal tabular-nums">
+            ${!foodLoaded && !foods.length
+              ? '<span>กำลังโหลด...</span>'
+              : `<b>${kcal.toLocaleString()}</b><span> / ${goal.toLocaleString()} kcal</span>`}
+          </button>
+          <p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>
+        </div>
+        ${progressRing(pct, 'ของเป้าวันนี้', `${kcal} จาก ${goal} kcal`)}
+      </div>
+      <div class="hx-stats" role="list">
+        ${stats.map(s => `
+          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)}">
+            <i class="fa-solid ${s.icon}" aria-hidden="true"></i>
+            <span class="hx-stat-label">${esc(s.label)}</span>
+            <span class="hx-stat-value tabular-nums">${esc(s.value)}<small> ${esc(s.sub)}</small></span>
+          </button>`).join('')}
+      </div>
+      <div class="hx-macros">
+        ${macroTile('is-protein', 'โปรตีน', sum('protein'), targets.protein)}
+        ${macroTile('is-carb', 'คาร์บ', sum('carbs'), targets.carbs)}
+        ${macroTile('is-fat', 'ไขมัน', sum('fat'), targets.fat)}
+      </div>
+    </section>`;
+}
+
+function buildQuickAccessHtml(config) {
+  let items = CATEGORIES;
+  if (config.pinnedShortcuts.length) {
+    const matched = config.pinnedShortcuts
+      .map(key => CATEGORIES.find(c => c.key === key || c.tab === key))
+      .filter(Boolean);
+    if (matched.length) items = matched;
+  }
+  return `
+    <section class="hx-section" aria-labelledby="hx-cat-title">
+      <div class="hx-section-head">
+        <h2 id="hx-cat-title" class="hx-section-title">หมวดหมู่</h2>
+        <button type="button" data-go="settings" data-focus="st-home-widget-settings" class="hx-link">ปรับแต่ง</button>
+      </div>
+      <div class="hx-cats">
+        ${items.map(c => `
+          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat ${c.cat}">
+            <span class="hx-cat-icon" aria-hidden="true">${c.emoji}</span>
+            <span class="hx-cat-label">${esc(c.label)}</span>
+          </button>`).join('')}
+      </div>
+    </section>`;
+}
+
+const MEAL_SLOTS = [
+  { id: 'breakfast', label: 'มื้อเช้า', time: '08:00' },
+  { id: 'lunch', label: 'มื้อกลางวัน', time: '12:30' },
+  { id: 'snack', label: 'ของว่าง', time: '15:30' },
+  { id: 'dinner', label: 'มื้อเย็น', time: '18:30' }
+];
+
+function mealSlotOf(food) {
+  if (food.mealId && MEAL_SLOTS.some(s => s.id === food.mealId)) return food.mealId;
+  const m = String(food.meal || '');
+  if (m.includes('เช้า')) return 'breakfast';
+  if (m.includes('กลางวัน')) return 'lunch';
+  if (m.includes('เย็น') || m.includes('ค่ำ')) return 'dinner';
+  return 'snack';
+}
+
+function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
+  const rows = [];
+
+  MEAL_SLOTS.forEach(slot => {
+    const items = foods.filter(f => mealSlotOf(f) === slot.id);
+    if (!items.length && slot.id === 'snack') return;
+    const kcal = Math.round(items.reduce((a, f) => a + num(f.calories), 0));
+    rows.push({
+      time: slot.time,
+      done: items.length > 0,
+      title: slot.label,
+      sub: items.length ? `${items.map(f => f.name).join(' · ')} · ${kcal.toLocaleString()} kcal` : 'ยังไม่ได้บันทึก · แตะเพื่อจด',
+      tab: 'food',
+      focus: items.length ? null : 'f-name'
+    });
+  });
+
+  (state.workouts || []).filter(w => w.date === today).forEach(w => {
+    rows.push({
+      time: w.time || '17:00',
+      done: w.status !== 'planned',
+      title: w.title || TYPES[w.type] || 'ออกกำลังกาย',
+      sub: `${w.durationMin ? `${w.durationMin} นาที` : 'ออกกำลังกาย'}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}`,
+      tab: 'workout'
+    });
+  });
+
+  remindersForDate(today).slice(0, 3).forEach(r => {
+    rows.push({
+      time: r.dueTime || '—',
+      done: false,
+      title: r.label,
+      sub: r.detail || 'แจ้งเตือนวันนี้',
+      tab: r.tab || 'notifications'
+    });
+  });
+
+  rows.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+  const doneCount = rows.filter(r => r.done).length;
+
+  const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
+  const incomeMonth = monthExps.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
+  const spentToday = todayExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
+
+  return `
+    <section class="hx-section" aria-labelledby="hx-today-title">
+      <div class="hx-section-head">
+        <h2 id="hx-today-title" class="hx-section-title">วันนี้</h2>
+        <span class="hx-muted tabular-nums">ทำแล้ว ${doneCount}/${rows.length}</span>
+      </div>
+      <ol class="hx-timeline">
+        ${rows.map(r => `
+          <li>
+            <button type="button" data-go="${esc(r.tab)}" ${r.focus ? `data-focus="${r.focus}"` : ''} class="hx-tl-row ${r.done ? 'is-done' : ''}">
+              <span class="hx-tl-time tabular-nums">${esc(r.time)}</span>
+              <span class="hx-tl-dot" aria-hidden="true">${r.done ? '<i class="fa-solid fa-check"></i>' : ''}</span>
+              <span class="hx-tl-body">
+                <span class="hx-tl-title">${esc(r.title)}<span class="sr-only">${r.done ? ' (ทำแล้ว)' : ' (ยังไม่ทำ)'}</span></span>
+                <span class="hx-tl-sub">${esc(r.sub)}</span>
+              </span>
+              <i class="fa-solid fa-chevron-right hx-tl-chev" aria-hidden="true"></i>
+            </button>
+          </li>`).join('')}
+      </ol>
+    </section>
+    <button type="button" data-go="expense" class="hx-money">
+      <span class="hx-money-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
+      <span class="hx-money-body">
+        <span class="hx-money-label">การเงินเดือนนี้</span>
+        <span class="hx-money-value tabular-nums">${monthExps.length ? `จ่าย ${baht(spentMonth)}` : 'ยังไม่มีรายการ'}${incomeMonth > 0 ? `<small class="is-income"> · รับ ${baht(incomeMonth)}</small>` : ''}</span>
+        <span class="hx-money-sub tabular-nums">${todayExps.length ? `วันนี้จ่าย ${baht(spentToday, 2)}` : monthExps.length ? 'วันนี้ยังไม่มีรายจ่าย' : 'แตะเพื่อจดหรือสแกนสลิป'}</span>
+      </span>
+      <i class="fa-solid fa-chevron-right hx-tl-chev" aria-hidden="true"></i>
+    </button>`;
+}
+
 function renderPlannerTeaser(host, today) {
   if (!host) return;
   const routines = Array.isArray(state.planner?.routines) ? state.planner.routines : [];
   const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
-  const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned').length;
-  const dayReminders = remindersForDate(today);
   const doneMapToday = Array.isArray(state.planner?.doneMap?.[today]) ? state.planner.doneMap[today].length : 0;
-
-  const metaParts = [esc(fmtDate(today))];
-  if (todayWorkouts.length) metaParts.push(`ออกกำลังกาย ${doneWorkouts}/${todayWorkouts.length}`);
-  if (routines.length) metaParts.push(`กิจวัตร ${routines.length} รายการ${doneMapToday ? ` · ทำแล้ว ${doneMapToday}` : ''}`);
-  if (!todayWorkouts.length && !routines.length) metaParts.push('ตั้งกิจวัตรประจำวันและแผนออกกำลังกายได้ที่นี่');
+  const desc = routines.length
+    ? `กิจวัตร ${routines.length} รายการ${doneMapToday ? ` · ทำแล้ว ${doneMapToday}` : ''}${todayWorkouts.length ? ` · ออกกำลังกาย ${todayWorkouts.length}` : ''}`
+    : 'วางแผนกิจวัตรและการออกกำลังกายทั้งสัปดาห์ในที่เดียว';
 
   host.innerHTML = `
-  <section class="card space-y-3">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="min-w-0">
-        <h2 class="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
-          <span class="emoji-bubble emoji-sm cat-workout">🗓️</span>
-          <span>Weekly Planner & กิจวัตร</span>
-        </h2>
-        <p class="text-xs text-slate-600 mt-1 tabular-nums">${metaParts.join(' · ')}</p>
+    <section class="hx-plan" aria-labelledby="hx-plan-title">
+      <div class="hx-plan-copy">
+        <span class="hx-eyebrow">Weekly Planner</span>
+        <h2 id="hx-plan-title" class="hx-plan-title">วางแผนสัปดาห์นี้<br>ให้สบายขึ้น</h2>
+        <p class="hx-plan-sub">${esc(desc)}</p>
+        <button type="button" id="home-planner-open" class="hx-plan-btn">
+          เปิด Planner <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
       </div>
-      <button type="button" id="home-planner-open" class="btn btn-primary text-xs shrink-0 whitespace-nowrap">
-        <i class="fa-solid fa-calendar-check"></i> เปิดเช็กลิสต์ Planner
-      </button>
-    </div>
-    ${dayReminders.length ? `
-    <div class="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-xs space-y-1.5">
-      <p class="font-semibold text-amber-900">นัดหมายและเตือนวันนี้ (${dayReminders.length})</p>
-      <ul class="space-y-1 text-amber-950">
-        ${dayReminders.slice(0, 3).map(r => `<li class="flex items-center gap-2 min-w-0"><span aria-hidden="true">${r.icon}</span><span class="truncate font-medium">${esc(r.label)}</span>${r.dueTime ? `<span class="text-amber-800 tabular-nums shrink-0">${esc(r.dueTime)} น.</span>` : ''}</li>`).join('')}
-      </ul>
-    </div>` : ''}
-  </section>`;
+      <div class="hx-plan-art" aria-hidden="true"><i class="fa-solid fa-calendar-days"></i></div>
+    </section>`;
+}
+
+function buildRemindersHtml(today, reminders) {
+  const formatUrgency = r => {
+    if (!r.date) return { text: 'กำหนดการ', cls: '' };
+    if (r.date < today) return { text: `เลยกำหนด ${daysBetween(r.date, today)} วัน`, cls: 'is-late' };
+    if (r.date === today) return { text: r.dueTime ? `วันนี้ ${r.dueTime} น.` : 'วันนี้', cls: 'is-today' };
+    const diff = daysBetween(today, r.date);
+    return { text: diff === 1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`, cls: '' };
+  };
+
+  return `
+    <section class="hx-section" aria-labelledby="hx-rem-title">
+      <div class="hx-section-head">
+        <h2 id="hx-rem-title" class="hx-section-title">ใกล้ถึงกำหนด</h2>
+        <button type="button" data-go="notifications" class="hx-link">ดูทั้งหมด</button>
+      </div>
+      ${reminders.length ? `
+        <ul class="hx-list">
+          ${reminders.slice(0, 4).map(r => {
+            const u = formatUrgency(r);
+            return `
+              <li>
+                <button type="button" data-go="${esc(r.tab || 'notifications')}" class="hx-list-row">
+                  <span class="hx-list-icon" aria-hidden="true">${r.icon}</span>
+                  <span class="hx-tl-body">
+                    <span class="hx-tl-title">${esc(r.label)}</span>
+                    <span class="hx-tl-sub"><span class="hx-due ${u.cls} tabular-nums">${esc(u.text)}</span>${r.detail ? ` · ${esc(r.detail)}` : ''}</span>
+                  </span>
+                  <i class="fa-solid fa-chevron-right hx-tl-chev" aria-hidden="true"></i>
+                </button>
+              </li>`;
+          }).join('')}
+        </ul>`
+        : '<p class="hx-empty">ไม่มีรายการเร่งด่วน พักผ่อนได้ตามสบาย</p>'}
+    </section>`;
 }
 
 export function mountHome(navigate) {
   go = navigate;
   const el = $('#home-today');
   el.innerHTML = `
-    <section id="home-head" class="space-y-2"></section>
-    <div id="home-widgets" class="space-y-4">
+    <section id="home-head" class="hx-head"></section>
+    <div id="home-widgets" class="hx-widgets">
       <div id="home-slot-daily-overview"></div>
       <div id="home-slot-quick-access"></div>
+      <div id="home-slot-daily-activity" class="hx-stack"></div>
       <div id="home-planner"></div>
-      <div id="home-slot-daily-activity"></div>
       <div id="home-slot-reminders"></div>
     </div>`;
 
@@ -180,355 +417,21 @@ export function mountHome(navigate) {
   });
 }
 
-const num = v => (Number.isFinite(+v) ? +v : 0);
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return ['ราตรีสวัสดิ์', '🌙'];
-  if (h < 12) return ['อรุณสวัสดิ์', '☀️'];
-  if (h < 17) return ['สวัสดีตอนบ่าย', '🌤️'];
-  if (h < 20) return ['สวัสดีตอนเย็น', '🌇'];
-  return ['ราตรีสวัสดิ์', '🌙'];
-}
-
-function buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, allReminders) {
-  const foodLoaded = !!state.loaded?.todayFood;
-  const kcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
-  const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
-  const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned');
-  const latestBody = bodyLatest(state.body || []);
-  const overdueCount = allReminders.filter(r => r.date && r.date < today).length;
-  const dueTodayCount = allReminders.filter(r => r.date === today).length;
-  const spentToday = todayExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-
-  const pulseItems = [];
-
-  if (!foodLoaded && !foods.length) {
-    pulseItems.push({
-      tab: 'food',
-      label: 'อาหารวันนี้',
-      value: 'กำลังโหลด...',
-      sub: `เป้า ${targets.kcal.toLocaleString()} kcal`,
-      tone: 'bg-slate-50 border-slate-100'
-    });
-  } else if (foods.length > 0) {
-    const left = targets.kcal - kcal;
-    pulseItems.push({
-      tab: 'food',
-      label: 'พลังงานวันนี้',
-      value: `${kcal.toLocaleString()} kcal`,
-      sub: left >= 0 ? `เหลือ ${Math.round(left).toLocaleString()} kcal · ${foods.length} รายการ` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal · ${foods.length} รายการ`,
-      tone: 'cat-food bg-white border-slate-100'
-    });
-  } else {
-    pulseItems.push({
-      tab: 'food',
-      label: 'อาหารวันนี้',
-      value: 'ยังไม่บันทึก',
-      sub: `เป้า ${targets.kcal.toLocaleString()} kcal · แตะเพื่อจดมื้อแรก`,
-      tone: 'bg-slate-50 border-slate-100'
-    });
-  }
-
-  if (doneWorkouts.length > 0) {
-    const mins = doneWorkouts.reduce((a, w) => a + num(w.durationMin), 0);
-    pulseItems.push({
-      tab: 'workout',
-      label: 'ออกกำลังกายวันนี้',
-      value: `${doneWorkouts.length} ครั้ง`,
-      sub: mins ? `รวม ${mins} นาที` : 'บันทึกแล้ววันนี้',
-      tone: 'bg-white border-slate-100'
-    });
-  } else if (todayWorkouts.length > 0) {
-    pulseItems.push({
-      tab: 'workout',
-      label: 'แผนออกกำลังกาย',
-      value: `${todayWorkouts.length} แผนวันนี้`,
-      sub: 'แตะเพื่อเริ่มบันทึก',
-      tone: 'bg-white border-slate-100'
-    });
-  } else if (latestBody.weight) {
-    pulseItems.push({
-      tab: 'body',
-      label: 'น้ำหนักล่าสุด',
-      value: `${latestBody.weight.v} กก.`,
-      sub: fmtDate(latestBody.weight.d),
-      tone: 'bg-white border-slate-100'
-    });
-  } else {
-    pulseItems.push({
-      tab: 'workout',
-      label: 'ออกกำลังกาย',
-      value: 'ยังไม่บันทึกวันนี้',
-      sub: 'เริ่มบันทึกหรือตั้งแผนได้ที่นี่',
-      tone: 'bg-slate-50 border-slate-100'
-    });
-  }
-
-  if (todayExps.length > 0) {
-    pulseItems.push({
-      tab: 'expense',
-      label: 'ใช้จ่ายวันนี้',
-      value: `฿${spentToday.toLocaleString('th-TH', { maximumFractionDigits: 2 })}`,
-      sub: `${todayExps.length} รายการวันนี้`,
-      tone: 'bg-white border-slate-100'
-    });
-  } else if (monthExps.length > 0) {
-    const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-    pulseItems.push({
-      tab: 'expense',
-      label: 'ใช้จ่ายเดือนนี้',
-      value: `฿${spentMonth.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`,
-      sub: `วันนี้ยังไม่จ่าย · ${monthExps.length} รายการเดือนนี้`,
-      tone: 'bg-white border-slate-100'
-    });
-  } else {
-    pulseItems.push({
-      tab: 'expense',
-      label: 'รายรับ-จ่าย',
-      value: 'ยังไม่มีรายการ',
-      sub: 'จดหรือสแกนสลิปในเครื่อง',
-      tone: 'bg-slate-50 border-slate-100'
-    });
-  }
-
-  pulseItems.push({
-    tab: 'notifications',
-    label: 'รายการเตือน',
-    value: allReminders.length ? `${allReminders.length} รายการ` : 'เรียบร้อยดี',
-    sub: overdueCount ? `เลยกำหนด ${overdueCount} · วันนี้ ${dueTodayCount}` : dueTodayCount ? `ถึงกำหนดวันนี้ ${dueTodayCount} รายการ` : 'ไม่มีรายการเร่งด่วน',
-    tone: overdueCount ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-100'
-  });
-
-  return `
-    <section class="card cozy-hero space-y-3" aria-label="สรุปประจำวัน">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-sm font-bold text-slate-800">ภาพรวมวันนี้</h2>
-        <span class="text-xs text-slate-500">${isDemoMode() ? 'ข้อมูลตัวอย่าง' : 'ข้อมูลจริงจากการบันทึก'}</span>
-      </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        ${pulseItems.map(item => `
-          <button type="button" data-go="${item.tab}" class="text-left rounded-2xl border p-3 min-h-[44px] transition-colors hover:bg-lav-soft/40 ${item.tone}">
-            <span class="block text-xs text-slate-600 truncate">${esc(item.label)}</span>
-            <span class="block text-base font-bold text-slate-800 mt-0.5 tabular-nums truncate">${esc(item.value)}</span>
-            <span class="block text-[11px] text-slate-500 mt-0.5 truncate">${esc(item.sub)}</span>
-          </button>`).join('')}
-      </div>
-    </section>`;
-}
-
-function buildQuickAccessHtml(config) {
-  let items = CATEGORIES;
-  let isCustom = false;
-  if (config.pinnedShortcuts.length) {
-    const matched = config.pinnedShortcuts
-      .map(key => CATEGORIES.find(c => c.key === key || c.tab === key))
-      .filter(Boolean);
-    if (matched.length) {
-      items = matched;
-      isCustom = true;
-    }
-  }
-  return `
-    <section class="space-y-2.5" aria-label="ทางลัดหมวดหมู่">
-      <div class="flex items-center justify-between gap-2 px-1">
-        <h2 class="text-base font-bold text-slate-800">ไปที่หมวด</h2>
-        <span class="text-xs text-slate-500">${isCustom ? `ทางลัดที่ปักหมุด (${items.length})` : `ครบทั้ง ${items.length} หมวดหลัก`}</span>
-      </div>
-      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-        ${items.map(c => `
-          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="cat-tile ${c.cat} min-h-[44px]">
-            <span class="emoji-bubble" aria-hidden="true">${c.emoji}</span>
-            <span class="truncate max-w-full px-1">${esc(c.label)}</span>
-          </button>`).join('')}
-      </div>
-    </section>`;
-}
-
-function buildDailyActivityHtml(today, foods, targets, monthExps, todayExps) {
-  const foodLoaded = !!state.loaded?.todayFood;
-  const sum = k => foods.reduce((a, i) => a + num(i[k]), 0);
-  const kcal = Math.round(sum('calories'));
-  const pct = targets.kcal ? Math.min(100, Math.round((kcal / targets.kcal) * 100)) : 0;
-  const left = targets.kcal - kcal;
-  const macro = (label, v, goal) => `<div class="macro"><span>${label}</span><b class="tabular-nums">${foods.length ? round1(v) : '—'}<small>/${goal ?? '-'}g</small></b></div>`;
-
-  const foodCard = `
-    <button type="button" data-go="food" class="card food-today cat-food w-full text-left flex flex-col justify-between">
-      <div>
-        <div class="flex items-center justify-between gap-2">
-          <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">🍙</span><span>อาหารวันนี้</span></span>
-          <span class="text-xs text-slate-600 tabular-nums">${!foodLoaded && !foods.length ? 'กำลังโหลด...' : foods.length ? `${foods.length} รายการ` : 'ยังไม่บันทึก'}</span>
-        </div>
-        ${foods.length ? `
-          <div class="flex items-baseline justify-between gap-2 mt-2.5">
-            <div class="tabular-nums"><span class="text-2xl font-bold text-slate-800">${kcal.toLocaleString()}</span><span class="text-sm text-slate-600"> / ${targets.kcal.toLocaleString()} kcal</span></div>
-            <span class="text-xs font-medium tabular-nums ${left >= 0 ? 'text-slate-600' : 'text-amber-800'}">${left >= 0 ? `เหลือ ${Math.round(left).toLocaleString()}` : `เกิน ${Math.round(-left).toLocaleString()}`}</span>
-          </div>
-          <div class="progress mt-2.5" aria-hidden="true"><span style="width:${pct}%"></span></div>
-          <p class="text-xs text-slate-600 mt-2 truncate">ล่าสุด: ${esc(foods.slice(0, 2).map(f => f.name).join(' · '))}</p>
-        ` : `
-          <div class="mt-2.5 space-y-1">
-            <p class="text-base font-bold text-slate-800">${foodLoaded ? 'ยังไม่ได้บันทึกอาหารวันนี้' : 'กำลังซิงค์รายการอาหาร...'}</p>
-            <p class="text-xs text-slate-600 tabular-nums">เป้าหมายวันนี้ ${targets.kcal.toLocaleString()} kcal · แตะเพื่อเพิ่มมื้ออาหาร</p>
-          </div>
-          <div class="progress mt-2.5" aria-hidden="true"><span style="width:0%"></span></div>
-        `}
-      </div>
-      <div class="grid grid-cols-3 gap-2 mt-3">${macro('โปรตีน', sum('protein'), targets.protein)}${macro('คาร์บ', sum('carbs'), targets.carbs)}${macro('ไขมัน', sum('fat'), targets.fat)}</div>
-    </button>`;
-
-  const recentWorkouts = (state.workouts || [])
-    .filter(w => w.status !== 'planned')
-    .slice()
-    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  const latestWorkout = recentWorkouts[0] || null;
-  const plannedToday = (state.workouts || []).filter(w => w.date === today && w.status === 'planned');
-  const body = bodyLatest(state.body || []);
-  const bodySignals = [
-    body.weight ? `น้ำหนัก ${body.weight.v} กก. (${fmtDate(body.weight.d)})` : '',
-    body.sleepHours ? `นอน ${round1(body.sleepHours.v)} ชม.` : '',
-    body.steps ? `${Math.round(body.steps.v).toLocaleString()} ก้าว` : ''
-  ].filter(Boolean);
-
-  const activityCard = `
-    <div class="card cat-workout flex flex-col justify-between space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">🏃‍♀️</span><span>กิจกรรม & ร่างกาย</span></span>
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" data-go="settings" data-focus="st-home-widget-settings" class="min-h-[36px] min-w-[36px] rounded-lg text-brand-dark hover:bg-white/70" aria-label="ปรับแต่งการ์ดหน้าแรก" title="ปรับแต่งการ์ดหน้าแรก"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
-          <button type="button" data-go="workout" class="text-xs font-medium text-brand-dark underline min-h-[32px]">เปิดบันทึก</button>
-        </div>
-      </div>
-      <div class="space-y-2 text-sm">
-        ${latestWorkout ? `
-          <button type="button" data-go="workout" class="w-full text-left rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 hover:bg-lav-soft/40 transition-colors">
-            <span class="block text-xs text-slate-500">ออกกำลังกายล่าสุด · ${esc(fmtDate(latestWorkout.date))}</span>
-            <span class="block font-semibold text-slate-800 mt-0.5 truncate">${esc(TYPES[latestWorkout.type] || latestWorkout.type || 'ออกกำลังกาย')}${latestWorkout.title ? ` — ${esc(latestWorkout.title)}` : ''}</span>
-            <span class="block text-xs text-slate-600 tabular-nums mt-0.5">${latestWorkout.durationMin ? `${latestWorkout.durationMin} นาที` : 'บันทึกแล้ว'}${latestWorkout.estKcal ? ` · ~${latestWorkout.estKcal} kcal` : ''}</span>
-          </button>
-        ` : plannedToday.length ? `
-          <button type="button" data-go="workout" class="w-full text-left rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 hover:bg-lav-soft/40 transition-colors">
-            <span class="block text-xs text-slate-500">แผนวันนี้</span>
-            <span class="block font-semibold text-slate-800 mt-0.5 truncate">${esc(plannedToday[0].title || TYPES[plannedToday[0].type] || 'ออกกำลังกายตามแผน')}</span>
-            <span class="block text-xs text-slate-600 mt-0.5">รอทำอีก ${plannedToday.length} รายการ</span>
-          </button>
-        ` : `
-          <button type="button" data-go="workout" class="w-full text-left rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 hover:bg-lav-soft/40 transition-colors">
-            <span class="block font-medium text-slate-700">ยังไม่มีบันทึกออกกำลังกาย</span>
-            <span class="block text-xs text-slate-500 mt-0.5">แตะเพื่อบันทึกการเคลื่อนไหวหรือสร้างแผน</span>
-          </button>
-        `}
-        ${bodySignals.length ? `
-          <button type="button" data-go="body" class="w-full text-left rounded-xl bg-slate-50 border border-slate-100 px-3 py-2 hover:bg-lav-soft/40 transition-colors">
-            <span class="block text-xs text-slate-500">อัปเดตร่างกายล่าสุด</span>
-            <span class="block text-xs font-medium text-slate-800 mt-0.5 tabular-nums">${esc(bodySignals.join(' · '))}</span>
-          </button>
-        ` : `
-          <button type="button" data-go="body" class="w-full text-left rounded-xl bg-slate-50 border border-slate-100 px-3 py-2 hover:bg-lav-soft/40 transition-colors">
-            <span class="block text-xs text-slate-500">ยังไม่มีบันทึกน้ำหนัก · นอน · ก้าวเดิน</span>
-          </button>
-        `}
-      </div>
-    </div>`;
-
-  const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-  const incomeMonth = monthExps.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
-  const spentToday = todayExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-  const latestExp = monthExps.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0] || null;
-
-  const financeCard = `
-    <button type="button" data-go="expense" class="card cat-body sm:col-span-2 w-full text-left flex flex-wrap items-center justify-between gap-3">
-      <div class="space-y-1 min-w-0">
-        <span class="tile-head"><span class="emoji-bubble emoji-sm" aria-hidden="true">💸</span><span>การเงินเดือนนี้ & สแกนสลิป</span></span>
-        ${monthExps.length ? `
-          <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 pt-1 tabular-nums">
-            <span class="text-xl font-bold text-rose-700">จ่าย ฿${spentMonth.toLocaleString('th-TH', { maximumFractionDigits: 2 })}</span>
-            ${incomeMonth > 0 ? `<span class="text-sm font-semibold text-emerald-700">รับ ฿${incomeMonth.toLocaleString('th-TH', { maximumFractionDigits: 2 })}</span>` : ''}
-          </div>
-          <p class="text-xs text-slate-600 tabular-nums">
-            ${todayExps.length ? `วันนี้จ่าย ฿${spentToday.toLocaleString('th-TH', { maximumFractionDigits: 2 })}` : 'วันนี้ยังไม่มีรายจ่าย'}${latestExp ? ` · ล่าสุด: ${esc(latestExp.note || latestExp.category || 'รายการ')} ฿${num(latestExp.amount).toLocaleString('th-TH')}` : ''}
-          </p>
-        ` : `
-          <p class="text-base font-bold text-slate-800 pt-1">ยังไม่มีรายการรายรับ-รายจ่ายเดือนนี้</p>
-          <p class="text-xs text-slate-600">แตะเพื่อจดรายจ่าย หรือสแกนสลิปโอนเงินในเครื่อง</p>
-        `}
-      </div>
-      <span class="text-xs font-medium text-slate-600 shrink-0 tabular-nums">${monthExps.length ? `${monthExps.length} รายการเดือนนี้` : 'เริ่มจดรายการ →'}</span>
-    </button>`;
-
-  return `
-    <section class="space-y-2.5" aria-label="กิจกรรมและบันทึกล่าสุด">
-      <div class="flex items-center justify-between gap-2 px-1">
-        <h2 class="text-base font-bold text-slate-800">กิจกรรมและบันทึกวันนี้</h2>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        ${foodCard}
-        ${activityCard}
-        ${financeCard}
-      </div>
-    </section>`;
-}
-
-function buildRemindersHtml(today, reminders) {
-  const formatUrgency = r => {
-    if (!r.date) return { text: 'กำหนดการ', cls: 'text-slate-600' };
-    if (r.date < today) return { text: `เลยกำหนด ${daysBetween(r.date, today)} วัน`, cls: 'text-rose-700 font-semibold' };
-    if (r.date === today) return { text: r.dueTime ? `วันนี้ ${r.dueTime} น.` : 'วันนี้', cls: 'text-amber-800 font-semibold' };
-    const diff = daysBetween(today, r.date);
-    return { text: diff === 1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`, cls: 'text-slate-600' };
-  };
-
-  return `
-    <section class="card space-y-3" aria-label="แจ้งเตือนและรายการสำคัญ">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="font-bold text-slate-800 flex items-center gap-2">
-          <span class="emoji-bubble emoji-sm cat-body" aria-hidden="true">🔔</span>
-          <span>ใกล้ถึงกำหนด</span>
-        </h2>
-        <div class="flex items-center gap-3 text-xs">
-          <button type="button" data-go="remind" data-focus="rm-smart" class="text-brand-dark font-medium underline min-h-[32px]">+ เพิ่มเตือน</button>
-          <button type="button" data-go="notifications" class="text-slate-600 underline min-h-[32px]">ดูทั้งหมด</button>
-        </div>
-      </div>
-      ${reminders.length ? `
-        <div class="divide-y divide-slate-100">
-          ${reminders.slice(0, 4).map(r => {
-            const u = formatUrgency(r);
-            return `
-              <button type="button" data-go="${esc(r.tab || 'notifications')}" class="w-full text-left flex items-center gap-3 py-2.5 first:pt-1 last:pb-1 hover:bg-lav-soft/30 rounded-xl px-1.5 transition-colors">
-                <span class="emoji-bubble emoji-sm" aria-hidden="true">${r.icon}</span>
-                <span class="min-w-0 flex-1">
-                  <span class="text-sm font-semibold text-slate-800 block truncate">${esc(r.label)}</span>
-                  <span class="text-xs text-slate-600 block truncate">
-                    <span class="${u.cls} tabular-nums">${esc(u.text)}</span>
-                    ${r.detail ? ` · ${esc(r.detail)}` : ''}
-                  </span>
-                </span>
-              </button>`;
-          }).join('')}
-        </div>`
-        : '<p class="rounded-2xl bg-ok-soft p-3 text-sm text-green-800">ไม่มีรายการเร่งด่วนที่ใกล้ถึงกำหนด พักผ่อนได้ตามสบาย</p>'}
-    </section>`;
-}
-
 export function renderHome() {
   const el = $('#home-today');
   if (!el || (!state.uid && !isDemoMode())) return;
   const today = localDateStr();
-  const [hello, sun] = greeting();
-  const name = (state.user?.displayName || '').split(' ')[0];
+  const name = (state.user?.displayName || state.profile?.name || '').split(' ')[0];
   const dateText = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const head = $('#home-head', el);
   if (head) {
     head.innerHTML = `
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="home-hello">
-          <p class="text-sm text-slate-600">${esc(dateText)}</p>
-          <h1 class="text-xl sm:text-2xl font-bold text-slate-800">${hello}${name ? ', ' + esc(name) : ''} ${sun}</h1>
-        </div>
-        <div id="home-push-slot" class="shrink-0"></div>
-      </div>`;
+      <div class="hx-head-copy">
+        <p class="hx-date">${esc(dateText)}</p>
+        <h1 class="hx-hello">${greeting()}${name ? `, ${esc(name)}` : ''}</h1>
+      </div>
+      <div id="home-push-slot" class="shrink-0"></div>`;
     refreshHomePushBtn();
   }
 
@@ -559,7 +462,7 @@ export function renderHome() {
   }
 
   if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
-    slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets, monthExps, todayExps, reminders);
+    slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets);
   }
   if (slots['quick-access'] && !config.hidden.has('quick-access')) {
     slots['quick-access'].innerHTML = buildQuickAccessHtml(config);
@@ -574,7 +477,7 @@ export function renderHome() {
     }
   }
   if (slots['daily-activity'] && !config.hidden.has('daily-activity')) {
-    slots['daily-activity'].innerHTML = buildDailyActivityHtml(today, foods, targets, monthExps, todayExps);
+    slots['daily-activity'].innerHTML = buildDailyActivityHtml(today, foods, monthExps, todayExps);
   }
   if (slots['reminders'] && !config.hidden.has('reminders')) {
     slots['reminders'].innerHTML = buildRemindersHtml(today, reminders);
@@ -587,7 +490,7 @@ async function refreshHomePushBtn() {
   const st = await getPushStatus();
   if (!slot.isConnected) return;
   if (isDemoMode()) {
-    slot.innerHTML = '<span class="rounded-full bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">แจ้งเตือนปิดในโหมดตัวอย่าง</span>';
+    slot.innerHTML = '';
     return;
   }
   if (!st.supported && !st.needsIosInstall) {
@@ -595,8 +498,8 @@ async function refreshHomePushBtn() {
     return;
   }
   if (st.subscribedHere) {
-    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="chip bg-ok-soft text-green-800 min-h-[40px]"><i class="fa-solid fa-bell"></i> รับแจ้งเตือนแล้ว</button>`;
+    slot.innerHTML = '';
   } else {
-    slot.innerHTML = `<button type="button" id="home-push-btn" class="chip bg-pink-soft text-rose-800 border border-pink-200 min-h-[40px]"><i class="fa-regular fa-bell"></i> เปิดรับการแจ้งเตือน</button>`;
+    slot.innerHTML = `<button type="button" id="home-push-btn" class="hx-push" aria-label="เปิดรับการแจ้งเตือน"><i class="fa-regular fa-bell" aria-hidden="true"></i><span>เปิดแจ้งเตือน</span></button>`;
   }
 }

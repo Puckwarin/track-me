@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./home.css";
 
 @theme {
   /* ธีม Track Me: Baby Blue × Ice Mist Off-White · Soft Wellness */
