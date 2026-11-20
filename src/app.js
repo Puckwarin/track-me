@@ -661,11 +661,12 @@ on('auth', user => {
   unmountOnboarding();
   overviewLoader.get()?.resetDashboardState?.();
   resetHomePlannerState();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.demoFoodRecords = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   $('#preview-banner')?.classList.toggle('hidden', !isPreviewMode());
   window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
+    if (isDemoMode()) seedDemoState();
     mountAll();
     updateStickyOffsets();
     settingsLoader.get()?.refreshAccount?.();
@@ -686,6 +687,7 @@ on('auth', user => {
 
 document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goToGroup(b.dataset.nav)));
 $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) goTo(b.dataset.sub); });
+window.addEventListener('trackme:goto', e => { if (e.detail?.tab) goTo(e.detail.tab); });
 $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));

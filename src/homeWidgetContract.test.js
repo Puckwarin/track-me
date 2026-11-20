@@ -33,6 +33,7 @@ describe('home widget customization contract', () => {
       'daily-overview',
       'quick-access',
       'daily-activity',
+      'planner',
       'reminders'
     ]);
     expect(HOME_WIDGET_DEFS.map(def => def.id)).toEqual(HOME_WIDGET_IDS);

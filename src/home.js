@@ -18,6 +18,7 @@ export const HOME_WIDGET_DEFS = [
   { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
   { id: 'quick-access', label: 'ทางลัดบันทึกด่วน' },
   { id: 'daily-activity', label: 'กิจกรรม & บันทึกล่าสุด' },
+  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
   { id: 'reminders', label: 'แจ้งเตือนที่ต้องดูแล' }
 ];
 
@@ -422,7 +423,7 @@ export function mountHome(navigate) {
 
 export function renderHome() {
   const el = $('#home-today');
-  if (!el || !state.uid) return;
+  if (!el || (!state.uid && !isDemoMode())) return;
   const today = localDateStr();
   const name = (state.profile?.name || (isPreviewMode() ? '' : state.user?.displayName) || '').split(' ')[0];
   const dateText = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -497,6 +498,10 @@ export function renderHome() {
 async function refreshHomePushBtn() {
   const slot = $('#home-push-slot');
   if (!slot) return;
+  if (isDemoMode()) {
+    slot.innerHTML = '';
+    return;
+  }
   const st = await getPushStatus();
   if (!slot.isConnected) return;
   if (!st.supported && !st.needsIosInstall) {

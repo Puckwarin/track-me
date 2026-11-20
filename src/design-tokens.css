@@ -1,6 +1,6 @@
 /* ============================================================
-   Track Me — Design Tokens v2
-   Soft Blue × Lavender × Pink — Soft Wellness × Modern Lifestyle
+   Track Me â€” Design Tokens v2
+   Soft Blue Ã— Lavender Ã— Pink â€” Soft Wellness Ã— Modern Lifestyle
    Team 1: Design System & Shared UI Components
    ============================================================ */
 
@@ -11,11 +11,11 @@
   --font-heading: "Prompt", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Semantic color ramps — Baby Blue × Soft Wellness Pastels */
+  /* Semantic color ramps â€” Baby Blue Ã— Soft Wellness Pastels */
   --color-primary-50: #EFF7FE;
   --color-primary-100: #DCEEFF;
   --color-primary-200: #BBE0FC;
-  --color-primary-300: #8ECDF7;   /* Baby Blue — Primary soft accent */
+  --color-primary-300: #8ECDF7;   /* Baby Blue â€” Primary soft accent */
   --color-primary-400: #6AB8ED;
   --color-primary-500: #4A9AD6;
   --color-primary-600: #357FB7;
@@ -26,7 +26,7 @@
   --color-secondary-50: #F4F1FA;
   --color-secondary-100: #EAE3F6;
   --color-secondary-200: #D5C8EC;
-  --color-secondary-300: #B39EDB;   /* Soft Lavender — Secondary accent */
+  --color-secondary-300: #B39EDB;   /* Soft Lavender â€” Secondary accent */
   --color-secondary-400: #9980C8;
   --color-secondary-500: #7E66B0;
   --color-secondary-600: #664D9C;
@@ -37,7 +37,7 @@
   --color-accent-50: #FDF3F7;
   --color-accent-100: #FCE9EF;
   --color-accent-200: #F6CFD9;
-  --color-accent-300: #EDAFC0;   /* Soft Pink — Gentle highlight */
+  --color-accent-300: #EDAFC0;   /* Soft Pink â€” Gentle highlight */
   --color-accent-400: #DC91A6;
   --color-accent-500: #C8748C;
   --color-accent-600: #A84463;
@@ -48,7 +48,7 @@
   --color-sage-50: #F0FAF4;
   --color-sage-100: #E3F5EC;
   --color-sage-200: #BFE5D2;
-  --color-sage-300: #94D0B2;   /* Soft Mint — Activity & positive states */
+  --color-sage-300: #94D0B2;   /* Soft Mint â€” Activity & positive states */
   --color-sage-400: #6EBA94;
   --color-sage-500: #4C9D75;
   --color-sage-600: #357E5B;
@@ -59,7 +59,7 @@
   --color-peach-50: #FFF8F2;
   --color-peach-100: #FFF1E6;
   --color-peach-200: #FAD8BE;
-  --color-peach-300: #F4C39E;   /* Pastel Peach — Warm category accent */
+  --color-peach-300: #F4C39E;   /* Pastel Peach â€” Warm category accent */
   --color-peach-400: #E5A678;
   --color-peach-500: #D18854;
   --color-peach-600: #A8572A;
@@ -70,12 +70,12 @@
   /* Semantic surface tokens */
   --color-surface: #FFFFFF;
   --color-surface-raised: #FFFFFF;
-  --color-surface-subtle: #F4F8FC;   /* Ice Mist — Main background */
+  --color-surface-subtle: #F4F8FC;   /* Ice Mist â€” Main background */
   --color-surface-overlay: #FCFEFF;
   --color-app-bg: #F4F8FC;
 
   /* Semantic text tokens */
-  --color-ink: #1E293B;   /* Slate 800 — Primary text */
+  --color-ink: #1E293B;   /* Slate 800 â€” Primary text */
   --color-ink-secondary: #334155;
   --color-ink-muted: #526277;
   --color-ink-subtle: #7E8FA4;
@@ -107,7 +107,7 @@
   --color-info-bg: #EFF7FE;
   --color-info-border: #BBE0FC;
 
-  /* Spacing scale — 8px base */
+  /* Spacing scale â€” 8px base */
   --space-0: 0;
   --space-1: 0.25rem;   /* 4px */
   --space-2: 0.5rem;    /* 8px */

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ธีม Track Me: Baby Blue × Ice Mist Off-White · Soft Wellness */
+/* à¸˜à¸µà¸¡ Track Me: Baby Blue Ã— Ice Mist Off-White Â· Soft Wellness */
 @theme {
   --font-sans: "Prompt", ui-sans-serif, system-ui, sans-serif;
 
@@ -52,7 +52,7 @@
 }
 
 :root {
-  /* สีพาสเทลประจำหมวด: bg = พื้นอ่อน · fg = ตัวอักษร/ไอคอน · ring = เส้น */
+  /* à¸ªà¸µà¸žà¸²à¸ªà¹€à¸—à¸¥à¸›à¸£à¸°à¸ˆà¸³à¸«à¸¡à¸§à¸”: bg = à¸žà¸·à¹‰à¸™à¸­à¹ˆà¸­à¸™ Â· fg = à¸•à¸±à¸§à¸­à¸±à¸à¸©à¸£/à¹„à¸­à¸„à¸­à¸™ Â· ring = à¹€à¸ªà¹‰à¸™ */
   --food-bg: #FFF0E3; --food-fg: #9D5328; --food-ring: #F9D8BC;
   --workout-bg: #E3F6EC; --workout-fg: #2B6E4F; --workout-ring: #BCE6CF;
   --period-bg: #FCEAF0; --period-fg: #A84463; --period-ring: #F5C5D5;
@@ -84,7 +84,7 @@ body { background: var(--color-app-bg); color: var(--color-ink); }
 #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 2rem); }
 button { touch-action: manipulation; }
 
-/* ---------- ส่วนประกอบพื้นฐาน ---------- */
+/* ---------- à¸ªà¹ˆà¸§à¸™à¸›à¸£à¸°à¸à¸­à¸šà¸žà¸·à¹‰à¸™à¸à¸²à¸™ ---------- */
 .card { background: #fff; border-radius: 1.5rem; border: 1px solid #E1EBF5; box-shadow: var(--card-shadow); padding: 1.25rem; scroll-margin-top: calc(var(--header-h) + var(--nav-bar-h) + env(safe-area-inset-top) + 1rem); }
 @media (min-width: 640px) { .card { padding: 1.5rem; } }
 .summary-all-empty { display: none; }
@@ -138,7 +138,7 @@ input.input::-webkit-datetime-edit { padding: 0; }
   }
 }
 
-/* ---------- Popup: กลางจอบนคอม · แผ่นเลื่อนขึ้นจากด้านล่างบนมือถือ ---------- */
+/* ---------- Popup: à¸à¸¥à¸²à¸‡à¸ˆà¸­à¸šà¸™à¸„à¸­à¸¡ Â· à¹à¸œà¹ˆà¸™à¹€à¸¥à¸·à¹ˆà¸­à¸™à¸‚à¸¶à¹‰à¸™à¸ˆà¸²à¸à¸”à¹‰à¸²à¸™à¸¥à¹ˆà¸²à¸‡à¸šà¸™à¸¡à¸·à¸­à¸–à¸·à¸­ ---------- */
 .modal-backdrop { background: rgb(15 23 42 / .38); backdrop-filter: blur(2px); padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, var(--safe-b)); }
 .modal-box { border-radius: 1.75rem; max-height: 90vh; max-height: calc(100dvh - 2rem); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; box-shadow: 0 20px 50px -12px rgb(15 23 42 / .32); }
 @media (max-width: 640px) {
@@ -151,7 +151,7 @@ input.input::-webkit-datetime-edit { padding: 0; }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 .toast { bottom: calc(var(--nav-h) + var(--safe-b) + 1rem); }
 
-/* ---------- ส่วนหัว ---------- */
+/* ---------- à¸ªà¹ˆà¸§à¸™à¸«à¸±à¸§ ---------- */
 .app-header { background: color-mix(in srgb, var(--color-app-bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); padding-top: env(safe-area-inset-top); border-bottom: 1px solid #E1EBF5; }
 .logo-bubble { width: 4.5rem; height: 4.5rem; border-radius: 1.75rem; display: flex; align-items: center; justify-content: center; font-size: 2.1rem; background: linear-gradient(135deg, #DCEEFF, #E5F5EC); box-shadow: inset 0 -3px 0 rgb(74 154 214 / .12); }
 .logo-bubble.logo-sm { width: 2.25rem; height: 2.25rem; border-radius: .9rem; font-size: 1.1rem; }
@@ -165,7 +165,7 @@ input.input::-webkit-datetime-edit { padding: 0; }
 #reminder-banner { border-radius: 1.25rem; margin: .75rem 1rem 0; }
 @media (min-width: 1152px) { #reminder-banner { max-width: 78rem; margin-inline: auto; padding-inline: 1rem; } }
 
-/* ---------- เมนูย่อย (ชิปเลื่อนแนวนอน) ---------- */
+/* ---------- à¹€à¸¡à¸™à¸¹à¸¢à¹ˆà¸­à¸¢ (à¸Šà¸´à¸›à¹€à¸¥à¸·à¹ˆà¸­à¸™à¹à¸™à¸§à¸™à¸­à¸™) ---------- */
 .page { margin-top: 1rem; }
 .subnav { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top)); z-index: 35; margin-top: .5rem; padding-block: .25rem; background: color-mix(in srgb, var(--color-app-bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .subnav:has(.subnav-row) { position: sticky; }
@@ -209,7 +209,7 @@ html[data-theme="dark"] .sub-tile.is-active .hx-cat-label { color: #BAE2FF; }
 .nav-plus :is(i, .nav-plus-svg) { transition: transform .2s; }
 .nav-plus[aria-expanded="true"] :is(i, .nav-plus-svg) { transform: rotate(45deg); }
 
-/* แผ่นเลือกหมวด */
+/* à¹à¸œà¹ˆà¸™à¹€à¸¥à¸·à¸­à¸à¸«à¸¡à¸§à¸” */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(15 23 42 / 0); display: flex; align-items: flex-end; justify-content: center; transition: background .2s; }
 .sheet-backdrop.hidden { display: none; }
 .sheet-backdrop.is-open { background: rgb(15 23 42 / .38); }
@@ -218,7 +218,7 @@ html[data-theme="dark"] .sub-tile.is-active .hx-cat-label { color: #BAE2FF; }
 .sheet-handle { width: 2.5rem; height: .3rem; border-radius: 9999px; background: #CBDCEB; margin: 0 auto 1rem; }
 @media (min-width: 640px) { .sheet-backdrop { align-items: center; } .sheet-panel { border-radius: 2rem; margin-bottom: 0; } }
 
-/* ---------- ไอคอนและการ์ดหมวด ---------- */
+/* ---------- à¹„à¸­à¸„à¸­à¸™à¹à¸¥à¸°à¸à¸²à¸£à¹Œà¸”à¸«à¸¡à¸§à¸” ---------- */
 .emoji-bubble { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; font-size: 1.35rem; background: var(--c-bg, #EFF5FB); line-height: 1; flex: none; }
 .emoji-bubble.emoji-sm { width: 2rem; height: 2rem; border-radius: .75rem; font-size: 1rem; vertical-align: middle; margin-right: .25rem; }
 .icon-bubble { color: var(--c-fg, var(--color-brand-dark)); }
@@ -230,7 +230,7 @@ html[data-theme="dark"] .sub-tile.is-active .hx-cat-label { color: #BAE2FF; }
 .sheet-panel .cat-tile .emoji-bubble { background: #fff; }
 html[data-theme="dark"] .sheet-panel .cat-tile .emoji-bubble { background: var(--c-bg); }
 
-/* ---------- หน้า Home ---------- */
+/* ---------- à¸«à¸™à¹‰à¸² Home ---------- */
 .nav-shortcuts { display: flex; flex-direction: column; gap: .55rem; padding: .35rem .1rem; }
 .nav-shortcuts > h2 { color: var(--color-slate-700); font-size: .875rem; font-weight: 600; }
 .nav-shortcuts-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
@@ -266,11 +266,11 @@ html[data-theme="dark"] .sheet-panel .cat-tile .emoji-bubble { background: var(-
 .macro small { font-weight: 400; color: #94A3B8; font-size: .65rem; }
 .cozy-hero { background: linear-gradient(180deg, #fff 58%, #EBF5FF); }
 
-/* ไฮไลต์ฟอร์มเมื่อกดจากปุ่ม + */
+/* à¹„à¸®à¹„à¸¥à¸•à¹Œà¸Ÿà¸­à¸£à¹Œà¸¡à¹€à¸¡à¸·à¹ˆà¸­à¸à¸”à¸ˆà¸²à¸à¸›à¸¸à¹ˆà¸¡ + */
 @keyframes card-flash { 0% { box-shadow: 0 0 0 0 rgb(74 154 214 / .45), var(--card-shadow); } 100% { box-shadow: 0 0 0 14px rgb(74 154 214 / 0), var(--card-shadow); } }
 .card-flash { animation: card-flash 1s ease-out 2; }
 
-/* สีประจำหมวดกับหัวข้อการ์ดในแต่ละหน้า */
+/* à¸ªà¸µà¸›à¸£à¸°à¸ˆà¸³à¸«à¸¡à¸§à¸”à¸à¸±à¸šà¸«à¸±à¸§à¸‚à¹‰à¸­à¸à¸²à¸£à¹Œà¸”à¹ƒà¸™à¹à¸•à¹ˆà¸¥à¸°à¸«à¸™à¹‰à¸² */
 html[data-page="food"] .card h2 :is(i, svg), html[data-page="food"] .card h3 :is(i, svg) { color: var(--food-fg); }
 html[data-page="workout"] .card h2 :is(i, svg), html[data-page="workout"] .card h3 :is(i, svg) { color: var(--workout-fg); }
 html[data-page="period"] .card h2 :is(i, svg), html[data-page="period"] .card h3 :is(i, svg) { color: var(--period-fg); }
@@ -398,7 +398,7 @@ html[data-theme="cozy"] .cal-day:hover { background: #F5E8DA; }
 html[data-theme="cozy"] .cal-today { box-shadow: 0 0 0 2px #8B5E3C inset; }
 html[data-theme="cozy"] .cal-sel { outline: 2px solid #6B4428; }
 
-/* ---------- Dark Theme (Consolidated Cool Navy Slate × Baby Blue) ---------- */
+/* ---------- Dark Theme (Consolidated Cool Navy Slate Ã— Baby Blue) ---------- */
 html[data-theme="dark"] {
   color-scheme: dark;
   --color-app-bg: #0F1622;
@@ -488,7 +488,7 @@ html[data-theme="dark"] .bg-pink-50 *, html[data-theme="dark"] .bg-pink-100 *,
 html[data-theme="dark"] .bg-rose-50 *, html[data-theme="dark"] .bg-rose-100 *,
 html[data-theme="dark"] .bg-green-50 *, html[data-theme="dark"] .bg-green-100 * { color: #F1F5F9 !important; }
 
-/* ปฏิทินประจำเดือน */
+/* à¸›à¸à¸´à¸—à¸´à¸™à¸›à¸£à¸°à¸ˆà¸³à¹€à¸”à¸·à¸­à¸™ */
 .cal-day { aspect-ratio: 1 / 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 1rem; font-size: .8rem; font: inherit; color: inherit; background: transparent; padding: 0; position: relative; cursor: pointer; border: 1px solid transparent; }
 .cal-day:hover { background: #FCEAF0; }
 .cal-day:disabled { opacity: 0.45; cursor: default; }
@@ -500,7 +500,7 @@ html[data-theme="dark"] .bg-green-50 *, html[data-theme="dark"] .bg-green-100 * 
 .cal-dot { width: 5px; height: 5px; border-radius: 9999px; background: #7E66B0; position: absolute; bottom: 4px; }
 .cal-period .cal-dot { background: #fff; }
 
-/* พิมพ์รายงานเป็น PDF: ซ่อนทุกอย่างยกเว้นรายงาน */
+/* à¸žà¸´à¸¡à¸žà¹Œà¸£à¸²à¸¢à¸‡à¸²à¸™à¹€à¸›à¹‡à¸™ PDF: à¸‹à¹ˆà¸­à¸™à¸—à¸¸à¸à¸­à¸¢à¹ˆà¸²à¸‡à¸¢à¸à¹€à¸§à¹‰à¸™à¸£à¸²à¸¢à¸‡à¸²à¸™ */
 @media print {
   header, nav, #summary-section, #login-screen, #reminder-banner, #bottom-nav, #quick-sheet, #subnav, .no-print { display: none !important; }
   main:not(#tab-report) { display: none !important; }
