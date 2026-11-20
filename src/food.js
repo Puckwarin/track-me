@@ -1,6 +1,7 @@
 import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, $$, esc, localDateStr, addDays, mondayOf, numField, round1, toast, openModal, toNum } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker } from './ui.js';
@@ -343,8 +344,14 @@ function openHiwpintoCalculator(saved = null) {
 }
 
 export function watchDay() {
-  if (!state.uid || !root) return;
+  if (!root) return;
   const date = $('#f-date', root).value;
+  if (isDemoMode()) {
+    items = (state.demoFoodRecords || []).filter(item => item.date === date);
+    renderDay();
+    return;
+  }
+  if (!state.uid) return;
   watchFoodRecords(state.uid, date, list => { items = list; renderDay(); });
 }
 

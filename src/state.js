@@ -5,6 +5,7 @@ export const state = {
   period: [],
   body: [],
   customFoods: [],
+  demoFoodRecords: [],
   symptoms: [],
   workouts: [],
   templates: [],

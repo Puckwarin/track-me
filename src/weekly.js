@@ -1,6 +1,7 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
 import { TYPES } from './workoutConstants.js';
@@ -79,7 +80,7 @@ export function resetWeeklyToToday() {
 const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {
-  if (!root || !state.uid) return;
+  if (!root || (!state.uid && !isDemoMode())) return;
   $('#sum-week', root).className = `chip whitespace-nowrap min-h-[38px] ${summaryMode === 'weekly' ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
   $('#sum-month', root).className = `chip whitespace-nowrap min-h-[38px] ${summaryMode === 'monthly' ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
   $('#wk-prev', root).setAttribute('aria-label', summaryMode === 'monthly' ? 'เดือนก่อน' : 'สัปดาห์ก่อน');
@@ -93,10 +94,14 @@ export async function renderWeekly() {
 
   let food = [];
   let foodError = false;
-  try {
-    food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', weekStart), where('date', '<=', end)))).docs.map(d => d.data());
-  } catch {
-    foodError = true;
+  if (isDemoMode()) {
+    food = (state.demoFoodRecords || []).filter(item => item.date >= weekStart && item.date <= end);
+  } else {
+    try {
+      food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', weekStart), where('date', '<=', end)))).docs.map(d => d.data());
+    } catch {
+      foodError = true;
+    }
   }
   if (my !== seq) return;
 
@@ -200,10 +205,14 @@ async function renderMonthly() {
 
   let food = [];
   let foodError = false;
-  try {
-    food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', start), where('date', '<=', end)))).docs.map(d => d.data());
-  } catch {
-    foodError = true;
+  if (isDemoMode()) {
+    food = (state.demoFoodRecords || []).filter(item => item.date >= start && item.date <= end);
+  } else {
+    try {
+      food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', start), where('date', '<=', end)))).docs.map(d => d.data());
+    } catch {
+      foodError = true;
+    }
   }
   if (my !== seq) return;
 

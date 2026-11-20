@@ -1,6 +1,7 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { auth } from './firebase.js';
 import { $, esc, fmtDate, fmtDateTime, localDateStr, addDays, daysBetween, round1, toCsv, downloadFile, toast } from './util.js';
 import { periodStats } from './period.js';
@@ -63,7 +64,13 @@ async function load() {
   const range = name => getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
     .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
   // ประจำเดือน/น้ำหนักอยู่ในหน่วยความจำแล้ว; อาหาร/อาการดึงตามช่วงวันที่ (ตอนออฟไลน์จะอ่านจากแคชในเครื่อง)
-  const [food, symptoms, workouts] = await Promise.all([range('food_records'), range('symptom_records'), range('workout_records')]);
+  const [food, symptoms, workouts] = isDemoMode()
+    ? [
+      (state.demoFoodRecords || []).filter(item => item.date >= from && item.date <= to),
+      state.symptoms.filter(item => item.date >= from && item.date <= to),
+      state.workouts.filter(item => item.date >= from && item.date <= to)
+    ]
+    : await Promise.all([range('food_records'), range('symptom_records'), range('workout_records')]);
   const period = state.period.filter(p => p.start <= to && (p.end || p.start) >= from).sort((a, b) => a.start.localeCompare(b.start));
   const body = state.body.filter(b => b.date >= from && b.date <= to);
   return { from, to, food, symptoms, workouts, period, body };

@@ -1,5 +1,6 @@
 // หน้า Home: Daily Overview, Quick Access, Planner, Daily Activity และ Reminders
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, round1, toast, daysBetween } from './util.js';
 import { getTargets } from './profile.js';
 import { collectReminders, remindersForDate } from './reminders.js';
@@ -539,7 +540,7 @@ function buildRemindersHtml(today, reminders) {
 
 export function renderHome() {
   const el = $('#home-today');
-  if (!el || !state.uid) return;
+  if (!el || (!state.uid && !isDemoMode())) return;
   const today = localDateStr();
   const [hello, sun] = greeting();
   const name = (state.user?.displayName || '').split(' ')[0];
@@ -618,6 +619,10 @@ export function renderHome() {
 async function refreshHomePushBtn() {
   const slot = $('#home-push-slot');
   if (!slot) return;
+  if (isDemoMode()) {
+    slot.innerHTML = '';
+    return;
+  }
   const st = await getPushStatus();
   if (!slot.isConnected) return;
   if (!st.supported && !st.needsIosInstall) {

@@ -1,6 +1,7 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { isDemoMode } from './demo.js';
 import { $, esc, fmtDateTime, localDateStr, monthEndDate, toast } from './util.js';
 import { getTargets } from './profile.js';
 import {
@@ -98,6 +99,20 @@ function renderWeightChart(months) {
 }
 
 async function loadFoodForRange(forceRefresh = false) {
+  if (isDemoMode()) {
+    const today = localDateStr();
+    const keys = buildMonthKeys(rangeMonths, today);
+    const start = `${keys[0]}-01`;
+    const end = monthEndDate(keys[keys.length - 1]);
+    cachedFood = compactFoodForOverview((state.demoFoodRecords || []).filter(item => item.date >= start && item.date <= end));
+    cachedRangeKey = `demo:${start}:${end}`;
+    cachedUpdatedAt = Date.now();
+    cachedFromStorage = false;
+    lastFoodError = '';
+    isLoading = false;
+    renderView();
+    return;
+  }
   if (!state.uid) return;
   const today = localDateStr();
   const keys = buildMonthKeys(rangeMonths, today);
@@ -204,9 +219,11 @@ function renderView() {
       cacheInfoEl.textContent = '⏳ กำลังโหลดข้อมูลอาหารย้อนหลังจากเซิร์ฟเวอร์...';
       cacheInfoEl.classList.remove('hidden');
     } else if (cachedUpdatedAt) {
-      cacheInfoEl.textContent = cachedFromStorage
-        ? `แสดงผลจากแคชในเครื่อง (${fmtDateTime(cachedUpdatedAt)}) · กดรีเฟรชเพื่ออัปเดตจากเซิร์ฟเวอร์`
-        : `อัปเดตล่าสุดจากเซิร์ฟเวอร์ (${fmtDateTime(cachedUpdatedAt)})`;
+      cacheInfoEl.textContent = isDemoMode()
+        ? 'ข้อมูลตัวอย่าง · ไม่ได้อ่านหรือซิงค์จากเซิร์ฟเวอร์'
+        : cachedFromStorage
+          ? `แสดงผลจากแคชในเครื่อง (${fmtDateTime(cachedUpdatedAt)}) · กดรีเฟรชเพื่ออัปเดตจากเซิร์ฟเวอร์`
+          : `อัปเดตล่าสุดจากเซิร์ฟเวอร์ (${fmtDateTime(cachedUpdatedAt)})`;
       cacheInfoEl.classList.remove('hidden');
     } else {
       cacheInfoEl.textContent = '';
@@ -354,7 +371,7 @@ export function mountOverview(el) {
 }
 
 export function renderOverview({ refreshFood = false } = {}) {
-  if (!root || !state.uid) return;
+  if (!root || (!state.uid && !isDemoMode())) return;
   renderView();
   const panel = $('#tab-overview');
   const isVisible = panel && !panel.classList.contains('hidden');

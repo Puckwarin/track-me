@@ -19,6 +19,7 @@ import { $, localDateStr, addDays, toast, trapFocus } from './util.js';
 import { APP_VERSION_LABEL } from './version.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth } from './auth.js';
+import { isDemoMode, seedDemoState } from './demo.js';
 import './theme.js';
 import { CATEGORIES, GROUPS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
@@ -389,6 +390,7 @@ async function migrateLegacyExpensesIfNeeded(uid) {
 }
 
 function startData() {
+  if (isDemoMode()) return;
   const uid = state.uid;
   expenseRecordsLoaded = false;
   legacyMigrationBlocked = false;
@@ -474,10 +476,11 @@ on('auth', user => {
   unmountOnboarding();
   overviewLoader.get()?.resetOverviewState?.();
   resetHomePlannerState();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.demoFoodRecords = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
+    if (isDemoMode()) seedDemoState();
     mountAll();
     updateStickyOffsets();
     settingsLoader.get()?.refreshAccount?.();
