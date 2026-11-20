@@ -52,6 +52,7 @@ const CAT_ICONS = {
 };
 
 let root;
+let activeExpenseTab = 'log';
 let txType = 'expense';
 let editing = null; // { id, oldMonth } | null
 let selectedMonth = localDateStr().slice(0, 7);
@@ -61,6 +62,19 @@ let expenseBudgets = {};
 let recurringExpenses = [];
 let analyzedRecurringCandidates = [];
 let manualCategoryTouched = false;
+
+function setExpenseTab(tab) {
+  if (!root) return;
+  activeExpenseTab = ['log', 'summary', 'history'].includes(tab) ? tab : 'log';
+  root.querySelectorAll('[data-ex-tab]').forEach(btn => {
+    const on = btn.dataset.exTab === activeExpenseTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#ex-panel-log', root)?.classList.toggle('hidden', activeExpenseTab !== 'log');
+  $('#ex-panel-summary', root)?.classList.toggle('hidden', activeExpenseTab !== 'summary');
+  $('#ex-panel-history', root)?.classList.toggle('hidden', activeExpenseTab !== 'history');
+}
 
 const $r = s => $(s, root);
 const fmtMoney = n => (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -204,14 +218,27 @@ async function deleteTransactionRecord(id, dateStr) {
 
 export function mountExpense(el) {
   root = el;
+  activeExpenseTab = 'log';
   txType = 'expense';
   editing = null;
   manualCategoryTouched = false;
   pendingStatement = [];
   const today = localDateStr();
   root.innerHTML = `
-  <div class="lg:col-span-1 space-y-4">
-    <section class="card space-y-4">
+  <div class="lg:col-span-3 flex flex-wrap items-center justify-between gap-2.5">
+    <div class="tm-seg tm-seg--3 flex-1 min-w-[260px] max-w-xl" role="tablist" aria-label="หมวดรายรับ-รายจ่าย">
+      <button type="button" role="tab" data-ex-tab="log" aria-selected="true" class="tm-seg-btn is-active">บันทึก & นำเข้า</button>
+      <button type="button" role="tab" data-ex-tab="summary" aria-selected="false" class="tm-seg-btn">สรุป & งบ & ประจำ</button>
+      <button type="button" role="tab" data-ex-tab="history" aria-selected="false" class="tm-seg-btn">ประวัติ</button>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <label class="text-xs text-slate-500" for="ex-month">เดือน</label>
+      <input id="ex-month" type="month" class="input !w-auto !py-1.5 text-xs">
+    </div>
+  </div>
+
+  <div id="ex-panel-log" class="lg:col-span-3 space-y-4">
+    <section class="card space-y-4 max-w-2xl">
       <header class="space-y-1">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('expense', { size: 19, className: 'text-brand' })}<span>รายรับ-รายจ่าย</span></h2>
@@ -242,9 +269,9 @@ export function mountExpense(el) {
           <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">ประมวลผลข้อความ Statement</button></div>
         </div>
       </details>
-      <div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-        <button type="button" data-ex-type="expense" class="py-2 rounded-xl text-xs font-semibold transition">รายจ่าย (Expense)</button>
-        <button type="button" data-ex-type="income" class="py-2 rounded-xl text-xs font-semibold transition">รายรับ (Income)</button>
+      <div class="tm-seg tm-seg--2" role="tablist" aria-label="ประเภทรายการ">
+        <button type="button" role="tab" aria-selected="true" data-ex-type="expense" class="tm-seg-btn is-active">รายจ่าย (Expense)</button>
+        <button type="button" role="tab" aria-selected="false" data-ex-type="income" class="tm-seg-btn">รายรับ (Income)</button>
       </div>
 
       <div class="space-y-3">
@@ -270,13 +297,23 @@ export function mountExpense(el) {
         <button type="button" id="ex-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการ</button>
       </div>
     </section>
+
+    <section id="ex-pending-card" class="card space-y-3 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-slate-800">กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างกล่องรอตรวจ</button>
+          <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button>
+        </div>
+      </div>
+      <div id="ex-pending-list" class="space-y-2"></div>
+    </section>
   </div>
 
-  <div class="lg:col-span-2 space-y-4">
+  <div id="ex-panel-summary" class="hidden lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('overview', { size: 17, className: 'text-brand' })}<span>สรุปประจำเดือน</span></h3>
-        <input id="ex-month" type="month" class="input !w-auto !py-1.5 text-xs">
       </div>
       <div id="ex-summary" class="grid grid-cols-3 gap-2.5"></div>
       <div id="ex-breakdown" class="space-y-1.5 pt-1"></div>
@@ -293,17 +330,9 @@ export function mountExpense(el) {
       </div>
       <div id="ex-recurring-list" class="space-y-2"></div>
     </section>
+  </div>
 
-    <section id="ex-pending-card" class="card space-y-3 hidden">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800">กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างกล่องรอตรวจ</button>
-          <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button>
-        </div>
-      </div>
-      <div id="ex-pending-list" class="space-y-2"></div>
-    </section>
+  <div id="ex-panel-history" class="hidden lg:col-span-3 space-y-4">
     <section class="card space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ประวัติรายรับ-รายจ่าย</span></h3>
@@ -331,7 +360,20 @@ export function mountExpense(el) {
 
   updateTypeUi();
 
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'expense') return;
+    const fid = String(e.detail?.focusId || '');
+    if (fid === 'ex-list' || fid === 'ex-history') setExpenseTab('history');
+    else if (fid === 'ex-summary' || fid === 'ex-recurring-list') setExpenseTab('summary');
+    else setExpenseTab('log');
+  });
+
   root.addEventListener('click', async e => {
+    const tabBtn = e.target.closest('[data-ex-tab]');
+    if (tabBtn) {
+      setExpenseTab(tabBtn.dataset.exTab);
+      return;
+    }
     const typeBtn = e.target.closest('[data-ex-type]');
     if (typeBtn) {
       txType = typeBtn.dataset.exType === 'income' ? 'income' : 'expense';
@@ -470,6 +512,7 @@ export function mountExpense(el) {
     $r('#' + id).addEventListener('change', renderExpense);
   });
 
+  setExpenseTab('log');
   renderExpense();
 }
 
@@ -477,9 +520,8 @@ function updateTypeUi() {
   if (!root) return;
   root.querySelectorAll('[data-ex-type]').forEach(b => {
     const active = b.dataset.exType === txType;
-    b.className = active
-      ? `py-2 rounded-xl text-xs font-semibold transition ${txType === 'income' ? 'bg-ok-soft text-green-800 shadow-sm' : 'bg-white text-rose-700 shadow-sm'}`
-      : 'py-2 rounded-xl text-xs font-medium text-slate-500 transition';
+    b.className = `tm-seg-btn${active ? ' is-active' : ''}`;
+    b.setAttribute('aria-selected', String(active));
   });
   const cats = txType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const cur = $r('#ex-category').value;
@@ -532,6 +574,7 @@ function resetForm() {
 }
 
 function startEdit(item) {
+  setExpenseTab('log');
   editing = { id: item.id, oldMonth: (item.date || localDateStr()).slice(0, 7) };
   txType = item.type === 'income' ? 'income' : 'expense';
   manualCategoryTouched = true;
@@ -873,6 +916,7 @@ async function processStatementPaste() {
     return next;
   });
   status.textContent = 'อ่านได้ ' + items.length + ' รายการ · ข้าม/อ่านไม่ได้ ' + errors.length + ' บรรทัด';
+  setExpenseTab('log');
   renderPendingStatement();
 }
 

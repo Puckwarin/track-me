@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { foodLogName, foodLogPortion, foodLogQuantity, foodQuantityFromInput, unitNutritionFor } from './foodCalculations.js';
+import {
+  buildFoodRecordUpdatesFromLibrary,
+  foodLogName,
+  foodLogPortion,
+  foodLogQuantity,
+  foodQuantityFromInput,
+  hasFoodLibraryDefinitionChanged,
+  unitNutritionFor
+} from './foodCalculations.js';
 
 describe('food log calculations', () => {
   it('keeps legacy records readable when quantity is encoded in the name', () => {
@@ -20,4 +28,32 @@ describe('food log calculations', () => {
     expect(foodQuantityFromInput(100, base)).toBe(2);
     expect(foodQuantityFromInput(1, base)).toBe(1);
   });
+
+  it('updates matched food records cleanly when a custom library item is edited', () => {
+    const prev = { id: 'cf1', name: 'อกไก่ต้ม', unit: 'ชิ้น', gramsPerUnit: 100, calories: 165, protein: 31, carbs: 0, fat: 3.6 };
+    const next = { id: 'cf1', name: 'อกไก่ต้มสุก', unit: 'ชิ้น (120g)', gramsPerUnit: 120, calories: 198, protein: 36, carbs: 0, fat: 4.2, sugar: 0, sodium: 90 };
+    expect(hasFoodLibraryDefinitionChanged(prev, prev)).toBe(false);
+    expect(hasFoodLibraryDefinitionChanged(prev, next)).toBe(true);
+
+    const byId = buildFoodRecordUpdatesFromLibrary({ id: 'rec1', customFoodId: 'cf1', name: 'อกไก่ต้ม', quantity: 1.5, portionUnit: 'ชิ้น' }, next, prev);
+    expect(byId).toMatchObject({
+      customFoodId: 'cf1',
+      name: 'อกไก่ต้มสุก',
+      quantity: 1.5,
+      portionUnit: 'ชิ้น (120g)',
+      gramsPerUnit: 120,
+      calories: 297,
+      protein: 54,
+      sugar: 0,
+      sodium: 135
+    });
+
+    const legacyItem = { id: 'rec2', name: 'อกไก่ต้ม', quantity: 2, portionUnit: 'ชิ้น' };
+    const matchedLegacy = buildFoodRecordUpdatesFromLibrary(legacyItem, next, prev);
+    expect(matchedLegacy).toMatchObject({ customFoodId: 'cf1', name: 'อกไก่ต้มสุก', calories: 396, protein: 72 });
+
+    const unrelated = buildFoodRecordUpdatesFromLibrary({ id: 'rec3', name: 'ข้าวสวย', quantity: 1, portionUnit: 'ทัพพี' }, next, prev);
+    expect(unrelated).toBeNull();
+  });
 });
+

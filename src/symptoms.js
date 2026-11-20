@@ -13,15 +13,18 @@ export const SEVERITY = ['ไม่มี', 'เล็กน้อย', 'ปา�
 export const MOODS = ['', '😣 แย่มาก', '🙁 แย่', '😐 ปกติ', '🙂 ดี', '😊 ดีมาก'];
 export const STRESS = ['', 'ต่ำมาก', 'ต่ำ', 'ปานกลาง', 'สูง', 'สูงมาก'];
 
-const SEVERITY_ICONS = ['✨', '🌱', '🌼', '🆘'];
-
-function choiceRow(label, id, options, icons = [], values = options.map((_, i) => String(i)), colsClass = 'grid-cols-4') {
-  return `<div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 border-b border-slate-100 last:border-b-0">
-    <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">${esc(label)}</label>
-    <div class="flex-1 min-w-0">
-      <select id="${id}" class="hidden" aria-hidden="true" tabindex="-1">${options.map((text, i) => `<option value="${values[i]}">${text}</option>`).join('')}</select>
-      <div class="grid ${colsClass} gap-1.5" role="group" aria-label="${esc(label)}">
-        ${options.map((text, i) => `<button type="button" data-choice-for="${id}" data-value="${values[i]}" aria-pressed="${i === 0}" class="rounded-xl border border-slate-200 bg-white px-2 py-2 min-h-[40px] text-xs font-medium text-slate-600 text-center transition hover:bg-pink-50 aria-pressed:bg-pink-100 aria-pressed:border-pink-300 aria-pressed:text-rose-800">${icons[i] ? `<span class="mr-0.5">${icons[i]}</span>` : ''}${text || 'ไม่ระบุ'}</button>`).join('')}
+function sliderRow(label, id, options, values = options.map((_, i) => String(i))) {
+  const max = options.length - 1;
+  return `<div class="tm-dot-row py-2 border-b border-slate-100 last:border-b-0 space-y-1">
+    <div class="flex items-center justify-between gap-2 text-xs sm:text-sm">
+      <label for="${id}-range" class="font-medium text-slate-700">${esc(label)}:</label>
+      <span id="${id}-text" class="font-semibold text-brand-dark tabular-nums">${esc(options[0] || 'ไม่ระบุ')}</span>
+    </div>
+    <select id="${id}" class="hidden" aria-hidden="true" tabindex="-1">${options.map((text, i) => `<option value="${values[i]}">${text}</option>`).join('')}</select>
+    <div class="tm-dot-slider-box">
+      <input type="range" id="${id}-range" data-slider-for="${id}" data-values="${esc(values.join('|'))}" data-labels="${esc(options.join('|'))}" class="tm-slider tm-dot-slider" min="0" max="${max}" step="1" value="0" aria-label="${esc(label)}">
+      <div class="tm-dot-stops" aria-hidden="true">
+        ${options.map((_, i) => `<button type="button" data-dot-for="${id}" data-dot-idx="${i}" class="tm-dot-stop ${i === 0 ? 'is-active' : ''}" tabindex="-1"><span class="tm-dot-pip"></span></button>`).join('')}
       </div>
     </div>
   </div>`;
@@ -29,25 +32,48 @@ function choiceRow(label, id, options, icons = [], values = options.map((_, i) =
 
 function syncChoices() {
   if (!root) return;
-  root.querySelectorAll('[data-choice-for]').forEach(button => {
-    const select = $('#' + button.dataset.choiceFor, root);
-    const active = select && button.dataset.value === select.value;
-    button.setAttribute('aria-pressed', String(Boolean(active)));
-    button.classList.toggle('bg-pink-100', Boolean(active));
-    button.classList.toggle('border-pink-300', Boolean(active));
-    button.classList.toggle('text-rose-800', Boolean(active));
+  root.querySelectorAll('[data-slider-for]').forEach(range => {
+    const id = range.dataset.sliderFor;
+    const select = $('#' + id, root);
+    const values = (range.dataset.values || '').split('|');
+    const labels = (range.dataset.labels || '').split('|');
+    const idx = Math.max(0, values.indexOf(select ? select.value : ''));
+    range.value = String(idx);
+    const textEl = $('#' + id + '-text', root);
+    if (textEl) {
+      const txt = labels[idx] || 'ไม่ระบุ';
+      textEl.textContent = txt;
+      textEl.classList.toggle('text-slate-400', idx === 0);
+      textEl.classList.toggle('text-brand-dark', idx > 0);
+    }
+    const stops = root.querySelectorAll(`[data-dot-for="${id}"]`);
+    stops.forEach((dot, dIdx) => dot.classList.toggle('is-active', dIdx === idx));
   });
 }
 
 let root;
+let activeSymptomsTab = 'symptoms';
+
+export function setSymptomsTab(tab) {
+  if (!root) return;
+  activeSymptomsTab = tab === 'skin' ? 'skin' : 'symptoms';
+  root.querySelectorAll('[data-sx-tab]').forEach(btn => {
+    const on = btn.dataset.sxTab === activeSymptomsTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#sx-panel-symptoms', root)?.classList.toggle('hidden', activeSymptomsTab !== 'symptoms');
+  $('#sx-panel-skin', root)?.classList.toggle('hidden', activeSymptomsTab !== 'skin');
+}
 
 export function mountSymptoms(el) {
   root = el;
+  activeSymptomsTab = 'symptoms';
   root.innerHTML = `
-    <div class="card space-y-4 lg:col-span-2">
+    <div class="card space-y-3 lg:col-span-2">
       <div>
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 18, className: 'text-pink-500' })}<span>บันทึกอาการรายวัน</span></h3>
-        <p class="text-xs text-slate-500 mt-1">บันทึกได้ทุกวัน ไม่ว่าจะมีประจำเดือนหรือไม่</p>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 18, className: 'text-pink-500' })}<span>บันทึกอาการรายวัน & ผิว</span></h3>
+        <p class="text-xs text-slate-500 mt-0.5">บันทึกได้ทุกวัน — เลือกวันเดียวกันเพื่อจดทั้งอาการทั่วไปและอาการผิว</p>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">วันที่</label>
@@ -56,10 +82,17 @@ export function mountSymptoms(el) {
           <p class="text-[11px] text-slate-500 mt-1">แตะวันที่ในปฏิทินหน้าประจำเดือนเพื่อเลือกก็ได้</p>
         </div>
       </div>
+      <div class="tm-seg tm-seg--2" role="tablist" aria-label="หมวดบันทึกอาการ">
+        <button type="button" role="tab" data-sx-tab="symptoms" aria-selected="true" class="tm-seg-btn is-active">อาการทั่วไป</button>
+        <button type="button" role="tab" data-sx-tab="skin" aria-selected="false" class="tm-seg-btn">บันทึกผิว</button>
+      </div>
+    </div>
+
+    <div id="sx-panel-symptoms" class="card space-y-4 lg:col-span-2">
       <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
-        ${SYMPTOMS.map(([k, t]) => choiceRow(t, 's-' + k, SEVERITY, SEVERITY_ICONS)).join('')}
-        ${choiceRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['💭', '😣', '🙁', '😐', '🙂', '😊'], ['', '1', '2', '3', '4', '5'], 'grid-cols-3 sm:grid-cols-6')}
-        ${choiceRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['💭', '🍃', '🌿', '🌼', '🌧️', '🌪️'], ['', '1', '2', '3', '4', '5'], 'grid-cols-3 sm:grid-cols-6')}
+        ${SYMPTOMS.map(([k, t]) => sliderRow(t, 's-' + k, SEVERITY)).join('')}
+        ${sliderRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['', '1', '2', '3', '4', '5'])}
+        ${sliderRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['', '1', '2', '3', '4', '5'])}
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">หมายเหตุ</label>
@@ -72,13 +105,13 @@ export function mountSymptoms(el) {
       <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
     </div>
 
-    <section class="card space-y-4 lg:col-span-2">
+    <section id="sx-panel-skin" class="card space-y-4 lg:col-span-2 hidden">
       <header>
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
-        <p class="text-xs text-slate-500">รวมกับบันทึกอาการรายวัน เลือกวันเดียวกันเพื่อจดอาการและผลลัพธ์ต่อผิว</p>
+        <p class="text-xs text-slate-500">ติดตามอาการระคายเคืองและผลลัพธ์ต่อผิวตามวันที่เลือกด้านบน</p>
       </header>
       <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
-        ${SKIN_FIELDS.map(([k, t]) => choiceRow(t, 'skin-' + k, SEVERITY, SEVERITY_ICONS)).join('')}
+        ${SKIN_FIELDS.map(([k, t]) => sliderRow(t, 'skin-' + k, SEVERITY)).join('')}
       </div>
       <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
         <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700 sm:pt-2">ผลลัพธ์ต่อผิว</label>
@@ -92,27 +125,56 @@ export function mountSymptoms(el) {
     </section>`;
 
   $('#s-date', root).value = localDateStr();
-  root.addEventListener('click', e => {
-    const b = e.target.closest('[data-choice-for]');
-    if (!b) return;
-    const select = $('#' + b.dataset.choiceFor, root);
-    select.value = b.dataset.value;
+  root.addEventListener('input', e => {
+    const range = e.target.closest('[data-slider-for]');
+    if (!range) return;
+    const id = range.dataset.sliderFor;
+    const select = $('#' + id, root);
+    const values = (range.dataset.values || '').split('|');
+    if (select) select.value = values[Number(range.value)] ?? '';
     syncChoices();
+  });
+  root.addEventListener('click', e => {
+    const tabBtn = e.target.closest('[data-sx-tab]');
+    if (tabBtn) {
+      setSymptomsTab(tabBtn.dataset.sxTab);
+      return;
+    }
+    const dotBtn = e.target.closest('[data-dot-for]');
+    if (dotBtn) {
+      const id = dotBtn.dataset.dotFor;
+      const idx = Number(dotBtn.dataset.dotIdx);
+      const range = $('#' + id + '-range', root);
+      const select = $('#' + id, root);
+      const values = (range?.dataset.values || '').split('|');
+      if (select) select.value = values[idx] ?? '';
+      syncChoices();
+    }
+  });
+  window.addEventListener('trackme:show-symptoms', () => {
+    if (root?.isConnected) setSymptomsTab('symptoms');
+  });
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'symptoms') return;
+    const fid = String(e.detail?.focusId || '');
+    setSymptomsTab(fid.startsWith('skin-') ? 'skin' : 'symptoms');
   });
   $('#s-date', root).addEventListener('change', loadForm);
   $('#s-save', root).addEventListener('click', save);
   $('#s-del', root).addEventListener('click', del);
   $('#skin-save', root).addEventListener('click', saveSkin);
   $('#skin-del', root).addEventListener('click', delSkin);
-  $('#s-list', root).addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) selectDate(b.dataset.d); });
-  $('#skin-list', root).addEventListener('click', e => { const b = e.target.closest('[data-skin-d]'); if (b) selectDate(b.dataset.skinD); });
+  $('#s-list', root).addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) selectDate(b.dataset.d, 'symptoms'); });
+  $('#skin-list', root).addEventListener('click', e => { const b = e.target.closest('[data-skin-d]'); if (b) selectDate(b.dataset.skinD, 'skin'); });
+  setSymptomsTab('symptoms');
   loadForm();
 }
 
-export function selectDate(d) {
+export function selectDate(d, targetTab = 'symptoms') {
   if (!root) return;
   $('#s-date', root).value = d;
   loadForm();
+  setSymptomsTab(targetTab);
   window.dispatchEvent(new Event('trackme:show-symptoms'));
   setTimeout(() => root.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
 }

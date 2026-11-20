@@ -71,7 +71,7 @@
     <div id="onboarding-root" class="hidden"></div>
     <header class="app-header sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 md:px-6 py-2.5 flex justify-between items-center gap-2">
-        <button id="btn-logo" class="flex items-center gap-2.5 min-w-0" aria-label="ไปหน้าหลัก">
+        <button id="btn-logo" class="flex items-center gap-2.5 min-w-0 cursor-pointer" aria-label="ไปหน้าหลัก">
           <span class="logo-bubble logo-sm text-brand-dark" aria-hidden="true" data-ph-icon="brand" data-ph-size="19"></span>
           <span class="text-lg font-bold text-slate-800 truncate">Track Me</span>
         </button>
@@ -100,25 +100,21 @@
     </div>
     <nav id="desktop-nav" class="desktop-nav" aria-label="เมนูหลัก">
       <div class="rail-section-label hidden lg:block">เมนูหลัก</div>
-      <button data-nav="home" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="19"></span>
-        <span>หน้าหลัก</span>
-      </button>
       <button data-nav="food" class="desktop-nav-item">
         <span class="rail-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="19"></span>
-        <span>อาหาร / บันทึก</span>
+        <span>อาหาร</span>
       </button>
       <button data-nav="health" class="desktop-nav-item">
         <span class="rail-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="19"></span>
         <span>สุขภาพ</span>
       </button>
+      <button data-nav="expense" class="desktop-nav-item">
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="expense" data-ph-size="19"></span>
+        <span>การเงิน</span>
+      </button>
       <button data-nav="care" class="desktop-nav-item">
         <span class="rail-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="19"></span>
         <span>ดูแล</span>
-      </button>
-      <button data-nav="more" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="more" data-ph-size="19"></span>
-        <span>เพิ่มเติม</span>
       </button>
       <button id="desktop-quick-add" type="button" class="desktop-nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet">
         <span class="rail-ico" aria-hidden="true" data-ph-icon="plus" data-ph-size="18"></span>
@@ -167,18 +163,18 @@
     <!-- แถบเมนูมือถือ; data-nav ใช้ binding กลุ่มเดิมใน app.js -->
     <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">
       <div class="bottom-nav-inner">
-        <button data-nav="home" class="nav-item">
-          <span class="nav-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="20"></span>
-          <span>หน้าหลัก</span>
-        </button>
         <button data-nav="food" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="20"></span>
           <span>อาหาร</span>
         </button>
-        <button id="btn-quick-add" class="nav-plus" data-ph-icon="plus" data-ph-size="24" data-ph-class="nav-plus-svg" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
         <button data-nav="health" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="20"></span>
           <span>สุขภาพ</span>
+        </button>
+        <button id="btn-quick-add" class="nav-plus" data-ph-icon="plus" data-ph-size="24" data-ph-class="nav-plus-svg" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
+        <button data-nav="expense" class="nav-item">
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="expense" data-ph-size="20"></span>
+          <span>การเงิน</span>
         </button>
         <button data-nav="care" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="20"></span>

@@ -3,13 +3,12 @@ import { getAllNavigationTabs, readNavigationPreferences, saveNavigationPreferen
 import { $, toast } from './util.js';
 import { state } from './state.js';
 import { iconSvg } from './icons.js';
-import { fluentEmojiSvg } from './fluentEmoji.js';
 
-const GROUP_LABELS = { home: 'หน้าหลัก', food: 'อาหาร', health: 'สุขภาพ', care: 'ดูแล', more: 'เพิ่มเติม' };
+const GROUP_LABELS = { home: 'หน้าหลัก', food: 'อาหาร', health: 'สุขภาพ', expense: 'การเงิน', care: 'ดูแล', more: 'เพิ่มเติม' };
 const ITEMS = [{ tab: 'home', label: 'หน้าหลัก', emoji: '⌂', group: 'home' }, ...getAllNavigationTabs()];
 
 function renderNavItemIcon(tab, icon) {
-  return fluentEmojiSvg(tab, { size: 18 }) || iconSvg(tab === 'home' ? 'home' : (icon || tab), { size: 16 });
+  return iconSvg(tab === 'home' ? 'home' : (icon || tab), { size: 18 });
 }
 
 function render(root, preferences) {

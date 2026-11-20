@@ -26,6 +26,7 @@ export function estimateBurn(type, intensity, minutes, weightKg) {
   return Math.round(((MET[type] || MET.other)[idx < 0 ? 1 : idx] - 1) * weightKg * minutes / 60);
 }
 let root, draft = emptyDraft();
+let activeWorkoutTab = 'plan';
 let weekStart = '';
 let editingId = null;
 let editingTemplateId = null;
@@ -33,6 +34,19 @@ let lastParsedImport = null;
 let importTargetDate = '';
 let importTargetStatus = 'planned';
 let historyStatusFilter = 'all';
+
+function setWorkoutTab(tab) {
+  if (!root) return;
+  activeWorkoutTab = ['plan', 'history', 'templates'].includes(tab) ? tab : 'plan';
+  root.querySelectorAll('[data-workout-tab]').forEach(btn => {
+    const on = btn.dataset.workoutTab === activeWorkoutTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#w-panel-plan', root)?.classList.toggle('hidden', activeWorkoutTab !== 'plan');
+  $('#w-panel-history', root)?.classList.toggle('hidden', activeWorkoutTab !== 'history');
+  $('#w-panel-templates', root)?.classList.toggle('hidden', activeWorkoutTab !== 'templates');
+}
 
 const SAMPLE_IMPORT_TEXT = `Day A — Lower Body
 ขาและสะโพก
@@ -99,10 +113,18 @@ async function copyTextSafe(text) {
 
 export function mountWorkout(el) {
   root = el;
+  activeWorkoutTab = 'plan';
   const today = localDateStr();
   weekStart = mondayOf(today);
   root.innerHTML = `
-  <div class="space-y-6">
+  <div class="md:col-span-2">
+    <div class="tm-seg tm-seg--3 max-w-lg" role="tablist" aria-label="หมวดการออกกำลังกาย">
+      <button type="button" role="tab" data-workout-tab="plan" aria-selected="true" class="tm-seg-btn is-active">วางแผน & บันทึก</button>
+      <button type="button" role="tab" data-workout-tab="history" aria-selected="false" class="tm-seg-btn">ประวัติ & 7 วัน</button>
+      <button type="button" role="tab" data-workout-tab="templates" aria-selected="false" class="tm-seg-btn">เทมเพลต</button>
+    </div>
+  </div>
+  <div id="w-panel-plan" class="md:col-span-2 space-y-6">
     <div class="card space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 20, className: 'text-brand' })}<span>บันทึก & วางแผนออกกำลังกาย</span></h2>
@@ -191,14 +213,14 @@ export function mountWorkout(el) {
       <datalist id="w-names"></datalist>
     </div>
   </div>
-  <div class="space-y-6">
+  <div id="w-panel-history" class="hidden md:col-span-2 space-y-6">
     <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 17, className: 'text-brand' })}<span>7 วันที่ผ่านมา</span></h3><div id="w-week" class="text-sm text-slate-700 space-y-1"></div></div>
     <div class="card space-y-3">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>ประวัติ & แผนที่บันทึก</span></h3>
-      <div id="w-hist-status-tabs" class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 text-xs" role="tablist" aria-label="กรองสถานะบันทึก">
-        <button type="button" role="tab" aria-selected="true" data-hstatus="all" class="wa-sec-tab is-active flex-1 justify-center min-h-[36px] whitespace-nowrap">ทั้งหมด</button>
-        <button type="button" role="tab" aria-selected="false" data-hstatus="planned" class="wa-sec-tab flex-1 justify-center min-h-[36px] whitespace-nowrap">แผนที่วางไว้</button>
-        <button type="button" role="tab" aria-selected="false" data-hstatus="done" class="wa-sec-tab flex-1 justify-center min-h-[36px] whitespace-nowrap">ทำแล้ว</button>
+      <div id="w-hist-status-tabs" class="tm-seg tm-seg--3" role="tablist" aria-label="กรองสถานะบันทึก">
+        <button type="button" role="tab" aria-selected="true" data-hstatus="all" class="tm-seg-btn is-active">ทั้งหมด</button>
+        <button type="button" role="tab" aria-selected="false" data-hstatus="planned" class="tm-seg-btn">แผนที่วางไว้</button>
+        <button type="button" role="tab" aria-selected="false" data-hstatus="done" class="tm-seg-btn">ทำแล้ว</button>
       </div>
       <div class="space-y-2">
         <input id="w-hist-q" class="input text-xs" placeholder="ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต">
@@ -212,11 +234,41 @@ export function mountWorkout(el) {
         </details>
       </div>
       <div id="w-history" class="space-y-2"></div>
-      <div id="w-tpl-list" class="pt-3 border-t border-slate-100 space-y-1.5"></div>
+    </div>
+  </div>
+  <div id="w-panel-templates" class="hidden md:col-span-2 space-y-6">
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('bookmark', { size: 17, className: 'text-brand' })}<span>เทมเพลตของฉัน</span></h3>
+          <p class="text-xs text-slate-500 mt-0.5">เลือกใช้เริ่มออกกำลังกาย แก้ไข หรือวางข้อความเพื่อสร้างเทมเพลตใหม่</p>
+        </div>
+        <button type="button" id="w-tpl-open-import" class="chip bg-lav-soft text-brand-dark font-semibold border border-brand/25 hover:bg-brand/15">
+          ${iconSvg('note', { size: 14 })} วางข้อความ / ตารางสร้าง Template
+        </button>
+      </div>
+      <div id="w-tpl-list" class="space-y-1.5"></div>
     </div>
   </div>`;
 
   $('#w-date', root).value = today;
+  root.addEventListener('click', e => {
+    const tabBtn = e.target.closest('[data-workout-tab]');
+    if (tabBtn) setWorkoutTab(tabBtn.dataset.workoutTab);
+  });
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'workout') return;
+    const fid = String(e.detail?.focusId || '');
+    if (fid === 'w-history' || fid === 'w-week') setWorkoutTab('history');
+    else if (fid === 'w-tpl-list') setWorkoutTab('templates');
+    else setWorkoutTab('plan');
+  });
+  $('#w-tpl-open-import', root)?.addEventListener('click', () => {
+    setWorkoutTab('plan');
+    const panel = $('#w-import-panel', root);
+    panel?.classList.remove('hidden');
+    $('#w-import-text', root)?.focus();
+  });
 
   // Fallback อัตโนมัติเมื่อภาพโหลดไม่สำเร็จในทุกกรอบรูปประกอบ
   root.addEventListener('error', e => {
@@ -389,7 +441,7 @@ export function mountWorkout(el) {
     }
     if (useBtn) {
       const t = state.templates.find(x => x.id === useBtn.dataset.tuse);
-      if (t) { loadTemplate(t); window.scrollTo({ top: root.offsetTop, behavior: 'smooth' }); }
+      if (t) { setWorkoutTab('plan'); loadTemplate(t); window.scrollTo({ top: root.offsetTop, behavior: 'smooth' }); }
     }
     if (editBtn) startTemplateEdit(editBtn.dataset.tedit);
     if (delBtn) {
@@ -410,6 +462,7 @@ export function mountWorkout(el) {
     }
   });
 
+  setWorkoutTab('plan');
   renderSections();
   render();
 }
@@ -462,6 +515,7 @@ async function handleRecordAction(e) {
   if (againBtn) {
     const r = state.workouts.find(x => x.id === againBtn.dataset.again);
     if (r) {
+      setWorkoutTab('plan');
       editingId = null;
       updateRecordEditUi();
       $('#w-title', root).value = r.title || '';
@@ -505,6 +559,7 @@ function updateRecordEditUi() {
 function startRecordEdit(id) {
   const r = state.workouts.find(x => x.id === id);
   if (!r) return;
+  setWorkoutTab('plan');
   editingId = r.id;
   $('#w-date', root).value = r.date || localDateStr();
   weekStart = mondayOf($('#w-date', root).value);
@@ -574,6 +629,7 @@ function clearForm() {
 function startTemplateEdit(id) {
   const t = state.templates.find(x => x.id === id);
   if (!t) return;
+  setWorkoutTab('plan');
   editingTemplateId = t.id;
   $('#w-tpl-edit-name', root).value = t.name || '';
   $('#w-title', root).value = t.name || '';
@@ -1366,8 +1422,8 @@ export function render() {
   const sortedTpl = state.templates.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
   $('#w-tpl', root).innerHTML = '<option value="">เลือกเทมเพลต…</option>' + sortedTpl.map(t => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(TYPES[t.type] || '')})</option>`).join('');
   $('#w-tpl-list', root).innerHTML = sortedTpl.length
-    ? '<p class="text-xs font-semibold text-slate-600">เทมเพลตของฉัน</p>' + sortedTpl.map(t => `
-      <div class="flex justify-between items-center gap-2 text-sm py-1">
+    ? sortedTpl.map(t => `
+      <div class="flex justify-between items-center gap-2 text-sm py-1 border-b border-slate-100 last:border-b-0">
         <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1 min-h-[36px]">${esc(t.name)} <span class="text-xs text-slate-500">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
         <div class="flex items-center gap-2 shrink-0 text-xs">
           <button type="button" data-tstart="${esc(t.id)}" class="text-blue-700 font-medium hover:underline min-h-[36px] px-1">เริ่ม</button>
@@ -1375,7 +1431,7 @@ export function render() {
           <button type="button" data-tdel="${esc(t.id)}" class="text-rose-500 hover:underline min-h-[36px] px-1">ลบ</button>
         </div>
       </div>`).join('')
-    : '';
+    : '<p class="text-xs text-slate-500 py-3">ยังไม่มีเทมเพลตที่บันทึกไว้ — จัดท่าในหน้า "วางแผน & บันทึก" แล้วกด "บันทึกเป็นเทมเพลต" หรือกดวางข้อความ/ตารางด้านบนได้เลย</p>';
 
   renderWeekStrip();
 

@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
 import { $, esc, localDateStr, toNum, round1 } from './util.js';
 import { iconSvg } from './icons.js';
+import { bindChartInspector } from './ui.js';
 
 let root, dashboardData = null, loading = false, activeSection = 'health';
 
@@ -33,20 +34,22 @@ export function mountDashboard(el) {
         <p>ติดตามแนวโน้มของคุณในที่เดียว แล้วค่อย ๆ ปรับในแบบที่เหมาะกับตัวเอง</p>
       </div>
       <div class="db-controls">
-        <div class="db-range" role="group" aria-label="ช่วงเวลาสรุปข้อมูล">
-          <button type="button" id="db-range-3" aria-pressed="false">3 เดือน</button>
-          <button type="button" id="db-range-6" aria-pressed="true">6 เดือน</button>
-          <button type="button" id="db-range-12" aria-pressed="false">12 เดือน</button>
+        <div class="db-range tm-seg tm-seg--3 db-overview-only" role="group" aria-label="ช่วงเวลาสรุปข้อมูล">
+          <button type="button" id="db-range-3" class="tm-seg-btn" aria-pressed="false">3 เดือน</button>
+          <button type="button" id="db-range-6" class="tm-seg-btn" aria-pressed="true">6 เดือน</button>
+          <button type="button" id="db-range-12" class="tm-seg-btn" aria-pressed="false">12 เดือน</button>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" id="db-view-overview" data-page-go="overview" aria-pressed="true" class="db-refresh">ภาพรวม</button>
-          <button type="button" id="db-view-weekly" data-page-go="weekly" aria-pressed="false" class="db-refresh">สรุปสัปดาห์</button>
-          <button type="button" data-page-go="report" class="db-refresh">${iconSvg('report', { size: 14 })}<span>รายงาน</span></button>
-          <button type="button" id="db-refresh" class="db-refresh">${iconSvg('rotate-right', { size: 14 })}<span>รีเฟรช</span></button>
+          <div class="tm-seg tm-seg--3" role="tablist" aria-label="สลับมุมมองภาพรวม">
+            <button type="button" role="tab" id="db-view-overview" data-page-go="overview" aria-pressed="true" aria-selected="true" class="tm-seg-btn is-active">ภาพรวม</button>
+            <button type="button" role="tab" id="db-view-weekly" data-page-go="weekly" aria-pressed="false" aria-selected="false" class="tm-seg-btn">สรุป</button>
+            <button type="button" role="tab" data-page-go="report" class="tm-seg-btn">${iconSvg('report', { size: 14 })}<span>รายงาน</span></button>
+          </div>
+          <button type="button" id="db-refresh" class="db-refresh db-overview-only">${iconSvg('rotate-right', { size: 14 })}<span>รีเฟรช</span></button>
         </div>
       </div>
     </header>
-    <section class="db-welcome" aria-label="คำแนะนำการใช้งานแดชบอร์ด">
+    <section class="db-welcome db-overview-only" aria-label="คำแนะนำการใช้งานแดชบอร์ด">
       <div>
         <span class="db-welcome-kicker">บันทึกเล็ก ๆ สร้างความเปลี่ยนแปลงได้</span>
         <h3>กลับมาดูแลตัวเองกันต่อ</h3>
@@ -77,6 +80,7 @@ export function mountDashboard(el) {
     activeSection = tab.dataset.dbSection;
     $('#db-content', root).querySelectorAll('[data-db-section]').forEach(button => {
       const selected = button.dataset.dbSection === activeSection;
+      button.classList.toggle('is-active', selected);
       button.setAttribute('aria-selected', String(selected));
     });
     $('#db-content', root).querySelectorAll('[data-db-panel]').forEach(panel => {
@@ -199,7 +203,13 @@ function lineChart(data, valueKey, color, unit, decimals = 0) {
   }).join(' ');
   const dots = idxMap.map(dataIdx => {
     const d = data[dataIdx];
-    return `<circle cx="${x(dataIdx).toFixed(1)}" cy="${y(d[valueKey]).toFixed(1)}" r="3.5" fill="${color}"><title>${esc(d.label)}: ${fmtV(d[valueKey])} ${esc(unit)}</title></circle>`;
+    const cx = x(dataIdx).toFixed(1);
+    const cy = y(d[valueKey]).toFixed(1);
+    const valStr = `${fmtV(d[valueKey])} ${unit}`;
+    return `<g>
+      <circle cx="${cx}" cy="${cy}" r="3.6" fill="${color}"></circle>
+      <circle cx="${cx}" cy="${cy}" r="11" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(d.label)}: ${esc(valStr)}" data-chart-color="${color}" aria-label="${esc(d.label)} ${esc(valStr)}"><title>${esc(d.label)}: ${esc(valStr)}</title></circle>
+    </g>`;
   }).join('');
   const labels = data.map((d, i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#94a3b8" text-anchor="middle">${esc(d.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -223,9 +233,13 @@ function barChart(data, valueKey, color, unit, decimals = 0) {
   const fmtV = v => decimals === 0 ? Math.round(v).toLocaleString() : v.toFixed(decimals);
   const bars = data.map((d, i) => {
     const v = d[valueKey] || 0;
-    if (v <= 0) return '';
-    const bh = H - P - y(v);
-    return `<rect x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" opacity="0.85"><title>${esc(d.label)}: ${fmtV(v)} ${esc(unit)}</title></rect>`;
+    const valStr = `${fmtV(v)} ${unit}`;
+    const bx = x(i).toFixed(1);
+    const bh = v > 0 ? H - P - y(v) : 0;
+    return `<g>
+      ${v > 0 ? `<rect x="${bx}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" opacity="0.85"></rect>` : ''}
+      <rect x="${bx}" y="12" width="${Math.max(bw, 16).toFixed(1)}" height="${H - P - 12}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(d.label)}: ${v > 0 ? esc(valStr) : 'ไม่มีข้อมูล'}" data-chart-color="${v > 0 ? color : '#94a3b8'}" aria-label="${esc(d.label)} ${esc(valStr)}"><title>${esc(d.label)}: ${esc(valStr)}</title></rect>
+    </g>`;
   }).join('');
   const labels = data.map((d, i) => `<text x="${(x(i) + bw / 2).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#94a3b8" text-anchor="middle">${esc(d.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -268,8 +282,8 @@ function render(monthCount) {
       ${statCard('ค่าใช้จ่ายสุทธิ', totalIncome - totalExpense >= 0 ? '+' + (totalIncome - totalExpense).toLocaleString() : (totalIncome - totalExpense).toLocaleString(), `รายรับ ${totalIncome.toLocaleString()} · จ่าย ${totalExpense.toLocaleString()} · ${d.length} เดือน`, totalIncome - totalExpense >= 0 ? 'text-emerald-700' : 'text-rose-600')}
     </section>
 
-    <div role="tablist" aria-label="หมวดสรุปภาพรวม" class="db-tabs">
-      ${[['health','สุขภาพ'],['nutrition','โภชนาการ'],['activity','กิจกรรม'],['finance','การเงิน']].map(([key,label]) => `<button type="button" role="tab" id="db-tab-${key}" aria-controls="db-panel-${key}" aria-selected="${activeSection===key}" data-db-section="${key}">${label}</button>`).join('')}
+    <div role="tablist" aria-label="หมวดสรุปภาพรวม" class="tm-seg tm-seg--4">
+      ${[['health','สุขภาพ'],['nutrition','โภชนาการ'],['activity','กิจกรรม'],['finance','การเงิน']].map(([key,label]) => `<button type="button" role="tab" id="db-tab-${key}" class="tm-seg-btn ${activeSection===key?'is-active':''}" aria-controls="db-panel-${key}" aria-selected="${activeSection===key}" data-db-section="${key}">${label}</button>`).join('')}
     </div>
 
     <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="db-chart-panel" ${activeSection!=='health'?'hidden':''}>
@@ -315,4 +329,7 @@ function render(monthCount) {
       </div>
       </details>
     </section>`;
+  $('#db-content', root).querySelectorAll('.db-chart-card').forEach(card => {
+    bindChartInspector(card, { hint: 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลรายเดือน' });
+  });
 }

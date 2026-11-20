@@ -3,23 +3,51 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
-## [v5.3.0] - 2026-11-19
+## [v5.4.0] - 2026-11-20
 
-### Top Planner Checklist & Unified Category Tiles
-- **ย้าย Weekly Planner & กิจวัตร ขึ้นบนสุดของหน้าหลักและเปิดแสดงรายการวันนี้ทันที (`src/home.js`, `src/preview.js`, `src/style.css`)**:
-  - เปลี่ยนลำดับวิดเจ็ตเริ่มต้น `HOME_WIDGET_IDS` ให้ **`planner`** อยู่ลำดับแรกถัดจากคำทักทาย (`['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders']`) พร้อมอัปเดต `src/homeWidgetContract.test.js`
-  - ตั้งค่าเริ่มต้นให้เปิดโหลดและกางรายการ Planner ทันที (`plannerExpanded = true`) เพื่อให้เห็นเช็กลิสต์งาน กิจวัตร และแผนออกกำลังกายของวันนั้น ๆ บนหน้าแรกโดยไม่ต้องกดปุ่มเปิดก่อน พร้อมปรับการรองรับ Dark mode สำหรับพื้นหลัง/ป้ายของ Planner และเติม `days`/`weekPattern` ให้กิจวัตรในข้อมูล Preview Mode (`src/preview.js`)
-- **ปรับแท็บหมวดหมู่ย่อยในเมนูสุขภาพและดูแลให้เหมือน "หมวดหมู่" บนหน้าหลัก (`src/app.js`, `src/style.css`)**:
-  - ปรับ `renderSubnav()` สำหรับกลุ่ม `health` และ `care` ให้แสดงเป็นแถวการ์ดไอคอนพาสเทลมุมมนพร้อมป้ายชื่อด้านล่าง (`.subnav--tiles`, `.subnav-tiles`, `.sub-tile` ร่วมกับคลาส `.hx-cat` ของหน้าแรก) แทนแถบชิปข้อความแบบเดิม
-  - รองรับการเลื่อนแนวนอนบนหน้าจอแคบและขึ้นบรรทัดอัตโนมัติบนหน้าจอกว้าง, แสดงสถานะแท็บที่กำลังเปิดอยู่ชัดเจนทั้ง 4 ธีม (`Baby Blue`, `Pastel`, `Cozy`, `Dark mode`) และปรับการแสดงผลข้อความชื่อหมวดไม่ให้ถูกตัดคำกลางคัน
+### Unified Segmented Tabs, Food Pie Chart & Swipe/DnD, Compact Mobile Typography & "สรุป" View Unification
+- **ระบบสลับแท็บมาตรฐานเดียวกับหน้ารายรับ-รายจ่าย (`.tm-seg` / `.tm-seg-btn`) ทั้ง 4 ธีม (`src/style.css`, ทุกหน้าฟีเจอร์)**:
+  - เพิ่มคลาส `.tm-seg` (`.tm-seg--2`, `.tm-seg--3`, `.tm-seg--4`, `.tm-seg--scroll`) และ `.tm-seg-btn` รองรับครบทั้ง Baby Blue, Pastel, Cozy และ Dark mode พร้อม `min-height: 44px` บนมือถือ
+  - ปรับตัวสลับมุมมอง/หมวดย่อยใน `dashboard.js`, `weekly.js`, `food.js`, `body.js`, `symptoms.js`, `period.js`, `care.js`, `inventory.js`, `workout.js` และ `expense.js` ให้ใช้รูปแบบเดียวกัน พร้อมซิงค์ deep-link ผ่าน `trackme:focus` ใน `src/app.js` เพื่อให้การเปิดหน้าหรือกดแก้ไขจากรายการประวัติ/แจ้งเตือนสลับไปยังแท็บที่เกี่ยวข้องอัตโนมัติ
+- **ปรับปรุงหน้าอาหาร (`src/food.js`, `src/foodCalculations.js`, `src/icons.js`, `src/style.css`)**:
+  - ตัดปุ่ม `เมื่อวาน` / `วันนี้` / `พรุ่งนี้` (ใช้แถบ 7 วันและช่องเลือกวันที่แทน), ตัดปุ่ม `− 100 / + 100 kcal` และ `− 50 g / + 50 g` รวมถึงแถบแนวนอน `"พลังงานแต่ละมื้อ"` ออก
+  - แทนที่กราฟมื้ออาหารด้วย **SVG Pie Chart** (`buildMealCaloriePieData`, `buildMealPieSvg`) แสดงสัดส่วนแคลอรี่แยกตามมื้อ (`เช้า / กลางวัน / เย็น / ของว่าง`)
+  - ปรับรายการอาหารของวัน (`#f-body`) เป็นการ์ดแบ่งตามมื้อ: เพิ่มเช็กบ็อกซ์ **"เลือกทั้งมื้อ"** (`[data-meal-sel]`), รองรับ **Drag & Drop** (เมาส์และสัมผัส via `[data-drag-handle]` + `#f-drag-targets`) ย้ายมื้อได้ทันที, **ปัดซ้าย** เพื่อแสดงปุ่ม `แก้ไข`/`ลบ` (ถอดปุ่มแก้ไขและถังขยะคงที่ออก), และ **ปัดขวา** เพื่อบันทึก/สลับ **รายการโปรด**
+  - ปรับคำแนะนำโภชนาการ (`buildFoodAdvice`) ให้ประเมินจากหลายปัจจัยจริง (สัดส่วนพลังงานต่อเป้าหมาย, โปรตีน, ไขมัน และสมดุลคาร์บ/น้ำตาล) แทนข้อความแง่ดีคงที่
+- **ย่อหน้ายาวบนมือถือด้วย Section Tabs**:
+  - `src/body.js`: แยก `น้ำหนัก & สัดส่วน` | `นอน & ก้าวเดิน (Zepp)` (คง `#b-snapshot` ด้านบน) และปรับแท็บกราฟสัดส่วน/การนอนเป็น `.tm-seg`
+  - `src/symptoms.js`: คงแถบวันที่ `#s-date` ร่วมกันด้านบน และแยกแท็บ `อาการทั่วไป` | `บันทึกผิว`
+  - `src/period.js`: แยก `บันทึก & ปฏิทิน` | `สถิติ & ประวัติ`
+  - `src/care.js`: คงสรุปโปรไฟล์ `#pet-profile` ด้านบน และแยก `ดูแล & อาหาร` | `อาการน้อง` | `ผลตรวจ / ผลเลือด` (โหลด `lab.js` อัตโนมัติเมื่อเปิดแท็บผลตรวจ)
+  - `src/inventory.js`: คงสรุปสต๊อก `#inventory-summary` ด้านบน และแยก `สต๊อก & ซื้อของ` | `เพิ่ม / สแกน` | `ส่วนผสมที่เลี่ยง`
+  - `src/workout.js`: แยก `วางแผน & บันทึก` | `ประวัติ & 7 วัน` | `เทมเพลต` พร้อมอัปเดตตัวกรองสถานะประวัติ `#w-hist-status-tabs` เป็น `.tm-seg`
+  - `src/expense.js`: คงแถบเดือน `#ex-month` ร่วมกันด้านบน, แยก `บันทึก & นำเข้า` | `สรุป & งบ & ประจำ` | `ประวัติ`, และปรับ `[data-ex-type]` เป็น `.tm-seg`
+- **ปรับขนาดฟอนต์บนมือถือให้อ่านกระชับ (`src/style.css`, `src/home.css`)**:
+  - ปรับขนาดตัวอักษร root และหัวข้อการ์ด/ตัวเลขสถิติบนหน้าจอแคบ (`<= 767px`, `<= 639px`, `<= 380px`) โดยคงขนาด `16px` ของ `<input>/<select>/<textarea>` เพื่อกัน iOS auto-zoom และคง `min-height: 44px` ของปุ่มกด
+- **เปลี่ยนชื่อ `"สรุปสัปดาห์"` เป็น `"สรุป"` และลดความซ้ำซ้อน (`src/categories.js`, `src/dashboard.js`, `src/weekly.js`, `src/app.js`)**:
+  - เปลี่ยนชื่อ `SUBTABS.weekly.label` เป็น `"สรุป"`, ตัดปุ่มนำทางซ้ำซ้อน (`แดชบอร์ดภาพรวม`, `รายงาน`) ออกจาก `weekly.js` และซ่อนตัวควบคุมเฉพาะภาพรวม (`.db-overview-only`: ช่วง 3/6/12 เดือน, รีเฟรช, แถบทักทาย) เมื่อดูมุมมอง `สรุป` โดยใช้แถบ `.tm-seg` ด้านบนของ `dashboard.js` ร่วมกัน
+- **อัปเดตเวอร์ชันและเอกสารเป็น v5.4.0**: อัปเดต `package.json`, `package-lock.json`, `src/version.js` และเอกสารใน `README.md`, `CHANGELOG.md`, `docs/*` โดยไม่เปลี่ยน Firestore Rules หรือรูปแบบไฟล์สำรอง
+
+---
+## [v5.3.0] - 2026-11-20
+
+### Top Planner Checklist, 4-Tab Nav, Phosphor Duotone & Food Library Sync
+- **ย้าย Weekly Planner ขึ้นบนสุดของหน้าหลัก, ปรับให้กระชับและเปลี่ยนคำเป็น "กิจกรรม" (`src/home.js`, `src/planner.js`, `src/preview.js`, `src/style.css`, `src/planner.test.js`)**:
+  - เปลี่ยนลำดับวิดเจ็ตเริ่มต้น `HOME_WIDGET_IDS` ให้ **`planner`** อยู่ลำดับแรกถัดจากคำทักทาย (`['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders']`) พร้อมเปิดกางรายการทันที (`plannerExpanded = true`) และปรับการรองรับ Dark mode สำหรับพื้นหลัง/ป้ายของ Planner
+  - ปรับหัวข้อการ์ดเป็น **Weekly Planner**, เปลี่ยนแถบเลือกวันเป็นแถบวันที่เลื่อนซ้าย-ขวาได้ (`#pl-day-strip`, ตัดปุ่มสัปดาห์นี้/สัปดาห์หน้า และปุ่มสลับรายวัน/7 วันออก), ยุบปุ่มจัดการเป็นเมนูดรอปดาวน์ **วางแผน** (`กิจกรรม`, `ออกกำลังกาย`, `นัดหมาย`), ตัดการ์ดสรุปท้ายการ์ด, และเปลี่ยนคำว่า "กิจวัตร" เป็น "กิจกรรม" ทั่วทั้ง Planner
+  - ปรับหน้าต่าง **เพิ่มกิจกรรม** (`openRoutinesModal`): ตัด `ROUTINE_PRESETS` และช่อง `#rt-time` (`เวลา (ไม่บังคับ)`, คงค่าเดิมที่บันทึกไว้เมื่อแก้ไขรายการเก่า), แสดงรายการล่าสุดที่ใช้งานบ่อยแบบเลือกเติมชื่อได้ทันที (`getFrequentRecentRoutines`), ปรับป้าย **รูปแบบ** และตัวเลือก **วันเดียว**, และซ่อนตารางเลือกวัน `#rt-days` เมื่อเลือกพรีเซ็ต (`จ พ ศ อา`, `อ พฤ ส`, `ทุกวัน`, `จ–ศ`, `ส–อา`) พร้อมคงปุ่ม `เลือกวันเอง`
+- **ปรับเมนูหลักเหลือ 4 แท็บ + แตะโลโก้กลับหน้าหลัก และปรับแท็บหมวดหมู่ย่อย (`index.html`, `src/categories.js`, `src/app.js`, `src/style.css`)**:
+  - ปรับแถบนำทางหลัก (`#bottom-nav` และ `#desktop-nav`) เป็น **อาหาร (`food`)**, **สุขภาพ (`health`)**, **+**, **การเงิน (`expense`)** และ **ดูแล (`care`)** โดยตัดแท็บหน้าหลัก/เพิ่มเติมออก และให้คลิกโลโก้ **Track Me** (`#btn-logo`) เพื่อกลับหน้าหลัก
+  - ปรับ `renderSubnav()` สำหรับกลุ่ม `health` และ `care` ให้แสดงเป็นการ์ดไอคอนทรงเดียวกับ **หมวดหมู่** บนหน้าแรก (`.subnav--tiles`, `.subnav-tiles`, `.sub-tile` ร่วมกับ `.hx-cat`) รองรับครบทั้ง 4 ธีม
+- **ซิงค์รายการที่เลือกไว้เมื่อแก้ไขข้อมูลในคลังอาหาร (`src/food.js`, `src/foodCalculations.js`, `src/schema.js`, `src/foodCalculations.test.js`)**:
+  - บันทึก `customFoodId` (optional) เมื่อเพิ่มจากคลังอาหารและรองรับใน `SANITIZERS.food_records`; เมื่อแก้ไขรายการใน `custom_foods` ระบบจะอัปเดตฟอร์มอาหารที่กำลังเลือกอยู่ (โดยคงปริมาณที่ผู้ใช้กรอก) และอัปเดต `food_records` ที่ตรงกันในวันที่เปิดอยู่โดยอัตโนมัติ (รองรับทั้ง Preview Mode และ Firestore รวมถึงรายการเดิมที่จับคู่ด้วยชื่อและหน่วย)
 - **ผสานการปรับปรุงเพิ่มเติมจากสาขา `ui/by-claude` โดยคงฟีเจอร์ v5.3.0 ครบถ้วน (`src/app.js`, `src/style.css`, `src/overview.js`, `src/preview.js`, `src/preview.test.js`)**:
   - เพิ่มตัวฟังเหตุการณ์ `trackme:goto` ใน `src/app.js`, ปุ่มทางลัด `#ov-go-weekly` / `#ov-go-report` ใน `src/overview.js`, และแอนิเมชันย่อ/ซ่อน `.scroll-fabs.is-hidden` ใน `src/style.css`
   - ปรับข้อมูล `expense_budget` รายหมวดหมู่และกฎจัดหมวดอัตโนมัติ `expense_rule` ใน `src/preview.js` ให้ตรงกับ `src/schema.js` และ `src/expense.js` พร้อมเพิ่มการทดสอบใน `src/preview.test.js`
-- **เปลี่ยนชุดไอคอนทั้งแอปเป็น Fluent Emoji Flat (หมวดหมู่) + Phosphor Duotone (`src/fluentEmoji.js`, `src/icons.js`, `src/home.js`, `src/app.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `index.html`, `src/style.css`, `src/icons.test.js`)**:
-  - **Fluent Emoji Flat (`src/fluentEmoji.js`)**: คัดเฉพาะ SVG แบบ Flat จากชุด Microsoft Fluent Emoji 14 รายการ (~20 KB ก่อนบีบอัด, ไม่มี gradient ID ชนกัน, ทำงานออฟไลน์ 100%) สำหรับการ์ด **หมวดหมู่** หน้าแรก (`src/home.js`), แท็บหมวดหมู่กลุ่มสุขภาพและดูแล (`#subnav`), แผ่นบันทึกด่วน `+` (`#quick-grid`), และการตั้งค่าทางลัด/เมนู (`src/homeWidgetSettings.js`, `src/navigationSettings.js`) พร้อมปรับความคมชัดไอคอนสัตว์เลี้ยงใน Dark mode
-  - **Phosphor Duotone (`src/icons.js`)**: เปลี่ยนไอคอน UI ส่วนอื่นทั้งหมดและองค์ประกอบใน `index.html` (`hydrateStaticIcons()`) เป็น `@phosphor-icons/core` รุ่น **Duotone** แบบ tree-shaken inline SVG รองรับการเปลี่ยนสีตามทั้ง 4 ธีมอัตโนมัติ พร้อมคง alias `fa-*` เดิมครบถ้วน, เพิ่ม `src/icons.test.js` และถอด `lucide` / `@fortawesome/fontawesome-free` ออกจาก `package.json`
+- **ใช้ Phosphor Duotone ทั่วทั้งแอปแบบออฟไลน์ 100% (`src/icons.js`, `src/home.js`, `src/app.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `index.html`, `src/home.css`, `src/style.css`, `src/icons.test.js`)**:
+  - เปลี่ยนไอคอนทั้งหมดทั้งเมนู หมวดหมู่ การ์ดทางลัด แผ่น `+` และ UI ทั่วแอปมาใช้ `@phosphor-icons/core` รุ่น **Duotone** แบบ tree-shaken inline SVG ใน `src/icons.js` (ถอด `src/fluentEmoji.js`, `lucide` และ `@fortawesome/fontawesome-free` ออก)
 - **อัปเดตเวอร์ชันและเอกสารเป็น v5.3.0**:
-  - อัปเดต `package.json`, `package-lock.json` (`@phosphor-icons/core@^2.1.1`), `src/version.js`, `vite.config.js` และเอกสารทั้งหมด (`README.md`, `CHANGELOG.md`, `docs/*`) โดยไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง
+  - อัปเดต `package.json`, `package-lock.json` (`@phosphor-icons/core@^2.1.1`), `src/version.js`, `vite.config.js` และเอกสารทั้งหมด (`README.md`, `CHANGELOG.md`, `docs/*`) โดยไม่เปลี่ยน Firestore Rules หรือรูปแบบไฟล์สำรอง (เพิ่มเพียง optional `customFoodId` ใน `food_records`)
 
 ---
 ## [v5.2.0] - 2026-11-18

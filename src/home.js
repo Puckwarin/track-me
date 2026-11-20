@@ -10,12 +10,11 @@ import { bodyLatest } from './body.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
-import { fluentEmojiSvg } from './fluentEmoji.js';
 import { animateNumberTicker } from './ui.js';
 
 export const HOME_WIDGET_IDS = ['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders'];
 export const HOME_WIDGET_DEFS = [
-  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
+  { id: 'planner', label: 'Weekly Planner' },
   { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
   { id: 'quick-access', label: 'ทางลัดบันทึกด่วน' },
   { id: 'daily-activity', label: 'กิจกรรม & บันทึกล่าสุด' },
@@ -223,7 +222,7 @@ function buildQuickAccessHtml(config) {
       <div class="hx-cats">
         ${items.map(c => `
           <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat ${c.cat}">
-            <span class="hx-cat-icon" aria-hidden="true">${fluentEmojiSvg(c.key || c.tab, { size: 32 }) || iconSvg(c.icon || c.key, { size: 22 })}</span>
+            <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 26 })}</span>
             <span class="hx-cat-label">${esc(c.label)}</span>
           </button>`).join('')}
       </div>
@@ -327,8 +326,8 @@ function renderPlannerTeaser(host, today) {
   const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
   const doneMapToday = Array.isArray(state.planner?.doneMap?.[today]) ? state.planner.doneMap[today].length : 0;
   const desc = routines.length
-    ? `กิจวัตร ${routines.length} รายการ${doneMapToday ? ` · ทำแล้ว ${doneMapToday}` : ''}${todayWorkouts.length ? ` · ออกกำลังกาย ${todayWorkouts.length}` : ''}`
-    : 'วางแผนกิจวัตรและการออกกำลังกายทั้งสัปดาห์ในที่เดียว';
+    ? `กิจกรรม ${routines.length} รายการ${doneMapToday ? ` · ทำแล้ว ${doneMapToday}` : ''}${todayWorkouts.length ? ` · ออกกำลังกาย ${todayWorkouts.length}` : ''}`
+    : 'วางแผนกิจกรรมและการออกกำลังกายทั้งสัปดาห์ในที่เดียว';
 
   host.innerHTML = `
     <section class="hx-plan" aria-labelledby="hx-plan-title">

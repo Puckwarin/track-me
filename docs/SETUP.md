@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.3.0
+# Project Setup — ตั้งค่า Track Me v5.4.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -297,12 +297,21 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 
 ---
 
-## อัปเดต v5.3.0 (Planner ด้านบนหน้าหลัก, แท็บหมวดหมู่สุขภาพ/ดูแล & ชุดไอคอน Fluent Emoji + Phosphor Duotone)
+## อัปเดต v5.4.0 (Segmented Tabs มาตรฐาน, Pie Chart & Swipe อาหาร, ย่อหน้ายาว & มุมมองสรุป)
 
-- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: ปรับเฉพาะฝั่ง client ใน `src/home.js`, `src/app.js`, `src/style.css`, `src/icons.js`, `src/fluentEmoji.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `src/preview.js`, `src/version.js`, `index.html` และ `vite.config.js`
-- **Weekly Planner & กิจวัตรขึ้นบนสุด**: แสดงการ์ด Planner พร้อมรายการเช็กลิสต์ของวันนั้นเป็นส่วนแรกของหน้าแรกทันที (ผู้ใช้ที่เคยบันทึกการจัดลำดับวิดเจ็ตเองไว้ในเครื่องสามารถกดรีเซ็ตลำดับได้ที่ **ตั้งค่า → ส่วนประกอบหน้าแรก**)
-- **แท็บหมวดหมู่ในเมนูสุขภาพและดูแล**: เปลี่ยนแถบเมนูย่อยเป็นไอคอนการ์ดพาสเทลพร้อมป้ายชื่อด้านล่างในรูปแบบเดียวกับส่วน **หมวดหมู่** บนหน้าหลัก รองรับครบทั้ง 4 ธีม
-- **Fluent Emoji Flat + Phosphor Duotone (ออฟไลน์ 100%)**: ใช้ไอคอนสี Fluent Emoji Flat เฉพาะหมวดหมู่/ทางลัด/แผ่น `+` (`src/fluentEmoji.js`) และไอคอน Phosphor Duotone (`@phosphor-icons/core` ใน `src/icons.js`) สำหรับปุ่ม/เมนู/สถานะทั่วทั้งแอปโดยถอด `lucide` และ `@fortawesome/fontawesome-free` ที่ไม่ได้ใช้ออก
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงทั้งหมดอยู่ในฝั่ง client (`src/style.css`, `src/home.css`, `src/app.js`, `src/categories.js`, `src/dashboard.js`, `src/weekly.js`, `src/food.js`, `src/foodCalculations.js`, `src/body.js`, `src/symptoms.js`, `src/period.js`, `src/care.js`, `src/inventory.js`, `src/workout.js`, `src/expense.js`, `src/icons.js`, `src/version.js`)
+- **Segmented Tabs (`.tm-seg`) & การย่อหน้ายาว**: ปรับตัวสลับแท็บทั่วทั้งแอปให้ใช้รูปแบบเดียวกันทั้ง 4 ธีม และแบ่งแท็บย่อยในหน้า ร่างกาย, อาการ, ประจำเดือน, ดูแล, ของใช้, ออกกำลังกาย และรายรับ-รายจ่าย พร้อมรองรับ `trackme:focus` deep-link อัตโนมัติ
+- **หน้าอาหาร & มุมมองสรุป**: ใช้ Pie Chart แยกแคลอรี่รายมื้อ, เลือกทั้งมื้อ, ลากวางย้ายมื้อ (Drag & Drop), ปัดซ้ายแก้ไข/ลบ, ปัดขวารายการโปรด, ปรับคำแนะนำโภชนาการตามเกณฑ์หลายปัจจัย, เปลี่ยนชื่อ **สรุปสัปดาห์** เป็น **สรุป** พร้อมลดแถบสลับหน้าที่ซ้ำซ้อนกับหน้า **ภาพรวม**, และปรับขนาดฟอนต์บนมือถือให้กระชับขึ้น
+
+---
+
+## อัปเดต v5.3.0 (Planner ด้านบนหน้าหลัก, เมนู 4 แท็บ, Phosphor Duotone ทั้งแอป & ซิงค์คลังอาหาร)
+
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: ปรับฝั่ง client ใน `src/home.js`, `src/planner.js`, `src/categories.js`, `src/app.js`, `src/food.js`, `src/foodCalculations.js`, `src/schema.js`, `src/style.css`, `src/home.css`, `src/icons.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `src/preview.js`, `src/version.js`, `index.html` และ `vite.config.js` (เพิ่มเพียง optional field `customFoodId` ใน `food_records` ซึ่งอยู่ภายใต้ขีดจำกัด 30 fields ของ `firestore.rules` เดิม)
+- **Weekly Planner ด้านบนสุด & ปรับหน้าต่างเพิ่มกิจกรรม**: แสดงการ์ด **Weekly Planner** เป็นส่วนแรกของหน้าแรกทันที พร้อมแถบวันที่เลื่อนซ้าย-ขวาได้, เมนู **วางแผน** (`กิจกรรม`, `ออกกำลังกาย`, `นัดหมาย`), เปลี่ยนคำเป็น **กิจกรรม**, และลดความซับซ้อนในหน้าต่าง **เพิ่มกิจกรรม** (ผู้ใช้ที่เคยจัดลำดับวิดเจ็ตเองไว้ในเครื่องสามารถกดรีเซ็ตลำดับได้ที่ **ตั้งค่า → ส่วนประกอบหน้าแรก**)
+- **เมนูหลัก 4 แท็บ & แท็บหมวดหมู่สุขภาพ/ดูแล**: เมนูหลักแสดง **อาหาร**, **สุขภาพ**, **+**, **การเงิน**, **ดูแล** โดยแตะโลโก้ **Track Me** เพื่อกลับหน้าหลัก ส่วนแถบเมนูย่อยในกลุ่มสุขภาพและดูแลใช้การ์ดไอคอนทรงเดียวกับ **หมวดหมู่** บนหน้าหลักครบทั้ง 4 ธีม
+- **Phosphor Duotone ทั้งแอป (ออฟไลน์ 100%)**: ใช้ไอคอน **Phosphor Duotone** (`@phosphor-icons/core` ใน `src/icons.js`) สำหรับทุกเมนู หมวดหมู่ ทางลัด แผ่น `+` และ UI ทั่วทั้งแอป พร้อมถอด `src/fluentEmoji.js`, `lucide` และ `@fortawesome/fontawesome-free` ออก
+- **ซิงค์การแก้ไขข้อมูลจากคลังอาหาร**: เมื่อแก้ไขรายการในคลังอาหาร ระบบจะอัปเดตฟอร์มอาหารที่เลือกอยู่และรายการอาหารที่ตรงกันในวันที่เปิดอยู่โดยอัตโนมัติ
 
 ---
 

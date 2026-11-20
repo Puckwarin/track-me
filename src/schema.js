@@ -33,6 +33,7 @@ export const SANITIZERS = {
     ...(num(o.edibleGrams) !== null && { edibleGrams: num(o.edibleGrams) }),
     ...(num(o.edibleUnitGrams) !== null && { edibleUnitGrams: num(o.edibleUnitGrams) }),
     ...(o.edibleFractionSource && { edibleFractionSource: str(o.edibleFractionSource, 300) }),
+    ...(str(o.customFoodId, 80) && { customFoodId: str(o.customFoodId, 80) }),
     ...(isDateStr(o.copiedFrom) && { copiedFrom: o.copiedFrom }),
     createdAt: ts(o.createdAt || o.timestamp)
   } : null,

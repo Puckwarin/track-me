@@ -56,14 +56,14 @@
 
 ---
 
-## ผลหลังอัปเดต v5.3.0 (Fluent Emoji Flat + Phosphor Duotone)
+## ผลหลังอัปเดต v5.3.0 (Phosphor Duotone ทั้งแอป)
 
-เปลี่ยนจาก `lucide` เป็น **Fluent Emoji Flat** แบบคัดเฉพาะ 14 SVG ใน `src/fluentEmoji.js` และ **Phosphor Duotone** (`@phosphor-icons/core`) แบบ tree-shaken SVG ใน `src/icons.js` (ถอด `lucide`, `@fortawesome/fontawesome-free` และ `@iconify-json/fluent-emoji-flat` ออกจาก runtime dependencies) โดยยังคงใช้งานออฟไลน์และ precache ครบทั้งแอป
+เปลี่ยนจาก `lucide` เป็น **Phosphor Duotone** (`@phosphor-icons/core`) แบบ tree-shaken inline SVG ใน `src/icons.js` สำหรับทั้งเมนู หมวดหมู่ ทางลัด แผ่น `+` และ UI ทั่วทั้งแอป (ถอด `src/fluentEmoji.js`, `lucide`, `@fortawesome/fontawesome-free` และ `@iconify-json/fluent-emoji-flat` ออก) โดยยังคงใช้งานออฟไลน์และ precache ครบทั้งแอป
 
-| รายการ (`vite v6.4.6`) | v5.3.0 (ก่อนเปลี่ยนชุดไอคอน / `lucide`) | v5.3.0 (หลังเปลี่ยนเป็น Fluent Emoji + Phosphor Duotone) | เปลี่ยนแปลง |
+| รายการ (`vite v6.4.6`) | v5.3.0 (ก่อนเปลี่ยนชุดไอคอน / `lucide`) | v5.3.0 (หลังปรับเป็น Phosphor Duotone ทั้งแอป) | เปลี่ยนแปลง |
 |---|---:|---:|---:|
-| JavaScript หลัก (`index`) minified | 1,133.04 kB | 1,188.71 kB | +55.67 kB |
-| JavaScript หลัก (`index`) gzip | 297.47 kB | 321.62 kB | +24.15 kB |
-| PWA precache | 49 รายการ / 6,509.88 KiB | 49 รายการ / 6,551.29 KiB | +41.41 KiB |
+| JavaScript หลัก (`index`) minified | 1,133.04 kB | 1,167.67 kB | +34.63 kB |
+| JavaScript หลัก (`index`) gzip | 297.47 kB | 312.04 kB | +14.57 kB |
+| PWA precache | 49 รายการ / 6,509.88 KiB | 49 รายการ / 6,530.35 KiB | +20.47 KiB |
 
-- ขนาดเพิ่มขึ้น +24.15 kB (gzip) สำหรับไอคอนสองโทน ~109 ตัว + Fluent Emoji 14 ตัว โดยไม่มีการเรียกเครือข่ายหรือ CDN ภายนอก
+- ขนาดเพิ่มขึ้น +14.57 kB (gzip) สำหรับชุดไอคอน Phosphor Duotone ทั้งแอปโดยไม่มีการเรียกเครือข่ายหรือ CDN ภายนอก

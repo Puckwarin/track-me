@@ -18,12 +18,13 @@ export const GROUPS = {
   home: ['home'],
   food: ['food'],
   health: ['overview', 'workout', 'period', 'symptoms', 'body'],
-  care: ['expense', 'care', 'remind', 'inventory'],
+  expense: ['expense'],
+  care: ['care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
   overview: { icon: 'overview', emoji: '📈', label: 'แดชบอร์ด', cat: 'cat-neutral' },
-  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุปสัปดาห์', cat: 'cat-neutral' },
+  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุป', cat: 'cat-neutral' },
   workout: { icon: 'workout', emoji: '🏃‍♀️', label: 'ออกกำลังกาย', cat: 'cat-workout' },
   period: { icon: 'period', emoji: '🌸', label: 'ประจำเดือน', cat: 'cat-period' },
   symptoms: { icon: 'symptoms', emoji: '🌿', label: 'อาการ & ผิว', cat: 'cat-symptoms' },

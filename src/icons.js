@@ -23,6 +23,7 @@ import caretLeft from '@phosphor-icons/core/assets/duotone/caret-left-duotone.sv
 import caretRight from '@phosphor-icons/core/assets/duotone/caret-right-duotone.svg?raw';
 import caretUp from '@phosphor-icons/core/assets/duotone/caret-up-duotone.svg?raw';
 import chartBar from '@phosphor-icons/core/assets/duotone/chart-bar-duotone.svg?raw';
+import chartPieSlice from '@phosphor-icons/core/assets/duotone/chart-pie-slice-duotone.svg?raw';
 import chatCircleDots from '@phosphor-icons/core/assets/duotone/chat-circle-dots-duotone.svg?raw';
 import check from '@phosphor-icons/core/assets/duotone/check-duotone.svg?raw';
 import checkCircle from '@phosphor-icons/core/assets/duotone/check-circle-duotone.svg?raw';
@@ -38,6 +39,7 @@ import copy from '@phosphor-icons/core/assets/duotone/copy-duotone.svg?raw';
 import database from '@phosphor-icons/core/assets/duotone/database-duotone.svg?raw';
 import deviceMobile from '@phosphor-icons/core/assets/duotone/device-mobile-duotone.svg?raw';
 import dog from '@phosphor-icons/core/assets/duotone/dog-duotone.svg?raw';
+import dotsSixVertical from '@phosphor-icons/core/assets/duotone/dots-six-vertical-duotone.svg?raw';
 import dotsThree from '@phosphor-icons/core/assets/duotone/dots-three-duotone.svg?raw';
 import downloadSimple from '@phosphor-icons/core/assets/duotone/download-simple-duotone.svg?raw';
 import drop from '@phosphor-icons/core/assets/duotone/drop-duotone.svg?raw';
@@ -94,6 +96,7 @@ import snowflake from '@phosphor-icons/core/assets/duotone/snowflake-duotone.svg
 import sparkle from '@phosphor-icons/core/assets/duotone/sparkle-duotone.svg?raw';
 import spinner from '@phosphor-icons/core/assets/duotone/spinner-duotone.svg?raw';
 import squaresFour from '@phosphor-icons/core/assets/duotone/squares-four-duotone.svg?raw';
+import star from '@phosphor-icons/core/assets/duotone/star-duotone.svg?raw';
 import stethoscope from '@phosphor-icons/core/assets/duotone/stethoscope-duotone.svg?raw';
 import stop from '@phosphor-icons/core/assets/duotone/stop-duotone.svg?raw';
 import sun from '@phosphor-icons/core/assets/duotone/sun-duotone.svg?raw';
@@ -162,6 +165,9 @@ const ICONS = {
   trash,
   edit: pencilSimple,
   'edit-square': notePencil,
+  drag: dotsSixVertical,
+  star,
+  pie: chartPieSlice,
   bookmark: bookmarkSimple,
   book: bookOpen,
   sparkles: sparkle,
@@ -229,7 +235,7 @@ const ICONS = {
   'fa-bowl-food': forkKnife,
   'fa-chart-line': trendUp,
   'fa-chart-column': chartBar,
-  'fa-chart-pie': chartBar,
+  'fa-chart-pie': chartPieSlice,
   'fa-chart-simple': chartBar,
   'fa-calendar-week': calendarBlank,
   'fa-calendar-check': calendarCheck,

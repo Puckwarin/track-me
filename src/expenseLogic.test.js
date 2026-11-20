@@ -12,8 +12,9 @@ const expenseCategories = ['อาหาร', 'เครื่องดื่ม
 const incomeCategories = ['เงินเดือน', 'อื่น ๆ'];
 
 describe('expense logic', () => {
-  it('places expense first in the Care tab navigation group', () => {
-    expect(GROUPS.care[0]).toBe('expense');
+  it('gives expense its own top-level navigation group separate from Care', () => {
+    expect(GROUPS.expense).toEqual(['expense']);
+    expect(GROUPS.care).not.toContain('expense');
   });
 
   it('uses the latest matching learned rule only when its category fits the transaction type', () => {

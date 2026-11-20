@@ -1,26 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { CATEGORIES, SUBTABS } from './categories.js';
-import { hasFluentEmoji, fluentEmojiSvg, fluentEmojiBubble } from './fluentEmoji.js';
 import { iconSvg, iconBubble } from './icons.js';
 
-describe('icons & fluentEmoji registries', () => {
-  it('provides Fluent Emoji Flat SVGs for all categories and subtabs without gradient ID collisions', () => {
+describe('Phosphor Duotone icon registry', () => {
+  it('provides Phosphor Duotone SVGs for all categories and subtabs', () => {
     for (const c of CATEGORIES) {
-      expect(hasFluentEmoji(c.key)).toBe(true);
-      const svg = fluentEmojiSvg(c.key, { size: 32 });
-      expect(svg).toContain('viewBox="0 0 32 32"');
-      expect(svg).toContain(`tm-fluent-emoji--${c.key}`);
-      expect(svg).not.toMatch(/\bid=|url\(#/);
-      const bubble = fluentEmojiBubble(c.key, { cat: c.cat });
-      expect(bubble).toContain('fluent-bubble');
+      const svg = iconSvg(c.icon || c.key, { size: 24 });
+      expect(svg).toContain('class="tm-svg-icon ph-duotone"');
+      expect(svg).toContain('viewBox="0 0 256 256"');
+      expect(svg).toContain('<path');
+      const bubble = iconBubble(c.icon || c.key, { cat: c.cat });
+      expect(bubble).toContain('icon-bubble');
       expect(bubble).toContain(c.cat);
     }
 
     for (const [tab, meta] of Object.entries(SUBTABS)) {
-      expect(hasFluentEmoji(tab)).toBe(true);
-      const svg = fluentEmojiSvg(tab, { size: 30 });
-      expect(svg).toContain(`tm-fluent-emoji--${tab}`);
-      expect(iconSvg(meta.icon || tab)).toContain('viewBox="0 0 256 256"');
+      const svg = iconSvg(meta.icon || tab, { size: 22 });
+      expect(svg).toContain('viewBox="0 0 256 256"');
+      expect(svg).toContain('<path');
     }
   });
 

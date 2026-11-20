@@ -7,6 +7,7 @@ import {
   aggregateMonthlyOverview, buildMonthKeys, compactFoodForOverview, readOverviewCache, writeOverviewCache
 } from './overviewLogic.js';
 import { iconSvg } from './icons.js';
+import { bindChartInspector } from './ui.js';
 
 let root = null;
 let rangeMonths = 6;
@@ -50,11 +51,12 @@ function renderBarChart(months, valueKey, {
     const y = yPos(v);
     const h = Math.max(0, H - padBottom - y);
     const showLabel = months.length <= 6 || i % 2 === 0 || i === months.length - 1;
-    return `
-      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${v > 0 ? color : '#e2e8f0'}">
-        <title>${esc(formatTooltip(m, v))}</title>
-      </rect>
-      ${showLabel ? `<text x="${x + barW / 2}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${esc(m.label)}</text>` : ''}`;
+    const tipText = formatTooltip(m, v);
+    return `<g>
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${v > 0 ? color : '#e2e8f0'}"></rect>
+      <rect x="${padX + i * bw}" y="${padTop}" width="${bw}" height="${H - padTop - padBottom}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(tipText)}" data-chart-color="${v > 0 ? color : '#94a3b8'}" aria-label="${esc(tipText)}"><title>${esc(tipText)}</title></rect>
+      ${showLabel ? `<text x="${x + barW / 2}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${esc(m.label)}</text>` : ''}
+    </g>`;
   }).join('');
 
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="${esc(emptyText)}">${bars}${targetLine}</svg>`;
@@ -83,11 +85,15 @@ function renderWeightChart(months) {
     ? `<polyline fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${points.map(p => `${xAt(p.i)},${yAt(p.v)}`).join(' ')}"/>`
     : '';
 
-  const dots = points.map(p => `
-    <circle cx="${xAt(p.i)}" cy="${yAt(p.v)}" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="1.5">
-      <title>${esc(`${p.m.label}: เฉลี่ย ${p.v} กก. (ล่าสุด ${p.m.weightLatest} กก.)`)}</title>
-    </circle>
-    <text x="${xAt(p.i)}" y="${Math.max(12, yAt(p.v) - 8)}" font-size="9" text-anchor="middle" fill="#1e40af">${p.v}</text>`).join('');
+  const dots = points.map(p => {
+    const tip = `${p.m.label}: เฉลี่ย ${p.v} กก.`;
+    const sub = `ล่าสุด ${p.m.weightLatest} กก.`;
+    return `<g>
+      <circle cx="${xAt(p.i)}" cy="${yAt(p.v)}" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="1.5"></circle>
+      <circle cx="${xAt(p.i)}" cy="${yAt(p.v)}" r="12" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="#3b82f6" aria-label="${esc(tip)}"><title>${esc(`${tip} (${sub})`)}</title></circle>
+      <text x="${xAt(p.i)}" y="${Math.max(12, yAt(p.v) - 8)}" font-size="9" text-anchor="middle" fill="#1e40af">${p.v}</text>
+    </g>`;
+  }).join('');
 
   const xLabels = months.map((m, i) => {
     const show = months.length <= 6 || i % 2 === 0 || i === months.length - 1;
@@ -286,6 +292,9 @@ function renderView() {
       <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.workoutCount ? `${m.workoutCount} ครั้ง` : '—'}</td>
       <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.expenseTotal ? `฿${fmtMoney(m.expenseTotal)}` : '—'}</td>
     </tr>`).join('');
+  $('#ov-charts', root).querySelectorAll('.card').forEach(card => {
+    bindChartInspector(card, { hint: 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลรายเดือน' });
+  });
 }
 
 export function mountOverview(el) {

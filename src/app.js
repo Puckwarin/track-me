@@ -24,8 +24,7 @@ import { isPreviewMode, getPreviewCollection, getPreviewFoodByDate } from './pre
 import './theme.js';
 import { CATEGORIES, GROUPS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
-import { iconSvg } from './icons.js';
-import { fluentEmojiSvg, fluentEmojiBubble } from './fluentEmoji.js';
+import { iconSvg, iconBubble } from './icons.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
@@ -89,7 +88,7 @@ function renderSubnav(group, name) {
   nav.classList.toggle('subnav--tiles', useTiles);
   if (!show) { nav.innerHTML = ''; return; }
   if (useTiles) {
-    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${fluentEmojiSvg(item.tab || item.icon, { size: 30 }) || iconSvg(item.icon || item.tab, { size: 22 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
+    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 24 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
   } else {
     nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button type="button" data-sub="${esc(item.tab)}" class="sub-chip ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${esc(item.label)}</button>`).join('')}</div>`;
   }
@@ -146,7 +145,7 @@ const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mount
 const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
 const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
 const foodLoader = makeLazyFeature(() => import('./food.js'), m => { m.mountFood($('#tab-food')); m.watchDay(); }, 'หน้าอาหาร');
-const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#db-weekly')), 'หน้าสรุปสัปดาห์');
+const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#db-weekly')), 'หน้าสรุป');
 const remindLoader = makeLazyFeature(() => import('./remindLog.js'), m => m.mountRemind($('#tab-remind')), 'หน้าบันทึกเตือน');
 const settingsLoader = makeLazyFeature(() => import('./settings.js'), m => { m.mountSettings($('#tab-settings')); m.refreshAccount?.(); }, 'หน้าตั้งค่า');
 
@@ -239,10 +238,21 @@ export function showTab(name, { preserveDate = false } = {}) {
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
   renderSubnav(group, lastSub[group]);
-  $('#db-content')?.classList.toggle('hidden', name === 'weekly');
-  $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
-  $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
-  $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
+  const syncOverviewHeader = () => {
+    const isWeekly = name === 'weekly';
+    $('#db-content')?.classList.toggle('hidden', isWeekly);
+    $('#db-weekly')?.classList.toggle('hidden', !isWeekly);
+    document.querySelectorAll('#tab-overview .db-overview-only').forEach(el => el.classList.toggle('hidden', isWeekly));
+    const ovBtn = $('#db-view-overview');
+    const wkBtn = $('#db-view-weekly');
+    ovBtn?.classList.toggle('is-active', !isWeekly);
+    ovBtn?.setAttribute('aria-pressed', String(!isWeekly));
+    ovBtn?.setAttribute('aria-selected', String(!isWeekly));
+    wkBtn?.classList.toggle('is-active', isWeekly);
+    wkBtn?.setAttribute('aria-pressed', String(isWeekly));
+    wkBtn?.setAttribute('aria-selected', String(isWeekly));
+  };
+  syncOverviewHeader();
   if (!preserveDate) {
     if (name === 'home') resetHomePlannerToToday();
     if (name === 'period') resetPeriodToToday();
@@ -255,10 +265,7 @@ export function showTab(name, { preserveDate = false } = {}) {
   if (name === 'overview' || name === 'weekly') {
     pending = overviewLoader.ensure().then(async m => {
       m?.renderDashboard?.();
-      $('#db-content')?.classList.toggle('hidden', name === 'weekly');
-      $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
-      $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
-      $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
+      syncOverviewHeader();
       if (name !== 'weekly') return;
       const weekly = await weeklyLoader.ensure();
       if (!preserveDate) weekly?.resetWeeklyToToday?.();
@@ -289,8 +296,12 @@ function goToGroup(group) {
 // เปิดหน้าแท็บเจาะจงแล้วเลื่อนไปที่ฟอร์มบันทึก (ไม่เขียนทับด้วย lastSub ของกลุ่ม)
 async function goTo(name, focusId) {
   await showTab(name);
+  if (focusId) {
+    window.dispatchEvent(new CustomEvent('trackme:focus', { detail: { tab: name, focusId } }));
+  }
   if (name === 'care' && focusId && focusId.startsWith('lb-')) {
     await careLoader.get()?.ensureLabMounted?.();
+    window.dispatchEvent(new CustomEvent('trackme:focus', { detail: { tab: name, focusId } }));
   }
   if (!focusId) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   requestAnimationFrame(() => {
@@ -323,7 +334,7 @@ function openQuick(event) {
   quickTrigger = event?.currentTarget instanceof HTMLElement
     ? event.currentTarget
     : (document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add'));
-  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${fluentEmojiBubble(c.key || c.tab, { size: 28 })}<span>${c.label}</span></button>`).join('');
+  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${iconBubble(c.icon || c.key, { size: 22, cat: c.cat })}<span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   $('#btn-quick-add')?.setAttribute('aria-expanded', 'true');
