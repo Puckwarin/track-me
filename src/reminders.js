@@ -6,6 +6,7 @@ import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemin
 import { syncPeriodRemindToPush } from './push.js';
 import { resolveRuleNextDate } from './reminderParser.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 let root;
 const selectedKeys = new Set();
@@ -188,6 +189,10 @@ async function onChange(e) {
   }
   const single = e.target.closest('[data-nt-remind]');
   if (single) {
+    if (guardPreviewWrite('การตั้งค่าแจ้งเตือนล่วงหน้า')) {
+      renderReminders();
+      return;
+    }
     const [col, id] = single.dataset.ntRemind.split(':');
     const remindDays = Number(single.value);
     try {
@@ -219,6 +224,7 @@ async function onClick(e) {
     return;
   }
   if (e.target.closest('#nt-bulk-apply')) {
+    if (guardPreviewWrite('การตั้งค่าแจ้งเตือนหลายรายการ')) return;
     const targets = trackedSources().filter(x => selectedKeys.has(x.uidKey));
     if (!targets.length) return;
     const remindDays = Number($('#nt-bulk-days', root).value);
@@ -255,6 +261,7 @@ async function onClick(e) {
     }
     const r = collectReminders().find(x => x.uidKey === key);
     if (!r) return;
+    if (guardPreviewWrite('การปิดแจ้งเตือนรายการนี้')) return;
     try {
       if (r.kind === 'low') {
         updateDoc(userDoc(state.uid, r.col, r.id), { lowDismissed: true, updatedAt: new Date() })

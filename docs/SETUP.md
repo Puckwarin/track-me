@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.2.0
+# Project Setup — ตั้งค่า Track Me v5.3.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -297,11 +297,22 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 
 ---
 
-## อัปเดต v5.2.0 (4 ธีม, Lucide Icons, Accessibility & แสดงเลขเวอร์ชัน)
+## อัปเดต v5.3.0 (Planner ด้านบนหน้าหลัก, แท็บหมวดหมู่สุขภาพ/ดูแล & ชุดไอคอน Fluent Emoji + Phosphor Duotone)
 
-- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงทั้งหมดอยู่ในฝั่ง client (`src/theme.js`, `src/icons.js`, `src/version.js`, `src/ui.js`, `src/util.js`, `src/design-tokens.css`, `src/style.css` และหน้า UI ต่าง ๆ)
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: ปรับเฉพาะฝั่ง client ใน `src/home.js`, `src/app.js`, `src/style.css`, `src/icons.js`, `src/fluentEmoji.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `src/preview.js`, `src/version.js`, `index.html` และ `vite.config.js`
+- **Weekly Planner & กิจวัตรขึ้นบนสุด**: แสดงการ์ด Planner พร้อมรายการเช็กลิสต์ของวันนั้นเป็นส่วนแรกของหน้าแรกทันที (ผู้ใช้ที่เคยบันทึกการจัดลำดับวิดเจ็ตเองไว้ในเครื่องสามารถกดรีเซ็ตลำดับได้ที่ **ตั้งค่า → ส่วนประกอบหน้าแรก**)
+- **แท็บหมวดหมู่ในเมนูสุขภาพและดูแล**: เปลี่ยนแถบเมนูย่อยเป็นไอคอนการ์ดพาสเทลพร้อมป้ายชื่อด้านล่างในรูปแบบเดียวกับส่วน **หมวดหมู่** บนหน้าหลัก รองรับครบทั้ง 4 ธีม
+- **Fluent Emoji Flat + Phosphor Duotone (ออฟไลน์ 100%)**: ใช้ไอคอนสี Fluent Emoji Flat เฉพาะหมวดหมู่/ทางลัด/แผ่น `+` (`src/fluentEmoji.js`) และไอคอน Phosphor Duotone (`@phosphor-icons/core` ใน `src/icons.js`) สำหรับปุ่ม/เมนู/สถานะทั่วทั้งแอปโดยถอด `lucide` และ `@fortawesome/fontawesome-free` ที่ไม่ได้ใช้ออก
+
+---
+
+## อัปเดต v5.2.0 (4 ธีม, Lucide Icons, Preview Mode, Responsive Dashboard & UX)
+
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงทั้งหมดอยู่ในฝั่ง client (`src/theme.js`, `src/icons.js`, `src/version.js`, `src/preview.js`, `src/home.js`, `src/home.css`, `src/dashboard.js`, `src/ui.js`, `src/util.js`, `src/design-tokens.css`, `src/style.css` และหน้า UI ต่าง ๆ)
 - **ธีมแอป 4 รูปแบบ**: รองรับ **Baby Blue** (`baby-blue` ค่าเริ่มต้น), **Pastel** (`pastel`), **Cozy** (`cozy` โทนครีมน้ำตาลอบอุ่นเดิม) และ **Dark mode** (`dark`); หากเครื่องผู้ใช้เคยบันทึกค่า `'minimal'` ใน `localStorage` ระบบจะแปลงเป็น `'baby-blue'` ให้อัตโนมัติ
-- **Lucide Icons & แสดงเลขเวอร์ชัน**: เปลี่ยนไอคอนทั่วทั้งแอปมาใช้ชุด `lucide` (`src/icons.js` แบบ inline SVG) และแสดงเลขเวอร์ชันจาก `package.json` (`src/version.js`) ในหน้าล็อกอิน, แถบนำทางด้านซ้ายบน desktop และหน้าตั้งค่า (อัปเดต `package-lock.json` ให้ซิงค์กับ `lucide@^1.75.0` และเวอร์ชัน `5.2.0` แล้ว)
+- **Lucide Icons, Navigation & Accessibility**: เปลี่ยนไอคอนทั่วทั้งแอปมาใช้ชุด `lucide` (`src/icons.js` แบบ inline SVG), แสดงเลขเวอร์ชันจาก `package.json` (`src/version.js`), ย้ายปุ่ม **AI Chat** ไปไว้ที่ Header, ฝัง **+** ตรงกลาง Bottom Nav, ยุบปุ่มเลื่อนหน้าจอเหลือปุ่มเดียวซ่อนอัตโนมัติ, และเพิ่ม focus trap + `Escape` + คืน focus ในหน้าต่าง dialog ต่าง ๆ
+- **โหมดดูตัวอย่างโดยไม่เข้าสู่ระบบ (`src/preview.js`)**: กดปุ่ม **ดูตัวอย่างก่อนใช้งาน** ในหน้าเข้าสู่ระบบเพื่อลองสำรวจข้อมูลตัวอย่างทั้งแอปโดยไม่เชื่อม Firebase หรือแก้ไขบัญชีจริง และกดปุ่มออกจากโหมดตัวอย่างบนแถบด้านบนเพื่อล้างแคชชั่วคราวของ `preview-guest` ได้ทันที
+- **Responsive Home / Dashboard & การจัดกลุ่มข้อมูล**: หน้า Home (`src/home.css`) รองรับทั้ง 4 ธีม, แดชบอร์ด (`src/dashboard.js`) มีปุ่มสลับมุมมองระหว่างแดชบอร์ด สรุปสัปดาห์ และรายงานในกลุ่มสุขภาพที่กระชับเหลือ 5 แท็บ, ส่วนหน้าอาหาร รายจ่าย และออกกำลังกายมีตัวสลับมุมมองและเมนูพับ `<details>` สำหรับเครื่องมือเสริม ช่องเสริม และประวัติที่ยาวเกิน 5 รายการ
 
 ---
 

@@ -3,6 +3,7 @@ import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, toast } from './util.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 export const SYMPTOMS = [
   ['cramps', 'ปวดท้อง'], ['backache', 'ปวดหลัง'], ['headache', 'ปวดหัว'],
@@ -176,6 +177,7 @@ export function renderSkinList() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกอาการรายวัน')) return;
   const date = $('#s-date', root).value;
   if (!date) return toast('กรุณาเลือกวันที่', 'err');
   const symptoms = {};
@@ -188,11 +190,13 @@ function save() {
   toast('บันทึกอาการแล้ว');
 }
 function del() {
+  if (guardPreviewWrite('การลบบันทึกอาการ')) return;
   const date = $('#s-date', root).value;
   if (confirm('ลบบันทึกอาการของวันนี้?')) deleteDoc(userDoc(state.uid, 'symptom_records', date)).catch(e => toast(e.message, 'err'));
 }
 
 function saveSkin() {
+  if (guardPreviewWrite('การบันทึกอาการผิว')) return;
   const date = $('#s-date', root).value;
   if (!date) return toast('กรุณาเลือกวันที่', 'err');
   const symptoms = Object.fromEntries(SKIN_FIELDS.map(([k]) => [k, +$('#skin-' + k, root).value]));
@@ -200,6 +204,7 @@ function saveSkin() {
     .then(() => toast('บันทึกอาการผิวแล้ว')).catch(e => toast('บันทึกอาการผิวไม่สำเร็จ: ' + e.message, 'err'));
 }
 function delSkin() {
+  if (guardPreviewWrite('การลบบันทึกผิว')) return;
   const date = $('#s-date', root).value;
   if (confirm('ลบบันทึกผิวของวันนี้?')) deleteDoc(userDoc(state.uid, 'skin_records', date)).catch(e => toast(e.message, 'err'));
 }

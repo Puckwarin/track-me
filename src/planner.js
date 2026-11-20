@@ -1,6 +1,7 @@
 import { setDoc, updateDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
+import { isPreviewMode } from './preview.js';
 import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
@@ -165,6 +166,10 @@ async function savePlanner(next) {
   };
   state.planner = { id: 'planner', ...payload };
   renderPlanner();
+  if (isPreviewMode()) {
+    window.dispatchEvent(new Event('trackme:data-change'));
+    return;
+  }
   try {
     setDoc(userDoc(state.uid, 'settings', 'planner'), payload)
       .catch(e => toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err'));
@@ -313,6 +318,13 @@ export function mountPlanner(el, navigate) {
     const checked = chk.checked;
 
     if (kind === 'workout') {
+      if (isPreviewMode()) {
+        state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, status: checked ? 'done' : 'planned' } : w);
+        renderPlanner();
+        window.dispatchEvent(new Event('trackme:data-change'));
+        toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว (โหมดดูตัวอย่าง)' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+        return;
+      }
       try {
         updateDoc(userDoc(state.uid, 'workout_records', id), {
           status: checked ? 'done' : 'planned',

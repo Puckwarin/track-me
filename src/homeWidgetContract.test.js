@@ -29,9 +29,9 @@ describe('home widget customization contract', () => {
 
   it('exposes stable widget IDs and definitions matching all slots', () => {
     expect(HOME_WIDGET_IDS).toEqual([
+      'planner',
       'daily-overview',
       'quick-access',
-      'planner',
       'daily-activity',
       'reminders'
     ]);
@@ -56,8 +56,8 @@ describe('home widget customization contract', () => {
     expect(cfg.order).toEqual([
       'reminders',
       'quick-access',
-      'daily-overview',
       'planner',
+      'daily-overview',
       'daily-activity'
     ]);
     expect([...cfg.hidden]).toEqual(['planner']);

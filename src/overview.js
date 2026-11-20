@@ -1,6 +1,6 @@
-import { getDocs, query, where } from 'firebase/firestore';
-import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { getFoodRecordsInRange } from './foodService.js';
+import { isPreviewMode } from './preview.js';
 import { $, esc, fmtDateTime, localDateStr, monthEndDate, toast } from './util.js';
 import { getTargets } from './profile.js';
 import {
@@ -106,7 +106,8 @@ async function loadFoodForRange(forceRefresh = false) {
   const key = `${state.uid}:${start}:${end}`;
   if (!forceRefresh && cachedRangeKey === key && !lastFoodError) return;
 
-  const storageHit = readOverviewCache(state.uid, rangeMonths, { today });
+  const preview = isPreviewMode();
+  const storageHit = preview ? null : readOverviewCache(state.uid, rangeMonths, { today });
   if (!forceRefresh && storageHit) {
     cachedFood = storageHit.food;
     cachedUpdatedAt = storageHit.updatedAt;
@@ -126,31 +127,29 @@ async function loadFoodForRange(forceRefresh = false) {
   renderView();
 
   try {
-    const snap = await getDocs(query(
-      userCol(state.uid, 'food_records'),
-      where('date', '>=', start),
-      where('date', '<=', end)
-    ));
+    const snap = await getFoodRecordsInRange(state.uid, start, end);
     if (mySeq !== seq) return;
     const foodRows = compactFoodForOverview(snap.docs.map(d => d.data()));
     cachedFood = foodRows;
     cachedRangeKey = key;
     cachedUpdatedAt = Date.now();
     cachedFromStorage = false;
-    const summarySnapshot = aggregateMonthlyOverview({
-      monthsCount: rangeMonths,
-      today,
-      food: foodRows,
-      workouts: state.workouts || [],
-      body: state.body || [],
-      expenses: state.expenses || []
-    });
-    writeOverviewCache(state.uid, rangeMonths, {
-      today,
-      food: foodRows,
-      overviewSummary: summarySnapshot,
-      now: cachedUpdatedAt
-    });
+    if (!preview) {
+      const summarySnapshot = aggregateMonthlyOverview({
+        monthsCount: rangeMonths,
+        today,
+        food: foodRows,
+        workouts: state.workouts || [],
+        body: state.body || [],
+        expenses: state.expenses || []
+      });
+      writeOverviewCache(state.uid, rangeMonths, {
+        today,
+        food: foodRows,
+        overviewSummary: summarySnapshot,
+        now: cachedUpdatedAt
+      });
+    }
   } catch (err) {
     if (mySeq !== seq) return;
     if (storageHit) {
@@ -298,6 +297,10 @@ export function mountOverview(el) {
         <div>
           <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 19, className: 'text-brand' })}<span>แดชบอร์ดภาพรวมรายเดือน</span></h2>
           <p class="text-xs text-slate-600">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" id="ov-go-weekly" class="chip bg-sky-soft text-blue-700 whitespace-nowrap">${iconSvg('weekly', { size: 14 })} สรุปรายสัปดาห์</button>
+            <button type="button" id="ov-go-report" class="chip bg-lav-soft text-brand-dark whitespace-nowrap">${iconSvg('report', { size: 14 })} รายงานสุขภาพ</button>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" data-ov-range="3" class="chip whitespace-nowrap">3 เดือน</button>
@@ -340,6 +343,8 @@ export function mountOverview(el) {
     });
   });
 
+  $('#ov-go-weekly', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'weekly' } })));
+  $('#ov-go-report', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'report' } })));
   $('#ov-refresh', root).addEventListener('click', () => {
     void loadFoodForRange(true);
   });

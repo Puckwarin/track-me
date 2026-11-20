@@ -6,6 +6,7 @@ import { watch } from './sync.js';
 import { estimateStockFromPhotos, explainGeminiError, formatImageProgress } from './nutrition.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 const categories = ['คน · อาหาร/ขนม','สัตว์เลี้ยง · อาหาร/ขนม','สกินแคร์/ของใช้คน','ของใช้สัตว์เลี้ยง','ของใช้ในบ้าน','อื่น ๆ'];
 const $r = s => $(s, root);
@@ -103,10 +104,11 @@ function renderInventorySummary() {
 function renderShoppingList(){const box=$r('#shopping-list');if(!box)return;const low=listProducts().filter(p=>p.quantity!=null&&p.lowAt!=null&&p.quantity<=p.lowAt);box.classList.toggle('hidden',low.length===0);if(!low.length){box.innerHTML='';return;}box.innerHTML=`<div class="flex flex-wrap justify-between items-center gap-2"><div><h3 class="font-semibold">🛒 รายการซื้อของ · ${low.length} รายการ</h3><p class="text-xs">สร้างให้อัตโนมัติจากของที่ถึงเกณฑ์เตือน</p></div><button data-copy-shopping class="btn btn-soft !px-3 !py-2 text-xs">คัดลอกรายการ</button></div><ul class="space-y-1">${low.map(p=>`<li class="flex justify-between items-center gap-2 rounded-lg bg-white/70 px-2 py-1 text-sm tabular-nums"><span>□ <b>${esc(p.name)}</b> · เหลือ ${esc(p.quantity)} ${esc(p.unit||'หน่วย')}</span><button data-shopping-edit="${esc(p.id)}" class="chip min-h-[36px] bg-sky-soft text-blue-700">เติมสต๊อก</button></li>`).join('')}</ul>`;}
 function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';const more=$r('#inv-more-fields');if(more)more.open=false;$r('#inv-save').textContent='บันทึกสต๊อก';$r('#inv-cancel').classList.add('hidden');const st=$r('#inv-photo-status');if(st){st.textContent='';st.classList.add('hidden');}}
 function editProduct(p){editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);const more=$r('#inv-more-fields');if(more)more.open=Boolean(p.expiryDate||p.openedDate||p.paoMonths||p.ingredients||p.pros||p.cons||(p.remindDays!=null&&Number(p.remindDays)!==30));$r('#inv-save').textContent='บันทึกการแก้ไข';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
-function saveProduct(){const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonthsLocal(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
+function saveProduct(){if(guardPreviewWrite('การบันทึกสต๊อก'))return;const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonthsLocal(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
 async function onInventoryClick(e){
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.stepProduct){
+    if(guardPreviewWrite('การปรับจำนวนสต๊อก'))return;
     const p=(state.trackedProducts||[]).find(x=>x.id===b.dataset.stepProduct);if(!p)return;
     const delta=Number(b.dataset.delta)||0;
     const pendingKey=`${state.uid}:${p.id}`;
@@ -133,7 +135,7 @@ async function onInventoryClick(e){
   }
   const id=b.dataset.editProduct||b.dataset.deleteProduct;
   if(b.dataset.editProduct){const p=(state.trackedProducts||[]).find(x=>x.id===id);if(p)editProduct(p);}
-  else if(b.dataset.deleteProduct&&confirm('ลบรายการนี้ออกจากสต๊อก?'))try{deleteDoc(userDoc(state.uid,'tracked_products',id)).catch(err=>toast(err.message,'err'));toast('ลบรายการแล้ว');}catch(err){toast(err.message,'err');}
+  else if(b.dataset.deleteProduct){if(guardPreviewWrite('การลบสินค้าในสต๊อก'))return;if(confirm('ลบรายการนี้ออกจากสต๊อก?'))try{deleteDoc(userDoc(state.uid,'tracked_products',id)).catch(err=>toast(err.message,'err'));toast('ลบรายการแล้ว');}catch(err){toast(err.message,'err');}}
 }
 
 function openBatchInventoryModal(results, errors) {
@@ -179,6 +181,7 @@ function openBatchInventoryModal(results, errors) {
     </div>`, { wide: true });
 
   $('#bi-save', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การบันทึกสต๊อกจากรูปภาพ')) return;
     const rows = [...m.el.querySelectorAll('[data-bi-row]')];
     const items = [];
     for (const row of rows) {
@@ -264,4 +267,4 @@ async function scanPhoto(e) {
     toast(explainGeminiError(err), 'err');
   }
 }
-function saveBlacklist(){try{setDoc(userDoc(state.uid,'ingredient_blacklist','list'),{ingredients:$r('#inv-blacklist').value.trim(),updatedAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกส่วนผสมที่ต้องการเลี่ยงแล้ว');}catch(e){toast(e.message,'err');}}
+function saveBlacklist(){if(guardPreviewWrite('การบันทึก Ingredient Blacklist'))return;try{setDoc(userDoc(state.uid,'ingredient_blacklist','list'),{ingredients:$r('#inv-blacklist').value.trim(),updatedAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกส่วนผสมที่ต้องการเลี่ยงแล้ว');}catch(e){toast(e.message,'err');}}

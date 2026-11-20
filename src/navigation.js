@@ -2,7 +2,7 @@ import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 
 const DEFAULT_FAVORITES = ['food', 'workout', 'period'];
 const PROTECTED_TABS = new Set(['home', 'settings', 'notifications']);
-const ALL_TABS = Object.values(GROUPS).flat();
+const ALL_TABS = [...new Set([...Object.values(GROUPS).flat(), 'weekly', 'report'])];
 const STORAGE_PREFIX = 'trackme-navigation-v1:';
 
 function tabMetadata(tab) {

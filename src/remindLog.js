@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './ut
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -297,6 +298,7 @@ function resetForm() {
 }
 
 async function saveForm() {
+  if (guardPreviewWrite('การบันทึกรายการแจ้งเตือน')) return;
   const rawText = $r('#rm-smart').value.trim();
   if (!rawText) return toast('พิมพ์ข้อความแจ้งเตือนก่อนค่ะ', 'err');
   if (!currentDraft) updateSmartPreview(true);
@@ -355,6 +357,7 @@ async function saveForm() {
 }
 
 async function applyBulkRemind() {
+  if (guardPreviewWrite('การตั้งค่าแจ้งเตือนหลายรายการ')) return;
   const items = allItems().filter(x => selectedKeys.has(x.uidKey));
   if (!items.length) return;
   const remindDays = Number($r('#rm-bulk-remind').value);
@@ -388,6 +391,10 @@ async function onListChange(e) {
   }
   const rem = e.target.closest('[data-rm-remind]');
   if (rem) {
+    if (guardPreviewWrite('การตั้งค่าแจ้งเตือนล่วงหน้า')) {
+      renderRemind();
+      return;
+    }
     const [col, id] = rem.dataset.rmRemind.split(':');
     const remindDays = Number(rem.value);
     try {
@@ -435,6 +442,7 @@ async function onListClick(e) {
   }
 
   if (btn.dataset.done) {
+    if (guardPreviewWrite('การอัปเดตสถานะรายการเตือน')) return;
     const today = localDateStr();
     const baseDate = item.nextDate && item.nextDate > today ? item.nextDate : today;
     const next = computeNextForItem(item, baseDate);
@@ -454,14 +462,17 @@ async function onListClick(e) {
     return;
   }
 
-  if (btn.dataset.del && confirm(`ลบรายการ “${item.title}”?`)) {
-    selectedKeys.delete(item.uidKey);
-    try {
-      deleteDoc(userDoc(state.uid, item.col, item.id)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
-      if (editing?.id === item.id) resetForm();
-      toast('ลบรายการแล้ว');
-    } catch (err) {
-      toast('ลบไม่สำเร็จ: ' + err.message, 'err');
+  if (btn.dataset.del) {
+    if (guardPreviewWrite('การลบรายการแจ้งเตือน')) return;
+    if (confirm(`ลบรายการ “${item.title}”?`)) {
+      selectedKeys.delete(item.uidKey);
+      try {
+        deleteDoc(userDoc(state.uid, item.col, item.id)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
+        if (editing?.id === item.id) resetForm();
+        toast('ลบรายการแล้ว');
+      } catch (err) {
+        toast('ลบไม่สำเร็จ: ' + err.message, 'err');
+      }
     }
   }
 }

@@ -3,6 +3,25 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.3.0] - 2026-11-19
+
+### Top Planner Checklist & Unified Category Tiles
+- **ย้าย Weekly Planner & กิจวัตร ขึ้นบนสุดของหน้าหลักและเปิดแสดงรายการวันนี้ทันที (`src/home.js`, `src/preview.js`, `src/style.css`)**:
+  - เปลี่ยนลำดับวิดเจ็ตเริ่มต้น `HOME_WIDGET_IDS` ให้ **`planner`** อยู่ลำดับแรกถัดจากคำทักทาย (`['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders']`) พร้อมอัปเดต `src/homeWidgetContract.test.js`
+  - ตั้งค่าเริ่มต้นให้เปิดโหลดและกางรายการ Planner ทันที (`plannerExpanded = true`) เพื่อให้เห็นเช็กลิสต์งาน กิจวัตร และแผนออกกำลังกายของวันนั้น ๆ บนหน้าแรกโดยไม่ต้องกดปุ่มเปิดก่อน พร้อมปรับการรองรับ Dark mode สำหรับพื้นหลัง/ป้ายของ Planner และเติม `days`/`weekPattern` ให้กิจวัตรในข้อมูล Preview Mode (`src/preview.js`)
+- **ปรับแท็บหมวดหมู่ย่อยในเมนูสุขภาพและดูแลให้เหมือน "หมวดหมู่" บนหน้าหลัก (`src/app.js`, `src/style.css`)**:
+  - ปรับ `renderSubnav()` สำหรับกลุ่ม `health` และ `care` ให้แสดงเป็นแถวการ์ดไอคอนพาสเทลมุมมนพร้อมป้ายชื่อด้านล่าง (`.subnav--tiles`, `.subnav-tiles`, `.sub-tile` ร่วมกับคลาส `.hx-cat` ของหน้าแรก) แทนแถบชิปข้อความแบบเดิม
+  - รองรับการเลื่อนแนวนอนบนหน้าจอแคบและขึ้นบรรทัดอัตโนมัติบนหน้าจอกว้าง, แสดงสถานะแท็บที่กำลังเปิดอยู่ชัดเจนทั้ง 4 ธีม (`Baby Blue`, `Pastel`, `Cozy`, `Dark mode`) และปรับการแสดงผลข้อความชื่อหมวดไม่ให้ถูกตัดคำกลางคัน
+- **ผสานการปรับปรุงเพิ่มเติมจากสาขา `ui/by-claude` โดยคงฟีเจอร์ v5.3.0 ครบถ้วน (`src/app.js`, `src/style.css`, `src/overview.js`, `src/preview.js`, `src/preview.test.js`)**:
+  - เพิ่มตัวฟังเหตุการณ์ `trackme:goto` ใน `src/app.js`, ปุ่มทางลัด `#ov-go-weekly` / `#ov-go-report` ใน `src/overview.js`, และแอนิเมชันย่อ/ซ่อน `.scroll-fabs.is-hidden` ใน `src/style.css`
+  - ปรับข้อมูล `expense_budget` รายหมวดหมู่และกฎจัดหมวดอัตโนมัติ `expense_rule` ใน `src/preview.js` ให้ตรงกับ `src/schema.js` และ `src/expense.js` พร้อมเพิ่มการทดสอบใน `src/preview.test.js`
+- **เปลี่ยนชุดไอคอนทั้งแอปเป็น Fluent Emoji Flat (หมวดหมู่) + Phosphor Duotone (`src/fluentEmoji.js`, `src/icons.js`, `src/home.js`, `src/app.js`, `src/homeWidgetSettings.js`, `src/navigationSettings.js`, `index.html`, `src/style.css`, `src/icons.test.js`)**:
+  - **Fluent Emoji Flat (`src/fluentEmoji.js`)**: คัดเฉพาะ SVG แบบ Flat จากชุด Microsoft Fluent Emoji 14 รายการ (~20 KB ก่อนบีบอัด, ไม่มี gradient ID ชนกัน, ทำงานออฟไลน์ 100%) สำหรับการ์ด **หมวดหมู่** หน้าแรก (`src/home.js`), แท็บหมวดหมู่กลุ่มสุขภาพและดูแล (`#subnav`), แผ่นบันทึกด่วน `+` (`#quick-grid`), และการตั้งค่าทางลัด/เมนู (`src/homeWidgetSettings.js`, `src/navigationSettings.js`) พร้อมปรับความคมชัดไอคอนสัตว์เลี้ยงใน Dark mode
+  - **Phosphor Duotone (`src/icons.js`)**: เปลี่ยนไอคอน UI ส่วนอื่นทั้งหมดและองค์ประกอบใน `index.html` (`hydrateStaticIcons()`) เป็น `@phosphor-icons/core` รุ่น **Duotone** แบบ tree-shaken inline SVG รองรับการเปลี่ยนสีตามทั้ง 4 ธีมอัตโนมัติ พร้อมคง alias `fa-*` เดิมครบถ้วน, เพิ่ม `src/icons.test.js` และถอด `lucide` / `@fortawesome/fontawesome-free` ออกจาก `package.json`
+- **อัปเดตเวอร์ชันและเอกสารเป็น v5.3.0**:
+  - อัปเดต `package.json`, `package-lock.json` (`@phosphor-icons/core@^2.1.1`), `src/version.js`, `vite.config.js` และเอกสารทั้งหมด (`README.md`, `CHANGELOG.md`, `docs/*`) โดยไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง
+
+---
 ## [v5.2.0] - 2026-11-18
 
 ### 4-Theme System, Lucide Icons, Accessibility & UI Enhancements
@@ -19,6 +38,17 @@
 - **ยกระดับ Accessibility และ Micro-interactions (`src/util.js`, `src/ui.js`, `src/app.js`, `src/onboarding.js`, `src/chatWidget.js`, `src/home.js`, `src/food.js`, `src/body.js`, `src/expense.js`)**:
   - เพิ่ม `trapFocus()` พร้อมปิดด้วย `Escape`, คืน focus ให้ปุ่มที่เปิดหน้าต่างเมื่อปิด, และกำหนด `role="dialog"`, `aria-modal="true"`, `aria-labelledby` ให้ `openModal()`, `openBottomSheet()`, Onboarding dialog, AI Chat Drawer และ Quick Menu
   - เพิ่มตัวนับเลขแบบนุ่มนวล `animateNumberTicker()` (เคารพ `prefers-reduced-motion`), ขอบการ์ดเรืองแสง `.card-shine` ในการ์ดสรุปหน้าหลัก, ช่องค้นหาอาหารแบบ Combobox พร้อม keyboard navigation (`#f-name-listbox`), แถบเลือกวัน 7 วัน `.tm-day-pill` ในหน้าอาหาร, และตัวเลื่อนชั่วโมงนอน `.tm-slider` ในหน้าร่างกาย
+- **ลดความรกของปุ่มนำทางและปุ่มลอย (`index.html`, `src/style.css`, `src/app.js`, `src/chatWidget.js`)**:
+  - ย้ายปุ่ม **AI Chat** (`#ai-chat-fab`) ไปไว้บน Header ขวาบนข้างปุ่มแจ้งเตือน/ตั้งค่า (รองรับครบทั้ง 4 ธีมและสถานะเปิด/ปิด)
+  - ฝังปุ่ม **+** (`#btn-quick-add`) ไว้ตรงกลาง Bottom Nav บนมือถือ (`[หน้าหลัก] [อาหาร] [+] [สุขภาพ] [ดูแล]`) และเพิ่มปุ่ม **+ บันทึกด่วน** (`#desktop-quick-add`) ในแถบเมนูซ้ายบน Desktop
+  - ยุบปุ่มเลื่อน `↑`/`↓` เหลือ **ปุ่มเดียวอัตโนมัติ (`#fab-scroll`)** ที่สลับทิศตามตำแหน่งหน้า ซ่อนอัตโนมัติเมื่อหยุดเลื่อนและซ่อนทั้งหมดเมื่อหน้าสั้นจนเลื่อนไม่ได้
+- **โหมดดูตัวอย่างโดยไม่เข้าสู่ระบบ (`src/preview.js`, `src/auth.js`, `src/app.js`, `index.html`, `src/preview.test.js`)**:
+  - เพิ่มปุ่ม **ดูตัวอย่างก่อนใช้งาน (`#btn-preview`)** บนหน้าล็อกอินเพื่อจำลองการใช้งานแอปด้วยชุดข้อมูลตัวอย่างในหน่วยความจำ 18 หมวดหมู่ (`PREVIEW_UID = 'preview-guest'`) พร้อมแถบแจ้งเตือน `#preview-banner` และปุ่มออกที่ล้างแคชชั่วคราวใน `localStorage` (`clearPreviewStorage()`) อัตโนมัติ
+  - เพิ่ม `guardPreviewWrite()` ป้องกันการเขียน/ซิงค์ข้อมูลจริงไปยัง Firebase ระหว่างดูตัวอย่าง พร้อมรองรับการทดลองเพิ่ม/แก้ไข/ลบรายการอาหารและคลังอาหารในหน่วยความจำชั่วคราว
+- **ผสานเลย์เอาต์หน้า Home, แดชบอร์ดตอบสนองทุกจอ และการพับข้อมูลหน้าอาหาร/รายจ่าย/ออกกำลังกาย (`src/home.js`, `src/home.css`, `src/dashboard.js`, `src/weekly.js`, `src/categories.js`, `src/navigation.js`, `src/food.js`, `src/expense.js`, `src/workout.js`, `src/style.css`, `index.html`)**:
+  - **หน้า Home (`src/home.js`, `src/home.css`)**: ปรับเลย์เอาต์แบบ Calm Wellness (`.hx-*`) รองรับครบทั้ง 4 ธีม (`Baby Blue`, `Pastel`, `Cozy`, `Dark mode`) และจัดลำดับวิดเจ็ตเริ่มต้นเป็น `daily-overview`, `quick-access`, `daily-activity`, `planner`, `reminders`
+  - **แดชบอร์ดและกลุ่มสุขภาพ (`src/dashboard.js`, `src/weekly.js`, `src/categories.js`, `src/navigation.js`, `src/app.js`)**: ใช้ `src/dashboard.js` เป็นแดชบอร์ดตอบสนองทุกขนาดจอ (`.db-*`) พร้อมปุ่มสลับมุมมอง `[data-page-go]` (`overview`, `weekly`, `report`) และจัดเมนูย่อยกลุ่มสุขภาพให้กระชับ 5 แท็บ (`overview`, `workout`, `period`, `symptoms`, `body`) โดยยังคงเข้าถึง `weekly` และ `report` จากทางลัดได้
+  - **หน้าอาหาร รายจ่าย และออกกำลังกาย (`src/food.js`, `src/expense.js`, `src/workout.js`)**: เพิ่มตัวสลับมุมมอง **บันทึกอาหาร / สรุปโภชนาการ** และพับเครื่องมือเสริมใน `<details>` (กดช่องมื้ออาหารจากสรุปจะสลับกลับหน้าบันทึกให้ทันที), พับช่องเสริมร้านค้า/หมายเหตุและประวัติเกิน 5 รายการในหน้ารายจ่าย, พับประวัติเกิน 5 รายการในหน้าออกกำลังกาย, และเพิ่มขอบจางด้านขวาให้ `.subnav` บนมือถือ
 - **ไม่เปลี่ยน Firestore schema/Rules หรือรูปแบบไฟล์สำรอง**; อัปเดต `package.json`, `package-lock.json` (`lucide@^1.75.0` และเวอร์ชัน `5.2.0`), `src/version.js`, `vite.config.js` และเอกสารทั้งหมดให้ตรงกับพฤติกรรมปัจจุบัน
 
 ---

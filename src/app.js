@@ -8,6 +8,7 @@ import '@fontsource/prompt/latin-600.css';
 import '@fontsource/prompt/latin-700.css';
 import './style.css';
 import './design-tokens.css';
+import './home.css';
 import { registerSW } from 'virtual:pwa-register';
 import { doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 
@@ -15,14 +16,16 @@ import { db, userCol, userDoc } from './firebase.js';
 import { initRuntimeErrorMonitoring, reportRuntimeError, setRuntimeErrorSink } from './runtimeErrorMonitor.js';
 import { state, on, emit } from './state.js';
 import { SANITIZERS } from './schema.js';
-import { $, localDateStr, addDays, toast, trapFocus } from './util.js';
+import { $, esc, localDateStr, addDays, toast, trapFocus } from './util.js';
 import { APP_VERSION_LABEL } from './version.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
-import { initAuth } from './auth.js';
+import { initAuth, exitPreviewMode } from './auth.js';
+import { isPreviewMode, getPreviewCollection, getPreviewFoodByDate } from './preview.js';
 import './theme.js';
 import { CATEGORIES, GROUPS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
-import { iconSvg, iconBubble } from './icons.js';
+import { iconSvg } from './icons.js';
+import { fluentEmojiSvg, fluentEmojiBubble } from './fluentEmoji.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
 import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
@@ -33,6 +36,7 @@ import { mountReminders, renderReminders, collectReminders } from './reminders.j
 import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
 setRuntimeErrorSink((uid, reports) => {
+  if (!uid || isPreviewMode()) return Promise.resolve();
   const batch = writeBatch(db);
   reports.forEach(report => {
     batch.set(doc(userCol(uid, 'runtime_error_logs')), {
@@ -79,9 +83,16 @@ function renderSubnav(group, name) {
   const nav = $('#subnav');
   const preferences = readNavigationPreferences(state.uid);
   const tabs = getSubnavTabs(group, preferences, name);
-  nav.classList.toggle('hidden', tabs.length < 2);
-  if (tabs.length < 2) { nav.innerHTML = ''; return; }
-  nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button data-sub="${item.tab}" class="sub-chip ${item.cat} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${item.label}</button>`).join('')}</div>`;
+  const show = tabs.length >= 2;
+  const useTiles = show && (group === 'health' || group === 'care');
+  nav.classList.toggle('hidden', !show);
+  nav.classList.toggle('subnav--tiles', useTiles);
+  if (!show) { nav.innerHTML = ''; return; }
+  if (useTiles) {
+    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${fluentEmojiSvg(item.tab || item.icon, { size: 30 }) || iconSvg(item.icon || item.tab, { size: 22 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
+  } else {
+    nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button type="button" data-sub="${esc(item.tab)}" class="sub-chip ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${esc(item.label)}</button>`).join('')}</div>`;
+  }
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
@@ -130,12 +141,12 @@ function makeLazyFeature(loader, onMount, errorLabel) {
 
 const reportLoader = makeLazyFeature(() => import('./reports.js'), m => m.mountReport($('#tab-report')), 'รายงานสุขภาพ');
 const workoutLoader = makeLazyFeature(() => import('./workout.js'), m => m.mountWorkout($('#tab-workout')), 'หน้าออกกำลังกาย');
-const overviewLoader = makeLazyFeature(() => import('./overview.js'), m => m.mountOverview($('#tab-overview')), 'แดชบอร์ดภาพรวม');
+const overviewLoader = makeLazyFeature(() => import('./dashboard.js'), m => m.mountDashboard($('#tab-overview')), 'แดชบอร์ดภาพรวม');
 const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mountExpense($('#tab-expense')), 'หน้ารายรับ-รายจ่าย');
 const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
 const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
 const foodLoader = makeLazyFeature(() => import('./food.js'), m => { m.mountFood($('#tab-food')); m.watchDay(); }, 'หน้าอาหาร');
-const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#tab-weekly')), 'หน้าสรุปสัปดาห์');
+const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#db-weekly')), 'หน้าสรุปสัปดาห์');
 const remindLoader = makeLazyFeature(() => import('./remindLog.js'), m => m.mountRemind($('#tab-remind')), 'หน้าบันทึกเตือน');
 const settingsLoader = makeLazyFeature(() => import('./settings.js'), m => { m.mountSettings($('#tab-settings')); m.refreshAccount?.(); }, 'หน้าตั้งค่า');
 
@@ -169,20 +180,33 @@ function ensureChatWidgetMounted(openAfterLoad = false) {
 }
 
 function mountChatFab() {
-  if ($('#ai-chat-fab')) return;
+  const fab = $('#ai-chat-fab');
+  if (fab) {
+    if (!fab.dataset.bound) {
+      fab.dataset.bound = '1';
+      fab.addEventListener('click', () => {
+        if (chatFeature) chatFeature.toggleChatWidget();
+        else void ensureChatWidgetMounted(true);
+      });
+    }
+    return;
+  }
   const host = $('#app-shell') || document.body;
   const wrap = document.createElement('div');
   wrap.className = 'no-print';
   wrap.innerHTML = `
-    <button id="ai-chat-fab" type="button" class="ai-chat-fab" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
-      ${iconSvg('chat', { size: 22 })}
+    <button id="ai-chat-fab" type="button" class="icon-btn ai-chat-header-btn" data-lazy-managed="1" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
+      ${iconSvg('chat', { size: 18 })}
     </button>`;
   host.appendChild(wrap);
-  const fab = $('#ai-chat-fab');
-  fab?.addEventListener('click', () => {
-    if (chatFeature) chatFeature.toggleChatWidget();
-    else void ensureChatWidgetMounted(true);
-  });
+  const createdFab = $('#ai-chat-fab');
+  if (createdFab) {
+    createdFab.dataset.bound = '1';
+    createdFab.addEventListener('click', () => {
+      if (chatFeature) chatFeature.toggleChatWidget();
+      else void ensureChatWidgetMounted(true);
+    });
+  }
 }
 
 function updateStickyOffsets() {
@@ -206,14 +230,19 @@ updateStickyOffsets();
 
 export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
-  TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== name); });
+  const visibleTab = name === 'weekly' ? 'overview' : name;
+  TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== visibleTab); });
   const group = groupOf(name);
-  lastSub[group] = name;
+  lastSub[group] = name === 'weekly' || name === 'report' ? 'overview' : name;
   document.querySelectorAll('[data-nav]').forEach(b => { const on_ = b.dataset.nav === group; b.classList.toggle('is-active', on_); if (on_) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   $('#btn-bell').classList.toggle('is-active', name === 'notifications');
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
-  renderSubnav(group, name);
+  renderSubnav(group, lastSub[group]);
+  $('#db-content')?.classList.toggle('hidden', name === 'weekly');
+  $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
+  $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
+  $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
   if (!preserveDate) {
     if (name === 'home') resetHomePlannerToToday();
     if (name === 'period') resetPeriodToToday();
@@ -223,8 +252,19 @@ export function showTab(name, { preserveDate = false } = {}) {
   let pending = Promise.resolve();
   if (name === 'home') { renderHome(); renderHomeShortcuts(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
-  if (name === 'overview') pending = overviewLoader.ensure().then(m => m?.renderOverview?.());
-  if (name === 'weekly') pending = weeklyLoader.ensure().then(m => { if (!preserveDate) m?.resetWeeklyToToday?.(); m?.renderWeekly?.(); });
+  if (name === 'overview' || name === 'weekly') {
+    pending = overviewLoader.ensure().then(async m => {
+      m?.renderDashboard?.();
+      $('#db-content')?.classList.toggle('hidden', name === 'weekly');
+      $('#db-weekly')?.classList.toggle('hidden', name !== 'weekly');
+      $('#db-view-overview')?.setAttribute('aria-pressed', String(name !== 'weekly'));
+      $('#db-view-weekly')?.setAttribute('aria-pressed', String(name === 'weekly'));
+      if (name !== 'weekly') return;
+      const weekly = await weeklyLoader.ensure();
+      if (!preserveDate) weekly?.resetWeeklyToToday?.();
+      weekly?.renderWeekly?.();
+    });
+  }
   if (name === 'care') pending = careLoader.ensure().then(m => { if (!preserveDate) m?.resetCareToToday?.(); });
   if (name === 'remind') pending = remindLoader.ensure().then(m => m?.renderRemind?.());
   if (name === 'expense') pending = expenseLoader.ensure().then(m => { if (!preserveDate) m?.resetExpenseToToday?.(); m?.renderExpense?.(); });
@@ -234,6 +274,9 @@ export function showTab(name, { preserveDate = false } = {}) {
   if (name === 'report') pending = reportLoader.ensure().then(m => { if (!preserveDate) m?.resetReportToToday?.(); });
   if (name === 'workout') pending = workoutLoader.ensure().then(m => { if (!preserveDate) m?.resetToToday?.(); });
   try { sessionStorage.setItem('active_tab', name); } catch (e) {}
+  void pending.finally(() => {
+    requestAnimationFrame(() => updateScrollFab({ reveal: false }));
+  });
   return pending;
 }
 
@@ -260,6 +303,11 @@ async function goTo(name, focusId) {
   });
 }
 
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-page-go]');
+  if (button && TABS.includes(button.dataset.pageGo)) void goTo(button.dataset.pageGo);
+});
+
 function updateBell() {
   const n = collectReminders().length;
   const badge = $('#bell-badge');
@@ -269,14 +317,17 @@ function updateBell() {
 
 let quickTrigger = null;
 let releaseQuickTrap = () => {};
-function openQuick() {
+function openQuick(event) {
   const sheet = $('#quick-sheet');
   const panel = $('#quick-sheet .sheet-panel') || sheet;
-  quickTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add');
-  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${iconBubble(c.icon || c.key)}<span>${c.label}</span></button>`).join('');
+  quickTrigger = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add'));
+  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${fluentEmojiBubble(c.key || c.tab, { size: 28 })}<span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
-  $('#btn-quick-add').setAttribute('aria-expanded', 'true');
+  $('#btn-quick-add')?.setAttribute('aria-expanded', 'true');
+  $('#desktop-quick-add')?.setAttribute('aria-expanded', 'true');
   releaseQuickTrap();
   releaseQuickTrap = trapFocus(panel, { autoFocus: false });
   $('#quick-grid button')?.focus({ preventScroll: true });
@@ -286,10 +337,68 @@ function closeQuick() {
   releaseQuickTrap();
   releaseQuickTrap = () => {};
   sheet.classList.remove('is-open');
-  $('#btn-quick-add').setAttribute('aria-expanded', 'false');
+  $('#btn-quick-add')?.setAttribute('aria-expanded', 'false');
+  $('#desktop-quick-add')?.setAttribute('aria-expanded', 'false');
   setTimeout(() => sheet.classList.add('hidden'), 200);
   if (quickTrigger?.isConnected) quickTrigger.focus({ preventScroll: true });
   quickTrigger = null;
+}
+
+let scrollHideTimer = 0;
+let lastScrollY = 0;
+function hideScrollFab() {
+  const wrap = $('#scroll-fabs');
+  const btn = $('#fab-scroll');
+  if (!wrap || !btn) return;
+  wrap.classList.add('is-hidden');
+  wrap.setAttribute('aria-hidden', 'true');
+  btn.tabIndex = -1;
+}
+function scheduleScrollFabHide() {
+  clearTimeout(scrollHideTimer);
+  scrollHideTimer = window.setTimeout(() => {
+    const btn = $('#fab-scroll');
+    if (btn && btn.matches(':hover, :focus-visible')) {
+      scheduleScrollFabHide();
+      return;
+    }
+    hideScrollFab();
+  }, 2400);
+}
+function updateScrollFab({ reveal = false } = {}) {
+  const wrap = $('#scroll-fabs');
+  const btn = $('#fab-scroll');
+  if (!wrap || !btn) return;
+  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const y = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+  const scrollingDown = y > lastScrollY + 4;
+  lastScrollY = y;
+
+  if (maxScroll <= 140 || (y < 16 && !scrollingDown)) {
+    clearTimeout(scrollHideTimer);
+    hideScrollFab();
+    return;
+  }
+
+  const shouldGoBottom = y <= 180 && (scrollingDown || y < 80);
+  const dir = shouldGoBottom ? 'bottom' : 'top';
+  btn.dataset.dir = dir;
+  const label = dir === 'bottom' ? 'เลื่อนลงล่างสุด' : 'เลื่อนขึ้นบนสุด';
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('title', dir === 'bottom' ? 'ลงล่างสุด' : 'ขึ้นบนสุด');
+
+  if (!reveal && y < 80) {
+    clearTimeout(scrollHideTimer);
+    hideScrollFab();
+    return;
+  }
+
+  if (reveal) {
+    wrap.classList.remove('is-hidden');
+    wrap.setAttribute('aria-hidden', 'false');
+    btn.tabIndex = 0;
+    scheduleScrollFabHide();
+  }
 }
 
 let mounted = false;
@@ -336,7 +445,7 @@ function mergeExpenses() {
 }
 
 async function migrateLegacyExpensesIfNeeded(uid) {
-  if (migratingLegacyExpenses || legacyMigrationBlocked || !expenseRecordsLoaded || !navigator.onLine) return;
+  if (isPreviewMode() || migratingLegacyExpenses || legacyMigrationBlocked || !expenseRecordsLoaded || !navigator.onLine) return;
   const legacyDocs = (state.legacyExpenseDocs || []).filter(doc => !doc.migratedAt);
   if (!legacyDocs.length) return;
 
@@ -388,13 +497,74 @@ async function migrateLegacyExpensesIfNeeded(uid) {
   }
 }
 
+function hydratePreviewState() {
+  state.loaded = { period: true, body: true };
+  state.period = getPreviewCollection('period_records');
+  state.body = getPreviewCollection('body_records');
+  state.customFoods = getPreviewCollection('custom_foods');
+  state.petProfiles = getPreviewCollection('pet_profiles');
+  state.petCare = getPreviewCollection('pet_care_records');
+  state.petFoods = getPreviewCollection('pet_food_records');
+  state.trackedProducts = getPreviewCollection('tracked_products');
+  state.replacements = getPreviewCollection('replacement_records');
+  state.skincareProducts = getPreviewCollection('skincare_products');
+  state.ingredientBlacklist = getPreviewCollection('ingredient_blacklist');
+  state.symptoms = getPreviewCollection('symptom_records');
+  state.skinRecords = getPreviewCollection('skin_records');
+  state.workouts = getPreviewCollection('workout_records');
+  state.labs = getPreviewCollection('lab_records');
+  state.templates = getPreviewCollection('workout_templates');
+  state.expenseRecords = getPreviewCollection('expense_records');
+  expenseRecordsLoaded = true;
+  state.expenseSettings = getPreviewCollection('settings');
+  state.profile = state.expenseSettings.find(x => x.id === 'profile') || null;
+  state.planner = state.expenseSettings.find(x => x.id === 'planner') || null;
+  state.pushSettings = null;
+  state.assistantNotes = state.expenseSettings
+    .filter(x => x.kind === 'assistant_note' || String(x.id || '').startsWith('note_'))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  state.userFeedback = state.expenseSettings
+    .filter(x => x.kind === 'user_feedback' || String(x.id || '').startsWith('feedback_'))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  state.legacyExpenseDocs = [];
+  mergeExpenses();
+  todayKey = localDateStr();
+  state.todayFood = getPreviewFoodByDate(todayKey);
+
+  refreshProfile();
+  emit('profile');
+  emit('customFoods');
+  emit('pushSettings');
+  renderPeriod();
+  renderBody();
+  renderSymptomList();
+  renderSkinList();
+  checkReminder();
+  renderReminders();
+  renderHome();
+  renderSummary();
+  careLoader.get()?.renderCare?.();
+  careLoader.get()?.onLabsUpdated?.();
+  inventoryLoader.get()?.renderInventory?.();
+  workoutLoader.get()?.render?.();
+  weeklyLoader.get()?.renderWeekly?.();
+  expenseLoader.get()?.renderExpense?.();
+  overviewLoader.get()?.renderDashboard?.();
+  foodLoader.get()?.watchDay?.();
+  window.dispatchEvent(new Event('trackme:notes-change'));
+}
+
 function startData() {
+  if (isPreviewMode()) {
+    hydratePreviewState();
+    return;
+  }
   const uid = state.uid;
   expenseRecordsLoaded = false;
   legacyMigrationBlocked = false;
   state.loaded = { period: false, body: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); renderHome(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderOverview?.(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderDashboard?.(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   for (const [key, col] of [['petProfiles', 'pet_profiles'], ['petCare', 'pet_care_records'], ['petFoods', 'pet_food_records']]) {
     watch(`care:${col}`, userCol(uid, col), records => {
@@ -412,7 +582,7 @@ function startData() {
   }
   watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
   watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
-  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutLoader.get()?.render?.(); weeklyLoader.get()?.renderWeekly?.(); renderHome(); renderSummary(); overviewLoader.get()?.renderOverview?.(); });
+  watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutLoader.get()?.render?.(); weeklyLoader.get()?.renderWeekly?.(); renderHome(); renderSummary(); overviewLoader.get()?.renderDashboard?.(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; careLoader.get()?.onLabsUpdated?.(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutLoader.get()?.render?.(); });
   watch('expense_records', userCol(uid, 'expense_records'), list => {
@@ -423,7 +593,7 @@ function startData() {
     renderHome();
     weeklyLoader.get()?.renderWeekly?.();
     renderSummary();
-    overviewLoader.get()?.renderOverview?.();
+    overviewLoader.get()?.renderDashboard?.();
     migrateLegacyExpensesIfNeeded(uid);
   });
   watch('settings', userCol(uid, 'settings'), list => {
@@ -450,7 +620,7 @@ function startData() {
     renderHome();
     weeklyLoader.get()?.renderWeekly?.();
     renderSummary();
-    overviewLoader.get()?.renderOverview?.();
+    overviewLoader.get()?.renderDashboard?.();
     window.dispatchEvent(new Event('trackme:push-change'));
     window.dispatchEvent(new Event('trackme:notes-change'));
     migrateLegacyExpensesIfNeeded(uid);
@@ -464,6 +634,12 @@ let todayKey = null;
 function watchToday() {
   if (!state.uid) return;
   todayKey = localDateStr();
+  if (isPreviewMode()) {
+    state.todayFood = getPreviewFoodByDate(todayKey);
+    renderHome();
+    renderSummary();
+    return;
+  }
   watch('food-today', query(userCol(state.uid, 'food_records'), where('date', '==', todayKey)), list => { state.todayFood = list; renderHome(); renderSummary(); });
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); renderSummary(); } });
@@ -472,10 +648,11 @@ on('auth', user => {
   stopAll();
   onboardingCheckedUid = null;
   unmountOnboarding();
-  overviewLoader.get()?.resetOverviewState?.();
+  overviewLoader.get()?.resetDashboardState?.();
   resetHomePlannerState();
   state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
+  $('#preview-banner')?.classList.toggle('hidden', !isPreviewMode());
   window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
     mountAll();
@@ -483,10 +660,13 @@ on('auth', user => {
     settingsLoader.get()?.refreshAccount?.();
     renderSummary();
     startData();
-    let start = null; try { start = sessionStorage.getItem('active_tab'); } catch (e) {}
+    let start = null;
+    if (!isPreviewMode()) {
+      try { start = sessionStorage.getItem('active_tab'); } catch (e) {}
+    }
     const navigationPreferences = readNavigationPreferences(state.uid);
     void showTab(navigationPreferences.customized ? navigationPreferences.landingPage : (start || 'home'));
-    if (new URLSearchParams(window.location.search).has('shared-slip')) {
+    if (!isPreviewMode() && new URLSearchParams(window.location.search).has('shared-slip')) {
       void expenseLoader.ensure().then(m => m?.handleSharedSlipLaunch?.(showTab));
     }
   }
@@ -498,10 +678,22 @@ $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-
 $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));
+$('#btn-exit-preview')?.addEventListener('click', exitPreviewMode);
 $('#btn-copy-summary').addEventListener('click', copySummary);
-$('#fab-top')?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-$('#fab-bottom')?.addEventListener('click', () => window.scrollTo({ top: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight), behavior: 'smooth' }));
-$('#btn-quick-add').addEventListener('click', openQuick);
+$('#fab-scroll')?.addEventListener('click', () => {
+  const btn = $('#fab-scroll');
+  const targetTop = btn?.dataset.dir === 'bottom'
+    ? Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
+    : 0;
+  window.scrollTo({ top: targetTop, behavior: 'smooth' });
+});
+$('#fab-scroll')?.addEventListener('mouseleave', () => {
+  if (!$('#scroll-fabs')?.classList.contains('is-hidden')) scheduleScrollFabHide();
+});
+window.addEventListener('scroll', () => updateScrollFab({ reveal: true }), { passive: true });
+window.addEventListener('resize', () => updateScrollFab({ reveal: false }), { passive: true });
+$('#btn-quick-add')?.addEventListener('click', openQuick);
+$('#desktop-quick-add')?.addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {
   if (e.target.id === 'quick-sheet') return closeQuick();
@@ -517,6 +709,7 @@ document.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
+window.addEventListener('trackme:goto', e => { if (e.detail?.tab) void goTo(e.detail.tab); });
 window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderHomeShortcuts(); renderSummary(); });
 window.addEventListener('trackme:navigation-change', () => {
   renderHomeShortcuts();
@@ -527,4 +720,14 @@ window.addEventListener('trackme:push-change', () => renderHome());
 navigator.serviceWorker?.addEventListener('message', e => {
   if (e.data?.type === 'TRACKME_OPEN_TAB') void showTab(e.data.tab);
 });
+function hydrateStaticIcons() {
+  document.querySelectorAll('[data-ph-icon]').forEach(el => {
+    const name = el.dataset.phIcon;
+    const size = Number(el.dataset.phSize) || 18;
+    const className = el.dataset.phClass || '';
+    if (name) el.innerHTML = iconSvg(name, { size, className });
+  });
+}
+
+hydrateStaticIcons();
 initAuth();

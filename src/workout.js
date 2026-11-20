@@ -8,6 +8,7 @@ import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl 
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
@@ -392,6 +393,7 @@ export function mountWorkout(el) {
     }
     if (editBtn) startTemplateEdit(editBtn.dataset.tedit);
     if (delBtn) {
+      if (guardPreviewWrite('การลบเทมเพลตออกกำลังกาย')) return;
       const tpl = state.templates.find(x => x.id === delBtn.dataset.tdel);
       const ok = await confirmDialog({
         title: 'ลบเทมเพลตออกกำลังกาย?',
@@ -450,6 +452,7 @@ async function handleRecordAction(e) {
     return;
   }
   if (doneBtn) {
+    if (guardPreviewWrite('การเปลี่ยนสถานะออกกำลังกาย')) return;
     updateDoc(userDoc(state.uid, 'workout_records', doneBtn.dataset.doneWorkout), { status: 'done', updatedAt: new Date() })
       .then(() => toast('อัปเดตเป็นทำเสร็จแล้ว 💪'))
       .catch(err => toast(err.message, 'err'));
@@ -470,6 +473,7 @@ async function handleRecordAction(e) {
     }
   }
   if (delBtn) {
+    if (guardPreviewWrite('การลบบันทึกออกกำลังกาย')) return;
     const item = state.workouts.find(x => x.id === delBtn.dataset.del);
     const isPlan = item?.status === 'planned';
     const itemLabel = item?.title || TYPES[item?.type] || 'รายการนี้';
@@ -589,6 +593,7 @@ function exitTemplateEdit() {
 }
 
 async function saveEditedTemplate() {
+  if (guardPreviewWrite('การแก้ไขเทมเพลตออกกำลังกาย')) return;
   if (!editingTemplateId) return;
   const name = $('#w-tpl-edit-name', root).value.trim().slice(0, 60);
   if (!name) return toast('กรุณาตั้งชื่อเทมเพลต', 'err');
@@ -991,6 +996,7 @@ function applyImportToForm({ keepPanel = false } = {}) {
 
 function saveImportAsWorkout() {
   if (!lastParsedImport?.totalExercises) return;
+  if (guardPreviewWrite('การบันทึกแผนออกกำลังกายที่นำเข้า')) return;
   const p = lastParsedImport;
   const sections = cleanRowsObject(p.sections);
   const count = Object.values(sections).reduce((sum, arr) => sum + arr.length, 0);
@@ -1020,6 +1026,7 @@ function saveImportAsWorkout() {
 }
 
 function saveImportAsTemplate() {
+  if (guardPreviewWrite('การบันทึกเทมเพลตออกกำลังกาย')) return;
   if (!lastParsedImport?.totalExercises) return;
   const p = lastParsedImport;
   const cleanSec = cleanRowsObject(p.sections);
@@ -1185,6 +1192,7 @@ async function launchActiveWorkoutSession({ rows, sections, type, intensity, tit
         ...(feedback?.exerciseFeedback?.length && { exerciseFeedback: feedback.exerciseFeedback }),
         note: mergedNote
       };
+      if (guardPreviewWrite('การบันทึกผลออกกำลังกาย')) return;
       if (recordId) {
         updateDoc(userDoc(state.uid, 'workout_records', recordId), { ...payload, updatedAt: new Date() })
           .catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
@@ -1221,6 +1229,7 @@ async function startActiveWorkout() {
 }
 
 async function save() {
+  if (guardPreviewWrite('การบันทึกการออกกำลังกาย')) return;
   const sections = clean(), count = Object.values(sections).reduce((a, r) => a + r.length, 0);
   const dur = toNum($('#w-dur', root).value);
   if (!count && !dur) return toast('เพิ่มท่าอย่างน้อย 1 ท่า หรือใส่ระยะเวลา (เช่น เดิน 30 นาที)', 'err');
@@ -1253,6 +1262,7 @@ async function save() {
 }
 
 function saveTemplatePrompt() {
+  if (guardPreviewWrite('การบันทึกเทมเพลตออกกำลังกาย')) return;
   const sections = clean();
   if (!Object.values(sections).some(r => r.length)) return toast('เพิ่มท่าก่อนบันทึกเป็นเทมเพลต', 'err');
   if (editingTemplateId) {
@@ -1417,9 +1427,10 @@ function renderHistory() {
   const sorted = filtered.slice().sort((a, b) => historyStatusFilter === 'planned'
     ? (a.date || '').localeCompare(b.date || '')
     : (b.date || '').localeCompare(a.date || ''));
-  const rows = sorted.slice(0, filtering ? 50 : 15);
+  const rows = sorted.slice(0, filtering ? 50 : sorted.length);
+  const showAllHistory = filtering || Boolean($('#w-history-more', root)?.open);
 
-  $('#w-history', root).innerHTML = rows.length ? rows.map(w => {
+  const renderedRows = rows.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
     const isPlan = w.status === 'planned';
     const fbList = Array.isArray(w.exerciseFeedback) ? w.exerciseFeedback : [];
@@ -1468,5 +1479,10 @@ function renderHistory() {
       </details>
       ${isPlan ? actionsHtml : ''}
     </div>`;
-  }).join('') : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
+  });
+  const recentRows = showAllHistory ? renderedRows.join('') : renderedRows.slice(0, 5).join('');
+  const olderRows = showAllHistory ? '' : renderedRows.slice(5).join('');
+  $('#w-history', root).innerHTML = rows.length
+    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 space-y-2">${olderRows}</div></details>` : ''}`
+    : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
 }

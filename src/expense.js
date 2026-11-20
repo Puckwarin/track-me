@@ -5,6 +5,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker } from './ui.js';
+import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
 import {
@@ -110,7 +111,7 @@ function removeExpenseSetting(id) {
 }
 
 function rememberExpenseRules(rules) {
-  if (!state.uid) return;
+  if (!state.uid || isPreviewMode()) return;
   const latest = new Map();
   rules.forEach(rule => {
     const keyword = normalizeExpenseKeyword(rule.keyword);
@@ -151,15 +152,18 @@ function explainExpenseWriteError(err) {
 
 function saveTransactionRecord(record, prevEdit = null) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  if (guardPreviewWrite('การบันทึกรายรับ-รายจ่าย')) return false;
   const targetMonth = record.date.slice(0, 7);
   const docId = prevEdit?.id || record.id;
   setDoc(userDoc(state.uid, 'expense_records', docId), buildExpensePayload(record))
     .catch(err => toast(explainExpenseWriteError(err), 'err'));
   selectedMonth = targetMonth;
+  return true;
 }
 
 async function saveBatchExpenseRecords(records) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  if (guardPreviewWrite('การบันทึกรายการจำนวนมาก')) return false;
   try {
     for (let i = 0; i < records.length; i += 400) {
       const batch = writeBatch(db);
@@ -168,6 +172,7 @@ async function saveBatchExpenseRecords(records) {
       });
       batch.commit().catch(err => toast(explainExpenseWriteError(err), 'err'));
     }
+    return true;
   } catch (err) {
     throw new Error(explainExpenseWriteError(err));
   }
@@ -175,6 +180,7 @@ async function saveBatchExpenseRecords(records) {
 
 async function deleteTransactionRecord(id, dateStr) {
   if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  if (guardPreviewWrite('การลบรายรับ-รายจ่าย')) return false;
   try {
     deleteDoc(userDoc(state.uid, 'expense_records', id))
       .catch(err => toast(explainExpenseWriteError(err), 'err'));
@@ -193,6 +199,7 @@ async function deleteTransactionRecord(id, dateStr) {
       updatedAt: new Date()
     }, { merge: true }).catch(err => toast(explainExpenseWriteError(err), 'err'));
   }
+  return true;
 }
 
 export function mountExpense(el) {
@@ -249,8 +256,13 @@ export function mountExpense(el) {
           <div><label class="lbl">วันที่ *</label><input id="ex-date" type="date" class="input"></div>
           <div><label class="lbl">เวลา</label><input id="ex-time" type="time" class="input"></div>
         </div>
-        <div><label class="lbl">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="ex-merchant" class="input" placeholder="เช่น 7-Eleven, ค่าอาหาร, เงินเดือน"></div>
-        <div><label class="lbl">หมายเหตุ</label><input id="ex-note" class="input" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"></div>
+        <details id="ex-optional-fields" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ตัวเลือกเพิ่มเติม · ร้านค้าและหมายเหตุ</summary>
+          <div class="mt-3 space-y-3">
+            <div><label class="lbl" for="ex-merchant">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="ex-merchant" class="input" placeholder="เช่น 7-Eleven, ค่าอาหาร, เงินเดือน"></div>
+            <div><label class="lbl" for="ex-note">หมายเหตุ</label><input id="ex-note" class="input" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"></div>
+          </div>
+        </details>
       </div>
 
       <div class="flex flex-wrap justify-end gap-2">
@@ -389,11 +401,13 @@ export function mountExpense(el) {
     }
     const delBtn = e.target.closest('[data-ex-del]');
     if (delBtn) {
+      if (guardPreviewWrite('การลบรายรับ-รายจ่าย')) return;
       const id = delBtn.dataset.exDel;
       const hit = (state.expenses || []).find(x => x.id === id);
       if (!hit || !confirm(`ลบรายการ “${hit.merchant || hit.category} (${fmtMoney(hit.amount)} ฿)” ?`)) return;
       try {
-        await deleteTransactionRecord(hit.id, hit.date);
+        const deleted = await deleteTransactionRecord(hit.id, hit.date);
+        if (!deleted) return;
         if (editing?.id === hit.id) resetForm();
         toast('ลบรายการแล้ว');
       } catch (err) {
@@ -511,6 +525,7 @@ function resetForm() {
   $r('#ex-time').value = nowTimeStr();
   $r('#ex-merchant').value = '';
   $r('#ex-note').value = '';
+  if ($r('#ex-optional-fields')) $r('#ex-optional-fields').open = false;
   $r('#ex-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการ`;
   $r('#ex-cancel').classList.add('hidden');
   clearOcrStatus();
@@ -527,6 +542,7 @@ function startEdit(item) {
   $r('#ex-time').value = item.time || '';
   $r('#ex-merchant').value = item.merchant || '';
   $r('#ex-note').value = item.note || '';
+  if ($r('#ex-optional-fields')) $r('#ex-optional-fields').open = Boolean(item.merchant || item.note);
   $r('#ex-save').innerHTML = `${iconSvg('save', { size: 15 })} บันทึกการแก้ไข`;
   $r('#ex-cancel').classList.remove('hidden');
   root.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -552,7 +568,7 @@ function saveManualForm() {
   };
 
   try {
-    saveTransactionRecord(record, editing);
+    if (!saveTransactionRecord(record, editing)) return;
     if (record.type === 'expense' && record.merchant) {
       rememberExpenseRules([{ keyword: record.merchant, category: record.category }]);
     }
@@ -678,12 +694,14 @@ function openBatchSlipsConfirmModal(results) {
       });
     }
     if (!records.length) return toast('เลือกอย่างน้อย 1 สลิปก่อนบันทึก', 'err');
+    if (guardPreviewWrite('การบันทึกสลิปหลายรายการ')) return;
 
     const btn = $('#ms-confirm', m.el);
     btn.disabled = true;
     btn.textContent = 'กำลังบันทึก…';
     try {
-      await saveBatchExpenseRecords(records);
+      const saved = await saveBatchExpenseRecords(records);
+      if (!saved) return;
       const learnedRules = records
         .filter(r => r.type === 'expense' && r.merchant && r.category && r.category !== 'อื่น ๆ')
         .map(r => ({ keyword: r.merchant.slice(0, 80), category: r.category }));
@@ -765,10 +783,12 @@ export function openSlipConfirmModal(parsed) {
       createdAt: new Date().toISOString()
     };
 
+    if (guardPreviewWrite('การบันทึกสลิป')) return;
     const btn = $('#sl-confirm', m.el);
     btn.disabled = true;
     try {
-      await saveTransactionRecord(record);
+      const saved = await saveTransactionRecord(record);
+      if (!saved) return;
       if (record.merchant && record.category && record.category !== 'อื่น ๆ' && state.uid) {
         rememberExpenseRules([{ keyword: record.merchant.slice(0, 80), category: record.category }]);
       }
@@ -902,9 +922,11 @@ async function importSelectedStatementItems() {
   const rulesToSave = records
     .filter(x => x.type === 'expense' && x.merchant && EXPENSE_CATEGORIES.includes(x.category) && x.category !== 'อื่น ๆ')
     .map(x => ({ keyword: x.merchant.slice(0, 80), category: x.category }));
+  if (guardPreviewWrite('การนำเข้า Statement')) return;
   const btn = $r('#ex-pending-import'); btn.disabled = true;
   try {
-    await saveBatchExpenseRecords(records);
+    const saved = await saveBatchExpenseRecords(records);
+    if (!saved) return;
     if (rulesToSave.length && state.uid) {
       rememberExpenseRules(rulesToSave);
     }
@@ -946,6 +968,7 @@ function openExpenseBudgetEditor() {
 
   $('#ex-budget-save', modal.el).addEventListener('click', () => {
     if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+    if (guardPreviewWrite('การบันทึกงบประมาณรายเดือน')) return;
     const next = {};
     for (const [index, category] of EXPENSE_CATEGORIES.entries()) {
       const raw = $(`#ex-budget-${index}`, modal.el).value.trim();
@@ -1009,6 +1032,7 @@ function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {
 
   $('#ex-recurring-save', modal.el).addEventListener('click', () => {
     if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+    if (guardPreviewWrite('การบันทึกรายการประจำ')) return;
     const merchant = $('#ex-recurring-merchant', modal.el).value.trim();
     const amount = Number($('#ex-recurring-amount', modal.el).value);
     const category = $('#ex-recurring-category', modal.el).value;
@@ -1040,6 +1064,7 @@ function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {
 
 function deleteRecurringPlan(plan) {
   if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+  if (guardPreviewWrite('การลบรายการประจำ')) return;
   const id = expenseSettingDocId('expense_recurring', plan.planId);
   removeExpenseSetting(id);
   deleteDoc(userDoc(state.uid, 'settings', id))
@@ -1050,6 +1075,7 @@ function deleteRecurringPlan(plan) {
 
 function recordRecurringExpense(plan) {
   if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+  if (guardPreviewWrite('การบันทึกรายจ่ายประจำ')) return;
   const today = localDateStr();
   if (plan.nextDate > today) return toast('รายการนี้ยังไม่ถึงกำหนด', 'err');
   let nextDate = advanceRecurringDate(plan.nextDate, plan.frequency, plan.dayOfMonth);
@@ -1237,12 +1263,15 @@ export function renderExpense() {
   });
 
   $r('#ex-count').textContent = `${filtered.length} รายการ`;
-  $r('#ex-list').innerHTML = filtered.length ? filtered.map(x => {
+  const sorted = filtered.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.time || '').localeCompare(String(a.time || '')));
+  const filterActive = Boolean(q || fType !== 'all' || fCat);
+  const showAllHistory = filterActive || Boolean($r('#ex-history-more')?.open);
+  const renderExpenseRow = x => {
     const isInc = x.type === 'income';
     const isTransfer = x.type === 'transfer';
     return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2 tabular-nums">
       <div class="flex items-center gap-2.5 min-w-0">
-        <span class="emoji-bubble emoji-sm">${CAT_ICONS[x.category] || '💸'}</span>
+        <span class="emoji-bubble emoji-sm" aria-hidden="true">${CAT_ICONS[x.category] || '💸'}</span>
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-1.5">
             <b class="text-sm text-slate-800 truncate">${esc(x.merchant || x.category)}</b>
@@ -1261,5 +1290,10 @@ export function renderExpense() {
         </div>
       </div>
     </article>`;
-  }).join('') : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
+  };
+  const recent = showAllHistory ? sorted : sorted.slice(0, 5);
+  const older = showAllHistory ? [] : sorted.slice(5);
+  $r('#ex-list').innerHTML = sorted.length
+    ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${older.length})</summary><div class="mt-2 space-y-2">${older.map(renderExpenseRow).join('')}</div></details>` : ''}`
+    : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
 }

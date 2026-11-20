@@ -1,4 +1,4 @@
-import { addDoc, updateDoc, query, where, writeBatch, getDocs, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on } from './state.js';
 import { $, $$, esc, localDateStr, addDays, mondayOf, numField, round1, toast, openModal, toNum } from './util.js';
@@ -12,7 +12,8 @@ import { guessFoodCategory, parseBulkFoodText } from './foodParser.js';
 import { DEFAULT_PRESETS, MEAL_ORDER, MEAL_COLORS, BUILTIN_FAV_KEY, HIDDEN_BUILTINS_KEY, builtinFavorites, categoryNames, getPresets, gramsInUnit, hiddenBuiltins, label } from './foodConstants.js';
 import { canWeigh, foodLogName, foodLogPortion, foodLogQuantity, foodQuantityFromInput, fmtAmount, unitNutritionFor } from './foodCalculations.js';
 import { validateFoodLog } from './foodValidation.js';
-import { addCustomFood, addFoodRecord, deleteCustomFood, deleteFoodRecord, updateCustomFood, updateFoodRecord, watchFoodRecords } from './foodService.js';
+import { addCustomFood, addFoodRecord, deleteCustomFood, deleteFoodRecord, getFoodRecordsInRange, updateCustomFood, updateFoodRecord, watchFoodRecords } from './foodService.js';
+import { guardPreviewWrite } from './preview.js';
 import { openFoodEditor } from './foodEditor.js';
 import { openFoodHistorySearch } from './foodHistory.js';
 export { guessFoodCategory };
@@ -26,8 +27,8 @@ const num = v => (typeof v === 'number' ? v : 0);
 export function mountFood(el) {
   root = el;
   root.innerHTML = `
-  <div class="space-y-6">
-    <div class="card space-y-3">
+  <div class="md:col-span-2 space-y-4">
+    <section class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <button data-day="-1" type="button" class="chip bg-slate-100 text-slate-700 min-h-[38px] whitespace-nowrap">เมื่อวาน</button>
         <button data-day="0" type="button" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">วันนี้</button>
@@ -49,96 +50,116 @@ export function mountFood(el) {
           <span id="f-ring-pct" class="absolute text-xs font-bold text-brand-dark tabular-nums">0%</span>
         </div>
       </div>
-      <div id="f-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1"></div>
-      <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
-    </div>
+    </section>
 
-    <div class="card space-y-4">
-      <div class="flex flex-wrap justify-between items-center gap-2">
-        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('circle-plus', { size: 19, className: 'text-brand' })}<span>บันทึกมื้ออาหาร</span></h2>
-        <div class="flex flex-wrap gap-1.5">
-          <button id="f-bulk-log" type="button" class="chip bg-amber-100 text-amber-900 min-h-[36px] whitespace-nowrap">${iconSvg('zap', { size: 14 })} เพิ่มหลายเมนู</button>
-          <button id="f-online" type="button" class="chip bg-sky-soft text-blue-700 min-h-[36px] whitespace-nowrap">${iconSvg('globe', { size: 14 })} ค้นหาโภชนาการ</button>
-          <button id="f-hiwpinto-sync" type="button" class="chip bg-emerald-100 text-emerald-800 min-h-[36px] whitespace-nowrap">${iconSvg('cloud-download', { size: 14 })} Sync Hiwpinto</button>
-          <button id="f-library" type="button" class="chip bg-lav-soft text-brand-dark min-h-[36px] whitespace-nowrap">${iconSvg('book', { size: 14 })} คลังอาหาร</button>
+    <fieldset class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
+      <legend class="sr-only">เลือกมุมมองอาหาร</legend>
+      <input id="f-view-log" type="radio" name="food-view" value="log" class="sr-only" checked>
+      <label for="f-view-log" class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-semibold text-slate-600 transition">บันทึกอาหาร</label>
+      <input id="f-view-summary" type="radio" name="food-view" value="summary" class="sr-only">
+      <label for="f-view-summary" class="cursor-pointer rounded-xl px-3 py-2.5 text-center text-sm font-semibold text-slate-600 transition">สรุปโภชนาการ</label>
+    </fieldset>
+
+    <section id="f-log-panel" aria-labelledby="f-view-log" class="space-y-4">
+      <div class="card space-y-4">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('circle-plus', { size: 19, className: 'text-brand' })}<span>บันทึกมื้ออาหาร</span></h2>
+          <details class="relative">
+            <summary class="chip bg-slate-100 text-slate-700 min-h-[36px] whitespace-nowrap list-none cursor-pointer">${iconSvg('ellipsis', { size: 14 })} เครื่องมือเพิ่มเติม</summary>
+            <div class="tm-tools-menu absolute right-0 top-full z-10 mt-2 flex min-w-52 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+              <button id="f-bulk-log" type="button" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]">${iconSvg('zap', { size: 14 })} เพิ่มหลายเมนู</button>
+              <button id="f-online" type="button" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]">${iconSvg('globe', { size: 14 })} ค้นหาโภชนาการ</button>
+              <button id="f-hiwpinto-sync" type="button" class="chip justify-start bg-emerald-100 text-emerald-800 min-h-[40px]">${iconSvg('cloud-download', { size: 14 })} Sync Hiwpinto</button>
+              <button id="f-library" type="button" class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]">${iconSvg('book', { size: 14 })} คลังอาหาร</button>
+            </div>
+          </details>
         </div>
-      </div>
 
-      <div class="space-y-1.5">
-        <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
-          <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
-          <span class="inline-flex text-brand">${iconSvg('camera', { size: 22 })}</span>
-          <span class="block text-sm font-semibold text-slate-800 mt-1">ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
-          <span class="block text-xs text-slate-600 mt-0.5">ลองอ่านบาร์โค้ดและ OCR ฉลากในเครื่องก่อน (ฟรี) และใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
-        </label>
-        <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
-      </div>
-      <div id="f-photo-lib-bar" class="hidden rounded-xl bg-sky-soft/50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span id="f-photo-lib-text" class="text-slate-700 font-medium"></span>
-        <button id="f-photo-lib-btn" type="button" class="chip bg-white text-brand-dark border border-lav-soft">${iconSvg('bookmark', { size: 13 })} บันทึกลงคลังอาหาร</button>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <label class="lbl">มื้อ</label>
-          <select id="f-meal" class="input"></select>
-          <button id="f-copy-meal" type="button" class="chip bg-lav-soft text-brand-dark mt-2">${iconSvg('copy', { size: 13 })} คัดลอกจากมื้อเดิม</button>
+        <div class="space-y-1.5">
+          <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
+            <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
+            <span class="inline-flex text-brand">${iconSvg('camera', { size: 22 })}</span>
+            <span class="block text-sm font-semibold text-slate-800 mt-1">ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
+            <span class="block text-xs text-slate-600 mt-0.5">ลองอ่านบาร์โค้ดและ OCR ฉลากในเครื่องก่อน (ฟรี) และใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
+          </label>
+          <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
         </div>
-        <div class="sm:col-span-2">
-          <label class="lbl" for="f-name">ชื่อเมนู (พิมพ์ค้นหาจากคลังได้)</label>
-          <div class="tm-combobox">
-            <input id="f-name" class="input" placeholder="เช่น อกไก่ต้ม" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-name-listbox" autocomplete="off">
-            <div id="f-name-listbox" role="listbox" class="tm-combobox-list hidden" aria-label="เมนูอาหารแนะนำ"></div>
+        <div id="f-photo-lib-bar" class="hidden rounded-xl bg-sky-soft/50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span id="f-photo-lib-text" class="text-slate-700 font-medium"></span>
+          <button id="f-photo-lib-btn" type="button" class="chip bg-white text-brand-dark border border-lav-soft">${iconSvg('bookmark', { size: 13 })} บันทึกลงคลังอาหาร</button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="lbl">มื้อ</label>
+            <select id="f-meal" class="input"></select>
+            <button id="f-copy-meal" type="button" class="chip bg-lav-soft text-brand-dark mt-2">${iconSvg('copy', { size: 13 })} คัดลอกจากมื้อเดิม</button>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="lbl" for="f-name">ชื่อเมนู (พิมพ์ค้นหาจากคลังได้)</label>
+            <div class="tm-combobox">
+              <input id="f-name" class="input" placeholder="เช่น อกไก่ต้ม" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-name-listbox" autocomplete="off">
+              <div id="f-name-listbox" role="listbox" class="tm-combobox-list hidden" aria-label="เมนูอาหารแนะนำ"></div>
+            </div>
           </div>
         </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><div id="f-qty-adjust" class="food-adjust-row hidden" aria-label="ปรับน้ำหนักทีละ 50 กรัม"><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="-50" aria-label="ลดน้ำหนัก 50 กรัม">− 50 g</button><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="50" aria-label="เพิ่มน้ำหนัก 50 กรัม">+ 50 g</button></div><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
+          <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
+          <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"><div class="food-adjust-row" aria-label="ปรับแคลอรี่ทีละ 100 กิโลแคลอรี่"><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="-100" aria-label="ลดแคลอรี่ 100 กิโลแคลอรี่">− 100</button><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="100" aria-label="เพิ่มแคลอรี่ 100 กิโลแคลอรี่">+ 100 kcal</button></div></div>
+          <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
+          <div><label class="lbl">คาร์บ (g)</label><input id="f-carb" type="number" inputmode="decimal" class="input"></div>
+          <div><label class="lbl">ไขมัน (g)</label><input id="f-fat" type="number" inputmode="decimal" class="input"></div>
+          <div id="f-sugar-wrap" class="hidden"><label class="lbl">น้ำตาล (g)</label><input id="f-sugar" type="number" inputmode="decimal" class="input"></div>
+          <div id="f-sodium-wrap" class="hidden"><label class="lbl">โซเดียม (mg)</label><input id="f-sodium" type="number" inputmode="decimal" class="input"></div>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2"><button id="f-clear" type="button" class="btn btn-ghost">เคลียร์ค่า</button><button id="f-save-lib" type="button" class="btn btn-soft">${iconSvg('bookmark', { size: 15 })} บันทึกลงคลัง</button><button id="f-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกรายการ</button></div>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div id="f-qty-wrap"><label id="f-qty-label" class="lbl">จำนวน (หน่วย)</label><input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input"><div id="f-qty-adjust" class="food-adjust-row hidden" aria-label="ปรับน้ำหนักทีละ 50 กรัม"><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="-50" aria-label="ลดน้ำหนัก 50 กรัม">− 50 g</button><button type="button" class="food-adjust-btn" data-food-adjust="f-qty" data-adjust-by="50" aria-label="เพิ่มน้ำหนัก 50 กรัม">+ 50 g</button></div><p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p></div>
-        <div id="f-gross-wrap" class="hidden col-span-2 sm:col-span-1"><label class="lbl">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input" placeholder="เช่น 180"><label class="lbl mt-2">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input"><p id="f-edible-note" class="mt-1 text-xs text-slate-500"></p></div>
-        <div><label class="lbl">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input"><div class="food-adjust-row" aria-label="ปรับแคลอรี่ทีละ 100 กิโลแคลอรี่"><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="-100" aria-label="ลดแคลอรี่ 100 กิโลแคลอรี่">− 100</button><button type="button" class="food-adjust-btn" data-food-adjust="f-cal" data-adjust-by="100" aria-label="เพิ่มแคลอรี่ 100 กิโลแคลอรี่">+ 100 kcal</button></div></div>
-        <div><label class="lbl">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input"></div>
-        <div><label class="lbl">คาร์บ (g)</label><input id="f-carb" type="number" inputmode="decimal" class="input"></div>
-        <div><label class="lbl">ไขมัน (g)</label><input id="f-fat" type="number" inputmode="decimal" class="input"></div>
-        <div id="f-sugar-wrap" class="hidden"><label class="lbl">น้ำตาล (g)</label><input id="f-sugar" type="number" inputmode="decimal" class="input"></div>
-        <div id="f-sodium-wrap" class="hidden"><label class="lbl">โซเดียม (mg)</label><input id="f-sodium" type="number" inputmode="decimal" class="input"></div>
-      </div>
-      <div class="flex flex-wrap justify-end gap-2"><button id="f-clear" type="button" class="btn btn-ghost">เคลียร์ค่า</button><button id="f-save-lib" type="button" class="btn btn-soft">${iconSvg('bookmark', { size: 15 })} บันทึกลงคลัง</button><button id="f-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกรายการ</button></div>
-    </div>
 
-    <div class="card space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>รายการอาหารของวัน</span></h3>
-        <button id="f-hist-search" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('search', { size: 14 })} ค้นหาประวัติอาหาร</button>
+      <div class="card space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>รายการอาหารของวัน</span></h3>
+          <button id="f-hist-search" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('search', { size: 14 })} ค้นหาประวัติอาหาร</button>
+        </div>
+        <div id="f-bulk-bar" class="hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex flex-wrap items-center gap-2 text-xs">
+          <label class="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="accent-violet-500"> เลือกทั้งหมด</label>
+          <span class="text-slate-500">เลือกแล้ว <b id="f-sel-count">0</b></span>
+          <select id="f-bulk-meal" class="input !w-auto !py-1.5 !px-2 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
+          <button id="f-bulk-move" type="button" class="chip bg-sky-soft text-blue-700 font-semibold" disabled>${iconSvg('swap', { size: 14 })} ย้ายไปมื้อนี้</button>
+        </div>
+        <div class="overflow-x-hidden"><table class="w-full table-fixed text-left text-sm">
+          <thead class="bg-lav-soft/50 text-slate-600"><tr>
+            <th class="p-2 w-8 text-center"></th>
+            <th class="p-2.5">เมนู</th>
+            <th class="p-2.5 w-14 text-right">kcal</th>
+            <th class="p-2.5 w-14 text-right">P</th>
+            <th class="p-2 w-20 text-center">จัดการ</th>
+          </tr></thead>
+          <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
+        </table></div>
       </div>
-      <div id="f-bulk-bar" class="hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex flex-wrap items-center gap-2 text-xs">
-        <label class="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="accent-violet-500"> เลือกทั้งหมด</label>
-        <span class="text-slate-500">เลือกแล้ว <b id="f-sel-count">0</b></span>
-        <select id="f-bulk-meal" class="input !w-auto !py-1.5 !px-2 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
-        <button id="f-bulk-move" type="button" class="chip bg-sky-soft text-blue-700 font-semibold" disabled>${iconSvg('swap', { size: 14 })} ย้ายไปมื้อนี้</button>
-      </div>
-      <div class="overflow-x-hidden"><table class="w-full table-fixed text-left text-sm">
-        <thead class="bg-lav-soft/50 text-slate-600"><tr>
-          <th class="p-2 w-8 text-center"></th>
-          <th class="p-2.5">เมนู</th>
-          <th class="p-2.5 w-14 text-right">kcal</th>
-          <th class="p-2.5 w-14 text-right">P</th>
-          <th class="p-2 w-20 text-center">จัดการ</th>
-        </tr></thead>
-        <tbody id="f-body" class="divide-y divide-slate-100"></tbody>
-      </table></div>
-    </div>
-  </div>
+    </section>
 
-  <div class="space-y-6">
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('clock', { size: 17, className: 'text-brand' })}<span>พลังงานแต่ละมื้อ</span></h3>
-      <div id="f-meals" class="space-y-3"></div>
-      <p id="f-meals-note" class="text-[11px] text-slate-500"></p>
-    </div>
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lightbulb', { size: 17, className: 'text-brand' })}<span>คำแนะนำจากเกณฑ์ที่ตั้งไว้</span></h3>
-      <div id="f-advice" class="bg-ok-soft/60 p-3 rounded-xl text-xs text-green-900 leading-relaxed"></div>
-    </div>
+    <section id="f-summary-panel" aria-labelledby="f-view-summary" class="space-y-4">
+      <div class="card space-y-3">
+        <header class="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 class="text-lg font-bold text-slate-800">ภาพรวมสารอาหาร</h2><p class="text-xs text-slate-500">เทียบปริมาณที่บันทึกกับเป้าหมายในวันที่เลือก</p></div>
+          <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
+        </header>
+        <div id="f-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card space-y-3">
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('clock', { size: 17, className: 'text-brand' })}<span>พลังงานแต่ละมื้อ</span></h3>
+          <div id="f-meals" class="space-y-3"></div>
+          <p id="f-meals-note" class="text-[11px] text-slate-500"></p>
+        </div>
+        <div class="card space-y-3">
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lightbulb', { size: 17, className: 'text-brand' })}<span>คำแนะนำจากเกณฑ์ที่ตั้งไว้</span></h3>
+          <div id="f-advice" class="bg-ok-soft/60 p-3 rounded-xl text-xs text-green-900 leading-relaxed"></div>
+        </div>
+      </div>
+    </section>
   </div>`;
 
   $('#f-date', root).value = localDateStr();
@@ -162,7 +183,7 @@ export function mountFood(el) {
     field.dispatchEvent(new Event('input', { bubbles: true }));
   });
   $$('[data-day]', root).forEach(b => b.addEventListener('click', () => { $('#f-date', root).value = addDays(localDateStr(), +b.dataset.day); watchDay(); }));
-  $('#f-meals', root).addEventListener('click', e => { const b = e.target.closest('[data-meal]'); if (b) { $('#f-meal', root).value = b.dataset.meal; $('#f-name', root).focus(); $('#f-name', root).scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
+  $('#f-meals', root).addEventListener('click', e => { const b = e.target.closest('[data-meal]'); if (b) { const logRadio = $('#f-view-log', root); if (logRadio) logRadio.checked = true; $('#f-meal', root).value = b.dataset.meal; $('#f-name', root).focus(); $('#f-name', root).scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
   ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
   $('#f-clear', root).addEventListener('click', clearFoodForm);
   $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
@@ -324,6 +345,7 @@ function openHiwpintoCalculator(saved = null) {
     calculate();
   });
   $m('#hp-save').addEventListener('click', () => {
+    if (guardPreviewWrite('การบันทึกเมนู Hiwpinto')) return;
     const values = calculate(); if (!values) return;
     const includedRice = $m('#hp-has-rice').checked;
     const name = $m('#hp-name').value.trim();
@@ -605,7 +627,7 @@ async function copyRecentMeal() {
     let sourceDate = null, sourceItems = [];
     for (let days = 1; days <= 30 && !sourceItems.length; days++) {
       const candidate = addDays(date, -days);
-      const result = await getDocs(query(userCol(state.uid, 'food_records'), where('date', '==', candidate)));
+      const result = await getFoodRecordsInRange(state.uid, candidate, candidate);
       sourceItems = result.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item.mealId===mealId || item.meal===mealName);
       if (sourceItems.length) sourceDate = candidate;
     }
@@ -620,6 +642,7 @@ async function copyRecentMeal() {
     $('#copy-meal-all', modal.el).addEventListener('change', e => { choices().forEach(c => { c.checked=e.target.checked; }); });
     choices().forEach(c => c.addEventListener('change', () => { $('#copy-meal-all',modal.el).checked=choices().every(x=>x.checked); }));
     $('#copy-meal-confirm', modal.el).addEventListener('click', async () => {
+      if (guardPreviewWrite('การคัดลอกมื้ออาหาร')) return;
       const selected = choices().filter(c=>c.checked).map(c=>sourceItems[Number(c.dataset.index)]);
       if (!selected.length) return toast('เลือกรายการอาหารอย่างน้อย 1 รายการ', 'err');
       const batch = writeBatch(db), collectionRef = userCol(state.uid, 'food_records');
@@ -855,6 +878,7 @@ function openFoodSearchModal(initialQuery = '') {
 }
 
 async function bulkMoveFoodMeal() {
+  if (guardPreviewWrite('การย้ายมื้อหลายรายการ')) return;
   const targetSel = $('#f-bulk-meal', root);
   const mealId = targetSel.value;
   const meal = targetSel.selectedOptions[0]?.textContent || '';
@@ -1031,6 +1055,7 @@ function openBatchFoodScanModal(results, errors) {
     </div>`, { wide: true });
 
   $('#bfs-save', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การบันทึกอาหารจากรูปภาพ')) return;
     const date = $('#bfs-date', m.el).value;
     const mealSel = $('#bfs-meal', m.el);
     const mealId = mealSel.value;
@@ -1258,6 +1283,7 @@ export function openLibrary(onPick) {
     render();
   });
   $('#lib-add-to-meal', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การเพิ่มหลายเมนูจากคลัง')) return;
     const picked = getPresets().filter(p => selected.has(p.id));
     if (!picked.length || !state.uid) return;
     const date = $('#f-date', root)?.value || localDateStr();
@@ -1315,6 +1341,7 @@ export function openLibrary(onPick) {
   });
   $('#lib-bulk-category', m.el).addEventListener('change', render);
   $('#lib-change-category', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การเปลี่ยนหมวดหมู่หลายรายการ')) return;
     const category = $('#lib-bulk-category', m.el).value, foods = state.customFoods.filter(f => selected.has(f.id));
     if (!category || !foods.length) return;
     if (!confirm(`เปลี่ยนหมวดหมู่ของ ${foods.length} เมนูที่เลือกเป็น “${category}” หรือไม่?`)) return;
@@ -1338,6 +1365,7 @@ export function openLibrary(onPick) {
     catch (err) { toast('เปลี่ยนหมวดหมู่ไม่สำเร็จ: ' + err.message, 'err'); }
   });
   $('#lib-delete-selected', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การลบเมนูหลายรายการ')) return;
     const foods = state.customFoods.filter(f => selected.has(f.id));
     if (!foods.length) return;
     const names = foods.slice(0, 5).map(f => `• ${f.name}`).join('\n');
@@ -1485,6 +1513,7 @@ function openQuickBulkFoodLog() {
   updatePreview();
 
   $('#qb-save', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การเพิ่มอาหารหลายเมนู')) return;
     const date = $('#qb-date', m.el).value;
     const mealSel = $('#qb-meal', m.el);
     const mealId = mealSel.value;

@@ -1,6 +1,7 @@
 import { getDocs, query, where } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
 import { $, esc, localDateStr, toNum, round1 } from './util.js';
 import { iconSvg } from './icons.js';
 
@@ -24,20 +25,37 @@ function monthRange(count) {
 export function mountDashboard(el) {
   root = el;
   root.innerHTML = `
-  <div class="space-y-5">
-    <div class="card space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('health', { size: 18, className: 'text-brand shrink-0' })}<span>แดชบอร์ดภาพรวม</span></h2>
-        <div class="flex items-center gap-1.5">
-          <button type="button" id="db-range-3" class="chip text-xs bg-slate-100 text-slate-600">3 เดือน</button>
-          <button type="button" id="db-range-6" class="chip text-xs bg-brand text-white font-semibold">6 เดือน</button>
-          <button type="button" id="db-range-12" class="chip text-xs bg-slate-100 text-slate-600">12 เดือน</button>
+  <div class="db-page">
+    <header class="db-header">
+      <div class="db-heading">
+        <div class="db-eyebrow">TRACK ME · YOUR WELLNESS AT A GLANCE</div>
+        <h2>ภาพรวมสุขภาพและไลฟ์สไตล์</h2>
+        <p>ติดตามแนวโน้มของคุณในที่เดียว แล้วค่อย ๆ ปรับในแบบที่เหมาะกับตัวเอง</p>
+      </div>
+      <div class="db-controls">
+        <div class="db-range" role="group" aria-label="ช่วงเวลาสรุปข้อมูล">
+          <button type="button" id="db-range-3" aria-pressed="false">3 เดือน</button>
+          <button type="button" id="db-range-6" aria-pressed="true">6 เดือน</button>
+          <button type="button" id="db-range-12" aria-pressed="false">12 เดือน</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="db-view-overview" data-page-go="overview" aria-pressed="true" class="db-refresh">ภาพรวม</button>
+          <button type="button" id="db-view-weekly" data-page-go="weekly" aria-pressed="false" class="db-refresh">สรุปสัปดาห์</button>
+          <button type="button" data-page-go="report" class="db-refresh">${iconSvg('report', { size: 14 })}<span>รายงาน</span></button>
+          <button type="button" id="db-refresh" class="db-refresh">${iconSvg('rotate-right', { size: 14 })}<span>รีเฟรช</span></button>
         </div>
       </div>
-      <p class="text-xs text-slate-500">สรุปตัวเลขสำคัญ แล้วเลือกดูแนวโน้มเฉพาะหมวดที่ต้องการ</p>
-      <button type="button" id="db-refresh" class="chip bg-lav-soft text-brand-dark">${iconSvg('rotate-right', { size: 14 })} รีเฟรชข้อมูล</button>
-    </div>
-    <div id="db-content" class="space-y-5"><p class="text-sm text-slate-400">กด "รีเฟรชข้อมูล" เพื่อโหลด</p></div>
+    </header>
+    <section class="db-welcome" aria-label="คำแนะนำการใช้งานแดชบอร์ด">
+      <div>
+        <span class="db-welcome-kicker">บันทึกเล็ก ๆ สร้างความเปลี่ยนแปลงได้</span>
+        <h3>กลับมาดูแลตัวเองกันต่อ</h3>
+        <p>ข้อมูลจะค่อย ๆ ชัดขึ้นเมื่อคุณบันทึกอย่างสม่ำเสมอ</p>
+      </div>
+      <span class="db-welcome-mark" aria-hidden="true">${iconSvg('brand', { size: 24 })}</span>
+    </section>
+    <div id="db-content" class="db-content" aria-live="polite"><p class="db-loading">กำลังรวบรวมข้อมูล…</p></div>
+    <div id="db-weekly" class="hidden lg:col-span-3 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8" aria-live="polite"></div>
   </div>`;
 
   let monthCount = 6;
@@ -45,7 +63,7 @@ export function mountDashboard(el) {
     monthCount = n;
     [3, 6, 12].forEach(r => {
       const b = $('#db-range-' + r, root);
-      b.className = 'chip text-xs ' + (r === n ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600');
+      b.setAttribute('aria-pressed', String(r === n));
     });
     if (dashboardData) render(monthCount);
   };
@@ -60,7 +78,6 @@ export function mountDashboard(el) {
     $('#db-content', root).querySelectorAll('[data-db-section]').forEach(button => {
       const selected = button.dataset.dbSection === activeSection;
       button.setAttribute('aria-selected', String(selected));
-      button.className = `whitespace-nowrap rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold transition ${selected ? 'bg-brand text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`;
     });
     $('#db-content', root).querySelectorAll('[data-db-panel]').forEach(panel => {
       panel.hidden = panel.dataset.dbPanel !== activeSection;
@@ -74,12 +91,21 @@ export function resetDashboardToToday() {
   if (root) loadAndRender(6);
 }
 
+export function resetDashboardState() {
+  dashboardData = null;
+  activeSection = 'health';
+}
+
+export function renderDashboard() {
+  if (root && !loading) void loadAndRender(6);
+}
+
 async function loadAndRender(monthCount) {
-  if (loading) return;
+  if (loading || (!state.uid && !isPreviewMode())) return;
   loading = true;
   const btn = $('#db-refresh', root);
-  if (btn) { btn.disabled = true; btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังโหลด…`; }
-  $('#db-content', root).innerHTML = '<p class="text-sm text-slate-400">กำลังรวบรวมข้อมูล…</p>';
+  if (btn) { btn.disabled = true; btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })}<span>กำลังโหลด…</span>`; }
+  $('#db-content', root).innerHTML = '<p class="db-loading">กำลังรวบรวมข้อมูล…</p>';
   try {
     dashboardData = await loadData(monthCount);
     render(monthCount);
@@ -87,7 +113,7 @@ async function loadAndRender(monthCount) {
     $('#db-content', root).innerHTML = `<p class="text-sm text-rose-600">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`;
   } finally {
     loading = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = `${iconSvg('rotate-right', { size: 14 })} รีเฟรชข้อมูล`; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `${iconSvg('rotate-right', { size: 14 })}<span>รีเฟรช</span>`; }
   }
 }
 
@@ -96,9 +122,11 @@ async function loadData(monthCount) {
   const from = months[0] + '-01';
   const to = localDateStr();
 
-  const rangeQuery = name => getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
-    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
-    .catch(() => []);
+  const rangeQuery = name => isPreviewMode()
+    ? Promise.resolve(getPreviewRecordsInRange(name, from, to))
+    : getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
+        .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
+        .catch(() => []);
 
   const [food, workouts] = await Promise.all([rangeQuery('food_records'), rangeQuery('workout_records')]);
   const body = state.body.filter(b => b.date >= from && b.date <= to);
@@ -165,7 +193,7 @@ function lineChart(data, valueKey, color, unit, decimals = 0) {
   const y = v => H - P - ((v - min) / (max - min || 1)) * (H - 2 * P);
   const fmtV = v => decimals === 0 ? Math.round(v).toLocaleString() : v.toFixed(decimals);
   const idxMap = data.map((d, i) => d[valueKey] != null ? i : null).filter(i => i !== null);
-  const line = idxMap.map((dataIdx, j) => {
+  const line = idxMap.map(dataIdx => {
     const val = data[dataIdx][valueKey];
     return `${x(dataIdx).toFixed(1)},${y(val).toFixed(1)}`;
   }).join(' ');
@@ -209,11 +237,11 @@ function barChart(data, valueKey, color, unit, decimals = 0) {
 }
 
 function statCard(label, value, sub, colorClass) {
-  return `<div class="rounded-xl bg-slate-50 border border-slate-100 p-3 text-center">
-    <p class="text-xs text-slate-500">${esc(label)}</p>
-    <p class="text-xl font-bold ${colorClass}">${esc(value)}</p>
-    ${sub ? `<p class="text-[11px] text-slate-400">${esc(sub)}</p>` : ''}
-  </div>`;
+  return `<article class="db-stat">
+    <p class="db-stat-label">${esc(label)}</p>
+    <p class="db-stat-value ${colorClass}">${esc(value)}</p>
+    ${sub ? `<p class="db-stat-note">${esc(sub)}</p>` : ''}
+  </article>`;
 }
 
 function render(monthCount) {
@@ -233,28 +261,28 @@ function render(monthCount) {
   const totalIncome = d.reduce((a, r) => a + r.incomeTotal, 0);
 
   $('#db-content', root).innerHTML = `
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <section class="db-metrics" aria-label="สรุปตัวเลขสำคัญ">
       ${statCard('น้ำหนักล่าสุด', latest?.weight != null ? latest.weight + ' กก.' : '-', weightTrend != null ? `เปลี่ยน ${weightStr}` : 'จาก ' + d.length + ' เดือน', weightClass)}
       ${statCard('แคลอรี่เฉลี่ย/วัน', latest?.avgKcal != null ? latest.avgKcal + ' kcal' : '-', latest?.avgKcal != null ? 'เดือนล่าสุด' : '-', 'text-amber-600')}
       ${statCard('ออกกำลังกาย', totalWorkout + ' ครั้ง', `รวม ${d.reduce((a, r) => a + r.workoutMin, 0)} นาที · ${d.length} เดือน`, 'text-brand-dark')}
       ${statCard('ค่าใช้จ่ายสุทธิ', totalIncome - totalExpense >= 0 ? '+' + (totalIncome - totalExpense).toLocaleString() : (totalIncome - totalExpense).toLocaleString(), `รายรับ ${totalIncome.toLocaleString()} · จ่าย ${totalExpense.toLocaleString()} · ${d.length} เดือน`, totalIncome - totalExpense >= 0 ? 'text-emerald-700' : 'text-rose-600')}
+    </section>
+
+    <div role="tablist" aria-label="หมวดสรุปภาพรวม" class="db-tabs">
+      ${[['health','สุขภาพ'],['nutrition','โภชนาการ'],['activity','กิจกรรม'],['finance','การเงิน']].map(([key,label]) => `<button type="button" role="tab" id="db-tab-${key}" aria-controls="db-panel-${key}" aria-selected="${activeSection===key}" data-db-section="${key}">${label}</button>`).join('')}
     </div>
 
-    <div role="tablist" aria-label="หมวดสรุปภาพรวม" class="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5">
-      ${[['health','สุขภาพ'],['nutrition','โภชนาการ'],['activity','กิจกรรม'],['finance','การเงิน']].map(([key,label]) => `<button type="button" role="tab" id="db-tab-${key}" aria-controls="db-panel-${key}" aria-selected="${activeSection===key}" data-db-section="${key}" class="whitespace-nowrap rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold transition ${activeSection===key?'bg-brand text-white shadow-sm':'text-slate-600 hover:bg-slate-100'}">${label}</button>`).join('')}
-    </div>
-
-    <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='health'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('body', { size: 15, className: 'text-brand shrink-0' })}<span>น้ำหนัก (กก.)</span></h3>${lineChart(d, 'weight', '#6366f1', 'กก.', 1)}</div>
+    <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="db-chart-panel" ${activeSection!=='health'?'hidden':''}>
+      <div class="db-chart-card"><h3>${iconSvg('body', { size: 16, className: 'text-brand shrink-0' })}<span>น้ำหนัก (กก.)</span></h3>${lineChart(d, 'weight', '#6366f1', 'กก.', 1)}</div>
     </section>
-    <section role="tabpanel" id="db-panel-nutrition" aria-labelledby="db-tab-nutrition" data-db-panel="nutrition" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='nutrition'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('flame', { size: 15, className: 'text-orange-500 shrink-0' })}<span>แคลอรี่เฉลี่ย/วัน (kcal)</span></h3>${lineChart(d, 'avgKcal', '#f97316', 'kcal', 0)}</div>
+    <section role="tabpanel" id="db-panel-nutrition" aria-labelledby="db-tab-nutrition" data-db-panel="nutrition" class="db-chart-panel" ${activeSection!=='nutrition'?'hidden':''}>
+      <div class="db-chart-card"><h3>${iconSvg('flame', { size: 16, className: 'text-orange-500 shrink-0' })}<span>แคลอรี่เฉลี่ย/วัน (kcal)</span></h3>${lineChart(d, 'avgKcal', '#f97316', 'kcal', 0)}</div>
     </section>
-    <section role="tabpanel" id="db-panel-activity" aria-labelledby="db-tab-activity" data-db-panel="activity" class="grid grid-cols-1 md:grid-cols-2 gap-4" ${activeSection!=='activity'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('workout', { size: 15, className: 'text-emerald-600 shrink-0' })}<span>จำนวนครั้งออกกำลังกาย</span></h3>${barChart(d, 'workoutCount', '#10b981', 'ครั้ง', 0)}</div>
+    <section role="tabpanel" id="db-panel-activity" aria-labelledby="db-tab-activity" data-db-panel="activity" class="db-chart-panel" ${activeSection!=='activity'?'hidden':''}>
+      <div class="db-chart-card"><h3>${iconSvg('workout', { size: 16, className: 'text-emerald-600 shrink-0' })}<span>จำนวนครั้งออกกำลังกาย</span></h3>${barChart(d, 'workoutCount', '#10b981', 'ครั้ง', 0)}</div>
     </section>
-    <section role="tabpanel" id="db-panel-finance" aria-labelledby="db-tab-finance" data-db-panel="finance" class="space-y-4" ${activeSection!=='finance'?'hidden':''}>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('expense', { size: 15, className: 'text-rose-500 shrink-0' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>${barChart(d, 'expenseTotal', '#f43f5e', 'บาท', 0)}</div>
+    <section role="tabpanel" id="db-panel-finance" aria-labelledby="db-tab-finance" data-db-panel="finance" class="db-chart-panel space-y-4" ${activeSection!=='finance'?'hidden':''}>
+      <div class="db-chart-card"><h3>${iconSvg('expense', { size: 16, className: 'text-rose-500 shrink-0' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>${barChart(d, 'expenseTotal', '#f43f5e', 'บาท', 0)}</div>
       <details class="card space-y-3">
         <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน <span class="ml-1 text-xs font-normal text-slate-500">แตะเพื่อดูรายละเอียด</span></span></summary>
       <div class="overflow-x-auto">

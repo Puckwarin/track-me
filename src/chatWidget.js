@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, openModal, toast, trapFocus } from './ut
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
 import { CHAT_ROLES, LOCAL_ROLE, LOCAL_HELP_TEXT, getAnyChatRole } from './services/chatRoles.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 const STORAGE_KEYS = {
   history: 'trackme_ai_chat_history',
@@ -289,8 +290,8 @@ function ensureShell() {
   const wrap = document.createElement('div');
   wrap.className = 'no-print';
   wrap.innerHTML = `
-    ${hasFab ? '' : `<button id="ai-chat-fab" type="button" class="ai-chat-fab" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
-      ${iconSvg('chat', { size: 22 })}
+    ${hasFab ? '' : `<button id="ai-chat-fab" type="button" class="icon-btn ai-chat-header-btn" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI">
+      ${iconSvg('chat', { size: 18 })}
     </button>`}
 
     <section id="ai-chat-drawer" class="ai-chat-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="ai-chat-title" tabindex="-1">
@@ -544,6 +545,7 @@ function setOpen(next) {
   }
   drawer.classList.toggle('hidden', !isOpen);
   fab.setAttribute('aria-expanded', String(isOpen));
+  fab.classList.toggle('is-active', isOpen);
   releaseDrawerTrap();
   releaseDrawerTrap = () => {};
   if (isOpen) {
@@ -1039,6 +1041,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       $('#nf-n-cancel', body)?.addEventListener('click', () => { editNoteId = null; renderModal(); });
       $('#nf-n-save', body)?.addEventListener('click', async () => {
         if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+        if (guardPreviewWrite('การบันทึกโน้ต')) return;
         const title = ($('#nf-n-title', body)?.value || '').trim() || 'โน้ต';
         const category = $('#nf-n-cat', body)?.value || 'ทั่วไป';
         const content = ($('#nf-n-content', body)?.value || '').trim();
@@ -1072,6 +1075,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       });
       body.querySelectorAll('[data-note-del]').forEach(btn => {
         btn.addEventListener('click', async () => {
+          if (guardPreviewWrite('การลบโน้ต')) return;
           if (!confirm('ต้องการลบโน้ตนี้?')) return;
           const id = btn.dataset.noteDel;
           try {
@@ -1134,6 +1138,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       });
       $('#nf-fb-save', body)?.addEventListener('click', async () => {
         if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
+        if (guardPreviewWrite('การส่ง Feedback')) return;
         const category = $('#nf-fb-cat', body)?.value || 'other';
         const context = ($('#nf-fb-ctx', body)?.value || '').trim();
         const message = ($('#nf-fb-msg', body)?.value || '').trim();
@@ -1164,6 +1169,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       });
       body.querySelectorAll('[data-fb-del]').forEach(btn => {
         btn.addEventListener('click', async () => {
+          if (guardPreviewWrite('การลบ Feedback')) return;
           if (!confirm('ต้องการลบ Feedback นี้?')) return;
           const id = btn.dataset.fbDel;
           try {

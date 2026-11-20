@@ -1,6 +1,5 @@
-import { getDocs, query, where } from 'firebase/firestore';
-import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { getFoodRecordsInRange } from './foodService.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
 import { TYPES } from './workoutConstants.js';
@@ -48,7 +47,9 @@ export function mountWeekly(el) {
   root.innerHTML = `
   <div class="lg:col-span-3 space-y-6">
     <div class="card space-y-3">
-      <div class="flex justify-center gap-2">
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <button type="button" data-page-go="overview" class="chip whitespace-nowrap min-h-[38px]">แดชบอร์ดภาพรวม</button>
+        <button type="button" data-page-go="report" class="chip whitespace-nowrap min-h-[38px]">รายงาน</button>
         <button id="sum-week" type="button" class="chip whitespace-nowrap min-h-[38px]">รายสัปดาห์</button>
         <button id="sum-month" type="button" class="chip whitespace-nowrap min-h-[38px]">รายเดือน</button>
       </div>
@@ -94,7 +95,7 @@ export async function renderWeekly() {
   let food = [];
   let foodError = false;
   try {
-    food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', weekStart), where('date', '<=', end)))).docs.map(d => d.data());
+    food = (await getFoodRecordsInRange(state.uid, weekStart, end)).docs.map(d => d.data());
   } catch {
     foodError = true;
   }
@@ -201,7 +202,7 @@ async function renderMonthly() {
   let food = [];
   let foodError = false;
   try {
-    food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', start), where('date', '<=', end)))).docs.map(d => d.data());
+    food = (await getFoodRecordsInRange(state.uid, start, end)).docs.map(d => d.data());
   } catch {
     foodError = true;
   }

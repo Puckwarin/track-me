@@ -5,6 +5,9 @@ import { $, toast } from './util.js';
 import { clearSummaryCache } from './summary.js';
 import { hasDevicePin, showDeviceLock, removeDevicePin } from './local-lock.js';
 import { reportRuntimeError, setRuntimeErrorUser } from './runtimeErrorMonitor.js';
+import {
+  PREVIEW_UID, PREVIEW_USER, clearPreviewStorage, initPreviewStore, isPreviewMode, resetPreviewStore
+} from './preview.js';
 
 let signedInUser = null;
 
@@ -17,12 +20,43 @@ async function resetPinWithGoogle(user) {
 }
 
 export function lockCurrentApp() {
-  if (!signedInUser || !hasDevicePin(signedInUser.uid)) return;
+  if (!signedInUser || isPreviewMode() || !hasDevicePin(signedInUser.uid)) return;
   const user = signedInUser;
   showDeviceLock(user.uid, () => { $('#app-shell').classList.remove('hidden'); emit('auth', user); }, signOutUser, () => resetPinWithGoogle(user));
 }
 
+export function enterPreviewMode() {
+  setRuntimeErrorUser(null);
+  clearSummaryCache();
+  initPreviewStore();
+  state.isPreview = true;
+  state.user = PREVIEW_USER;
+  state.uid = PREVIEW_UID;
+  const loginErr = $('#login-error');
+  if (loginErr) loginErr.textContent = '';
+  $('#app-lock')?.classList.add('hidden');
+  $('#login-screen')?.classList.add('hidden');
+  $('#app-shell')?.classList.remove('hidden');
+  emit('auth', PREVIEW_USER);
+}
+
+export function exitPreviewMode() {
+  if (!isPreviewMode()) return;
+  clearSummaryCache();
+  clearPreviewStorage();
+  resetPreviewStore();
+  state.isPreview = false;
+  state.user = null;
+  state.uid = null;
+  setRuntimeErrorUser(null);
+  $('#app-lock')?.classList.add('hidden');
+  $('#app-shell')?.classList.add('hidden');
+  $('#login-screen')?.classList.remove('hidden');
+  emit('auth', null);
+}
+
 export function initAuth() {
+  $('#btn-preview')?.addEventListener('click', enterPreviewMode);
   $('#btn-google').addEventListener('click', async () => {
     $('#login-error').textContent = '';
     try { await signInWithPopup(auth, provider); }
@@ -43,6 +77,12 @@ export function initAuth() {
   });
   // Firebase เก็บ session ในเครื่อง → เปิดแอปตอนออฟไลน์ก็ยังถือว่าล็อกอินอยู่
   onAuthStateChanged(auth, user => {
+    if (!user && state.isPreview) return;
+    if (user && state.isPreview) {
+      clearPreviewStorage();
+      resetPreviewStore();
+      state.isPreview = false;
+    }
     setRuntimeErrorUser(user?.uid || null);
     signedInUser = user;
     state.user = user;
@@ -70,6 +110,10 @@ export function initAuth() {
 }
 
 export async function signOutUser() {
+  if (isPreviewMode()) {
+    exitPreviewMode();
+    return;
+  }
   if (!confirm('ออกจากระบบ?')) return;
   clearSummaryCache();
   try { await signOut(auth); } catch (e) {

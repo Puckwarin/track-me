@@ -1,6 +1,7 @@
 import { getDocs, writeBatch } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
+import { guardPreviewWrite } from './preview.js';
 import { $, esc, localDateStr, downloadFile, toast } from './util.js';
 import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
 import { iconSvg } from './icons.js';
@@ -142,6 +143,7 @@ export function mountBackup(el) {
 const selected = el => [...el.querySelectorAll('#bk-cols input:checked')].map(i => i.value);
 
 async function exportData(el) {
+  if (guardPreviewWrite('การสำรองข้อมูล ')) return;
   const cols = selected(el);
   if (!cols.length) return toast('เลือกอย่างน้อย 1 หมวด', 'err');
   try {
@@ -152,6 +154,7 @@ async function exportData(el) {
 }
 
 async function readFile(file, el) {
+  if (guardPreviewWrite('การกู้คืนข้อมูล ')) return;
   const box = $('#bk-preview', el);
   box.classList.remove('hidden');
   try {

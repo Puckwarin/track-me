@@ -18,6 +18,14 @@ Install dependencies with `npm ci`, then run:
 
 Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover local date helpers (`localDateStr`, `localMonthStr`, `addDays` in `src/util.test.js`), parsers (food, workout, reminder, statement, slip OCR, Zepp CSV), schema sanitizers, backup/restore planning & batched commits (`src/backup.test.js`), Firestore snapshot listener lifecycle & offline/pending sync indicators (`src/sync.test.js`), expense rules/budgets/recurrence, monthly overview dashboard aggregation & `localStorage` caching (`src/overviewLogic.test.js`), TDEE calculations, cycle statistics, food validation, nutrition/USDA/OFF/exercise image persistent caches (`src/nutrition.test.js`, `src/foodsearch.test.js`, `src/exerciseMedia.test.js`), local OCR sufficiency threshold, AI per-model & provider fallback/cooldown/model routing, 0-token local assistant & fuzzy food matching (`src/services/localAssistant.test.js`), AI assistant roles/tools/notes/feedback/markdown sanitization/write rollback, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 15 active tests, `src/services/aiAssistant.test.js` has 13 active tests, `src/services/localAssistant.test.js` has 7 active tests, `src/util.test.js` has 6 active tests, `src/zeppParser.test.js` has 9 active tests, `src/nutrition.test.js` has 5 active tests, `src/backup.test.js` has 5 active tests, `src/overviewLogic.test.js` has 4 active tests, `src/sync.test.js` has 2 active tests, `src/foodsearch.test.js` has 2 active tests, `src/exerciseMedia.test.js` has 1 active test, and `src/schema.test.js` has 7 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
 
+ผลตรวจสอบ v5.3.0 (2026-11-20):
+
+- `npm run lint`: ผ่าน ไม่มี errors หรือ warnings
+- `npm test`: ผ่าน 140 tests จาก 31 test files (รวม `src/preview.test.js` 6 tests, `src/icons.test.js` 2 tests และ `src/homeWidgetContract.test.js`); ข้าม Firestore Rules 5 tests (`src/firestoreRules.test.js`) เพราะเครื่องที่ตรวจไม่ได้เปิด Emulator
+- `npm run lock:check`: ผ่าน (`1,234` entries, `0 missing optionalDependencies`; ซิงค์เวอร์ชัน `5.3.0` และ `@phosphor-icons/core@^2.1.1` ใน `package.json` และ `package-lock.json`)
+- `npm run build`: ผ่าน (`vite v6.4.6`, `dist/assets/index-*.js` ขนาด `1,188.71 kB` minified / `321.62 kB` gzip; `PWA v1.3.0` precache 49 entries, `6551.29 KiB`); Vite ยังแสดงคำเตือนขนาด chunk หลักเกิน 500 kB
+- การตรวจนี้ครอบคลุม static lint, unit tests และ production build; ไม่ได้รันทดสอบ Google Sign-in, Firestore production หรือ Emulator ในชุดคำสั่งนี้
+
 ผลตรวจสอบ v5.2.0 (2026-11-18):
 
 - `npm run lint`: ผ่าน ไม่มี errors หรือ warnings

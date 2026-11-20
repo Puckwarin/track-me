@@ -1,6 +1,7 @@
 import { deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { userCol, userDoc } from '../firebase.js';
 import { state } from '../state.js';
+import { getPreviewRecordsInRange, isPreviewMode } from '../preview.js';
 import { addDays, daysBetween, fmtDate, isDateStr, localDateStr, round1 } from '../util.js';
 import { explainGeminiError, lookupPer100g } from '../nutrition.js';
 import {
@@ -446,6 +447,8 @@ async function executeReadTool(name, args = {}) {
       let rows = [];
       if (start === today && end === today && Array.isArray(state.todayFood)) {
         rows = state.todayFood;
+      } else if (isPreviewMode()) {
+        rows = getPreviewRecordsInRange('food_records', start, end);
       } else {
         const snap = await getDocs(
           query(userCol(uid, 'food_records'), where('date', '>=', start), where('date', '<=', end))
@@ -1217,6 +1220,7 @@ function buildWriteActionOutcome(prepared, writeRes, payloadData, undo) {
 export async function executeConfirmedAction(prepared, options = {}) {
   const uid = state.uid;
   if (!uid) throw new Error('ผู้ใช้ยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบก่อน');
+  if (isPreviewMode()) throw new Error('โหมดดูตัวอย่าง: ไม่สามารถบันทึกข้อมูลจริงผ่านผู้ช่วย AI ได้ (กรุณาเข้าสู่ระบบ Google)');
   const wp = prepared?.writePlan;
   if (!wp) throw new Error('ข้อมูลรายการไม่สมบูรณ์');
 
@@ -1416,6 +1420,7 @@ async function processToolBatch(toolCalls, turnState) {
 export async function undoAssistantAction(undo, options = {}) {
   const uid = state.uid;
   if (!uid || !undo) throw new Error('ไม่สามารถยกเลิกรายการได้');
+  if (isPreviewMode()) throw new Error('โหมดดูตัวอย่าง: ไม่สามารถแก้ไขข้อมูลจริงได้');
 
   if (undo.kind === 'expense') {
     return awaitFirestoreWrite(deleteDoc(userDoc(uid, 'expense_records', undo.id)), options);

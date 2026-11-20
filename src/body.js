@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
@@ -157,11 +158,15 @@ export function mountBody(el) {
   });
   $('#b-body', root).addEventListener('click', e => {
     const b = e.target.closest('[data-del]');
-    if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (!b) return;
+    if (guardPreviewWrite('การลบข้อมูลสัดส่วน')) return;
+    if (confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.del)).catch(err => toast(err.message, 'err'));
   });
   $('#bz-list', root).addEventListener('click', e => {
     const b = e.target.closest('[data-ss-del]');
-    if (b && confirm('ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.ssDel)).catch(err => toast(err.message, 'err'));
+    if (!b) return;
+    if (guardPreviewWrite('การลบข้อมูลการนอน/ก้าวเดิน')) return;
+    if (confirm('ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.ssDel)).catch(err => toast(err.message, 'err'));
   });
   render();
 }
@@ -442,6 +447,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   });
 
   $('#zp-confirm', box)?.addEventListener('click', async () => {
+    if (guardPreviewWrite('การนำเข้าข้อมูลจาก Zepp')) return;
     const picked = items.filter(x => x.checked && isDateStr(x.date));
     if (!picked.length || !state.uid) return;
     const confirmBtn = $('#zp-confirm', box);
@@ -497,6 +503,7 @@ async function handleCsvImport(e) {
 
 
 function saveSleepSteps() {
+  if (guardPreviewWrite('การบันทึกการนอนและก้าวเดิน')) return;
   const date = $('#bz-date', root).value;
   const sleepHours = numField(root, 'bz-sleep');
   const steps = numField(root, 'bz-steps');
@@ -532,6 +539,7 @@ function saveSleepSteps() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกน้ำหนักและสัดส่วน')) return;
   const date = $('#b-date', root).value;
   const rec = { weight: numField(root, 'b-weight'), bust: numField(root, 'b-bust'), waist: numField(root, 'b-waist'), hip: numField(root, 'b-hip'), arm: numField(root, 'b-arm'), thigh: numField(root, 'b-thigh') };
   if (!date) return toast('กรุณาเลือกวันที่', 'err');

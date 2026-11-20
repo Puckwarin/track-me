@@ -10,8 +10,9 @@ import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
 import { mountMigrate } from './migrate.js';
 import { checkReminder, REMIND_OPTIONS, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
-import { signOutUser, lockCurrentApp } from './auth.js';
+import { signOutUser, lockCurrentApp, exitPreviewMode } from './auth.js';
 import { state } from './state.js';
+import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { mountNavigationSettings } from './navigationSettings.js';
 import { mountHomeWidgetSettings } from './homeWidgetSettings.js';
 import { applyTheme, THEMES } from './theme.js';
@@ -206,7 +207,10 @@ export function mountSettings(el) {
       st.textContent = e.message === 'NO_KEY' ? 'ยังไม่ได้ใส่ OpenRouter API Key' : (e.invalidKey ? 'คีย์ OpenRouter ไม่ถูกต้อง: ' + e.message : e.message || 'เชื่อมต่อ OpenRouter ไม่สำเร็จ');
     } finally { btn.disabled = false; }
   });
-  $('#st-out', el).addEventListener('click', signOutUser);
+  $('#st-out', el).addEventListener('click', () => {
+    if (isPreviewMode()) exitPreviewMode();
+    else void signOutUser();
+  });
   $('#st-usda', el).value = getUsdaKey();
   $('#st-usda-save', el).addEventListener('click', () => { setUsdaKey($('#st-usda', el).value); $('#st-usda-status', el).textContent = ''; updateKeysSummary(); toast('บันทึกคีย์ USDA แล้ว'); });
   $('#st-usda-test', el).addEventListener('click', async () => {
@@ -230,8 +234,20 @@ export function mountSettings(el) {
   theme.addEventListener('change', () => applyTheme(theme.value));
   mountNavigationSettings($('#st-nav-customize', el));
   mountHomeWidgetSettings($('#st-home-widget-controls', el));
-  const pinState = $('#st-pin-state', el), updatePinState = () => { const active = hasDevicePin(state.uid); pinState.textContent = active ? 'เปิดใช้ PIN บนอุปกรณ์นี้แล้ว' : 'ยังไม่ได้ตั้ง PIN'; $('#st-lock-now', el).disabled = !active; $('#st-pin-remove', el).disabled = !active; };
+  const pinState = $('#st-pin-state', el), updatePinState = () => {
+    if (isPreviewMode()) {
+      pinState.textContent = 'โหมดดูตัวอย่าง: ต้องเข้าสู่ระบบ Google ก่อนตั้งค่า PIN';
+      $('#st-lock-now', el).disabled = true;
+      $('#st-pin-remove', el).disabled = true;
+      return;
+    }
+    const active = hasDevicePin(state.uid);
+    pinState.textContent = active ? 'เปิดใช้ PIN บนอุปกรณ์นี้แล้ว' : 'ยังไม่ได้ตั้ง PIN';
+    $('#st-lock-now', el).disabled = !active;
+    $('#st-pin-remove', el).disabled = !active;
+  };
   $('#st-pin-save', el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การตั้งค่า PIN ')) return;
     const pin = $('#st-pin', el).value, confirmPin = $('#st-pin-confirm', el).value;
     if (!/^\d{4}$/.test(pin)) return toast('PIN ต้องเป็นตัวเลข 4 หลัก', 'err');
     if (pin !== confirmPin) return toast('PIN ทั้งสองช่องไม่ตรงกัน', 'err');
@@ -239,7 +255,10 @@ export function mountSettings(el) {
     catch (error) { toast('ตั้ง PIN ไม่สำเร็จ: ' + error.message, 'err'); }
   });
   $('#st-lock-now', el).addEventListener('click', lockCurrentApp);
-  $('#st-pin-remove', el).addEventListener('click', () => { if (confirm('ปิด PIN บนอุปกรณ์นี้?')) { removeDevicePin(state.uid); updatePinState(); toast('ปิด PIN แล้ว'); } });
+  $('#st-pin-remove', el).addEventListener('click', () => {
+    if (guardPreviewWrite('การปิด PIN ')) return;
+    if (confirm('ปิด PIN บนอุปกรณ์นี้?')) { removeDevicePin(state.uid); updatePinState(); toast('ปิด PIN แล้ว'); }
+  });
   updatePinState();
   const sel = $('#st-remind', el);
   sel.value = String(getPeriodRemindDays());
@@ -391,5 +410,12 @@ export function mountSettings(el) {
 
 export function refreshAccount() {
   const el = $('#st-user');
+  const outBtn = $('#st-out');
+  if (isPreviewMode()) {
+    if (el) el.textContent = 'กำลังใช้งานโหมดดูตัวอย่าง (ไม่ได้เข้าสู่ระบบ · ข้อมูลจำลองชั่วคราว)';
+    if (outBtn) outBtn.textContent = 'กลับไปหน้าเข้าสู่ระบบ Google';
+    return;
+  }
   if (el) el.textContent = state.user ? `${state.user.displayName || ''} ${state.user.email ? '(' + state.user.email + ')' : ''}` : '';
+  if (outBtn) outBtn.textContent = 'ออกจากระบบ';
 }

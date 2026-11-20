@@ -2,6 +2,7 @@ import { CATEGORIES } from './categories.js';
 import { HOME_WIDGET_DEFS, getHomeWidgetConfig, saveHomeWidgetConfig } from './home.js';
 import { toast } from './util.js';
 import { iconSvg } from './icons.js';
+import { fluentEmojiSvg } from './fluentEmoji.js';
 
 function render(root, config) {
   root.innerHTML = `
@@ -28,7 +29,7 @@ function render(root, config) {
         <h4 class="text-sm font-semibold text-slate-700">ปักหมุดทางลัดบันทึกด่วน</h4>
         <p class="text-xs text-slate-500 mt-1">เลือกหมวดที่ต้องการให้แสดงในส่วนทางลัดบนหน้าแรก หากไม่เลือกจะแสดงทุกหมวด</p>
         <div class="nav-pref-list mt-2">
-          ${CATEGORIES.map(category => `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-widget-shortcut="${category.key}" ${config.pinnedShortcuts.includes(category.key) || config.pinnedShortcuts.includes(category.tab) ? 'checked' : ''}><span aria-hidden="true">${category.emoji}</span><span>${category.label}</span></label></div>`).join('')}
+          ${CATEGORIES.map(category => `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-widget-shortcut="${category.key}" ${config.pinnedShortcuts.includes(category.key) || config.pinnedShortcuts.includes(category.tab) ? 'checked' : ''}><span class="inline-flex items-center" aria-hidden="true">${fluentEmojiSvg(category.key, { size: 20 })}</span><span>${category.label}</span></label></div>`).join('')}
         </div>
       </div>
       <button type="button" id="st-home-widgets-reset" class="btn btn-ghost text-sm">รีเซ็ตหน้าแรกเป็นค่าเริ่มต้น</button>

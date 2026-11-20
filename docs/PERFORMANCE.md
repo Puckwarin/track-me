@@ -53,3 +53,17 @@
 - Entry หลัก (`1,035.97 kB` minified) ยังเกินคำเตือน Vite `500 kB` เนื่องจาก Firebase Auth/Firestore SDK ยังโหลดตั้งแต่เริ่มเพื่อคง data listeners และ offline cache หลัก
 - Vite ยังคงแจ้งเตือนเดิมว่า `src/workoutActive.js` ถูกทั้ง static และ dynamic import ภายใน `src/workout.js` (พฤติกรรมเดิมก่อน v4.8.0)
 - ค่าทั้งหมดเป็นผลจาก production build; ยังไม่ได้วัดเวลา FCP/LCP จริงบนอุปกรณ์มือถือหรือทดสอบ offline end-to-end กับบัญชี Firebase จริง
+
+---
+
+## ผลหลังอัปเดต v5.3.0 (Fluent Emoji Flat + Phosphor Duotone)
+
+เปลี่ยนจาก `lucide` เป็น **Fluent Emoji Flat** แบบคัดเฉพาะ 14 SVG ใน `src/fluentEmoji.js` และ **Phosphor Duotone** (`@phosphor-icons/core`) แบบ tree-shaken SVG ใน `src/icons.js` (ถอด `lucide`, `@fortawesome/fontawesome-free` และ `@iconify-json/fluent-emoji-flat` ออกจาก runtime dependencies) โดยยังคงใช้งานออฟไลน์และ precache ครบทั้งแอป
+
+| รายการ (`vite v6.4.6`) | v5.3.0 (ก่อนเปลี่ยนชุดไอคอน / `lucide`) | v5.3.0 (หลังเปลี่ยนเป็น Fluent Emoji + Phosphor Duotone) | เปลี่ยนแปลง |
+|---|---:|---:|---:|
+| JavaScript หลัก (`index`) minified | 1,133.04 kB | 1,188.71 kB | +55.67 kB |
+| JavaScript หลัก (`index`) gzip | 297.47 kB | 321.62 kB | +24.15 kB |
+| PWA precache | 49 รายการ / 6,509.88 KiB | 49 รายการ / 6,551.29 KiB | +41.41 KiB |
+
+- ขนาดเพิ่มขึ้น +24.15 kB (gzip) สำหรับไอคอนสองโทน ~109 ตัว + Fluent Emoji 14 ตัว โดยไม่มีการเรียกเครือข่ายหรือ CDN ภายนอก

@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, toNum, round1, toast } from './util.js';
 import { bodyLatest } from './body.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 export const ACTIVITY = [
   ['sedentary', 'นั่งทำงานเป็นหลัก แทบไม่ออกกำลังกาย', 1.2],
@@ -161,6 +162,7 @@ function preview() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกเป้าหมายและมื้ออาหาร')) return;
   readMeals();
   if (!enforceMinimums(true)) return;
   const p = draft();

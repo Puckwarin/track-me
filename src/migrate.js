@@ -1,6 +1,7 @@
 import { collection, getDocs, query, where, writeBatch, deleteDoc, doc } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
+import { guardPreviewWrite } from './preview.js';
 import { $, esc, toast } from './util.js';
 import { SANITIZERS } from './schema.js';
 import { iconSvg } from './icons.js';
@@ -20,6 +21,7 @@ export function mountMigrate(el) {
 }
 
 async function scan(el) {
+  if (guardPreviewWrite('การย้ายข้อมูล ')) return;
   const room = $('#mg-room', el).value.trim(), out = $('#mg-out', el);
   if (!room) return;
   out.textContent = 'กำลังตรวจสอบ...';

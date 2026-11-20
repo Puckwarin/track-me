@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './util.js';
 import { selectDate } from './symptoms.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
@@ -104,11 +105,15 @@ export function mountPeriod(el) {
   $('#p-body', root).addEventListener('click', e => {
     const end = e.target.closest('[data-end]'), del = e.target.closest('[data-del]');
     if (end) {
+      if (guardPreviewWrite('การอัปเดตวันสิ้นสุดรอบเดือน')) return;
       const p = state.period.find(i => i.id === end.dataset.end); if (!p) return;
       const d = localDateStr();
       updateDoc(userDoc(state.uid, 'period_records', p.id), { end: d < p.start ? p.start : d }).catch(err => toast(err.message, 'err'));
     }
-    if (del && confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (del) {
+      if (guardPreviewWrite('การลบบันทึกรอบเดือน')) return;
+      if (confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
+    }
   });
   render();
 }
@@ -184,6 +189,7 @@ export function render() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกรอบเดือน')) return;
   const start = $('#p-start', root).value, end = $('#p-end', root).value;
   if (!start) return toast('กรุณาเลือกวันแรกที่ประจำเดือนมา', 'err');
   if (end && end < start) return toast('วันสุดท้ายต้องไม่ก่อนวันแรก', 'err');

@@ -9,7 +9,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 export default defineConfig({
   base: BASE,
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version || '5.2.0')
+    __APP_VERSION__: JSON.stringify(pkg.version || '5.3.0')
   },
   server: {
     host: '0.0.0.0',

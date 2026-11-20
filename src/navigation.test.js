@@ -38,7 +38,7 @@ describe('navigation preferences', () => {
     const preferences = defaultNavigationPreferences();
     preferences.favorites = ['care', 'expense'];
     preferences.landingPage = 'weekly';
-    preferences.subnavOrder.health = ['report', 'overview', 'weekly', 'workout', 'period', 'symptoms', 'body'];
+    preferences.subnavOrder.health = ['body', 'overview', 'workout', 'period', 'symptoms'];
     expect(saveNavigationPreferences('user-1', preferences)).toBe(true);
     expect(readNavigationPreferences('user-1')).toMatchObject({
       customized: true,
@@ -62,13 +62,12 @@ describe('navigation preferences', () => {
     expect(preferences.landingPage).toBe('home');
     expect(preferences.hiddenTabs).toEqual(['report']);
     expect(getSubnavTabs('more', preferences).map(item => item.tab)).toEqual(['notifications', 'settings']);
-    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['overview', 'weekly', 'workout', 'period', 'symptoms', 'body']);
+    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['overview', 'workout', 'period', 'symptoms', 'body']);
   });
 
-  it('retains the active page in its submenu when it is hidden', () => {
+  it('keeps weekly summaries and reports accessible outside the compact health submenu', () => {
     const preferences = defaultNavigationPreferences();
-    preferences.hiddenTabs = ['report'];
-    expect(getSubnavTabs('health', preferences, 'report').map(item => item.tab)).toContain('report');
-    expect(getSubnavTabs('health', preferences).map(item => item.tab)).not.toContain('report');
+    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['overview', 'workout', 'period', 'symptoms', 'body']);
+    expect(getHomeShortcuts({ favorites: ['weekly', 'report'] }).map(item => item.tab)).toEqual(['weekly', 'report']);
   });
 });

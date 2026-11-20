@@ -24,7 +24,7 @@
   <!-- Login -->
   <div id="login-screen" class="min-h-screen flex items-center justify-center p-6">
     <div class="card cozy-hero max-w-sm w-full text-center space-y-5 !p-8">
-      <div class="logo-bubble mx-auto text-brand-dark" aria-hidden="true">
+      <div class="logo-bubble mx-auto text-brand-dark" aria-hidden="true" data-ph-icon="brand" data-ph-size="34">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7-4.35-9-8.65C1.45 8.5 3.65 5 7.2 5c2.05 0 3.7 1.05 4.8 2.6C13.1 6.05 14.75 5 16.8 5c3.55 0 5.75 3.5 4.2 6.85-2 4.3-9 8.65-9 8.65Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M7.5 12h2.2l1.4-2.4 1.9 4.4 1.4-2h2.1" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="space-y-1">
@@ -32,14 +32,21 @@
         <p class="text-sm text-slate-500">ดูแลตัวเองแบบสบาย ๆ ในที่เดียว</p>
       </div>
       <div class="flex justify-center gap-2" aria-hidden="true">
-        <span class="emoji-bubble icon-bubble cat-food"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9 6.5c0-1 .7-1.6.7-2.5M12.5 6.5c0-1 .7-1.6.7-2.5M16 6.5c0-1 .7-1.6.7-2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg></span>
-        <span class="emoji-bubble icon-bubble cat-workout"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6.5 8v8M17.5 8v8M4 9.8v4.4M20 9.8v4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="7" y="10.5" width="10" height="3" rx="1.2" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="1.7"/></svg></span>
-        <span class="emoji-bubble icon-bubble cat-period"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3.8C9 7.8 6 11.1 6 14.5a6 6 0 1 0 12 0c0-3.4-3-6.7-6-10.7Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/></svg></span>
-        <span class="emoji-bubble icon-bubble cat-body"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4.5" y="4" width="15" height="16" rx="3.5" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85"/><path d="M8.2 9.8a4.2 4.2 0 0 1 7.6 0H8.2Z" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/></svg></span>
-        <span class="emoji-bubble icon-bubble cat-care"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="7.2" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".24" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="6.8" r="1.6" fill="currentColor" fill-opacity=".24" stroke="currentColor" stroke-width="1.65"/><circle cx="16.8" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".24" stroke="currentColor" stroke-width="1.65"/><path d="M7.4 16.5c0-2.7 2.1-4.6 4.6-4.6s4.6 1.9 4.6 4.6c0 1.6-1.2 2.6-2.8 2.6-.7 0-1.2-.2-1.8-.2s-1.1.2-1.8.2c-1.6 0-2.8-1-2.8-2.6Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <span class="emoji-bubble icon-bubble cat-food" data-ph-icon="food" data-ph-size="20"></span>
+        <span class="emoji-bubble icon-bubble cat-workout" data-ph-icon="workout" data-ph-size="20"></span>
+        <span class="emoji-bubble icon-bubble cat-period" data-ph-icon="period" data-ph-size="20"></span>
+        <span class="emoji-bubble icon-bubble cat-body" data-ph-icon="body" data-ph-size="20"></span>
+        <span class="emoji-bubble icon-bubble cat-care" data-ph-icon="care" data-ph-size="20"></span>
       </div>
       <p class="text-xs text-slate-500">อาหาร ออกกำลังกาย ประจำเดือน น้ำหนัก และสัตว์เลี้ยง<br>ข้อมูลเป็นของคุณคนเดียว ผูกกับบัญชี Google</p>
       <button id="btn-google" class="btn btn-primary w-full justify-center !py-3"><b>G</b> เข้าสู่ระบบด้วย Google</button>
+      <div class="pt-0.5 space-y-1.5">
+        <button id="btn-preview" type="button" class="btn btn-soft w-full justify-center !py-2.5">
+          <span class="inline-flex" data-ph-icon="eye" data-ph-size="17" aria-hidden="true"></span>
+          <span>ดูตัวอย่างโดยไม่เข้าสู่ระบบ</span>
+        </button>
+        <p class="text-[11px] text-slate-500">สำรวจทุกหน้าด้วยข้อมูลจำลองชั่วคราว ไม่บันทึกเข้าบัญชีจริง</p>
+      </div>
       <p id="login-error" class="text-xs text-rose-600"></p>
       <p class="text-xs text-slate-400">ล็อกอินครั้งแรกต้องออนไลน์ หลังจากนั้นใช้งานออฟไลน์ได้</p>
       <p class="text-[11px] text-slate-400 tabular-nums">เวอร์ชัน <span class="tm-app-version"></span></p>
@@ -48,8 +55,7 @@
 
   <div id="app-lock" class="hidden fixed inset-0 z-[120] bg-app-bg flex items-center justify-center p-6">
     <form id="lock-form" class="card cozy-hero max-w-sm w-full text-center space-y-4 !p-8">
-      <div class="logo-bubble mx-auto text-brand-dark" aria-hidden="true">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.8" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.85"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg>
+      <div class="logo-bubble mx-auto text-brand-dark" aria-hidden="true" data-ph-icon="lock" data-ph-size="32">
       </div>
       <h1 class="text-xl font-bold text-slate-800">Track Me ถูกล็อกอยู่</h1>
       <p class="text-sm text-slate-500">กรอก PIN 4 หลักเพื่อเปิดแอปบนอุปกรณ์นี้</p>
@@ -66,44 +72,58 @@
     <header class="app-header sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 md:px-6 py-2.5 flex justify-between items-center gap-2">
         <button id="btn-logo" class="flex items-center gap-2.5 min-w-0" aria-label="ไปหน้าหลัก">
-          <span class="logo-bubble logo-sm text-brand-dark" aria-hidden="true">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7-4.35-9-8.65C1.45 8.5 3.65 5 7.2 5c2.05 0 3.7 1.05 4.8 2.6C13.1 6.05 14.75 5 16.8 5c3.55 0 5.75 3.5 4.2 6.85-2 4.3-9 8.65-9 8.65Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M7.5 12h2.2l1.4-2.4 1.9 4.4 1.4-2h2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </span>
+          <span class="logo-bubble logo-sm text-brand-dark" aria-hidden="true" data-ph-icon="brand" data-ph-size="19"></span>
           <span class="text-lg font-bold text-slate-800 truncate">Track Me</span>
         </button>
         <div class="flex items-center gap-1.5">
           <span class="sync-pill" title="สถานะการซิงค์"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="sync-dot"></span><span id="sync-text">กำลังเชื่อมต่อ...</span></span>
+          <button id="ai-chat-fab" type="button" class="icon-btn ai-chat-header-btn" data-lazy-managed="1" data-ph-icon="chat" data-ph-size="18" aria-label="เปิดผู้ช่วย AI Track Me" aria-expanded="false" aria-controls="ai-chat-drawer" title="ผู้ช่วย AI"></button>
           <button id="btn-bell" class="icon-btn relative" aria-label="แจ้งเตือน">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 10.5a5.5 5.5 0 1 1 11 0c0 3.7 1.3 5.1 2 5.8H4.5c.7-.7 2-2.1 2-5.8Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9.8 18.8a2.4 2.4 0 0 0 4.4 0" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg>
+            <span class="inline-flex" data-ph-icon="notifications" data-ph-size="18" aria-hidden="true"></span>
             <span id="bell-badge" class="bell-badge hidden"></span>
           </button>
-          <button id="btn-settings" class="icon-btn" aria-label="ตั้งค่า">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.1" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.8v2.1M12 18.1v2.1M4.9 7.9l1.8 1M17.3 15.1l1.8 1M4.9 16.1l1.8-1M17.3 8.9l1.8-1" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg>
-          </button>
+          <button id="btn-settings" class="icon-btn" data-ph-icon="settings" data-ph-size="18" aria-label="ตั้งค่า"></button>
         </div>
       </div>
     </header>
+    <div id="preview-banner" class="preview-banner hidden no-print" role="region" aria-label="โหมดดูตัวอย่าง">
+      <div class="preview-banner-inner">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="preview-badge">
+            <span class="inline-flex" data-ph-icon="eye" data-ph-size="13" aria-hidden="true"></span>
+            <span>โหมดดูตัวอย่าง</span>
+          </span>
+          <p class="text-xs text-slate-600 truncate sm:whitespace-normal">ข้อมูลจำลองเพื่อดูหน้าตาแอป · ไม่ได้ซิงค์หรือบันทึกลงบัญชีจริง</p>
+        </div>
+        <button id="btn-exit-preview" type="button" class="btn btn-primary !min-h-[38px] !py-1.5 !px-3.5 text-xs whitespace-nowrap shrink-0">เข้าสู่ระบบ Google</button>
+      </div>
+    </div>
     <nav id="desktop-nav" class="desktop-nav" aria-label="เมนูหลัก">
       <div class="rail-section-label hidden lg:block">เมนูหลัก</div>
       <button data-nav="home" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 10.6 12 4l8 6.6V19a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 19v-8.4Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9.75 20.8v-5.3a2.25 2.25 0 0 1 4.5 0v5.3" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg></span>
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="19"></span>
         <span>หน้าหลัก</span>
       </button>
       <button data-nav="food" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9 6.5c0-1 .7-1.6.7-2.5M12.5 6.5c0-1 .7-1.6.7-2.5M16 6.5c0-1 .7-1.6.7-2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg></span>
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="19"></span>
         <span>อาหาร / บันทึก</span>
       </button>
       <button data-nav="health" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85"/><path d="m7 14.5 3.1-3.4 2.7 2.4 4.2-4.7" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="19"></span>
         <span>สุขภาพ</span>
       </button>
       <button data-nav="care" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="7.2" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="6.8" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><circle cx="16.8" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><path d="M7.4 16.5c0-2.7 2.1-4.6 4.6-4.6s4.6 1.9 4.6 4.6c0 1.6-1.2 2.6-2.8 2.6-.7 0-1.2-.2-1.8-.2s-1.1.2-1.8.2c-1.6 0-2.8-1-2.8-2.6Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="19"></span>
         <span>ดูแล</span>
       </button>
       <button data-nav="more" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="13.2" y="4" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13.2" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="13.2" y="13.2" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="more" data-ph-size="19"></span>
         <span>เพิ่มเติม</span>
+      </button>
+      <button id="desktop-quick-add" type="button" class="desktop-nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet">
+        <span class="rail-ico" aria-hidden="true" data-ph-icon="plus" data-ph-size="18"></span>
+        <span class="hidden lg:inline">บันทึกด่วน</span>
+        <span class="lg:hidden">บันทึก</span>
       </button>
       <div class="rail-version" aria-label="เวอร์ชันเว็บแอป"><span class="tm-app-version"></span></div>
     </nav>
@@ -117,11 +137,11 @@
         <div class="card">
           <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
             <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span class="emoji-bubble icon-bubble emoji-sm cat-lab" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="12.5" width="3.5" height="7" rx="1.2" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="1.75"/><rect x="10.25" y="8" width="3.5" height="11.5" rx="1.2" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="1.75"/><rect x="16.5" y="4.5" width="3.5" height="15" rx="1.2" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="1.75"/></svg></span>
+              <span class="emoji-bubble icon-bubble emoji-sm cat-lab" aria-hidden="true" data-ph-icon="overview" data-ph-size="16"></span>
               <span>สรุปภาพรวมทั้งหมด</span>
             </h2>
             <button id="btn-copy-summary" class="chip bg-slate-100 text-slate-700">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5V6.8A2.3 2.3 0 0 0 13.2 4.5H6.8A2.3 2.3 0 0 0 4.5 6.8v6.4a2.3 2.3 0 0 0 2.3 2.3h1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span class="inline-flex" data-ph-icon="copy" data-ph-size="14" aria-hidden="true"></span>
               <span>คัดลอกสรุป</span>
             </button>
           </div>
@@ -133,7 +153,6 @@
     <main id="tab-food" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8"></main>
     <main id="tab-overview" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
     <main id="tab-workout" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8"></main>
-    <main id="tab-weekly" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
     <main id="tab-remind" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
     <main id="tab-expense" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
     <main id="tab-period" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
@@ -149,29 +168,23 @@
     <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">
       <div class="bottom-nav-inner">
         <button data-nav="home" class="nav-item">
-          <span class="nav-ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 10.6 12 4l8 6.6V19a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 19v-8.4Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9.75 20.8v-5.3a2.25 2.25 0 0 1 4.5 0v5.3" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg></span>
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="20"></span>
           <span>หน้าหลัก</span>
         </button>
         <button data-nav="food" class="nav-item">
-          <span class="nav-ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"/><path d="M9 6.5c0-1 .7-1.6.7-2.5M12.5 6.5c0-1 .7-1.6.7-2.5M16 6.5c0-1 .7-1.6.7-2.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"/></svg></span>
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="20"></span>
           <span>อาหาร</span>
         </button>
+        <button id="btn-quick-add" class="nav-plus" data-ph-icon="plus" data-ph-size="24" data-ph-class="nav-plus-svg" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
         <button data-nav="health" class="nav-item">
-          <span class="nav-ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.85"/><path d="m7 14.5 3.1-3.4 2.7 2.4 4.2-4.7" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="20"></span>
           <span>สุขภาพ</span>
         </button>
         <button data-nav="care" class="nav-item">
-          <span class="nav-ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="7.2" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="6.8" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><circle cx="16.8" cy="8.5" r="1.6" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.65"/><path d="M7.4 16.5c0-2.7 2.1-4.6 4.6-4.6s4.6 1.9 4.6 4.6c0 1.6-1.2 2.6-2.8 2.6-.7 0-1.2-.2-1.8-.2s-1.1.2-1.8.2c-1.6 0-2.8-1-2.8-2.6Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/></svg></span>
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="20"></span>
           <span>ดูแล</span>
         </button>
-        <button data-nav="more" class="nav-item">
-          <span class="nav-ico" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="13.2" y="4" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13.2" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/><rect x="13.2" y="13.2" width="6.8" height="6.8" rx="2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.8"/></svg></span>
-          <span>เพิ่มเติม</span>
-        </button>
       </div>
-      <button id="btn-quick-add" class="nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet">
-        <svg class="nav-plus-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg>
-      </button>
     </nav>
 
     <!-- แผ่นเลือกหมวดเพื่อบันทึกด่วน -->
@@ -180,22 +193,15 @@
         <div class="sheet-handle" aria-hidden="true"></div>
         <div class="flex items-center justify-between mb-4">
           <h2 id="quick-title" class="text-lg font-bold text-slate-800">วันนี้อยากบันทึกอะไรดี?</h2>
-          <button id="quick-close" class="icon-btn" aria-label="ปิด">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6.5 6.5 11 11m0-11-11 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
+          <button id="quick-close" class="icon-btn" data-ph-icon="close" data-ph-size="18" aria-label="ปิด"></button>
         </div>
         <div id="quick-grid" class="grid grid-cols-4 gap-3"></div>
       </div>
     </div>
 
-    <!-- ปุ่มลอยเลื่อนขึ้นบนสุด / ลงล่างสุด -->
-    <div id="scroll-fabs" class="scroll-fabs no-print" aria-label="ตัวช่วยเลื่อนหน้าจอ">
-      <button id="fab-top" type="button" class="fab-scroll-btn" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 18.5V5.5m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button id="fab-bottom" type="button" class="fab-scroll-btn" aria-label="เลื่อนลงล่างสุด" title="ลงล่างสุด">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5.5v13m0 0-5-5m5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+    <!-- ปุ่มลอยเลื่อนหน้าจออัตโนมัติ (ปุ่มเดียว ซ่อนเมื่อหน้าสั้นหรือหยุดเลื่อน) -->
+    <div id="scroll-fabs" class="scroll-fabs is-hidden no-print" aria-hidden="true">
+      <button id="fab-scroll" type="button" class="fab-scroll-btn" data-dir="top" data-ph-icon="arrow-up" data-ph-size="18" data-ph-class="fab-scroll-ico" tabindex="-1" aria-label="เลื่อนขึ้นบนสุด" title="ขึ้นบนสุด"></button>
     </div>
   </div>
 

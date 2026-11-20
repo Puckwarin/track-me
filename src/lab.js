@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } fro
 import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -124,7 +125,9 @@ export function mountLab(el) {
   });
   $('#lb-list', root).addEventListener('click', e => {
     const d = e.target.closest('[data-del]');
-    if (d && confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (!d) return;
+    if (guardPreviewWrite('การลบผลตรวจ')) return;
+    if (confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
   });
   render();
 }
@@ -204,6 +207,7 @@ async function onScanLabPhoto(e) {
       </div>`, { wide: true });
 
     $('#lbs-save', m.el).addEventListener('click', async () => {
+      if (guardPreviewWrite('การบันทึกผลตรวจจากรูปภาพ')) return;
       const date = $('#lbs-date', m.el).value;
       const globalNote = $('#lbs-note', m.el).value.trim();
       if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
@@ -287,6 +291,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
     </div>`, { wide: true });
 
   $('#lbb-save', m.el).addEventListener('click', () => {
+    if (guardPreviewWrite('การบันทึกผลตรวจเป็นชุด')) return;
     const date = $('#lbb-date', m.el).value;
     const note = $('#lbb-note', m.el).value.trim().slice(0, 200);
     if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
@@ -393,6 +398,7 @@ export function resetLabToToday() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกผลตรวจ')) return;
   const name = $('#lb-name', root).value.trim(), value = toNum($('#lb-value', root).value), date = $('#lb-date', root).value;
   if (!name || value === null || !date) return toast('กรอกวันที่ รายการตรวจ และผลที่ได้', 'err');
   const low = toNum($('#lb-low', root).value), high = toNum($('#lb-high', root).value);

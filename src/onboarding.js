@@ -1,6 +1,7 @@
 import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
+import { isPreviewMode } from './preview.js';
 import { $, toast, trapFocus } from './util.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { ACTIVITY, GOAL_PRESETS, refreshProfile } from './profile.js';
@@ -317,7 +318,7 @@ function handleNext() {
 
 export function mountOnboarding(user, profile) {
   const uid = user?.uid;
-  if (!uid || !shouldShowOnboarding({ uid, metadata: user.metadata, profile, progressStore })) {
+  if (!uid || isPreviewMode() || !shouldShowOnboarding({ uid, metadata: user.metadata, profile, progressStore })) {
     unmountOnboarding();
     return;
   }
