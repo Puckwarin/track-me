@@ -621,6 +621,8 @@ function clearFoodForm() {
   updateFoodPreview();
 }
 
+// ถ้าเมนูรู้น้ำหนักต่อหน่วย ผู้ใช้จะกรอกเป็นกรัมหรือจำนวนหน่วยก็ได้: ระบบใช้ขนาดของตัวเลขเดาโหมดเอง — เลข ≥ น้ำหนัก 1 หน่วย × 0.9 ถือเป็นกรัม เลขน้อยกว่านั้นถือเป็นจำนวนหน่วย
+// จำนวนหน่วยจริงที่จะบันทึก: ถ้าเมนูชั่งได้และค่าที่กรอกน่าจะเป็นกรัม ให้แปลงกลับเป็นหน่วย
 const formQty = () => foodQuantityFromInput(numField(root, 'f-qty'), base);
 
 function syncFoodWeightForm() {
@@ -684,6 +686,7 @@ function saveFood() {
     rec.edibleGrams = weighedGrams * rec.edibleFraction; rec.edibleUnitGrams = base.gramsPerUnit;
     rec.edibleFractionSource = base.edibleFractionSource || null;
   }
+  // ไม่ await: ตอนออฟไลน์ promise จะไม่จบจนกว่าจะซิงค์ แต่ข้อมูลถูกเก็บในเครื่องและแสดงทันที
   addFoodRecord(state.uid, rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   clearFoodForm();
 }
@@ -1019,91 +1022,6 @@ function setupFoodBodyGestures() {
   document.addEventListener('click', e => {
     if (!body.contains(e.target)) closeAllSwipes();
   });
-
-  const endPointer = e => {
-    if (pointerDrag && e.pointerId === pointerDrag.pointerId) {
-      const { id, row, ghost, targetMeal } = pointerDrag;
-      ghost.remove();
-      row.classList.remove('is-dragging');
-      setDropBarOpen(false);
-      pointerDrag = null;
-      if (targetMeal) moveFoodItemToMeal(id, targetMeal);
-      return;
-    }
-    if (!swipe || e.pointerId !== swipe.pointerId) return;
-    const { row, id, dx, locked, baseX } = swipe;
-    swipe = null;
-    row.classList.remove('is-swiping');
-    if (!locked) {
-      if (baseX < 0) {
-        row.classList.remove('is-open-left');
-        setSwipeX(row, 0);
-      }
-      return;
-    }
-    if (dx <= -56) {
-      row.classList.add('is-open-left');
-      setSwipeX(row, -136);
-    } else if (dx >= 68) {
-      row.classList.remove('is-open-left');
-      setSwipeX(row, 0);
-      void toggleFoodRecordFavorite(id);
-    } else {
-      row.classList.remove('is-open-left');
-      setSwipeX(row, 0);
-    }
-  };
-  window.addEventListener('pointerup', endPointer);
-  window.addEventListener('pointercancel', endPointer);
-  document.addEventListener('click', e => {
-    if (!body.contains(e.target)) closeAllSwipes();
-  });
-}
-
-function buildMealPieSvg(slices, totalKcal) {
-  const theme = typeof document !== 'undefined' ? document.documentElement?.dataset?.theme : 'baby-blue';
-  const sepStroke = theme === 'dark' ? '#182232' : (theme === 'cozy' ? '#FFFDF9' : (theme === 'pastel' ? '#FFFFFF' : '#F4F8FC'));
-  const emptyStroke = theme === 'dark' ? '#374966' : (theme === 'cozy' ? '#DFD0BF' : (theme === 'pastel' ? '#EAD8EA' : '#CBDCEB'));
-  const mutedText = theme === 'dark' ? '#98A9BE' : (theme === 'cozy' ? '#7C6858' : (theme === 'pastel' ? '#8B6B7E' : '#526277'));
-  const sliceTextFill = theme === 'dark' ? '#0F1622' : '#FFFFFF';
-
-  const active = slices.filter(s => s.kcal > 0);
-  if (!totalKcal || !active.length) {
-    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="ยังไม่มีข้อมูลพลังงานแต่ละมื้อ">
-      <circle cx="80" cy="80" r="64" fill="none" stroke="${emptyStroke}" stroke-width="2" stroke-dasharray="5 5"/>
-      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="700" fill="${mutedText}">0 kcal</text>
-      <text x="80" y="94" text-anchor="middle" font-size="9.5" fill="${mutedText}">ยังไม่บันทึก</text>
-    </svg>`;
-  }
-  const cx = 80, cy = 80, r = 66;
-  if (active.length === 1) {
-    const s = active[0];
-    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (100%)`;
-    const sub = `${s.count} รายการ`;
-    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมพลังงานแต่ละมื้อ">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><title>${esc(tip)}</title></circle>
-      <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="${sliceTextFill}" pointer-events="none">100%</text>
-    </svg>`;
-  }
-  let angle = -Math.PI / 2;
-  const paths = active.map(s => {
-    const sweep = (s.kcal / totalKcal) * Math.PI * 2;
-    const x1 = cx + r * Math.cos(angle);
-    const y1 = cy + r * Math.sin(angle);
-    const nextAngle = angle + sweep;
-    const x2 = cx + r * Math.cos(nextAngle);
-    const y2 = cy + r * Math.sin(nextAngle);
-    const largeArc = sweep > Math.PI ? 1 : 0;
-    const mid = angle + sweep / 2;
-    const share = Math.round((s.kcal / totalKcal) * 100);
-    const lx = cx + r * 0.6 * Math.cos(mid);
-    const ly = cy + r * 0.6 * Math.sin(mid);
-    angle = nextAngle;
-    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (${share}%)`;
-    const sub = `${s.count} รายการ`;
-    return `<g tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" stroke-linejoin="round"><title>${esc(tip)}</title></path>${share >= 10 ? `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${sliceTextFill}" pointer-events="none">${share}%</text>` : ''}</g>`;
-  }).join('');
-  return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมสัดส่วนพลังงานแต่ละมื้อ">${paths}</svg>`;
 }
 
 function buildMealPieSvg(slices, totalKcal) {
@@ -1158,7 +1076,7 @@ function editFoodQuantity(id) {
   const isGrams = item.portionUnit === 'g' && item.gramsPerUnit === 1;
   const currentQuantity = foodLogQuantity(item);
   const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
-  const unitG = !isGross && !isGrams && inferredGrams > 0 ? inferredGrams : 1;
+  const unitG = !isGross && !isGrams && inferredGrams > 0 ? inferredGrams : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">แก้จำนวนอาหาร</h3><button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
@@ -1383,6 +1301,7 @@ function renderDay() {
   }
 }
 
+// ---------- Gemini: photo / online search ----------
 function saveCurrentToLibrary() {
   const name = foodLogName($('#f-name', root).value.trim());
   const calories = numField(root, 'f-cal');
@@ -1471,6 +1390,7 @@ function setFoodScanStatus(text, tone = 'busy') {
   else el.classList.add('text-slate-500');
 }
 
+// ---------- Unified multi-image scan (Barcode -> Label / Dish) ----------
 async function scanSingleFoodFile(file, { signal } = {}) {
   if ('BarcodeDetector' in window) {
     let code = null;
@@ -1582,17 +1502,17 @@ function openBatchFoodScanModal(results, errors) {
           </label>
           ${d.notes ? `<p class="text-[11px] text-slate-500">${esc(d.notes)}</p>` : ''}
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
-            <div class="sm:col-span-2"><label class="lbl">ชื่อเมนู *</label><input class="input bfs-name font-semibold" value="${esc(d.name || '')}"></div>
-            <div><label class="lbl">จำนวน</label><input type="number" step="0.1" min="0.1" inputmode="decimal" class="input bfs-qty" value="1"></div>
-            <div><label class="lbl">หน่วย</label><input class="input bfs-unit" value="${esc(d.unit || 'หน่วย')}"></div>
+            <div class="sm:col-span-2"><label class="lbl">ชื่อเมนู *</label><input class="input bfs-name text-xs font-semibold" value="${esc(d.name || '')}"></div>
+            <div><label class="lbl">จำนวน</label><input type="number" step="0.1" min="0.1" class="input bfs-qty text-xs" value="1"></div>
+            <div><label class="lbl">หน่วย</label><input class="input bfs-unit text-xs" value="${esc(d.unit || 'หน่วย')}"></div>
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <div><label class="lbl">kcal *</label><input type="number" min="0" step="1" inputmode="decimal" class="input bfs-cal" value="${esc(d.calories)}"></div>
-            <div><label class="lbl">P (g)</label><input type="number" min="0" step="0.1" inputmode="decimal" class="input bfs-pro" value="${esc(d.protein)}"></div>
-            <div><label class="lbl">C (g)</label><input type="number" min="0" step="0.1" inputmode="decimal" class="input bfs-carb" value="${esc(d.carbs)}"></div>
-            <div><label class="lbl">F (g)</label><input type="number" min="0" step="0.1" inputmode="decimal" class="input bfs-fat" value="${esc(d.fat)}"></div>
-            <div><label class="lbl">น้ำตาล</label><input type="number" min="0" step="0.1" inputmode="decimal" class="input bfs-sugar" value="${esc(d.sugar)}"></div>
-            <div><label class="lbl">โซเดียม</label><input type="number" min="0" step="1" inputmode="decimal" class="input bfs-sodium" value="${esc(d.sodium)}"></div>
+          <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-xs">
+            <div><label class="lbl">kcal *</label><input type="number" min="0" step="1" class="input bfs-cal !py-1" value="${esc(d.calories)}"></div>
+            <div><label class="lbl">P (g)</label><input type="number" min="0" step="0.1" class="input bfs-pro !py-1" value="${esc(d.protein)}"></div>
+            <div><label class="lbl">C (g)</label><input type="number" min="0" step="0.1" class="input bfs-carb !py-1" value="${esc(d.carbs)}"></div>
+            <div><label class="lbl">F (g)</label><input type="number" min="0" step="0.1" class="input bfs-fat !py-1" value="${esc(d.fat)}"></div>
+            <div><label class="lbl">น้ำตาล</label><input type="number" min="0" step="0.1" class="input bfs-sugar !py-1" value="${esc(d.sugar)}"></div>
+            <div><label class="lbl">โซเดียม</label><input type="number" min="0" step="1" class="input bfs-sodium !py-1" value="${esc(d.sodium)}"></div>
           </div>
         </div>`;
       }).join('')}
@@ -1745,6 +1665,8 @@ async function onUnifiedScan(e) {
   }
 }
 
+
+// ---------- Custom food library ----------
 export function openLibrary(onPick) {
   const meals = getMeals();
   const currentMealId = $('#f-meal', root)?.value || meals[0]?.id || '';
@@ -1753,9 +1675,9 @@ export function openLibrary(onPick) {
     <div class="flex flex-col sm:flex-row gap-2 mb-2"><input id="lib-q" class="input" placeholder="ค้นหาชื่อเมนู..."><select id="lib-category" class="input sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select><button id="lib-add" class="btn btn-primary whitespace-nowrap">${iconSvg('plus', { size: 15 })} เพิ่มเมนู</button></div>
     <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
       <span class="text-slate-500">วันที่เพิ่มเมนู:</span>
-      <input id="lib-from" type="date" class="input !w-auto" aria-label="ตั้งแต่วันที่">
+      <input id="lib-from" type="date" class="input !w-auto !py-1 text-xs" aria-label="ตั้งแต่วันที่">
       <span class="text-slate-400">–</span>
-      <input id="lib-to" type="date" class="input !w-auto" aria-label="ถึงวันที่">
+      <input id="lib-to" type="date" class="input !w-auto !py-1 text-xs" aria-label="ถึงวันที่">
       <button id="lib-date-clear" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างวันที่</button>
     </div>
     <div id="lib-bulk" class="space-y-2 mb-3 rounded-xl bg-slate-50 border border-slate-100 p-2.5 text-sm">
@@ -1763,12 +1685,12 @@ export function openLibrary(onPick) {
         <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700"><input id="lib-select-visible" type="checkbox" class="accent-violet-500"> เลือกทั้งหมดที่แสดง (<span id="lib-visible-count">0</span>)</label>
         <span class="text-xs text-slate-500">เลือกแล้ว <b id="lib-selected-count">0</b></span>
         <div class="flex items-center gap-1.5 ml-auto">
-          <select id="lib-add-meal" class="input !w-auto" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+          <select id="lib-add-meal" class="input !w-auto !py-1.5 !px-2 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
           <button id="lib-add-to-meal" class="chip bg-ok-soft text-green-800 !px-3 !py-2 text-xs font-semibold" disabled>${iconSvg('plus', { size: 13 })} เพิ่มที่เลือกลงมื้อ</button>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/70">
-        <select id="lib-bulk-category" class="input !w-auto min-w-36"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+        <select id="lib-bulk-category" class="input !w-auto min-w-36 !py-1.5 text-xs"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <button id="lib-change-category" class="chip bg-sky-soft text-blue-700 !px-2.5 !py-1.5 text-xs" disabled>แก้หมวดหมู่</button>
         <button id="lib-delete-selected" class="chip bg-pink-soft text-rose-600 !px-2.5 !py-1.5 text-xs" disabled>ลบเมนูที่เลือก</button>
       </div>
@@ -2036,7 +1958,7 @@ function openQuickBulkFoodLog() {
       <label class="lbl !mb-0">ข้อความรายการอาหาร</label>
       <button id="qb-sample" type="button" class="text-xs text-brand underline">ใส่ตัวอย่าง</button>
     </div>
-    <textarea id="qb-input" class="input min-h-36" placeholder="วางรายการอาหารหลายบรรทัดที่นี่..." spellcheck="false"></textarea>
+    <textarea id="qb-input" class="input min-h-36 font-mono text-xs" placeholder="วางรายการอาหารหลายบรรทัดที่นี่..." spellcheck="false"></textarea>
     <div id="qb-preview" class="mt-3 max-h-60 overflow-y-auto"></div>
     <label class="flex items-center gap-2 text-xs text-slate-600 mt-3"><input id="qb-save-lib" type="checkbox"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
     <div class="flex justify-end gap-2 mt-4">
