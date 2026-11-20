@@ -33,7 +33,7 @@ export { guessFoodCategory };
 export { openFoodEditor, openFoodHistorySearch };
 export { getPresets } from './foodConstants.js';
 
-let root, items = [], base = null;
+let root, items = [], base = null;   // base = ค่าต่อ 1 หน่วยของเมนูที่เลือกจากคลัง
 let lastCustomFoodsSnapshot = new Map();
 let lastTrackedUid = null;
 const selectedFoodIds = new Set();
@@ -139,7 +139,7 @@ export function mountFood(el) {
         <div id="f-bulk-bar" class="hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex flex-wrap items-center gap-2 text-xs">
           <label class="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="accent-violet-500"> เลือกทั้งหมด</label>
           <span class="text-slate-500">เลือกแล้ว <b id="f-sel-count">0</b></span>
-          <select id="f-bulk-meal" class="input !w-auto !py-1.5 !px-2 ml-auto" aria-label="มื้อปลายทาง"></select>
+          <select id="f-bulk-meal" class="input !w-auto !py-1.5 !px-2 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
           <button id="f-bulk-move" type="button" class="chip bg-sky-soft text-blue-700 font-semibold" disabled>${iconSvg('swap', { size: 14 })} ย้ายไปมื้อนี้</button>
         </div>
         <div id="f-drag-targets" class="tm-drag-drop-bar hidden" aria-label="วางเพื่อย้ายไปมื้ออื่น"></div>
@@ -512,6 +512,7 @@ function handleCustomFoodsUpdate() {
 
   if (!changedPairs.length) return;
 
+  // 1) อัปเดตเมนูที่เลือกค้างไว้ในฟอร์มบันทึกอาหาร (คงปริมาณ/น้ำหนักที่กรอกไว้)
   if (base?.id) {
     const activeMatch = changedPairs.find(pair => pair.updated.id === base.id);
     if (activeMatch) {
@@ -519,6 +520,7 @@ function handleCustomFoodsUpdate() {
     }
   }
 
+  // 2) อัปเดตรายการอาหารที่บันทึก/เลือกไว้แล้วในวันที่กำลังดูอยู่
   if (!state.uid || !items.length) return;
   const pendingUpdates = [];
   for (const item of items) {
@@ -853,6 +855,7 @@ function setupFoodBodyGestures() {
     else row.removeAttribute('data-swipe-dir');
   };
 
+  // HTML5 Drag & Drop (เดสก์ท็อป)
   body.addEventListener('dragstart', e => {
     const row = e.target.closest('.tm-swipe-row');
     if (!row) return;
@@ -903,10 +906,11 @@ function setupFoodBodyGestures() {
     });
   });
 
+  // Pointer Drag บนมือถือ/ทัชผ่านไอคอนจับลาก [data-drag-handle]
   body.addEventListener('pointerdown', e => {
     const handle = e.target.closest('[data-drag-handle]');
     if (handle) {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse') return; // เมาส์ใช้ HTML5 dragstart ได้ตรง ๆ
       const row = handle.closest('.tm-swipe-row');
       if (!row) return;
       e.preventDefault();
@@ -1015,6 +1019,45 @@ function setupFoodBodyGestures() {
   document.addEventListener('click', e => {
     if (!body.contains(e.target)) closeAllSwipes();
   });
+
+  const endPointer = e => {
+    if (pointerDrag && e.pointerId === pointerDrag.pointerId) {
+      const { id, row, ghost, targetMeal } = pointerDrag;
+      ghost.remove();
+      row.classList.remove('is-dragging');
+      setDropBarOpen(false);
+      pointerDrag = null;
+      if (targetMeal) moveFoodItemToMeal(id, targetMeal);
+      return;
+    }
+    if (!swipe || e.pointerId !== swipe.pointerId) return;
+    const { row, id, dx, locked, baseX } = swipe;
+    swipe = null;
+    row.classList.remove('is-swiping');
+    if (!locked) {
+      if (baseX < 0) {
+        row.classList.remove('is-open-left');
+        setSwipeX(row, 0);
+      }
+      return;
+    }
+    if (dx <= -56) {
+      row.classList.add('is-open-left');
+      setSwipeX(row, -136);
+    } else if (dx >= 68) {
+      row.classList.remove('is-open-left');
+      setSwipeX(row, 0);
+      void toggleFoodRecordFavorite(id);
+    } else {
+      row.classList.remove('is-open-left');
+      setSwipeX(row, 0);
+    }
+  };
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
+  document.addEventListener('click', e => {
+    if (!body.contains(e.target)) closeAllSwipes();
+  });
 }
 
 function buildMealPieSvg(slices, totalKcal) {
@@ -1059,6 +1102,51 @@ function buildMealPieSvg(slices, totalKcal) {
     const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (${share}%)`;
     const sub = `${s.count} รายการ`;
     return `<g tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" stroke-linejoin="round"><title>${esc(tip)}</title></path>${share >= 10 ? `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${sliceTextFill}" pointer-events="none">${share}%</text>` : ''}</g>`;
+  }).join('');
+  return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมสัดส่วนพลังงานแต่ละมื้อ">${paths}</svg>`;
+}
+
+function buildMealPieSvg(slices, totalKcal) {
+  const theme = typeof document !== 'undefined' ? document.documentElement?.dataset?.theme : 'baby-blue';
+  const sepStroke = theme === 'dark' ? '#182232' : (theme === 'cozy' ? '#FFFDF9' : '#FFFFFF');
+  const emptyStroke = theme === 'dark' ? '#374966' : (theme === 'cozy' ? '#DFD0BF' : (theme === 'pastel' ? '#EAD8EA' : '#CBDCEB'));
+  const mutedText = theme === 'dark' ? '#98A9BE' : (theme === 'cozy' ? '#7C6858' : '#64748b');
+
+  const active = slices.filter(s => s.kcal > 0);
+  if (!totalKcal || !active.length) {
+    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="ยังไม่มีข้อมูลพลังงานแต่ละมื้อ">
+      <circle cx="80" cy="80" r="64" fill="none" stroke="${emptyStroke}" stroke-width="2" stroke-dasharray="5 5"/>
+      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="700" fill="${mutedText}">0 kcal</text>
+      <text x="80" y="94" text-anchor="middle" font-size="9.5" fill="${mutedText}">ยังไม่บันทึก</text>
+    </svg>`;
+  }
+  const cx = 80, cy = 80, r = 66;
+  if (active.length === 1) {
+    const s = active[0];
+    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (100%)`;
+    const sub = `${s.count} รายการ`;
+    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมพลังงานแต่ละมื้อ">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><title>${esc(tip)}</title></circle>
+      <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" pointer-events="none">100%</text>
+    </svg>`;
+  }
+  let angle = -Math.PI / 2;
+  const paths = active.map(s => {
+    const sweep = (s.kcal / totalKcal) * Math.PI * 2;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    const nextAngle = angle + sweep;
+    const x2 = cx + r * Math.cos(nextAngle);
+    const y2 = cy + r * Math.sin(nextAngle);
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    const mid = angle + sweep / 2;
+    const share = Math.round((s.kcal / totalKcal) * 100);
+    const lx = cx + r * 0.6 * Math.cos(mid);
+    const ly = cy + r * 0.6 * Math.sin(mid);
+    angle = nextAngle;
+    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (${share}%)`;
+    const sub = `${s.count} รายการ`;
+    return `<g tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" stroke-linejoin="round"><title>${esc(tip)}</title></path>${share >= 10 ? `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#ffffff" pointer-events="none">${share}%</text>` : ''}</g>`;
   }).join('');
   return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมสัดส่วนพลังงานแต่ละมื้อ">${paths}</svg>`;
 }

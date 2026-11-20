@@ -1,6 +1,7 @@
 import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
+import { isPreviewMode } from './preview.js';
 import { getPeriodRemindDays } from './period.js';
 import { toast } from './util.js';
 
@@ -59,7 +60,7 @@ export function getPushHideDetails() {
 }
 
 export async function setPushHideDetails(hide) {
-  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  if (!state.uid || isPreviewMode()) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อนตั้งค่าการแจ้งเตือน');
   const next = Boolean(hide);
   setDoc(userDoc(state.uid, 'settings', 'push'), {
     hideDetails: next,
@@ -88,7 +89,7 @@ export async function getPushStatus() {
 }
 
 export async function enablePushNotifications(customVapidKey) {
-  if (!state.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  if (!state.uid || isPreviewMode()) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อนเปิดรับแจ้งเตือน');
   if (isIosDevice() && !isStandalonePwa()) {
     throw new Error('บน iPhone/iPad ต้องกดปุ่ม แชร์ (Share) → เพิ่มไปยังหน้าจอโฮม (Add to Home Screen) แล้วเปิดจากไอคอนบนหน้าจอก่อนจึงจะรับ Push Notification ได้');
   }
@@ -142,7 +143,7 @@ export async function enablePushNotifications(customVapidKey) {
 }
 
 export async function disablePushForThisDevice() {
-  if (!state.uid) return;
+  if (!state.uid || isPreviewMode()) return;
   const sub = await getCurrentBrowserSubscription();
   const endpoint = sub?.endpoint || null;
   if (sub) {
@@ -159,7 +160,7 @@ export async function disablePushForThisDevice() {
 }
 
 export async function syncPeriodRemindToPush() {
-  if (!state.uid || !state.pushSettings?.subscriptions?.length) return;
+  if (!state.uid || isPreviewMode() || !state.pushSettings?.subscriptions?.length) return;
   setDoc(userDoc(state.uid, 'settings', 'push'), {
     periodRemindDays: getPeriodRemindDays(),
     updatedAt: new Date()

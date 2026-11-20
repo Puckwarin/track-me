@@ -21,6 +21,9 @@ export function applyTheme(theme) {
           ? '#FAF6F0'
           : '#F4F8FC';
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('trackme:theme', { detail: { theme: selected } }));
+  }
 }
 
 try { applyTheme(localStorage.getItem('trackme-theme') || 'baby-blue'); } catch {}

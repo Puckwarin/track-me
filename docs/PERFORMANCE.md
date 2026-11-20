@@ -53,3 +53,17 @@
 - Entry หลัก (`1,035.97 kB` minified) ยังเกินคำเตือน Vite `500 kB` เนื่องจาก Firebase Auth/Firestore SDK ยังโหลดตั้งแต่เริ่มเพื่อคง data listeners และ offline cache หลัก
 - Vite ยังคงแจ้งเตือนเดิมว่า `src/workoutActive.js` ถูกทั้ง static และ dynamic import ภายใน `src/workout.js` (พฤติกรรมเดิมก่อน v4.8.0)
 - ค่าทั้งหมดเป็นผลจาก production build; ยังไม่ได้วัดเวลา FCP/LCP จริงบนอุปกรณ์มือถือหรือทดสอบ offline end-to-end กับบัญชี Firebase จริง
+
+---
+
+## ผลหลังอัปเดต v5.3.0 (Phosphor Duotone ทั้งแอป)
+
+เปลี่ยนจาก `lucide` เป็น **Phosphor Duotone** (`@phosphor-icons/core`) แบบ tree-shaken inline SVG ใน `src/icons.js` สำหรับทั้งเมนู หมวดหมู่ ทางลัด แผ่น `+` และ UI ทั่วทั้งแอป (ถอด `src/fluentEmoji.js`, `lucide`, `@fortawesome/fontawesome-free` และ `@iconify-json/fluent-emoji-flat` ออก) โดยยังคงใช้งานออฟไลน์และ precache ครบทั้งแอป
+
+| รายการ (`vite v6.4.6`) | v5.3.0 (ก่อนเปลี่ยนชุดไอคอน / `lucide`) | v5.3.0 (หลังปรับเป็น Phosphor Duotone ทั้งแอป) | เปลี่ยนแปลง |
+|---|---:|---:|---:|
+| JavaScript หลัก (`index`) minified | 1,133.04 kB | 1,167.67 kB | +34.63 kB |
+| JavaScript หลัก (`index`) gzip | 297.47 kB | 312.04 kB | +14.57 kB |
+| PWA precache | 49 รายการ / 6,509.88 KiB | 49 รายการ / 6,530.35 KiB | +20.47 KiB |
+
+- ขนาดเพิ่มขึ้น +14.57 kB (gzip) สำหรับชุดไอคอน Phosphor Duotone ทั้งแอปโดยไม่มีการเรียกเครือข่ายหรือ CDN ภายนอก

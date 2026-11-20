@@ -1,6 +1,7 @@
 import { setDoc, updateDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
+import { isPreviewMode } from './preview.js';
 import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
@@ -8,24 +9,19 @@ import { iconSvg } from './icons.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const DEFAULT_ALT_ANCHOR = '2026-01-05'; // วันจันทร์อ้างอิงสำหรับสลับสัปดาห์ A / B
-const ROUTINE_PRESETS = [
-  ['🍽️', 'ล้างจาน'],
-  ['💪', 'ออกกำลังกายตามแผน'],
-  ['🥤', 'ล้างแก้ว'],
-  ['💧', 'เติมน้ำดื่ม'],
-  ['🐾', 'เติมน้ำ/อาหารสัตว์เลี้ยง'],
-  ['🧴', 'ทาครีมบำรุง / กันแดด'],
-  ['💊', 'กินวิตามิน / ยา'],
-  ['🧺', 'ซัก/พับผ้า'],
-  ['🧹', 'กวาด/จัดห้อง']
+const DAY_PRESETS = [
+  { key: 'mwfs', label: 'จ พ ศ อา', days: [0, 2, 4, 6] },
+  { key: 'tts', label: 'อ พฤ ส', days: [1, 3, 5] },
+  { key: 'all', label: 'ทุกวัน', days: [0, 1, 2, 3, 4, 5, 6] },
+  { key: 'wd', label: 'จ–ศ', days: [0, 1, 2, 3, 4] },
+  { key: 'we', label: 'ส–อา', days: [5, 6] }
 ];
 
 let root;
 let goFn = () => {};
-let weekOffset = 0; // 0 = สัปดาห์นี้, 1 = สัปดาห์ถัดไป
-let viewMode = 'day'; // 'day' | 'week'
 let selectedDate = localDateStr();
-
+let shouldCenterStrip = true;
+let docClickBound = false;
 
 function weekdayIdx(dateStr) {
   return (parseLocal(dateStr).getDay() + 6) % 7; // 0 = จ ... 6 = อา
@@ -88,53 +84,66 @@ export function inferRoutineEmoji(title = '', currentIcon = '') {
   return '✅';
 }
 
-export function getRecentCompletedRoutines(planner = {}, limit = 10) {
+// จัดอันดับกิจกรรมจากที่ทำบ่อยและล่าสุด (doneMap + recentDone)
+export function getFrequentRecentRoutines(planner = {}, limit = 10) {
   const routines = Array.isArray(planner?.routines) ? planner.routines : [];
   const byId = new Map(routines.map(r => [r.id, r]));
   const doneMap = planner?.doneMap && typeof planner.doneMap === 'object' ? planner.doneMap : {};
   const recorded = Array.isArray(planner?.recentDone) ? planner.recentDone : [];
 
-  const candidates = [];
-  for (const item of recorded) {
-    if (!item?.title) continue;
-    candidates.push({
-      id: item.id || '',
-      title: String(item.title).trim(),
-      icon: inferRoutineEmoji(item.title, item.icon),
-      date: isDateStr(item.date) ? item.date : ''
-    });
-  }
+  const stats = new Map();
+  const touch = (title, rawIcon, date, id = '') => {
+    const clean = String(title || '').trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    const icon = inferRoutineEmoji(clean, rawIcon);
+    let entry = stats.get(key);
+    if (!entry) {
+      entry = { id, title: clean, icon, date: '', count: 0, dates: new Set() };
+      stats.set(key, entry);
+    } else if (icon !== '✅' && entry.icon === '✅') {
+      entry.icon = icon;
+    }
+    if (isDateStr(date)) {
+      if (!entry.dates.has(date)) {
+        entry.dates.add(date);
+        entry.count += 1;
+      }
+      if (!entry.date || date > entry.date) entry.date = date;
+    } else if (entry.count === 0) {
+      entry.count = 1;
+    }
+  };
 
-  const datesDesc = Object.keys(doneMap).filter(isDateStr).sort((a, b) => b.localeCompare(a));
-  for (const d of datesDesc) {
-    const ids = Array.isArray(doneMap[d]) ? [...doneMap[d]].reverse() : [];
+  for (const d of Object.keys(doneMap).filter(isDateStr).sort((a, b) => b.localeCompare(a))) {
+    const ids = Array.isArray(doneMap[d]) ? doneMap[d] : [];
     for (const id of ids) {
       const r = byId.get(id);
-      if (!r?.title) continue;
-      candidates.push({
-        id: r.id,
-        title: String(r.title).trim(),
-        icon: inferRoutineEmoji(r.title, r.icon),
-        date: d
-      });
+      if (r?.title) touch(r.title, r.icon, d, r.id);
     }
   }
 
-  const seen = new Set();
-  const unique = [];
-  for (const c of candidates) {
-    const key = c.title.toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(c);
-    if (unique.length >= limit) break;
+  for (const item of recorded) {
+    if (!item?.title) continue;
+    touch(item.title, item.icon, isDateStr(item.date) ? item.date : '', item.id || '');
   }
-  return unique;
+
+  return [...stats.values()]
+    .sort((a, b) => (b.count - a.count) || b.date.localeCompare(a.date) || a.title.localeCompare(b.title, 'th'))
+    .slice(0, limit)
+    .map(({ id, title, icon, date, count }) => ({ id, title, icon, date, count }));
+}
+
+export const getRecentCompletedRoutines = getFrequentRecentRoutines;
+
+export function matchingDayPreset(daysSet) {
+  const sorted = [...daysSet].sort((a, b) => a - b).join(',');
+  return DAY_PRESETS.find(p => p.days.join(',') === sorted)?.key || 'custom';
 }
 
 export function resetPlannerToToday() {
-  weekOffset = 0;
   selectedDate = localDateStr();
+  shouldCenterStrip = true;
 }
 
 function getPlanner() {
@@ -165,6 +174,10 @@ async function savePlanner(next) {
   };
   state.planner = { id: 'planner', ...payload };
   renderPlanner();
+  if (isPreviewMode()) {
+    window.dispatchEvent(new Event('trackme:data-change'));
+    return;
+  }
   try {
     setDoc(userDoc(state.uid, 'settings', 'planner'), payload)
       .catch(e => toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err'));
@@ -175,7 +188,7 @@ async function savePlanner(next) {
 
 // Planner รวมเฉพาะ 2 กลุ่มงาน:
 // (ก) ตารางออกกำลังกายที่วางแผนไว้ในวันนั้นๆ
-// (ข) กิจวัตรประจำวัน/งานบ้านที่ตั้งค่าทำซ้ำได้ (ทั้งทุกสัปดาห์ และสลับสัปดาห์ A/B อัตโนมัติ)
+// (ข) กิจกรรมประจำวัน/งานบ้านที่ตั้งค่าทำซ้ำได้ (ทั้งวันเดียว ทุกสัปดาห์ และสลับสัปดาห์ A/B อัตโนมัติ)
 export function itemsForDate(dateStr) {
   const { routines, doneMap, altAnchor } = getPlanner();
   const doneSet = new Set(doneMap[dateStr] || []);
@@ -205,12 +218,12 @@ export function itemsForDate(dateStr) {
       weekPattern: r.weekPattern || 'every',
       date: r.date || '',
       sub: r.weekPattern === 'once'
-        ? 'เฉพาะวันนี้ (ไม่ทำซ้ำ)'
+        ? 'เฉพาะวันนี้'
         : r.weekPattern === 'A'
           ? 'สลับสัปดาห์ (รอบ A)'
           : r.weekPattern === 'B'
             ? 'สลับสัปดาห์ (รอบ B)'
-            : 'กิจวัตรประจำสัปดาห์'
+            : 'กิจกรรมประจำสัปดาห์'
     }));
 
   return [...workouts, ...dayRoutines];
@@ -238,41 +251,27 @@ export function mountPlanner(el, navigate) {
   root = el;
   goFn = navigate || (() => {});
 
-  root.addEventListener('click', async e => {
-    const stepBtn = e.target.closest('[data-pl-step]');
-    if (stepBtn) {
-      weekOffset = Math.max(-8, Math.min(12, weekOffset + (Number(stepBtn.dataset.plStep) || 0)));
-      const mon = addDays(mondayOf(localDateStr()), weekOffset * 7);
-      const sun = addDays(mon, 6);
-      const today = localDateStr();
-      selectedDate = today >= mon && today <= sun ? today : mon;
-      renderPlanner();
-      return;
-    }
+  if (!docClickBound && typeof document !== 'undefined') {
+    docClickBound = true;
+    document.addEventListener('click', e => {
+      const menu = root?.isConnected ? $('#pl-plan-menu', root) : null;
+      if (menu?.open && !menu.contains(e.target)) {
+        menu.open = false;
+      }
+    });
+  }
 
-    const wkBtn = e.target.closest('[data-pl-week]');
-    if (wkBtn) {
-      weekOffset = Number(wkBtn.dataset.plWeek) || 0;
-      const mon = addDays(mondayOf(localDateStr()), weekOffset * 7);
-      const sun = addDays(mon, 6);
-      const today = localDateStr();
-      selectedDate = today >= mon && today <= sun ? today : mon;
-      renderPlanner();
-      return;
-    }
+  root.addEventListener('click', async e => {
+    const menu = $('#pl-plan-menu', root);
+    const closePlanMenu = () => {
+      if (menu) menu.open = false;
+    };
 
     if (e.target.closest('[data-pl-flip-parity]')) {
       const p = getPlanner();
       const nextAnchor = p.altAnchor === '2026-01-05' ? '2026-01-12' : '2026-01-05';
       await savePlanner({ ...p, altAnchor: nextAnchor });
       toast('สลับรอบสัปดาห์ A ↔ B แล้ว');
-      return;
-    }
-
-    const modeBtn = e.target.closest('[data-pl-mode]');
-    if (modeBtn) {
-      viewMode = modeBtn.dataset.plMode === 'week' ? 'week' : 'day';
-      renderPlanner();
       return;
     }
 
@@ -284,17 +283,14 @@ export function mountPlanner(el, navigate) {
     }
 
     if (e.target.closest('[data-pl-routines]')) {
-      openRoutinesModal();
-      return;
-    }
-
-    if (e.target.closest('[data-pl-once]')) {
-      openRoutinesModal({ initialPattern: 'once', initialDate: selectedDate });
+      closePlanMenu();
+      openRoutinesModal({ initialDate: selectedDate });
       return;
     }
 
     const goBtn = e.target.closest('[data-pl-go]');
     if (goBtn) {
+      closePlanMenu();
       goFn(goBtn.dataset.plGo);
       return;
     }
@@ -313,6 +309,13 @@ export function mountPlanner(el, navigate) {
     const checked = chk.checked;
 
     if (kind === 'workout') {
+      if (isPreviewMode()) {
+        state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, status: checked ? 'done' : 'planned' } : w);
+        renderPlanner();
+        window.dispatchEvent(new Event('trackme:data-change'));
+        toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว (โหมดดูตัวอย่าง)' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+        return;
+      }
       try {
         updateDoc(userDoc(state.uid, 'workout_records', id), {
           status: checked ? 'done' : 'planned',
@@ -386,7 +389,7 @@ function renderTaskListHtml(dateStr) {
           </span>
         </label>`;
       }).join('')
-    : `<p class="text-xs text-slate-500 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจวัตรในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
+    : `<p class="text-xs text-slate-500 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจกรรมในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
 
   return `
     ${renderDayReminderBanner(dateStr)}
@@ -395,38 +398,38 @@ function renderTaskListHtml(dateStr) {
 
 export function renderPlanner() {
   if (!root) return;
+  const prevStripScroll = $('#pl-day-strip', root)?.scrollLeft ?? null;
   const p = getPlanner();
   const today = localDateStr();
-  const baseMonday = mondayOf(today);
-  const mon = addDays(baseMonday, weekOffset * 7);
-  const sun = addDays(mon, 6);
-  if (selectedDate < mon || selectedDate > sun) {
-    selectedDate = weekOffset === 0 ? today : mon;
-  }
+  if (!isDateStr(selectedDate)) selectedDate = today;
 
-  const weekCode = weekCodeForDate(mon, p.altAnchor);
-  const hasAlternating = p.routines.some(r => r.weekPattern === 'A' || r.weekPattern === 'B');
-  const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
-  let totalAll = 0, doneAll = 0;
-  const dayMeta = days.map((d, idx) => {
+  const baseMonday = mondayOf(today);
+  const startDay = addDays(baseMonday, -14);
+  const endDay = addDays(baseMonday, 34);
+  const stripStart = selectedDate < startDay ? mondayOf(selectedDate) : startDay;
+  const stripEnd = selectedDate > endDay ? addDays(mondayOf(selectedDate), 6) : endDay;
+
+  const stripDays = [];
+  for (let d = stripStart; d <= stripEnd; d = addDays(d, 1)) {
     const items = itemsForDate(d);
     const done = items.filter(x => x.done).length;
     const remCount = remindersForDate(d).length;
-    totalAll += items.length;
-    doneAll += done;
-    return { date: d, wd: WEEKDAYS[idx], items, done, remCount };
-  });
+    stripDays.push({ date: d, wd: WEEKDAYS[weekdayIdx(d)], items, done, remCount });
+  }
 
+  const weekCode = weekCodeForDate(selectedDate, p.altAnchor);
+  const hasAlternating = p.routines.some(r => r.weekPattern === 'A' || r.weekPattern === 'B');
   const routinesCount = p.routines.length;
-  const rangeText = `${fmtDate(mon)} – ${fmtDate(sun)}`;
+  const selectedItems = itemsForDate(selectedDate);
+  const selectedDone = selectedItems.filter(x => x.done).length;
 
   const stripHtml = `
-    <div class="grid grid-cols-7 gap-1.5 tabular-nums">
-      ${dayMeta.map(m => {
+    <div id="pl-day-strip" class="pl-day-strip tabular-nums" role="listbox" aria-label="เลือกวันในแผน">
+      ${stripDays.map(m => {
         const isSel = m.date === selectedDate;
         const isToday = m.date === today;
         const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" class="relative flex flex-col items-center justify-center rounded-xl border py-2 px-0.5 min-h-[56px] text-xs transition ${
+        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-2 px-0.5 min-h-[56px] text-xs transition ${
           isSel ? 'bg-brand text-white border-brand shadow-sm'
             : isToday ? 'bg-white border-brand/60 text-brand-dark font-semibold hover:bg-lav-soft/60'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -441,159 +444,115 @@ export function renderPlanner() {
       }).join('')}
     </div>`;
 
-  const bodyHtml = viewMode === 'week'
-    ? `<div class="space-y-3 tabular-nums">
-        ${dayMeta.map(m => {
-          const isToday = m.date === today;
-          return `<div class="rounded-2xl border ${isToday ? 'border-brand/50 bg-lav-soft/20' : 'border-slate-200/80 bg-slate-50/40'} p-3 space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-sm font-bold text-slate-800">${m.wd} · ${esc(fmtDate(m.date))}${isToday ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
-              <span class="text-xs text-slate-500">${m.done}/${m.items.length} เสร็จ</span>
-            </div>
-            ${renderTaskListHtml(m.date)}
-          </div>`;
-        }).join('')}
-      </div>`
-    : `<div class="space-y-2.5">
-        ${stripHtml}
-        <div class="rounded-2xl border border-lav-soft/80 bg-slate-50/40 p-3 space-y-2.5">
-          <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
-            <span class="text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
-            <span class="text-xs text-slate-500">${itemsForDate(selectedDate).filter(x => x.done).length}/${itemsForDate(selectedDate).length} เสร็จ</span>
-          </div>
-          ${renderTaskListHtml(selectedDate)}
-          <div class="flex flex-wrap gap-1.5 pt-1">
-            <button type="button" data-pl-once class="chip min-h-[36px] bg-emerald-100 text-emerald-800 font-semibold">${iconSvg('plus', { size: 13 })} กิจวัตรวันเดียว (ไม่ซ้ำ)</button>
-            <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark">${iconSvg('repeat', { size: 13 })} ตั้งกิจวัตร / สลับสัปดาห์</button>
-            <button type="button" data-pl-go="workout" class="chip min-h-[36px] bg-sky-soft text-blue-700">${iconSvg('workout', { size: 13 })} วางแผนออกกำลังกาย</button>
-            <button type="button" data-pl-go="remind" class="chip min-h-[36px] bg-amber-50 border border-amber-200 text-amber-900">${iconSvg('pin', { size: 13 })} เพิ่มนัดหมาย</button>
-          </div>
-        </div>
-      </div>`;
-
   root.innerHTML = `
   <section class="card space-y-3.5">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <h2 class="text-base sm:text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>Weekly Planner & กิจวัตร</span></h2>
-        <p class="text-xs text-slate-500 tabular-nums">${esc(rangeText)} · เสร็จแล้ว ${doneAll}/${totalAll} รายการ</p>
+        <h2 class="text-base sm:text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>Weekly Planner</span></h2>
+        <p class="text-xs text-slate-500 tabular-nums">${esc(fmtDate(selectedDate))} · เสร็จแล้ว ${selectedDone}/${selectedItems.length} รายการ</p>
       </div>
       <div class="flex flex-wrap items-center gap-1.5">
-        ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบสัปดาห์ ${weekCode}</span>
+        ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบ ${weekCode}</span>
         <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} สลับ A↔B</button>` : ''}
-        <button type="button" data-pl-routines class="chip min-h-[36px] bg-lav-soft text-brand-dark">${iconSvg('repeat', { size: 13 })} กิจวัตร (${routinesCount})</button>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="flex items-center gap-1.5">
-        <button type="button" data-pl-step="-1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
-        <button type="button" data-pl-week="0" class="chip min-h-[36px] ${weekOffset === 0 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์นี้</button>
-        <button type="button" data-pl-week="1" class="chip min-h-[36px] ${weekOffset === 1 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600'}">สัปดาห์หน้า</button>
-        <button type="button" data-pl-step="1" class="chip min-h-[36px] min-w-[36px] bg-slate-100 text-slate-600" aria-label="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <button type="button" data-pl-mode="day" class="chip min-h-[36px] ${viewMode === 'day' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">รายวัน</button>
-        <button type="button" data-pl-mode="week" class="chip min-h-[36px] ${viewMode === 'week' ? 'bg-sky-soft text-blue-700 font-semibold' : 'bg-slate-100 text-slate-600'}">ดูทั้ง 7 วัน</button>
+        <details id="pl-plan-menu" class="relative">
+          <summary class="chip bg-lav-soft text-brand-dark min-h-[36px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} วางแผน</summary>
+          <div class="tm-tools-menu absolute right-0 top-full z-20 mt-2 flex min-w-48 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <button type="button" data-pl-routines class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]">${iconSvg('repeat', { size: 14 })} กิจกรรม (${routinesCount})</button>
+            <button type="button" data-pl-go="workout" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]">${iconSvg('workout', { size: 14 })} ออกกำลังกาย</button>
+            <button type="button" data-pl-go="remind" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]">${iconSvg('pin', { size: 14 })} นัดหมาย</button>
+          </div>
+        </details>
       </div>
     </div>
 
     ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
-      <span>💡 ตั้งกิจวัตรประจำสัปดาห์หรือตารางสลับสัปดาห์อัตโนมัติ (เช่น สัปดาห์ A จ-พ-ศ-อา / สัปดาห์ B อ-พฤ-ส) ครั้งเดียวใช้ได้ยาว</span>
+      <span>💡 ตั้งกิจกรรมประจำสัปดาห์หรือตารางสลับสัปดาห์อัตโนมัติ (เช่น สัปดาห์ A จ-พ-ศ-อา / สัปดาห์ B อ-พฤ-ส) ครั้งเดียวใช้ได้ยาว</span>
       <button type="button" data-pl-routines class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold">ตั้งค่าเลย</button>
     </div>` : ''}
 
-    ${bodyHtml}
-
-    ${(() => {
-      const recent = getRecentCompletedRoutines(p, 10);
-      if (!recent.length) return '';
-      return `
-      <div class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-xs font-bold text-slate-700">✅ กิจวัตรที่ทำล่าสุด (${recent.length} รายการ)</span>
-          <span class="text-[11px] text-slate-500">ไม่ซ้ำชื่อ</span>
+    <div class="space-y-2.5">
+      ${stripHtml}
+      <div class="rounded-2xl border border-lav-soft/80 bg-slate-50/40 p-3 space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
+          <span class="text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
+          <span class="text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>
         </div>
-        <div class="flex flex-wrap gap-1.5">
-          ${recent.map(item => `
-            <span class="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1 text-xs text-slate-700">
-              <span aria-hidden="true">${item.icon}</span>
-              <span class="font-medium">${esc(item.title)}</span>
-              ${item.date ? `<span class="text-[10px] text-slate-500 tabular-nums">· ${esc(fmtDate(item.date))}</span>` : ''}
-            </span>`).join('')}
-        </div>
-      </div>`;
-    })()}
+        ${renderTaskListHtml(selectedDate)}
+      </div>
+    </div>
   </section>`;
+
+  const stripEl = $('#pl-day-strip', root);
+  if (stripEl) {
+    if (shouldCenterStrip || prevStripScroll === null) {
+      shouldCenterStrip = false;
+      const activeEl = stripEl.querySelector(`[data-pl-day="${selectedDate}"]`);
+      if (activeEl) {
+        stripEl.scrollLeft = Math.max(0, activeEl.offsetLeft - Math.max(0, (stripEl.clientWidth - activeEl.offsetWidth) / 2));
+      }
+    } else {
+      stripEl.scrollLeft = prevStripScroll;
+    }
+  }
 }
 
 function openRoutinesModal(opts = {}) {
   let editingId = null;
+  let editingLegacyTime = '';
   let pickedDays = new Set([0, 2, 4, 6]);
   let pickedIcon = '✨';
   let pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
+  let showCustomDays = false;
   const defaultOnceDate = isDateStr(opts.initialDate) ? opts.initialDate : (selectedDate || localDateStr());
   const curWeekCode = weekCodeForDate(localDateStr(), getPlanner().altAnchor);
 
-  const recentRoutines = getRecentCompletedRoutines(getPlanner(), 10);
+  const frequentRoutines = getFrequentRecentRoutines(getPlanner(), 10);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3">
-      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('repeat', { size: 18, className: 'text-brand' })}<span>กิจวัตร & ตารางสลับสัปดาห์</span></h3>
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('repeat', { size: 18, className: 'text-brand' })}<span>เพิ่มกิจกรรม</span></h3>
       <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">รองรับทั้ง<b>ทุกสัปดาห์</b>, <b>สลับสัปดาห์ A ↔ B</b> และ<b>เฉพาะวันเดียว (ไม่ทำซ้ำ)</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
+    <p class="text-xs text-slate-500 mb-3">รองรับรูปแบบ<b>วันเดียว</b>, <b>ทุกสัปดาห์</b> และ<b>สลับสัปดาห์ A ↔ B</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
 
     <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3 mb-4">
-      <div class="flex flex-wrap gap-1.5" id="rt-presets">
-        ${ROUTINE_PRESETS.map(([ic, title]) => `<button type="button" data-rt-preset="${esc(ic + '|' + title)}" class="chip bg-white border border-slate-200 text-slate-700 text-xs hover:bg-lav-soft">${ic} ${esc(title)}</button>`).join('')}
-      </div>
-      ${recentRoutines.length ? `
-      <div class="space-y-1">
-        <p class="text-[11px] font-semibold text-slate-500">เคยทำล่าสุด (แตะเพื่อเติมชื่อ):</p>
-        <div class="flex flex-wrap gap-1.5">
-          ${recentRoutines.map(item => `<button type="button" data-rt-preset="${esc(item.icon + '|' + item.title)}" class="chip bg-sky-soft/70 border border-sky-200 text-slate-700 text-xs hover:bg-sky-soft">${item.icon} ${esc(item.title)}</button>`).join('')}
-        </div>
+      ${frequentRoutines.length ? `
+      <div class="flex flex-wrap gap-1.5">
+        ${frequentRoutines.map(item => `<button type="button" data-rt-preset="${esc(item.icon + '|' + item.title)}" class="chip bg-sky-soft/70 border border-sky-200 text-slate-700 text-xs hover:bg-sky-soft">${item.icon} ${esc(item.title)}</button>`).join('')}
       </div>` : ''}
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <div class="sm:col-span-2">
-          <label class="lbl">ชื่อกิจวัตร *</label>
-          <div class="flex items-center gap-2">
-            <span id="rt-icon-badge" class="w-10 h-10 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจวัตร">✨</span>
-            <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ส่งพัสดุวันนี้">
-          </div>
+      <div>
+        <label class="lbl">ชื่อกิจกรรม *</label>
+        <div class="flex items-center gap-2">
+          <span id="rt-icon-badge" class="w-10 h-10 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจกรรม">✨</span>
+          <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ส่งพัสดุวันนี้">
         </div>
-        <div><label class="lbl">เวลา (ไม่บังคับ)</label><input id="rt-time" type="time" class="input"></div>
       </div>
       <div>
-        <label class="lbl">รูปแบบการทำซ้ำ</label>
+        <label class="lbl">รูปแบบ</label>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5" id="rt-pattern-bar">
           <button type="button" data-rt-pat="every" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">ทุกสัปดาห์</button>
           <button type="button" data-rt-pat="A" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ A</button>
           <button type="button" data-rt-pat="B" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ B</button>
-          <button type="button" data-rt-pat="once" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">วันเดียว (ไม่ซ้ำ)</button>
+          <button type="button" data-rt-pat="once" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">วันเดียว</button>
         </div>
       </div>
       <div id="rt-once-wrap" class="hidden space-y-1">
         <label class="lbl">เลือกวันที่ทำ (แสดงเฉพาะวันนี้วันเดียว ไม่ทำซ้ำ)</label>
         <input id="rt-once-date" type="date" class="input sm:max-w-xs" value="${esc(defaultOnceDate)}">
       </div>
-      <div id="rt-days-wrap">
-        <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+      <div id="rt-days-wrap" class="space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-1.5">
           <label class="lbl !mb-0">ทำซ้ำทุกวันไหนบ้าง?</label>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" data-rt-days="mwfs" class="text-[11px] text-brand-dark underline">จ พ ศ อา</button>
-            <button type="button" data-rt-days="tts" class="text-[11px] text-brand-dark underline">อ พฤ ส</button>
-            <button type="button" data-rt-days="all" class="text-[11px] text-brand-dark underline">ทุกวัน</button>
-            <button type="button" data-rt-days="wd" class="text-[11px] text-brand-dark underline">จ–ศ</button>
-            <button type="button" data-rt-days="we" class="text-[11px] text-brand-dark underline">ส–อา</button>
+          <div class="flex flex-wrap gap-1.5" id="rt-day-presets">
+            ${DAY_PRESETS.map(p => `<button type="button" data-rt-days="${p.key}" class="px-2 py-1 rounded-lg border text-[11px] font-semibold transition">${p.label}</button>`).join('')}
+            <button type="button" data-rt-days="custom" class="px-2 py-1 rounded-lg border text-[11px] font-semibold transition">เลือกวันเอง</button>
           </div>
         </div>
-        <div id="rt-days" class="grid grid-cols-7 gap-1"></div>
+        <div id="rt-days" class="grid grid-cols-7 gap-1 hidden"></div>
       </div>
       <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
         <button type="button" id="rt-cancel-edit" class="btn btn-ghost hidden text-xs">ยกเลิกแก้ไข</button>
         <button type="button" id="rt-create-pair" class="btn btn-sky text-xs" title="สร้างรอบสัปดาห์ A ตามวันที่เลือก และสร้างรอบ B เป็นวันที่เหลือให้อัตโนมัติ">${iconSvg('swap', { size: 14 })} สร้างคู่สลับ A ↔ B</button>
-        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มกิจวัตร</button>
+        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มกิจกรรม</button>
       </div>
     </div>
 
@@ -601,7 +560,19 @@ function openRoutinesModal(opts = {}) {
   `, { wide: true });
 
   const renderDays = () => {
-    $('#rt-days', m.el).innerHTML = WEEKDAYS.map((wd, idx) => `
+    const activePreset = showCustomDays ? 'custom' : matchingDayPreset(pickedDays);
+    m.el.querySelectorAll('[data-rt-days]').forEach(btn => {
+      const active = btn.dataset.rtDays === activePreset;
+      btn.className = `px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
+        active
+          ? 'bg-brand text-white border-brand'
+          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+      }`;
+    });
+    const daysEl = $('#rt-days', m.el);
+    if (!daysEl) return;
+    daysEl.classList.toggle('hidden', !showCustomDays);
+    daysEl.innerHTML = WEEKDAYS.map((wd, idx) => `
       <button type="button" data-rt-d="${idx}" class="py-1.5 rounded-xl border text-xs font-semibold ${pickedDays.has(idx) ? 'bg-brand text-white border-brand' : 'bg-white border-slate-200 text-slate-600'}">${wd}</button>
     `).join('');
   };
@@ -650,7 +621,7 @@ function openRoutinesModal(opts = {}) {
         </div>
       </div>`;
     }).join('')
-      : '<p class="text-xs text-slate-500 text-center py-4">ยังไม่มีกิจวัตรที่ตั้งไว้</p>';
+      : '<p class="text-xs text-slate-500 text-center py-4">ยังไม่มีกิจกรรมที่ตั้งไว้</p>';
   };
 
   const syncIconBadge = (titleVal = '') => {
@@ -660,13 +631,14 @@ function openRoutinesModal(opts = {}) {
 
   const resetEdit = () => {
     editingId = null;
+    editingLegacyTime = '';
     pickedIcon = '✨';
     pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
     pickedDays = new Set([0, 2, 4, 6]);
+    showCustomDays = false;
     $('#rt-title', m.el).value = '';
-    $('#rt-time', m.el).value = '';
     $('#rt-once-date', m.el).value = defaultOnceDate;
-    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มกิจวัตร`;
+    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มกิจกรรม`;
     $('#rt-cancel-edit', m.el).classList.add('hidden');
     syncIconBadge('');
     renderPattern();
@@ -699,13 +671,13 @@ function openRoutinesModal(opts = {}) {
     const dayPreset = e.target.closest('[data-rt-days]');
     if (dayPreset) {
       const v = dayPreset.dataset.rtDays;
-      pickedDays = new Set(
-        v === 'all' ? [0, 1, 2, 3, 4, 5, 6]
-          : v === 'wd' ? [0, 1, 2, 3, 4]
-            : v === 'we' ? [5, 6]
-              : v === 'mwfs' ? [0, 2, 4, 6]
-                : [1, 3, 5]
-      );
+      if (v === 'custom') {
+        showCustomDays = true;
+      } else {
+        const found = DAY_PRESETS.find(p => p.key === v);
+        if (found) pickedDays = new Set(found.days);
+        showCustomDays = false;
+      }
       renderDays();
       return;
     }
@@ -715,6 +687,7 @@ function openRoutinesModal(opts = {}) {
       const d = Number(dBtn.dataset.rtD);
       if (pickedDays.has(d)) pickedDays.delete(d);
       else pickedDays.add(d);
+      showCustomDays = true;
       renderDays();
       return;
     }
@@ -724,11 +697,12 @@ function openRoutinesModal(opts = {}) {
       const r = getPlanner().routines.find(x => x.id === editBtn.dataset.rtEdit);
       if (!r) return;
       editingId = r.id;
+      editingLegacyTime = r.time || '';
       pickedIcon = inferRoutineEmoji(r.title, r.icon);
       pickedPattern = r.weekPattern || 'every';
       pickedDays = new Set(r.days || []);
+      showCustomDays = matchingDayPreset(pickedDays) === 'custom';
       $('#rt-title', m.el).value = r.title;
-      $('#rt-time', m.el).value = r.time || '';
       if (isDateStr(r.date)) $('#rt-once-date', m.el).value = r.date;
       syncIconBadge(r.title);
       $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึกการแก้ไข`;
@@ -752,16 +726,15 @@ function openRoutinesModal(opts = {}) {
 
   $('#rt-create-pair', m.el).addEventListener('click', async () => {
     const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    const time = $('#rt-time', m.el).value.trim().slice(0, 10);
     const daysA = [...pickedDays].sort((a, b) => a - b);
-    if (!title) return toast('กรอกชื่อกิจวัตรก่อนค่ะ', 'err');
+    if (!title) return toast('กรอกชื่อกิจกรรมก่อนค่ะ', 'err');
     if (daysA.length === 0 || daysA.length === 7) return toast('เลือกวัน 1–6 วัน เพื่อให้สัปดาห์ B สลับเป็นวันที่เหลืออัตโนมัติ', 'err');
     const daysB = [0, 1, 2, 3, 4, 5, 6].filter(d => !pickedDays.has(d));
     const p = getPlanner();
     const baseId = Date.now().toString(36);
     const icon = inferRoutineEmoji(title, pickedIcon);
-    const recA = { id: 'ra' + baseId, title, days: daysA, weekPattern: 'A', icon, ...(time && { time }) };
-    const recB = { id: 'rb' + baseId, title, days: daysB, weekPattern: 'B', icon, ...(time && { time }) };
+    const recA = { id: 'ra' + baseId, title, days: daysA, weekPattern: 'A', icon };
+    const recB = { id: 'rb' + baseId, title, days: daysB, weekPattern: 'B', icon };
     await savePlanner({ ...p, routines: [...p.routines, recA, recB] });
     toast(`สร้างคู่สลับ "${title}" (A: ${daysA.map(d => WEEKDAYS[d]).join('/')} · B: ${daysB.map(d => WEEKDAYS[d]).join('/')}) แล้ว`);
     resetEdit();
@@ -770,14 +743,13 @@ function openRoutinesModal(opts = {}) {
 
   $('#rt-save', m.el).addEventListener('click', async () => {
     const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    const time = $('#rt-time', m.el).value.trim().slice(0, 10);
-    if (!title) return toast('กรอกชื่อกิจวัตรก่อนค่ะ', 'err');
+    if (!title) return toast('กรอกชื่อกิจกรรมก่อนค่ะ', 'err');
 
     let days = [...pickedDays].sort((a, b) => a - b);
     let onceDate = '';
     if (pickedPattern === 'once') {
       onceDate = $('#rt-once-date', m.el).value;
-      if (!isDateStr(onceDate)) return toast('กรุณาเลือกวันที่ที่ต้องการทำกิจวัตรนี้', 'err');
+      if (!isDateStr(onceDate)) return toast('กรุณาเลือกวันที่ที่ต้องการทำกิจกรรมนี้', 'err');
       days = [weekdayIdx(onceDate)];
     } else if (!days.length) {
       return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
@@ -792,14 +764,14 @@ function openRoutinesModal(opts = {}) {
       icon,
       ...(pickedPattern !== 'every' && { weekPattern: pickedPattern }),
       ...(pickedPattern === 'once' && { date: onceDate }),
-      ...(time && { time })
+      ...(editingLegacyTime && { time: editingLegacyTime })
     };
     const routines = editingId
       ? p.routines.map(x => (x.id === editingId ? rec : x))
       : [...p.routines, rec];
 
     await savePlanner({ ...p, routines });
-    toast(editingId ? 'แก้ไขกิจวัตรแล้ว' : pickedPattern === 'once' ? `เพิ่มกิจวัตรเฉพาะวันที่ ${fmtDate(onceDate)} แล้ว` : 'เพิ่มกิจวัตรแล้ว');
+    toast(editingId ? 'แก้ไขกิจกรรมแล้ว' : pickedPattern === 'once' ? `เพิ่มกิจกรรมเฉพาะวันที่ ${fmtDate(onceDate)} แล้ว` : 'เพิ่มกิจกรรมแล้ว');
     resetEdit();
     renderList();
   });

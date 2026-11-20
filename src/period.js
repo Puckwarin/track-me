@@ -4,8 +4,21 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './util.js';
 import { selectDate } from './symptoms.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
-let root, cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+let root, activePeriodTab = 'main', cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+
+function setPeriodTab(tab) {
+  if (!root) return;
+  activePeriodTab = tab === 'stats' ? 'stats' : 'main';
+  root.querySelectorAll('[data-period-tab]').forEach(btn => {
+    const on = btn.dataset.periodTab === activePeriodTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#p-panel-main', root)?.classList.toggle('hidden', activePeriodTab !== 'main');
+  $('#p-panel-stats', root)?.classList.toggle('hidden', activePeriodTab !== 'stats');
+}
 
 export const REMIND_OPTIONS = [
   [-1, 'ปิดแจ้งเตือน'],
@@ -56,9 +69,17 @@ export function periodStats(items) {
 
 export function mountPeriod(el) {
   root = el;
+  activePeriodTab = 'main';
   root.innerHTML = `
-  <div class="lg:col-span-2 space-y-6">
-    <div class="card space-y-4">
+  <div class="lg:col-span-3">
+    <div class="tm-seg tm-seg--2 max-w-md" role="tablist" aria-label="หมวดบันทึกรอบเดือน">
+      <button type="button" role="tab" data-period-tab="main" aria-selected="true" class="tm-seg-btn is-active">บันทึก & ปฏิทิน</button>
+      <button type="button" role="tab" data-period-tab="stats" aria-selected="false" class="tm-seg-btn">สถิติ & ประวัติ</button>
+    </div>
+  </div>
+
+  <div id="p-panel-main" class="lg:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card space-y-4 lg:col-span-2">
       <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('period', { size: 19, className: 'text-pink-500' })}<span>บันทึกรอบเดือน</span></h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div><label class="lbl">วันแรกที่มา *</label><input type="date" id="p-start" class="input"></div>
@@ -69,7 +90,7 @@ export function mountPeriod(el) {
       <div class="flex justify-end"><button id="p-save" class="btn btn-pink">${iconSvg('plus', { size: 15 })} บันทึกรอบเดือน</button></div>
     </div>
 
-    <div class="card space-y-3">
+    <div class="card space-y-3 lg:col-span-1">
       <div class="flex items-center justify-between gap-2">
         <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน">${iconSvg('chevron-left', { size: 17 })}</button>
         <h3 id="c-title" class="font-bold text-slate-800 text-center"></h3>
@@ -83,33 +104,66 @@ export function mountPeriod(el) {
         <span><span class="inline-block w-2 h-2 rounded-full bg-violet-600 align-middle"></span> มีบันทึกอาการ</span>
       </div>
     </div>
+  </div>
 
-    <div class="card space-y-3">
+  <div id="p-panel-stats" class="hidden lg:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card space-y-3 lg:col-span-1">
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('overview', { size: 17, className: 'text-pink-500' })}<span>สถิติรอบเดือน</span></h3>
+      <div id="p-stats" class="space-y-2 text-sm text-slate-700 tabular-nums"></div>
+      <p class="text-xs text-slate-500">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
+    </div>
+
+    <div class="card space-y-3 lg:col-span-2">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-pink-500' })}<span>ประวัติประจำเดือน</span></h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
         <thead class="bg-pink-soft/50 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
     </div>
-  </div>
-  <div class="space-y-6"><div class="card space-y-3">
-    <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('overview', { size: 17, className: 'text-pink-500' })}<span>สถิติรอบเดือน</span></h3>
-    <div id="p-stats" class="space-y-2 text-sm text-slate-700 tabular-nums"></div>
-    <p class="text-xs text-slate-500">* วันที่คาดการณ์เป็นการประมาณจากค่าเฉลี่ยเท่านั้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากรอบเดือนผิดปกติควรปรึกษาแพทย์</p>
-  </div></div>`;
+  </div>`;
   $('#p-start', root).value = localDateStr();
+  root.addEventListener('click', e => {
+    const tabBtn = e.target.closest('[data-period-tab]');
+    if (tabBtn) setPeriodTab(tabBtn.dataset.periodTab);
+  });
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'period') return;
+    const fid = String(e.detail?.focusId || '');
+    setPeriodTab(fid === 'p-stats' || fid === 'p-body' ? 'stats' : 'main');
+  });
   $('#p-save', root).addEventListener('click', save);
   $('#c-prev', root).addEventListener('click', () => shiftMonth(-1));
   $('#c-next', root).addEventListener('click', () => shiftMonth(1));
-  $('#c-grid', root).addEventListener('click', e => { const d = e.target.closest('[data-d]'); if (d && d.dataset.d <= localDateStr()) { document.querySelectorAll('.cal-sel').forEach(x => x.classList.remove('cal-sel')); d.classList.add('cal-sel'); selectDate(d.dataset.d); } });
+  const cGrid = $('#c-grid', root);
+  let calSwipe = null;
+  cGrid.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    calSwipe = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  });
+  cGrid.addEventListener('pointerup', e => {
+    if (!calSwipe || e.pointerId !== calSwipe.pointerId) return;
+    const dx = e.clientX - calSwipe.x;
+    const dy = e.clientY - calSwipe.y;
+    calSwipe = null;
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.35) {
+      shiftMonth(dx < 0 ? 1 : -1);
+    }
+  });
+  cGrid.addEventListener('pointercancel', () => { calSwipe = null; });
+  cGrid.addEventListener('click', e => { const d = e.target.closest('[data-d]'); if (d && d.dataset.d <= localDateStr()) { document.querySelectorAll('.cal-sel').forEach(x => x.classList.remove('cal-sel')); d.classList.add('cal-sel'); selectDate(d.dataset.d); } });
   $('#p-body', root).addEventListener('click', e => {
     const end = e.target.closest('[data-end]'), del = e.target.closest('[data-del]');
     if (end) {
+      if (guardPreviewWrite('การอัปเดตวันสิ้นสุดรอบเดือน')) return;
       const p = state.period.find(i => i.id === end.dataset.end); if (!p) return;
       const d = localDateStr();
       updateDoc(userDoc(state.uid, 'period_records', p.id), { end: d < p.start ? p.start : d }).catch(err => toast(err.message, 'err'));
     }
-    if (del && confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (del) {
+      if (guardPreviewWrite('การลบบันทึกรอบเดือน')) return;
+      if (confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
+    }
   });
+  setPeriodTab('main');
   render();
 }
 
@@ -184,6 +238,7 @@ export function render() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกรอบเดือน')) return;
   const start = $('#p-start', root).value, end = $('#p-end', root).value;
   if (!start) return toast('กรุณาเลือกวันแรกที่ประจำเดือนมา', 'err');
   if (end && end < start) return toast('วันสุดท้ายต้องไม่ก่อนวันแรก', 'err');

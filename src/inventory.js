@@ -6,12 +6,26 @@ import { watch } from './sync.js';
 import { estimateStockFromPhotos, explainGeminiError, formatImageProgress } from './nutrition.js';
 import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
 
 const categories = ['คน · อาหาร/ขนม','สัตว์เลี้ยง · อาหาร/ขนม','สกินแคร์/ของใช้คน','ของใช้สัตว์เลี้ยง','ของใช้ในบ้าน','อื่น ๆ'];
 const $r = s => $(s, root);
-let root, editingId = null;
+let root, editingId = null, activeInvTab = 'stock';
 const pendingQuantityById = new Map();
 const leftDays = s => (s ? daysBetween(localDateStr(), s) : 0);
+
+function setInvTab(tab) {
+  if (!root) return;
+  activeInvTab = ['stock', 'form', 'blacklist'].includes(tab) ? tab : 'stock';
+  root.querySelectorAll('[data-inv-tab]').forEach(btn => {
+    const on = btn.dataset.invTab === activeInvTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#inv-panel-stock', root)?.classList.toggle('hidden', activeInvTab !== 'stock');
+  $('#inv-panel-form', root)?.classList.toggle('hidden', activeInvTab !== 'form');
+  $('#inv-panel-blacklist', root)?.classList.toggle('hidden', activeInvTab !== 'blacklist');
+}
 
 function normalizeScannedDate(raw) {
   if (!raw) return '';
@@ -34,38 +48,69 @@ function guessInventoryCategory(name) {
 
 export function mountInventory(el) {
   root=el;
+  activeInvTab = 'stock';
   root.innerHTML=`
-  <section class="card space-y-4 lg:col-span-2"><header class="flex flex-wrap items-start justify-between gap-2"><div><h2 class="text-lg font-bold text-slate-800">📦 ของใช้ & สต๊อก</h2><p class="text-xs text-slate-500">อาหาร/ขนมของคนและสัตว์เลี้ยง สกินแคร์ และของใช้ในบ้าน · กด − / + ปรับสต๊อกได้ทันที</p></div><span class="text-xs text-slate-600 bg-lav-soft/70 px-2.5 py-1 rounded-lg">📌 รอบเปลี่ยนของย้ายไปที่เมนู <b>บันทึกเตือน</b></span></header>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3"><input id="inv-name" class="input col-span-2 sm:col-span-1" placeholder="ชื่อของ เช่น ผ้าอนามัย 30cm"><select id="inv-category" class="input">${categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select><input id="inv-qty" type="number" min="0" step="0.1" class="input" placeholder="จำนวนคงเหลือ"><input id="inv-unit" class="input" placeholder="หน่วย เช่น ห่อ, หลอด, ชิ้น"><input id="inv-low" type="number" min="0" step="0.1" class="input col-span-2 sm:col-span-1" placeholder="เตือนเมื่อเหลือไม่เกิน"></div>
-    <details id="inv-more-fields" class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-      <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">วันหมดอายุ PAO ส่วนผสม และบันทึกเพิ่มเติม (ไม่บังคับ)</summary>
-      <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <label class="text-xs text-slate-600">วันหมดอายุ/ควรใช้ก่อน<input id="inv-expiry" type="date" class="input mt-0.5" aria-label="วันหมดอายุ/ควรใช้ก่อน"></label>
-        <label class="text-xs text-slate-600">วันที่เปิดใช้<input id="inv-open" type="date" class="input mt-0.5" aria-label="วันที่เปิดใช้"></label>
-        <label class="text-xs text-slate-600">PAO หลังเปิด (เดือน)<input id="inv-pao" type="number" min="1" max="120" class="input mt-0.5" placeholder="เช่น 12"></label>
-        <select id="inv-remind" class="input col-span-2 sm:col-span-3" aria-label="เตือนก่อนหมดอายุ">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 30 ? 'selected' : ''}>เตือนหมดอายุ: ${t}</option>`).join('')}</select>
-        <input id="inv-ingredients" class="input col-span-2 sm:col-span-3" placeholder="ส่วนผสม (ไม่บังคับ)">
-        <textarea id="inv-pros" class="input col-span-2 sm:col-span-1" placeholder="ความรู้สึก/ข้อดี (ไม่บังคับ)"></textarea>
-        <textarea id="inv-cons" class="input col-span-2" placeholder="ข้อเสีย (ไม่บังคับ)"></textarea>
-      </div>
-    </details>
-    <div class="rounded-2xl border-2 border-dashed border-brand/35 bg-lav-soft/30 p-3.5">
-      <label class="flex items-center justify-center sm:justify-start gap-2.5 text-sm font-semibold text-brand-dark cursor-pointer min-h-11">
-        ${iconSvg('images', { size: 18, className: 'text-brand shrink-0' })}
-        <span>📷 ถ่ายหรือเลือกรูปสินค้า/วันหมดอายุ (เลือกได้หลายรูปพร้อมกัน)</span>
-        <input id="inv-photo" type="file" accept="image/*" multiple class="hidden">
-      </label>
-      <p class="text-xs text-slate-500 mt-1">ย่อภาพในเครื่องแล้วส่งวิเคราะห์ชั่วคราว (ไม่บันทึกรูปลงระบบ) · หลังประมวลผลเสร็จจะมีหน้าต่างให้ตรวจสอบและยืนยันก่อนบันทึก</p>
-      <p id="inv-photo-status" class="hidden text-xs mt-1.5" aria-live="polite"></p>
+  <section class="card space-y-4 lg:col-span-2">
+    <header class="flex flex-wrap items-start justify-between gap-2"><div><h2 class="text-lg font-bold text-slate-800">📦 ของใช้ & สต๊อก</h2><p class="text-xs text-slate-500">อาหาร/ขนมของคนและสัตว์เลี้ยง สกินแคร์ และของใช้ในบ้าน · กด − / + ปรับสต๊อกได้ทันที</p></div><span class="text-xs text-slate-600 bg-lav-soft/70 px-2.5 py-1 rounded-lg">📌 รอบเปลี่ยนของย้ายไปที่เมนู <b>บันทึกเตือน</b></span></header>
+    <div id="inventory-summary" class="grid grid-cols-3 gap-2" aria-live="polite"></div>
+    <div class="tm-seg tm-seg--3" role="tablist" aria-label="หมวดคลังของใช้">
+      <button type="button" role="tab" data-inv-tab="stock" aria-selected="true" class="tm-seg-btn is-active">สต๊อก & ซื้อของ</button>
+      <button type="button" role="tab" data-inv-tab="form" aria-selected="false" class="tm-seg-btn">เพิ่ม / สแกน</button>
+      <button type="button" role="tab" data-inv-tab="blacklist" aria-selected="false" class="tm-seg-btn">ส่วนผสมที่เลี่ยง</button>
     </div>
-    <div class="flex gap-2 justify-end"><button id="inv-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button><button id="inv-save" class="btn btn-primary">บันทึกสต๊อก</button></div>
-    <div class="flex flex-col sm:flex-row gap-2"><input id="inv-search" class="input" placeholder="ค้นหาของที่บันทึกไว้"><select id="inv-filter" class="input sm:max-w-xs"><option value="">ทุกหมวดหมู่</option>${categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div id="shopping-list" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2"></div><div id="inventory-summary" class="grid grid-cols-3 gap-2" aria-live="polite"></div><div id="inv-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-    <div class="rounded-xl bg-rose-50 p-3 space-y-2"><label class="lbl">Ingredient Blacklist · ส่วนผสมที่ต้องการหลีกเลี่ยง</label><textarea id="inv-blacklist" class="input" placeholder="เช่น fragrance, alcohol (คั่นด้วยจุลภาค)"></textarea><button id="inv-blacklist-save" class="btn btn-soft">บันทึกรายการ</button></div>
+
+    <div id="inv-panel-stock" class="space-y-3">
+      <div class="flex flex-col sm:flex-row gap-2"><input id="inv-search" class="input" placeholder="ค้นหาของที่บันทึกไว้"><select id="inv-filter" class="input sm:max-w-xs"><option value="">ทุกหมวดหมู่</option>${categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+      <div id="shopping-list" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2"></div>
+      <div id="inv-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+
+    <div id="inv-panel-form" class="hidden space-y-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3"><input id="inv-name" class="input col-span-2 sm:col-span-1" placeholder="ชื่อของ เช่น ผ้าอนามัย 30cm"><select id="inv-category" class="input">${categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select><input id="inv-qty" type="number" min="0" step="0.1" class="input" placeholder="จำนวนคงเหลือ"><input id="inv-unit" class="input" placeholder="หน่วย เช่น ห่อ, หลอด, ชิ้น"><input id="inv-low" type="number" min="0" step="0.1" class="input col-span-2 sm:col-span-1" placeholder="เตือนเมื่อเหลือไม่เกิน"></div>
+      <details id="inv-more-fields" class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+        <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">วันหมดอายุ PAO ส่วนผสม และบันทึกเพิ่มเติม (ไม่บังคับ)</summary>
+        <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <label class="text-xs text-slate-600">วันหมดอายุ/ควรใช้ก่อน<input id="inv-expiry" type="date" class="input mt-0.5" aria-label="วันหมดอายุ/ควรใช้ก่อน"></label>
+          <label class="text-xs text-slate-600">วันที่เปิดใช้<input id="inv-open" type="date" class="input mt-0.5" aria-label="วันที่เปิดใช้"></label>
+          <label class="text-xs text-slate-600">PAO หลังเปิด (เดือน)<input id="inv-pao" type="number" min="1" max="120" class="input mt-0.5" placeholder="เช่น 12"></label>
+          <select id="inv-remind" class="input col-span-2 sm:col-span-3" aria-label="เตือนก่อนหมดอายุ">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 30 ? 'selected' : ''}>เตือนหมดอายุ: ${t}</option>`).join('')}</select>
+          <input id="inv-ingredients" class="input col-span-2 sm:col-span-3" placeholder="ส่วนผสม (ไม่บังคับ)">
+          <textarea id="inv-pros" class="input col-span-2 sm:col-span-1" placeholder="ความรู้สึก/ข้อดี (ไม่บังคับ)"></textarea>
+          <textarea id="inv-cons" class="input col-span-2" placeholder="ข้อเสีย (ไม่บังคับ)"></textarea>
+        </div>
+      </details>
+      <div class="rounded-2xl border-2 border-dashed border-brand/35 bg-lav-soft/30 p-3.5">
+        <label class="flex items-center justify-center sm:justify-start gap-2.5 text-sm font-semibold text-brand-dark cursor-pointer min-h-11">
+          ${iconSvg('images', { size: 18, className: 'text-brand shrink-0' })}
+          <span>📷 ถ่ายหรือเลือกรูปสินค้า/วันหมดอายุ (เลือกได้หลายรูปพร้อมกัน)</span>
+          <input id="inv-photo" type="file" accept="image/*" multiple class="hidden">
+        </label>
+        <p class="text-xs text-slate-500 mt-1">ย่อภาพในเครื่องแล้วส่งวิเคราะห์ชั่วคราว (ไม่บันทึกรูปลงระบบ) · หลังประมวลผลเสร็จจะมีหน้าต่างให้ตรวจสอบและยืนยันก่อนบันทึก</p>
+        <p id="inv-photo-status" class="hidden text-xs mt-1.5" aria-live="polite"></p>
+      </div>
+      <div class="flex gap-2 justify-end"><button id="inv-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button><button id="inv-save" class="btn btn-primary">บันทึกสต๊อก</button></div>
+    </div>
+
+    <div id="inv-panel-blacklist" class="hidden space-y-2">
+      <div class="rounded-xl bg-rose-50 p-3 space-y-2"><label class="lbl">Ingredient Blacklist · ส่วนผสมที่ต้องการหลีกเลี่ยง</label><textarea id="inv-blacklist" class="input" placeholder="เช่น fragrance, alcohol (คั่นด้วยจุลภาค)"></textarea><button id="inv-blacklist-save" class="btn btn-soft">บันทึกรายการ</button></div>
+    </div>
   </section>`;
+  root.addEventListener('click', e => {
+    const tabBtn = e.target.closest('[data-inv-tab]');
+    if (tabBtn) setInvTab(tabBtn.dataset.invTab);
+  });
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'inventory') return;
+    const fid = String(e.detail?.focusId || '');
+    if (fid === 'inv-blacklist') setInvTab('blacklist');
+    else if (['inv-name', 'inv-qty', 'inv-photo', 'inv-more-fields'].includes(fid)) setInvTab('form');
+    else setInvTab('stock');
+  });
   $r('#inv-save').onclick=saveProduct; $r('#inv-cancel').onclick=resetForm; $r('#inv-photo').onchange=scanPhoto;
   $r('#inv-search').oninput=render; $r('#inv-filter').onchange=render; $r('#inv-blacklist-save').onclick=saveBlacklist;
   $r('#shopping-list').onclick=async e=>{if(e.target.closest('[data-copy-shopping]')){const rows=listProducts().filter(p=>p.quantity!=null&&p.lowAt!=null&&p.quantity<=p.lowAt);const text=rows.map(p=>`□ ${p.name} — เหลือ ${p.quantity} ${p.unit||'หน่วย'}`).join('\n');try{await navigator.clipboard.writeText(text);toast('คัดลอกรายการซื้อของแล้ว');}catch{toast(text,'info');}}else{const b=e.target.closest('[data-shopping-edit]');if(b){const p=(state.trackedProducts||[]).find(x=>x.id===b.dataset.shoppingEdit);if(p)editProduct(p);}}};
   $r('#inv-list').onclick=onInventoryClick;
+  setInvTab('stock');
   render();
 }
 
@@ -102,11 +147,12 @@ function renderInventorySummary() {
 }
 function renderShoppingList(){const box=$r('#shopping-list');if(!box)return;const low=listProducts().filter(p=>p.quantity!=null&&p.lowAt!=null&&p.quantity<=p.lowAt);box.classList.toggle('hidden',low.length===0);if(!low.length){box.innerHTML='';return;}box.innerHTML=`<div class="flex flex-wrap justify-between items-center gap-2"><div><h3 class="font-semibold">🛒 รายการซื้อของ · ${low.length} รายการ</h3><p class="text-xs">สร้างให้อัตโนมัติจากของที่ถึงเกณฑ์เตือน</p></div><button data-copy-shopping class="btn btn-soft !px-3 !py-2 text-xs">คัดลอกรายการ</button></div><ul class="space-y-1">${low.map(p=>`<li class="flex justify-between items-center gap-2 rounded-lg bg-white/70 px-2 py-1 text-sm tabular-nums"><span>□ <b>${esc(p.name)}</b> · เหลือ ${esc(p.quantity)} ${esc(p.unit||'หน่วย')}</span><button data-shopping-edit="${esc(p.id)}" class="chip min-h-[36px] bg-sky-soft text-blue-700">เติมสต๊อก</button></li>`).join('')}</ul>`;}
 function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';const more=$r('#inv-more-fields');if(more)more.open=false;$r('#inv-save').textContent='บันทึกสต๊อก';$r('#inv-cancel').classList.add('hidden');const st=$r('#inv-photo-status');if(st){st.textContent='';st.classList.add('hidden');}}
-function editProduct(p){editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);const more=$r('#inv-more-fields');if(more)more.open=Boolean(p.expiryDate||p.openedDate||p.paoMonths||p.ingredients||p.pros||p.cons||(p.remindDays!=null&&Number(p.remindDays)!==30));$r('#inv-save').textContent='บันทึกการแก้ไข';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
-function saveProduct(){const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonthsLocal(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
+function editProduct(p){setInvTab('form');editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);const more=$r('#inv-more-fields');if(more)more.open=Boolean(p.expiryDate||p.openedDate||p.paoMonths||p.ingredients||p.pros||p.cons||(p.remindDays!=null&&Number(p.remindDays)!==30));$r('#inv-save').textContent='บันทึกการแก้ไข';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
+function saveProduct(){if(guardPreviewWrite('การบันทึกสต๊อก'))return;const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonthsLocal(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();if(wasEditing)setInvTab('stock');}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
 async function onInventoryClick(e){
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.stepProduct){
+    if(guardPreviewWrite('การปรับจำนวนสต๊อก'))return;
     const p=(state.trackedProducts||[]).find(x=>x.id===b.dataset.stepProduct);if(!p)return;
     const delta=Number(b.dataset.delta)||0;
     const pendingKey=`${state.uid}:${p.id}`;
@@ -133,7 +179,7 @@ async function onInventoryClick(e){
   }
   const id=b.dataset.editProduct||b.dataset.deleteProduct;
   if(b.dataset.editProduct){const p=(state.trackedProducts||[]).find(x=>x.id===id);if(p)editProduct(p);}
-  else if(b.dataset.deleteProduct&&confirm('ลบรายการนี้ออกจากสต๊อก?'))try{deleteDoc(userDoc(state.uid,'tracked_products',id)).catch(err=>toast(err.message,'err'));toast('ลบรายการแล้ว');}catch(err){toast(err.message,'err');}
+  else if(b.dataset.deleteProduct){if(guardPreviewWrite('การลบสินค้าในสต๊อก'))return;if(confirm('ลบรายการนี้ออกจากสต๊อก?'))try{deleteDoc(userDoc(state.uid,'tracked_products',id)).catch(err=>toast(err.message,'err'));toast('ลบรายการแล้ว');}catch(err){toast(err.message,'err');}}
 }
 
 function openBatchInventoryModal(results, errors) {
@@ -179,6 +225,7 @@ function openBatchInventoryModal(results, errors) {
     </div>`, { wide: true });
 
   $('#bi-save', m.el).addEventListener('click', async () => {
+    if (guardPreviewWrite('การบันทึกสต๊อกจากรูปภาพ')) return;
     const rows = [...m.el.querySelectorAll('[data-bi-row]')];
     const items = [];
     for (const row of rows) {
@@ -264,4 +311,4 @@ async function scanPhoto(e) {
     toast(explainGeminiError(err), 'err');
   }
 }
-function saveBlacklist(){try{setDoc(userDoc(state.uid,'ingredient_blacklist','list'),{ingredients:$r('#inv-blacklist').value.trim(),updatedAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกส่วนผสมที่ต้องการเลี่ยงแล้ว');}catch(e){toast(e.message,'err');}}
+function saveBlacklist(){if(guardPreviewWrite('การบันทึก Ingredient Blacklist'))return;try{setDoc(userDoc(state.uid,'ingredient_blacklist','list'),{ingredients:$r('#inv-blacklist').value.trim(),updatedAt:new Date()}).catch(e=>toast(e.message,'err'));toast('บันทึกส่วนผสมที่ต้องการเลี่ยงแล้ว');}catch(e){toast(e.message,'err');}}

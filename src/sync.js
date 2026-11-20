@@ -1,7 +1,7 @@
 import { onSnapshot } from 'firebase/firestore';
 import { $, fmtDateTime } from './util.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
-import { isDemoMode } from './demo.js';
+import { isPreviewMode } from './preview.js';
 
 export const syncState = {
   pending: {},
@@ -39,7 +39,9 @@ function onSyncError(err) {
 }
 
 export function syncLineText() {
-  if (isDemoMode()) return 'โหมดตัวอย่าง · แสดงข้อมูลสมมติและไม่ได้ซิงค์กับบัญชี';
+  if (isPreviewMode()) {
+    return 'โหมดดูตัวอย่าง (ข้อมูลจำลองบนเบราว์เซอร์ ไม่ได้ซิงค์กับ Firebase)';
+  }
   const pending = Object.values(syncState.pending).some(Boolean);
   let t = syncState.lastSync ? `ซิงค์กับเซิร์ฟเวอร์ล่าสุด: ${fmtDateTime(syncState.lastSync)}` : 'ยังไม่เคยซิงค์กับเซิร์ฟเวอร์';
   if (!navigator.onLine) t += ' · ออฟไลน์ (แสดงข้อมูลที่จำไว้ในเครื่อง)';
@@ -60,6 +62,13 @@ export function renderSyncStatus() {
   const pending = Object.values(syncState.pending).some(Boolean);
   const dot = $('#sync-dot'), text = $('#sync-text');
   if (!dot || !text) return;
+  if (isPreviewMode()) {
+    dot.className = 'w-2 h-2 rounded-full bg-sky-400';
+    text.textContent = 'โหมดดูตัวอย่าง';
+    const line = $('#sum-sync');
+    if (line) line.textContent = '👀 ' + syncLineText();
+    return;
+  }
   if (syncState.error) { dot.className = 'w-2 h-2 rounded-full bg-rose-400'; text.textContent = 'เชื่อมต่อไม่ได้ (' + syncState.error + ')'; }
   else if (!online) { dot.className = 'w-2 h-2 rounded-full bg-slate-300'; text.textContent = pending ? 'ออฟไลน์ · รอซิงค์' : 'ออฟไลน์'; }
   else if (pending) { dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse'; text.textContent = 'กำลังซิงค์...'; }

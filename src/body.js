@@ -4,6 +4,8 @@ import { state } from './state.js';
 import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
+import { bindChartInspector } from './ui.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
@@ -22,6 +24,7 @@ const SLEEP_STEPS_METRICS = [
 const BODY_MEASUREMENT_KEYS = ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'];
 
 let root;
+let activeBodyTab = 'body';
 let activeMetric = 'weight';
 let activeSleepStepsMetric = 'sleepHours';
 
@@ -48,99 +51,118 @@ function formatDurationTh(hours, minutes) {
   return m ? `${h} ชม. ${m} น.` : `${h} ชม.`;
 }
 
+function setBodyTab(tab) {
+  if (!root) return;
+  activeBodyTab = tab === 'sleep' ? 'sleep' : 'body';
+  root.querySelectorAll('[data-body-tab]').forEach(btn => {
+    const on = btn.dataset.bodyTab === activeBodyTab;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('#b-panel-body', root)?.classList.toggle('hidden', activeBodyTab !== 'body');
+  $('#b-panel-sleep', root)?.classList.toggle('hidden', activeBodyTab !== 'sleep');
+}
+
 export function mountBody(el) {
   root = el;
+  activeBodyTab = 'body';
   root.innerHTML = `
-  <div class="space-y-6">
+  <div class="md:col-span-2 space-y-3">
     <div id="b-snapshot" class="grid grid-cols-3 gap-2.5"></div>
-    <div class="card space-y-4">
-      <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-blue-500' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div><label class="lbl">วันที่</label><input type="date" id="b-date" class="input"></div>
-        <div><label class="lbl">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
-        <div><label class="lbl">รอบอก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-bust" class="input"></div>
-        <div><label class="lbl">รอบเอว (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-waist" class="input"></div>
-        <div><label class="lbl">รอบสะโพก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-hip" class="input"></div>
-        <div><label class="lbl">รอบแขน (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-arm" class="input"></div>
-        <div><label class="lbl">รอบขา (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-thigh" class="input"></div>
-        <div class="sm:col-span-2"><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
-      </div>
-      <p class="text-xs text-slate-500">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
-      <div class="flex justify-end"><button id="b-save" class="btn btn-sky">${iconSvg('plus', { size: 15 })} บันทึก</button></div>
-    </div>
-
-    <div class="card space-y-4">
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-indigo-500' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
-          <p class="text-xs text-slate-500 mt-0.5">เว็บแอปบนเบราว์เซอร์ไม่สามารถเชื่อมต่อเข้าแอป Zepp บนมือถือโดยตรงได้ — เลือกบันทึกเอง หรือนำเข้าไฟล์ CSV (3 รูปแบบ ไม่ใช้ AI) ที่ Export จาก Zepp ได้ทันที</p>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
-        <label class="btn btn-soft text-xs cursor-pointer">
-          ${iconSvg('csv', { size: 15, className: 'text-emerald-600' })} นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
-          <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
-        </label>
-      </div>
-
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div><label class="lbl">วันที่</label><input type="date" id="bz-date" class="input"></div>
-        <div>
-          <label class="lbl" for="bz-sleep">ชั่วโมงนอน (ชม.)</label>
-          <input type="number" step="0.1" min="0" max="24" inputmode="decimal" id="bz-sleep" class="input" placeholder="เช่น 7.5">
-          <input type="range" id="bz-sleep-slider" class="tm-slider" min="0" max="14" step="0.5" value="0" aria-label="ปรับชั่วโมงนอนแบบเลื่อน">
-        </div>
-        <div><label class="lbl">จำนวนก้าว</label><input type="number" step="1" min="0" inputmode="numeric" id="bz-steps" class="input" placeholder="เช่น 8420"></div>
-        <div><label class="lbl">เวลาเข้านอน</label><input type="time" id="bz-bed" class="input"></div>
-        <div><label class="lbl">เวลาตื่นนอน</label><input type="time" id="bz-wake" class="input"></div>
-        <div><label class="lbl">หมายเหตุ</label><input id="bz-note" class="input" placeholder="หลับสบาย / เดินออกกำลัง"></div>
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-500">รองรับ Zepp CSV : ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY) — เลือกพร้อมกันได้ ระบบรวมวันเดียวกันให้อัตโนมัติ</span>
-        <button id="bz-save" class="btn btn-primary text-xs shrink-0">${iconSvg('plus', { size: 15 })} บันทึกนอน / ก้าวเดิน</button>
-      </div>
-
-      <div class="border-t border-slate-100 pt-3 space-y-2">
-        <h3 class="text-sm font-bold text-slate-700">ประวัติการนอน & ก้าวเดินล่าสุด</h3>
-        <div id="bz-list" class="space-y-2"></div>
-      </div>
-    </div>
-
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-blue-500' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
-      <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
-        <tbody id="b-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
+    <div class="tm-seg tm-seg--2" role="tablist" aria-label="หมวดบันทึกข้อมูลร่างกาย">
+      <button type="button" role="tab" data-body-tab="body" aria-selected="true" class="tm-seg-btn is-active">น้ำหนัก & สัดส่วน</button>
+      <button type="button" role="tab" data-body-tab="sleep" aria-selected="false" class="tm-seg-btn">นอน & ก้าวเดิน (Zepp)</button>
     </div>
   </div>
-  <div class="space-y-6">
-    <div class="card space-y-3">
-      <h3 id="b-chart-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('health', { size: 17, className: 'text-blue-500' })}<span>แนวโน้มน้ำหนัก & สัดส่วน</span></h3>
-      <div id="b-chart-tabs" class="flex flex-wrap gap-1.5"></div>
-      <div id="b-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
-      <div id="b-chart"></div>
-    </div>
+  <div id="b-panel-body" class="md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
+    <div class="space-y-6">
+      <div class="card space-y-4">
+        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-blue-500' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div><label class="lbl">วันที่</label><input type="date" id="b-date" class="input"></div>
+          <div><label class="lbl">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
+          <div><label class="lbl">รอบอก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-bust" class="input"></div>
+          <div><label class="lbl">รอบเอว (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-waist" class="input"></div>
+          <div><label class="lbl">รอบสะโพก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-hip" class="input"></div>
+          <div><label class="lbl">รอบแขน (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-arm" class="input"></div>
+          <div><label class="lbl">รอบขา (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-thigh" class="input"></div>
+          <div class="sm:col-span-2"><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
+        </div>
+        <p class="text-xs text-slate-500">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
+        <div class="flex justify-end"><button id="b-save" class="btn btn-sky">${iconSvg('plus', { size: 15 })} บันทึก</button></div>
+      </div>
 
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('moon', { size: 17, className: 'text-indigo-500' })}<span>แนวโน้มการนอน & ก้าวเดิน</span></h3>
-      <div id="bz-chart-tabs" class="flex flex-wrap gap-1.5"></div>
-      <div id="bz-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
-      <div id="bz-chart"></div>
+      <div class="card space-y-3">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-blue-500' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
+        <div id="b-history-wrap">
+          <div id="b-mobile-list" class="sm:hidden space-y-2 tabular-nums"></div>
+          <div class="hidden sm:block overflow-x-auto"><table class="w-full text-left text-sm">
+            <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
+            <tbody id="b-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-6">
+      <div class="card space-y-3">
+        <h3 id="b-chart-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('health', { size: 17, className: 'text-blue-500' })}<span>แนวโน้มน้ำหนัก & สัดส่วน</span></h3>
+        <div id="b-chart-tabs" class="tm-seg tm-seg--scroll" role="tablist" aria-label="เลือกสัดส่วน"></div>
+        <div id="b-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
+        <div id="b-chart"></div>
+      </div>
+    </div>
+  </div>
+  <div id="b-panel-sleep" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
+    <div class="space-y-6">
+      <div class="card space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-indigo-500' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
+            <p class="text-xs text-slate-500 mt-0.5">นำเข้าไฟล์ CSV จาก Zepp ได้หลายไฟล์พร้อมกัน (ระบบรวมวันเดียวกันให้อัตโนมัติ) หรือกดปุ่มบันทึกเอง</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="btn btn-soft text-xs cursor-pointer">
+            ${iconSvg('csv', { size: 15, className: 'text-emerald-600' })} นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
+            <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
+          </label>
+          <button type="button" id="bz-open-manual" class="btn btn-primary text-xs">
+            ${iconSvg('plus', { size: 15 })} กรอกเอง (นอน / ก้าวเดิน)
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-500 leading-relaxed">รองรับ Zepp CSV 3 แบบ: ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY)</p>
+
+        <div class="border-t border-slate-100 pt-3 space-y-2">
+          <h3 class="text-sm font-bold text-slate-700">ประวัติการนอน & ก้าวเดินล่าสุด</h3>
+          <div id="bz-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-6">
+      <div class="card space-y-3">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('moon', { size: 17, className: 'text-indigo-500' })}<span>แนวโน้มการนอน & ก้าวเดิน</span></h3>
+        <div id="bz-chart-tabs" class="tm-seg tm-seg--2" role="tablist" aria-label="เลือกกราฟการนอนและก้าวเดิน"></div>
+        <div id="bz-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
+        <div id="bz-chart"></div>
+      </div>
     </div>
   </div>`;
 
   $('#b-date', root).value = localDateStr();
-  $('#bz-date', root).value = localDateStr();
+  root.addEventListener('click', e => {
+    const tabBtn = e.target.closest('[data-body-tab]');
+    if (tabBtn) setBodyTab(tabBtn.dataset.bodyTab);
+  });
+  window.addEventListener('trackme:focus', e => {
+    if (!root?.isConnected || e.detail?.tab !== 'body') return;
+    const fid = String(e.detail?.focusId || '');
+    setBodyTab(fid.startsWith('bz-') ? 'sleep' : 'body');
+    if (fid.startsWith('bz-') && fid !== 'bz-csv') {
+      requestAnimationFrame(() => $('#bz-open-manual', root)?.focus?.());
+    }
+  });
   $('#b-save', root).addEventListener('click', save);
-  $('#bz-save', root).addEventListener('click', saveSleepSteps);
-  $('#bz-sleep-slider', root).addEventListener('input', e => {
-    $('#bz-sleep', root).value = Number(e.target.value) > 0 ? e.target.value : '';
-  });
-  $('#bz-sleep', root).addEventListener('input', e => {
-    const v = Number(e.target.value);
-    $('#bz-sleep-slider', root).value = Number.isFinite(v) ? String(Math.max(0, Math.min(14, Math.round(v * 2) / 2))) : '0';
-  });
+  $('#bz-open-manual', root).addEventListener('click', () => openSleepStepsModal());
   $('#bz-csv', root).addEventListener('change', handleCsvImport);
 
   $('#b-chart-tabs', root).addEventListener('click', e => {
@@ -155,14 +177,25 @@ export function mountBody(el) {
     activeSleepStepsMetric = b.dataset.ssMetric;
     renderSleepStepsChart();
   });
-  $('#b-body', root).addEventListener('click', e => {
+  $('#b-history-wrap', root).addEventListener('click', e => {
     const b = e.target.closest('[data-del]');
-    if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (!b) return;
+    if (guardPreviewWrite('การลบข้อมูลสัดส่วน')) return;
+    if (confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.del)).catch(err => toast(err.message, 'err'));
   });
   $('#bz-list', root).addEventListener('click', e => {
+    const editBtn = e.target.closest('[data-ss-edit]');
+    if (editBtn) {
+      const rec = (state.body || []).find(x => x.id === editBtn.dataset.ssEdit);
+      openSleepStepsModal(rec || null);
+      return;
+    }
     const b = e.target.closest('[data-ss-del]');
-    if (b && confirm('ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.ssDel)).catch(err => toast(err.message, 'err'));
+    if (!b) return;
+    if (guardPreviewWrite('การลบข้อมูลการนอน/ก้าวเดิน')) return;
+    if (confirm('ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.ssDel)).catch(err => toast(err.message, 'err'));
   });
+  setBodyTab('body');
   render();
 }
 
@@ -171,8 +204,8 @@ export function resetBodyToToday() {
   const today = localDateStr();
   const dateEl = $('#b-date', root);
   if (dateEl) dateEl.value = today;
-  const zDateEl = $('#bz-date', root);
-  if (zDateEl) zDateEl.value = today;
+  const modalDateEl = document.getElementById('bz-date');
+  if (modalDateEl) modalDateEl.value = today;
 }
 
 export const sortBodyDesc = items => items.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -206,7 +239,15 @@ export function metricChartSvg(items, metricKey = 'weight') {
   const decimals = meta.decimals ?? 1;
   const fmtVal = v => decimals === 0 ? Math.round(v).toLocaleString() : v.toFixed(decimals);
   const line = pts.map((p, i) => `${x(ts[i]).toFixed(1)},${y(p.val).toFixed(1)}`).join(' ');
-  const dots = pts.map((p, i) => `<circle cx="${x(ts[i]).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="3.2" fill="${meta.color}"><title>${esc(fmtDate(p.date))}: ${fmtVal(p.val)} ${esc(meta.unit)}</title></circle>`).join('');
+  const dots = pts.map((p, i) => {
+    const cx = x(ts[i]).toFixed(1);
+    const cy = y(p.val).toFixed(1);
+    const valStr = `${fmtVal(p.val)} ${meta.unit}`;
+    return `<g>
+      <circle cx="${cx}" cy="${cy}" r="3.4" fill="${meta.color}"></circle>
+      <circle cx="${cx}" cy="${cy}" r="11" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(p.date))}: ${esc(valStr)}" data-chart-sub="${esc(meta.label)}" data-chart-color="${meta.color}" aria-label="${esc(fmtDate(p.date))} ${esc(valStr)}"><title>${esc(fmtDate(p.date))}: ${esc(valStr)}</title></circle>
+    </g>`;
+  }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแนวโน้ม${esc(meta.label)}"><polyline points="${line}" fill="none" stroke="${meta.color}" stroke-width="2.2"/>${dots}
     <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#64748b">${esc(fmtVal(max))}</text><text x="4" y="${y(min) + 4}" font-size="9.5" fill="#64748b">${esc(fmtVal(min))}</text>
     <text x="${P}" y="${H - 6}" font-size="10" fill="#64748b">${esc(fmtDate(pts[0].date))}</text>
@@ -217,12 +258,162 @@ export function weightChartSvg(items) {
   return metricChartSvg(items, 'weight');
 }
 
+export function sleepCandlestickSvg(items) {
+  const pts = (items || [])
+    .map(r => {
+      const h = resolvedSleepHours(r);
+      return h !== null && r.date ? { ...r, hours: h } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-14);
+  if (!pts.length) return '<p class="text-xs text-slate-500">บันทึกการนอนอย่างน้อย 1 ครั้งเพื่อดูกราฟแท่งเทียน</p>';
+
+  const W = 340, H = 185, PL = 34, PR = 12, PT = 16, PB = 28;
+  const maxHours = Math.max(9.5, ...pts.map(p => p.hours)) + 0.5;
+  const plotW = W - PL - PR;
+  const plotH = H - PT - PB;
+  const colW = plotW / Math.max(1, pts.length);
+  const candleW = Math.max(7, Math.min(18, colW * 0.56));
+  const xCenter = i => PL + (i + 0.5) * colW;
+  const yOf = h => PT + plotH - (Math.max(0, h) / maxHours) * plotH;
+  const targetY = yOf(7);
+
+  const candles = pts.map((r, i) => {
+    const cx = xCenter(i);
+    const xLeft = cx - candleW / 2;
+    const totalMin = typeof r.sleepMinutes === 'number' && r.sleepMinutes > 0 ? r.sleepMinutes : Math.round(r.hours * 60);
+    const deep = Math.max(0, Number(r.deepSleepMin) || 0);
+    const rem = Math.max(0, Number(r.remSleepMin) || 0);
+    const light = Math.max(0, Number(r.lightSleepMin) || 0);
+    const stageSum = deep + rem + light;
+    const hasStages = stageSum > 0;
+    const yTop = yOf(r.hours);
+    const yBottom = yOf(0);
+
+    let bodyHtml = `<line x1="${cx.toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="#94a3b8" stroke-width="1.3"/>
+      <line x1="${(cx - 3).toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${(cx + 3).toFixed(1)}" y2="${Math.max(PT, yTop - 3).toFixed(1)}" stroke="#94a3b8" stroke-width="1.2"/>`;
+
+    if (hasStages) {
+      const denom = Math.max(totalMin, stageSum, 1);
+      const bodyH = Math.max(4, yBottom - yTop);
+      const segs = [
+        { min: deep, color: '#4338ca' },
+        { min: rem, color: '#8b5cf6' },
+        { min: light, color: '#38bdf8' },
+        { min: Math.max(0, totalMin - stageSum), color: '#94a3b8' }
+      ].filter(s => s.min > 0);
+      let cursorY = yBottom;
+      segs.forEach(seg => {
+        const sh = (seg.min / denom) * bodyH;
+        const sy = cursorY - sh;
+        bodyHtml += `<rect x="${xLeft.toFixed(1)}" y="${sy.toFixed(1)}" width="${candleW.toFixed(1)}" height="${Math.max(1.5, sh).toFixed(1)}" rx="1.5" fill="${seg.color}"/>`;
+        cursorY = sy;
+      });
+    } else {
+      const fill = r.hours >= 7 ? '#10b981' : '#f59e0b';
+      bodyHtml += `<rect x="${xLeft.toFixed(1)}" y="${yTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${Math.max(4, yBottom - yTop).toFixed(1)}" rx="3" fill="${fill}" opacity="0.9"/>`;
+    }
+
+    const durLabel = formatDurationTh(r.hours, r.sleepMinutes) || `${round1(r.hours)} ชม.`;
+    const stageSub = hasStages
+      ? `ลึก ${Math.round(deep)}น. · ตื้น ${Math.round(light)}น.${rem ? ` · REM ${Math.round(rem)}น.` : ''}`
+      : (r.bedTime || r.wakeTime ? `${r.bedTime || '?'}–${r.wakeTime || '?'}` : sourceBadgeLabel(r.source));
+    const tipColor = hasStages ? '#4338ca' : (r.hours >= 7 ? '#10b981' : '#f59e0b');
+    const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#64748b">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+
+    return `<g>
+      ${bodyHtml}
+      ${xLabel}
+      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: นอน ${esc(durLabel)}" data-chart-sub="${esc(stageSub)}" data-chart-color="${tipColor}" aria-label="${esc(fmtDate(r.date))} นอน ${esc(durLabel)}"><title>${esc(fmtDate(r.date))}: นอน ${esc(durLabel)} (${esc(stageSub)})</title></rect>
+    </g>`;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนการนอนและระยะหลับลึกตื้น">
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#6366f1" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.7"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#6366f1">เป้า 7 ชม.</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="#64748b">${Math.round(maxHours)}ชม.</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#64748b">0</text>
+      ${candles}
+    </svg>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#4338ca]"></span>หลับลึก</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#8b5cf6]"></span>REM</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#38bdf8]"></span>หลับตื้น</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#10b981]"></span>ไม่มีข้อมูลระยะ (≥7ชม.)</span>
+    </div>`;
+}
+
+export function stepsCandlestickSvg(items) {
+  const pts = (items || [])
+    .filter(r => typeof r.steps === 'number' && r.date)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-14);
+  if (!pts.length) return '<p class="text-xs text-slate-500">บันทึกก้าวเดินอย่างน้อย 1 ครั้งเพื่อดูกราฟแท่งเทียน</p>';
+
+  const W = 340, H = 185, PL = 38, PR = 12, PT = 16, PB = 28;
+  const maxSteps = Math.max(9000, ...pts.map(p => p.steps)) * 1.08;
+  const plotW = W - PL - PR;
+  const plotH = H - PT - PB;
+  const colW = plotW / Math.max(1, pts.length);
+  const candleW = Math.max(7, Math.min(18, colW * 0.56));
+  const xCenter = i => PL + (i + 0.5) * colW;
+  const yOf = s => PT + plotH - (Math.max(0, s) / maxSteps) * plotH;
+  const targetY = yOf(8000);
+
+  const candles = pts.map((r, i) => {
+    const cx = xCenter(i);
+    const prev = i > 0 ? pts[i - 1].steps : Math.round(r.steps * 0.88);
+    const open = prev;
+    const close = r.steps;
+    const bull = close >= open;
+    const color = bull ? '#10b981' : '#f43f5e';
+    const topV = Math.max(open, close);
+    const botV = Math.min(open, close);
+    const wickLow = Math.max(0, Math.round(botV * 0.8));
+    const yHigh = yOf(topV);
+    const yLow = yOf(wickLow);
+    const yBodyTop = yOf(topV);
+    const bodyH = Math.max(5, yOf(botV) - yBodyTop);
+
+    const diff = i > 0 ? close - prev : null;
+    const diffStr = diff === null
+      ? 'วันแรกของช่วง'
+      : `${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ก้าวเทียบวันก่อน`;
+    const sub = `${diffStr}${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}`;
+    const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#64748b">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+
+    return `<g>
+      <line x1="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1.5"/>
+      <rect x="${(cx - candleW / 2).toFixed(1)}" y="${yBodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" rx="2.5" fill="${color}" opacity="0.9"/>
+      ${xLabel}
+      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว" data-chart-sub="${esc(sub)}" data-chart-color="${color}" aria-label="${esc(fmtDate(r.date))} ${r.steps.toLocaleString()} ก้าว"><title>${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว (${esc(sub)})</title></rect>
+    </g>`;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนก้าวเดินรายวัน">
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#10b981" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.65"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#059669">เป้า 8,000 ก้าว</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="#64748b">${Math.round(maxSteps / 1000)}k</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#64748b">0</text>
+      ${candles}
+    </svg>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#10b981]"></span>เพิ่ม / คงที่จากวันก่อน</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#f43f5e]"></span>ลดลงจากวันก่อน</span>
+    </div>`;
+}
+
 function renderChart() {
   if (!root) return;
   const meta = CHART_METRICS.find(m => m.key === activeMetric) || CHART_METRICS[0];
   $('#b-chart-tabs', root).innerHTML = CHART_METRICS.map(m => {
     const on_ = m.key === meta.key;
-    return `<button type="button" data-metric="${m.key}" class="chip text-xs ${on_ ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}">${esc(m.label)}</button>`;
+    return `<button type="button" role="tab" aria-selected="${on_}" data-metric="${m.key}" class="tm-seg-btn ${on_ ? 'is-active' : ''}">${esc(m.label)}</button>`;
   }).join('');
 
   const pts = state.body.filter(i => typeof i[meta.key] === 'number' && i.date).sort((a, b) => a.date.localeCompare(b.date));
@@ -239,7 +430,9 @@ function renderChart() {
     metaEl.innerHTML = `<span class="text-slate-400">ยังไม่มีข้อมูล${esc(meta.label)}</span>`;
   }
 
-  $('#b-chart', root).innerHTML = metricChartSvg(state.body, meta.key);
+  const chartEl = $('#b-chart', root);
+  chartEl.innerHTML = metricChartSvg(state.body, meta.key);
+  bindChartInspector(chartEl, { hint: 'แตะจุดบนกราฟเพื่อดูค่าแต่ละวัน' });
 }
 
 function renderSleepStepsChart() {
@@ -247,7 +440,7 @@ function renderSleepStepsChart() {
   const meta = SLEEP_STEPS_METRICS.find(m => m.key === activeSleepStepsMetric) || SLEEP_STEPS_METRICS[0];
   $('#bz-chart-tabs', root).innerHTML = SLEEP_STEPS_METRICS.map(m => {
     const on_ = m.key === meta.key;
-    return `<button type="button" data-ss-metric="${m.key}" class="chip text-xs ${on_ ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}">${esc(m.label)}</button>`;
+    return `<button type="button" role="tab" aria-selected="${on_}" data-ss-metric="${m.key}" class="tm-seg-btn ${on_ ? 'is-active' : ''}">${esc(m.label)}</button>`;
   }).join('');
 
   const pts = state.body
@@ -265,7 +458,9 @@ function renderSleepStepsChart() {
     metaEl.innerHTML = `<span class="text-slate-400">ยังไม่มีข้อมูล${esc(meta.label)}</span>`;
   }
 
-  $('#bz-chart', root).innerHTML = metricChartSvg(state.body, meta.key);
+  const chartEl = $('#bz-chart', root);
+  chartEl.innerHTML = meta.key === 'steps' ? stepsCandlestickSvg(state.body) : sleepCandlestickSvg(state.body);
+  bindChartInspector(chartEl, { hint: 'แตะแท่งเทียนเพื่อดูรายละเอียดแต่ละวัน' });
 }
 
 function renderSleepStepsList(desc) {
@@ -273,7 +468,7 @@ function renderSleepStepsList(desc) {
   if (!listEl) return;
   const rows = desc.filter(hasSleepOrSteps).slice(0, 20);
   if (!rows.length) {
-    listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีบันทึกการนอนหรือก้าวเดิน (กรอกเอง หรือนำเข้าไฟล์ CSV จาก Zepp ได้เลย)</p>';
+    listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีบันทึกการนอนหรือก้าวเดิน (นำเข้า Zepp CSV หรือกด "กรอกเอง" ได้เลย)</p>';
     return;
   }
   listEl.innerHTML = rows.map(r => {
@@ -300,7 +495,10 @@ function renderSleepStepsList(desc) {
           ${stageParts.length ? `<p class="text-[11px] text-slate-500">${esc(stageParts.join(' · '))}</p>` : ''}
           ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
         </div>
-        <button type="button" data-ss-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px] shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
+        <div class="flex items-center shrink-0">
+          <button type="button" data-ss-edit="${esc(r.id)}" class="text-slate-500 hover:text-brand p-2 min-w-[34px] min-h-[34px]" aria-label="แก้ไข">${iconSvg('edit', { size: 14 })}</button>
+          <button type="button" data-ss-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[34px] min-h-[34px]" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
+        </div>
       </div>
     `;
   }).join('');
@@ -319,23 +517,60 @@ export function render() {
       </div>`;
     snap.innerHTML =
       snapTile('น้ำหนักล่าสุด', latest.weight ? `${latest.weight.v} กก.` : 'ยังไม่บันทึก', latest.weight ? fmtDate(latest.weight.d) : 'ชั่งและจดได้เลย', 'body', 'text-blue-500') +
-      snapTile('การนอนล่าสุด', latest.sleepHours ? `${round1(latest.sleepHours.v)} ชม.` : 'ยังไม่บันทึก', latest.sleepHours ? fmtDate(latest.sleepHours.d) : 'กรอกหรือนำเข้า CSV', 'sleep', 'text-indigo-500') +
+      snapTile('การนอนล่าสุด', latest.sleepHours ? `${round1(latest.sleepHours.v)} ชม.` : 'ยังไม่บันทึก', latest.sleepHours ? fmtDate(latest.sleepHours.d) : 'นำเข้า CSV หรือกรอกเอง', 'sleep', 'text-indigo-500') +
       snapTile('ก้าวเดินล่าสุด', latest.steps ? `${Math.round(latest.steps.v).toLocaleString()} ก้าว` : 'ยังไม่บันทึก', latest.steps ? fmtDate(latest.steps.d) : 'ติดตามการเดินรายวัน', 'steps', 'text-emerald-600');
   }
   const desc = sortBodyDesc(state.body);
   const weightRows = desc.filter(hasBodyMeasurement);
   const cell = v => (typeof v === 'number' ? v : '—');
-  $('#b-body', root).innerHTML = weightRows.length ? weightRows.map((r, idx) => {
+  const rowsWithMeta = weightRows.map((r, idx) => {
     const prev = weightRows.slice(idx + 1).find(x => typeof x.weight === 'number');
-    let delta = '';
+    let deltaVal = null;
     if (typeof r.weight === 'number' && prev) {
       const d = +(r.weight - prev.weight).toFixed(1);
-      if (d) delta = ` <span class="text-xs ${d > 0 ? 'text-rose-600' : 'text-green-700'}">${d > 0 ? '+' : ''}${d}</span>`;
+      if (d) deltaVal = d;
     }
+    return { r, deltaVal };
+  });
+
+  $('#b-body', root).innerHTML = rowsWithMeta.length ? rowsWithMeta.map(({ r, deltaVal }) => {
+    const delta = deltaVal !== null
+      ? ` <span class="text-xs ${deltaVal > 0 ? 'text-rose-600' : 'text-green-700'}">${deltaVal > 0 ? '+' : ''}${deltaVal}</span>`
+      : '';
     return `<tr class="hover:bg-sky-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(r.date))}${r.note ? `<div class="text-xs text-slate-500 font-normal">${esc(r.note)}</div>` : ''}</td>
       <td class="p-3 text-right">${cell(r.weight)}${delta}</td><td class="p-3 text-right text-slate-600">${cell(r.bust)}</td><td class="p-3 text-right text-slate-600">${cell(r.waist)}</td><td class="p-3 text-right text-slate-600">${cell(r.hip)}</td><td class="p-3 text-right text-slate-600">${cell(r.arm)}</td><td class="p-3 text-right text-slate-600">${cell(r.thigh)}</td>
       <td class="p-3 text-center"><button data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึก">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
   }).join('') : '<tr><td colspan="8" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</td></tr>';
+
+  const mobileList = $('#b-mobile-list', root);
+  if (mobileList) {
+    const partBadges = r => [
+      ['อก', r.bust],
+      ['เอว', r.waist],
+      ['สะโพก', r.hip],
+      ['แขน', r.arm],
+      ['ขา', r.thigh]
+    ].filter(([, v]) => typeof v === 'number');
+    mobileList.innerHTML = rowsWithMeta.length ? rowsWithMeta.map(({ r, deltaVal }) => {
+      const parts = partBadges(r);
+      const deltaBadge = deltaVal !== null
+        ? `<span class="text-[11px] font-semibold ${deltaVal > 0 ? 'text-rose-600' : 'text-emerald-700'}">${deltaVal > 0 ? '+' : ''}${deltaVal}</span>`
+        : '';
+      return `
+        <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1.5 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+              <span class="font-bold text-slate-800">${esc(fmtDate(r.date))}</span>
+              ${typeof r.weight === 'number' ? `<span class="inline-flex items-center gap-1 rounded-md bg-sky-soft/70 px-2 py-0.5 font-bold text-blue-700">${r.weight} กก.${deltaBadge ? ` ${deltaBadge}` : ''}</span>` : ''}
+            </div>
+            <button type="button" data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-1.5 min-w-[34px] min-h-[34px] shrink-0" aria-label="ลบบันทึก">${iconSvg('trash', { size: 14 })}</button>
+          </div>
+          ${parts.length ? `<div class="grid grid-cols-3 gap-1.5 text-[11px] text-slate-600">${parts.map(([lbl, val]) => `<div class="rounded-lg bg-white/80 px-2 py-1 flex items-center justify-between gap-1 border border-slate-100"><span class="text-slate-500">${lbl}</span><b class="text-slate-800">${val}</b></div>`).join('')}</div>` : ''}
+          ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
+        </div>`;
+    }).join('') : '<p class="py-4 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</p>';
+  }
+
   renderSleepStepsList(desc);
   renderChart();
   renderSleepStepsChart();
@@ -442,6 +677,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   });
 
   $('#zp-confirm', box)?.addEventListener('click', async () => {
+    if (guardPreviewWrite('การนำเข้าข้อมูลจาก Zepp')) return;
     const picked = items.filter(x => x.checked && isDateStr(x.date));
     if (!picked.length || !state.uid) return;
     const confirmBtn = $('#zp-confirm', box);
@@ -496,13 +732,85 @@ async function handleCsvImport(e) {
 }
 
 
-function saveSleepSteps() {
-  const date = $('#bz-date', root).value;
-  const sleepHours = numField(root, 'bz-sleep');
-  const steps = numField(root, 'bz-steps');
-  const bedTime = ($('#bz-bed', root).value || '').trim();
-  const wakeTime = ($('#bz-wake', root).value || '').trim();
-  const note = ($('#bz-note', root).value || '').trim();
+function openSleepStepsModal(prefill = null) {
+  const initDate = isDateStr(prefill?.date) ? prefill.date : localDateStr();
+  const findByDate = d => (state.body || []).find(b => b.id === 'zepp_' + d);
+  const initialRec = prefill || findByDate(initDate) || null;
+  const initHours = resolvedSleepHours(initialRec);
+
+  const modal = openModal(`
+    <div id="bz-manual-box" class="space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('sleep', { size: 18, className: 'text-indigo-500' })}<span>บันทึกการนอน & ก้าวเดิน</span></h3>
+        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 sm:col-span-1"><label class="lbl" for="bz-date">วันที่</label><input type="date" id="bz-date" class="input" value="${esc(initDate)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="lbl" for="bz-steps">จำนวนก้าว</label><input type="number" step="1" min="0" inputmode="numeric" id="bz-steps" class="input" placeholder="เช่น 8420" value="${typeof initialRec?.steps === 'number' ? initialRec.steps : ''}"></div>
+        <div class="col-span-2">
+          <div class="flex items-center justify-between gap-2">
+            <label class="lbl !mb-0" for="bz-sleep">ชั่วโมงนอน (ชม.)</label>
+            <span id="bz-sleep-badge" class="text-xs font-semibold text-indigo-600 tabular-nums">${initHours !== null ? `${round1(initHours)} ชม.` : 'ยังไม่ระบุ'}</span>
+          </div>
+          <div class="grid grid-cols-[minmax(0,1fr)_96px] gap-2 items-center mt-1">
+            <input type="range" id="bz-sleep-slider" class="tm-slider !mt-0" min="0" max="14" step="0.5" value="${initHours !== null ? Math.max(0, Math.min(14, Math.round(initHours * 2) / 2)) : 0}" aria-label="ปรับชั่วโมงนอนแบบเลื่อน">
+            <input type="number" step="0.1" min="0" max="24" inputmode="decimal" id="bz-sleep" class="input text-center" placeholder="7.5" value="${initHours !== null ? initHours : ''}">
+          </div>
+        </div>
+        <div><label class="lbl" for="bz-bed">เวลาเข้านอน</label><input type="time" id="bz-bed" class="input" value="${esc(initialRec?.bedTime || '')}"></div>
+        <div><label class="lbl" for="bz-wake">เวลาตื่นนอน</label><input type="time" id="bz-wake" class="input" value="${esc(initialRec?.wakeTime || '')}"></div>
+        <div class="col-span-2"><label class="lbl" for="bz-note">หมายเหตุ</label><input id="bz-note" class="input" placeholder="หลับสบาย / เดินออกกำลัง" value="${esc(initialRec?.note || '')}"></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
+        <button type="button" id="bz-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 15 })} บันทึกนอน / ก้าวเดิน</button>
+      </div>
+    </div>
+  `);
+
+  const box = modal?.box || document.getElementById('bz-manual-box');
+  if (!box) return;
+  const sleepInp = $('#bz-sleep', box);
+  const sleepSlider = $('#bz-sleep-slider', box);
+  const sleepBadge = $('#bz-sleep-badge', box);
+  const syncBadge = v => {
+    const n = Number(v);
+    if (sleepBadge) sleepBadge.textContent = Number.isFinite(n) && n > 0 ? `${round1(n)} ชม.` : 'ยังไม่ระบุ';
+  };
+
+  sleepSlider?.addEventListener('input', e => {
+    const val = Number(e.target.value) > 0 ? e.target.value : '';
+    if (sleepInp) sleepInp.value = val;
+    syncBadge(val);
+  });
+  sleepInp?.addEventListener('input', e => {
+    const v = Number(e.target.value);
+    if (sleepSlider) sleepSlider.value = Number.isFinite(v) ? String(Math.max(0, Math.min(14, Math.round(v * 2) / 2))) : '0';
+    syncBadge(e.target.value);
+  });
+  $('#bz-date', box)?.addEventListener('change', e => {
+    const rec = findByDate(e.target.value);
+    if (!rec) return;
+    const sh = resolvedSleepHours(rec);
+    if (sleepInp) sleepInp.value = sh !== null ? String(sh) : '';
+    if (sleepSlider) sleepSlider.value = sh !== null ? String(Math.max(0, Math.min(14, Math.round(sh * 2) / 2))) : '0';
+    syncBadge(sh);
+    if ($('#bz-steps', box)) $('#bz-steps', box).value = typeof rec.steps === 'number' ? String(rec.steps) : '';
+    if ($('#bz-bed', box)) $('#bz-bed', box).value = rec.bedTime || '';
+    if ($('#bz-wake', box)) $('#bz-wake', box).value = rec.wakeTime || '';
+    if ($('#bz-note', box)) $('#bz-note', box).value = rec.note || '';
+  });
+  $('#bz-save', box)?.addEventListener('click', () => saveSleepSteps(box, () => modal?.close?.()));
+}
+
+function saveSleepSteps(container = root, onDone = null) {
+  if (guardPreviewWrite('การบันทึกการนอนและก้าวเดิน')) return;
+  const date = $('#bz-date', container).value;
+  const sleepHours = numField(container, 'bz-sleep');
+  const steps = numField(container, 'bz-steps');
+  const bedTime = ($('#bz-bed', container).value || '').trim();
+  const wakeTime = ($('#bz-wake', container).value || '').trim();
+  const note = ($('#bz-note', container).value || '').trim();
 
   if (!date) return toast('กรุณาเลือกวันที่', 'err');
   if (sleepHours === null && steps === null) return toast('กรุณากรอกชั่วโมงนอน หรือจำนวนก้าวอย่างน้อย 1 อย่าง', 'err');
@@ -525,13 +833,12 @@ function saveSleepSteps() {
   setDoc(userDoc(state.uid, 'body_records', docId), payload, { merge: true })
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
 
-  ['bz-sleep', 'bz-steps', 'bz-bed', 'bz-wake', 'bz-note'].forEach(id => { $('#' + id, root).value = ''; });
-  if ($('#bz-sleep-slider', root)) $('#bz-sleep-slider', root).value = '0';
-  $('#bz-date', root).value = localDateStr();
   toast('บันทึกการนอน & ก้าวเดินแล้ว');
+  if (typeof onDone === 'function') onDone();
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกน้ำหนักและสัดส่วน')) return;
   const date = $('#b-date', root).value;
   const rec = { weight: numField(root, 'b-weight'), bust: numField(root, 'b-bust'), waist: numField(root, 'b-waist'), hip: numField(root, 'b-hip'), arm: numField(root, 'b-arm'), thigh: numField(root, 'b-thigh') };
   if (!date) return toast('กรุณาเลือกวันที่', 'err');

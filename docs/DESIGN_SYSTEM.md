@@ -108,7 +108,7 @@ button({ label, icon, variant, size, full, id, type, disabled, ariaLabel })
 | Prop | Type | Default | Options |
 |---|---|---|---|
 | `label` | string | `''` | Button text |
-| `icon` | string | `''` | Lucide icon key in `src/icons.js` (e.g. `'plus'`, `'save'`) |
+| `icon` | string | `''` | Phosphor Duotone icon key in `src/icons.js` (e.g. `'plus'`, `'save'`) |
 | `variant` | string | `'primary'` | `primary`, `secondary`, `accent`, `success`, `danger`, `soft`, `ghost` |
 | `size` | string | `''` | `''` (default), `'sm'`, `'lg'` |
 | `full` | boolean | `false` | Full width |
@@ -116,7 +116,7 @@ button({ label, icon, variant, size, full, id, type, disabled, ariaLabel })
 
 ```js
 button({ label: 'บันทึก', icon: 'save', variant: 'primary', full: true })
-// Output renders inline Lucide SVG via iconSvg('save', { size: 16 })
+// Output renders inline Phosphor Duotone SVG via iconSvg('save', { size: 16 })
 ```
 
 ### Icon Button
@@ -131,7 +131,7 @@ iconButton({ icon, id, variant, size, ariaLabel, active })
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `icon` | string | `''` | Lucide icon key in `src/icons.js` |
+| `icon` | string | `''` | Phosphor Duotone icon key in `src/icons.js` |
 | `size` | string | `''` | `''` or `'sm'` (2.25rem) |
 | `active` | boolean | `false` | Active/selected state |
 
@@ -445,6 +445,11 @@ Key responsive behaviors:
 - Cards: reduced padding on mobile, `1rem` → `1.5rem` on desktop
 - Safe-area insets respected via `env(safe-area-inset-*)`
 
+## Icons (Offline 100%)
+
+- **Phosphor Duotone (`src/icons.js`)**: ใช้สำหรับไอคอนทุกส่วนทั้งแอป เมนูหลัก, การ์ด **หมวดหมู่** บนหน้าแรก, แท็บหมวดหมู่ย่อยของ **สุขภาพ (`health`)** และ **ดูแล (`care`)**, แผ่นบันทึกด่วน (`+`), และหน้าตั้งค่า (`@phosphor-icons/core/assets/duotone/*-duotone.svg?raw`) แบบ tree-shaken และรองรับ `currentColor` ปรับสีตามทั้ง 4 ธีมอัตโนมัติ (พร้อม alias `fa-*` และชื่อหมวดหมู่ครบถ้วน)
+  - แกลเลอรีหลัก (เลือกน้ำหนัก **Duotone**): <https://phosphoricons.com/> หรือ <https://icon-sets.iconify.design/ph/>
+
 ---
 
 ## Files
@@ -453,7 +458,7 @@ Key responsive behaviors:
 |---|---|
 | `src/design-tokens.css` | Design tokens (colors, spacing, radius, shadows, 4-theme overrides) + component utility classes |
 | `src/ui.js` | Shared UI component factory functions (JS → HTML string) and `animateNumberTicker` |
-| `src/icons.js` | Central Lucide inline SVG registry (`iconSvg`, `iconBubble`) |
+| `src/icons.js` | Central Phosphor Duotone inline SVG registry (`iconSvg`, `iconBubble`, `hydrateStaticIcons`) |
 | `src/theme.js` | 4-theme switcher (`baby-blue`, `pastel`, `cozy`, `dark`) + legacy `'minimal'` mapping |
 | `docs/DESIGN_SYSTEM.md` | This document |
 
@@ -463,7 +468,7 @@ Key responsive behaviors:
 2. **Import components**: `import { ... } from './ui.js'` and `import { iconSvg } from './icons.js'` in any feature module.
 3. **Backward compatibility**: Existing `.card`, `.btn`, `.input`, `.chip`, `.modal-backdrop` classes in `style.css` are preserved. New `tm-` prefixed classes are additive — no existing markup breaks.
 4. **Theme switching**: Uses `html[data-theme]` attribute (`baby-blue`, `pastel`, `cozy`, `dark`). Tokens in `design-tokens.css` and utilities in `style.css` adapt per theme.
-5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken `lucide` inline SVGs (`src/icons.js`); UI markup does not depend on FontAwesome webfonts.
+5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken **Phosphor Duotone** inline SVGs (`@phosphor-icons/core` via `src/icons.js`); UI markup works 100% offline with zero external CDN webfonts.
 
 ## Known Limitations
 

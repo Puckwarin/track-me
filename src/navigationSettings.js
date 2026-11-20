@@ -4,8 +4,12 @@ import { $, toast } from './util.js';
 import { state } from './state.js';
 import { iconSvg } from './icons.js';
 
-const GROUP_LABELS = { home: 'หน้าหลัก', food: 'อาหาร', health: 'สุขภาพ', care: 'ดูแล', more: 'เพิ่มเติม' };
+const GROUP_LABELS = { home: 'หน้าหลัก', food: 'อาหาร', health: 'สุขภาพ', expense: 'การเงิน', care: 'ดูแล', more: 'เพิ่มเติม' };
 const ITEMS = [{ tab: 'home', label: 'หน้าหลัก', emoji: '⌂', group: 'home' }, ...getAllNavigationTabs()];
+
+function renderNavItemIcon(tab, icon) {
+  return iconSvg(tab === 'home' ? 'home' : (icon || tab), { size: 18 });
+}
 
 function render(root, preferences) {
   const landing = $('#st-nav-landing', root);
@@ -15,7 +19,7 @@ function render(root, preferences) {
   $('#st-nav-favorites', root).innerHTML = ITEMS.filter(item => item.tab !== 'home').map(item => {
     const index = preferences.favorites.indexOf(item.tab);
     const selected = index >= 0;
-    return `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-nav-favorite="${item.tab}" ${selected ? 'checked' : ''}><span aria-hidden="true">${item.emoji}</span><span>${item.label}</span></label><div class="nav-pref-actions"><button type="button" class="nav-pref-move" data-nav-move="favorite" data-tab="${item.tab}" data-direction="-1" aria-label="ย้าย ${item.label} ขึ้น" ${!selected || index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button><button type="button" class="nav-pref-move" data-nav-move="favorite" data-tab="${item.tab}" data-direction="1" aria-label="ย้าย ${item.label} ลง" ${!selected || index === preferences.favorites.length - 1 ? 'disabled' : ''}>${iconSvg('chevron-down', { size: 13 })}</button></div></div>`;
+    return `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-nav-favorite="${item.tab}" ${selected ? 'checked' : ''}><span class="inline-flex items-center" aria-hidden="true">${renderNavItemIcon(item.tab, item.icon)}</span><span>${item.label}</span></label><div class="nav-pref-actions"><button type="button" class="nav-pref-move" data-nav-move="favorite" data-tab="${item.tab}" data-direction="-1" aria-label="ย้าย ${item.label} ขึ้น" ${!selected || index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button><button type="button" class="nav-pref-move" data-nav-move="favorite" data-tab="${item.tab}" data-direction="1" aria-label="ย้าย ${item.label} ลง" ${!selected || index === preferences.favorites.length - 1 ? 'disabled' : ''}>${iconSvg('chevron-down', { size: 13 })}</button></div></div>`;
   }).join('');
 
   $('#st-nav-submenus', root).innerHTML = Object.entries(GROUPS).filter(([, tabs]) => tabs.length > 1).map(([group, tabs]) => {
@@ -24,7 +28,7 @@ function render(root, preferences) {
       const item = ITEMS.find(candidate => candidate.tab === tab);
       const protectedTab = isProtectedNavigationTab(tab);
       const hidden = preferences.hiddenTabs.includes(tab);
-      return `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-nav-visible="${tab}" ${!hidden ? 'checked' : ''} ${protectedTab ? 'disabled' : ''}><span aria-hidden="true">${item?.emoji || ''}</span><span>${item?.label || tab}</span>${protectedTab ? '<small class="text-slate-400">จำเป็น</small>' : ''}</label><div class="nav-pref-actions"><button type="button" class="nav-pref-move" data-nav-move="${group}" data-tab="${tab}" data-direction="-1" aria-label="ย้าย ${item?.label || tab} ขึ้น" ${index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button><button type="button" class="nav-pref-move" data-nav-move="${group}" data-tab="${tab}" data-direction="1" aria-label="ย้าย ${item?.label || tab} ลง" ${index === order.length - 1 ? 'disabled' : ''}>${iconSvg('chevron-down', { size: 13 })}</button></div></div>`;
+      return `<div class="nav-pref-row"><label class="nav-pref-label"><input type="checkbox" data-nav-visible="${tab}" ${!hidden ? 'checked' : ''} ${protectedTab ? 'disabled' : ''}><span class="inline-flex items-center" aria-hidden="true">${renderNavItemIcon(tab, item?.icon)}</span><span>${item?.label || tab}</span>${protectedTab ? '<small class="text-slate-400">จำเป็น</small>' : ''}</label><div class="nav-pref-actions"><button type="button" class="nav-pref-move" data-nav-move="${group}" data-tab="${tab}" data-direction="-1" aria-label="ย้าย ${item?.label || tab} ขึ้น" ${index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button><button type="button" class="nav-pref-move" data-nav-move="${group}" data-tab="${tab}" data-direction="1" aria-label="ย้าย ${item?.label || tab} ลง" ${index === order.length - 1 ? 'disabled' : ''}>${iconSvg('chevron-down', { size: 13 })}</button></div></div>`;
     }).join('')}</section>`;
   }).join('');
 }

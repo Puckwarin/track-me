@@ -288,3 +288,65 @@ export function chartContainer({ svgContent = '', legend = [], id = '' } = {}) {
   if (id) attrs.push(`id="${esc(id)}"`);
   return `<div ${attrs.join(' ')}>${svgContent}${legendHtml}</div>`;
 }
+
+/* ---- Interactive Chart Inspector (Tap/Click to Read Values) ---- */
+export function bindChartInspector(container, {
+  hint = 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลละเอียด',
+  readoutEl = null,
+  stopSummaryToggle = false,
+  onSelect = null
+} = {}) {
+  if (!container) return;
+  const tips = container.querySelectorAll('[data-chart-tip]');
+  let out = readoutEl || container.querySelector('[data-chart-readout]');
+  if (!tips.length) {
+    if (out) out.classList.add('hidden');
+    return;
+  }
+  if (!out) {
+    out = document.createElement('div');
+    out.className = 'tm-chart-readout is-empty';
+    out.setAttribute('data-chart-readout', '');
+    out.setAttribute('aria-live', 'polite');
+    container.appendChild(out);
+  }
+  out.classList.remove('hidden');
+
+  const showHint = () => {
+    out.className = 'tm-chart-readout is-empty';
+    out.innerHTML = `<span>${esc(hint)}</span>`;
+  };
+  const showTarget = target => {
+    container.querySelectorAll('[data-chart-tip].is-selected').forEach(el => el.classList.remove('is-selected'));
+    target.classList.add('is-selected');
+    const title = target.dataset.chartTip || '';
+    const sub = target.dataset.chartSub || '';
+    const color = target.dataset.chartColor || '';
+    out.className = 'tm-chart-readout';
+    out.innerHTML = `<span class="inline-flex items-center gap-1.5 font-semibold min-w-0">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(color)}"></span>` : ''}<span class="truncate">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
+    if (typeof onSelect === 'function') onSelect(target);
+  };
+
+  showHint();
+  if (container.dataset.chartInspectorBound === '1') return;
+  container.dataset.chartInspectorBound = '1';
+
+  const activate = e => {
+    const target = e.target.closest('[data-chart-tip]');
+    if (!target || !container.contains(target)) return;
+    if (stopSummaryToggle) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    showTarget(target);
+  };
+  container.addEventListener('click', activate);
+  container.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target.closest('[data-chart-tip]');
+    if (!target || !container.contains(target)) return;
+    e.preventDefault();
+    if (stopSummaryToggle) e.stopPropagation();
+    showTarget(target);
+  });
+}

@@ -1,6 +1,7 @@
 import { addDoc, getDocs } from 'firebase/firestore';
 import { userCol } from './firebase.js';
 import { state } from './state.js';
+import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { openModal, toast, esc } from './util.js';
 
 const MONTHS = { 'ม.ค.':0,'มกราคม':0,'ก.พ.':1,'กุมภาพันธ์':1,'มี.ค.':2,'มีนาคม':2,'เม.ย.':3,'เมษายน':3,'พ.ค.':4,'พฤษภาคม':4,'มิ.ย.':5,'มิถุนายน':5,'ก.ค.':6,'กรกฎาคม':6,'ส.ค.':7,'สิงหาคม':7,'ก.ย.':8,'กันยายน':8,'ต.ค.':9,'ตุลาคม':9,'พ.ย.':10,'พฤศจิกายน':10,'ธ.ค.':11,'ธันวาคม':11 };
@@ -70,11 +71,14 @@ export function openHiwpintoSync() {
     let parsed;try{parsed=parseHiwpintoExport(JSON.parse(m.el.querySelector('#hp-paste').value));}catch(e){return toast(e.message||'อ่านข้อมูลไม่สำเร็จ','err');}
     const {start,end,entries}=parsed, out=m.el.querySelector('#hp-preview');
     if(!entries.length){out.innerHTML=`<p class="text-amber-800">ไม่พบเมนูที่มีโภชนาการในสัปดาห์ถัดไป (${start}–${end}). ตรวจว่าเลือกบิลสัปดาห์ถัดไปก่อนรัน helper</p>`;return;}
-    let library=state.customFoods||[];try{library=(await getDocs(userCol(state.uid,'custom_foods'))).docs.map(d=>d.data());}catch(err){return toast('อ่านคลังอาหารเพื่อตรวจชื่อซ้ำไม่ได้: '+err.message,'err');}
+    let library=state.customFoods||[];
+    if (!isPreviewMode()) {
+      try{library=(await getDocs(userCol(state.uid,'custom_foods'))).docs.map(d=>d.data());}catch(err){return toast('อ่านคลังอาหารเพื่อตรวจชื่อซ้ำไม่ได้: '+err.message,'err');}
+    }
     const existing=new Set(library.map(f=>cleanHiwpintoName(f.name).toLocaleLowerCase('th')));
     const unique=[],dups=[];
     for(const x of entries){const key=x.name.toLocaleLowerCase('th');if(existing.has(key)){dups.push(x.name);continue;}existing.add(key);unique.push(x);}
     out.innerHTML=`<p class="font-semibold">ช่วง ${start}–${end}: พบ ${entries.length} เมนู · ใหม่ ${unique.length} · ซ้ำข้าม ${dups.length}</p><div class="max-h-64 overflow-auto space-y-2 mt-2">${unique.map(x=>`<div class="rounded-lg bg-lav-soft/50 p-2"><b>${esc(x.name)}</b><div>${x.calories} kcal · P ${x.protein} · C ${x.carbs} · F ${x.fat}</div><div class="text-amber-700 text-xs">${esc(x.warning||'ค่าพลังงานและสารอาหารจากร้าน')}</div></div>`).join('')||'<p>ไม่มีรายการใหม่</p>'}${dups.length?`<p class="text-xs text-slate-500">ข้ามรายการชื่อซ้ำ: ${dups.map(esc).join(', ')}</p>`:''}</div><button id="hp-confirm-save" class="btn btn-primary mt-3" ${unique.length?'':'disabled'}>เพิ่ม ${unique.length} รายการเข้าคลังอาหาร</button>`;
-    out.querySelector('#hp-confirm-save')?.addEventListener('click',e=>{e.currentTarget.disabled=true;try{const writes=unique.map(x=>addDoc(userCol(state.uid,'custom_foods'),x.record));Promise.all(writes).catch(err=>toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err'));toast(`เพิ่ม ${unique.length} เมนู Hiwpinto แล้ว`);m.close();}catch(err){toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err');}});
+    out.querySelector('#hp-confirm-save')?.addEventListener('click',e=>{if(guardPreviewWrite('การนำเข้า Hiwpinto '))return;e.currentTarget.disabled=true;try{const writes=unique.map(x=>addDoc(userCol(state.uid,'custom_foods'),x.record));Promise.all(writes).catch(err=>toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err'));toast(`เพิ่ม ${unique.length} เมนู Hiwpinto แล้ว`);m.close();}catch(err){toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err');}});
   };
 }

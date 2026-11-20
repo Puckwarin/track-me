@@ -1,51 +1,66 @@
-import { getDocs, query, where } from 'firebase/firestore';
-import { userCol } from './firebase.js';
 import { state } from './state.js';
-import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
-import { $, esc, localDateStr, toNum, round1 } from './util.js';
+import { getFoodRecordsInRange } from './foodService.js';
+import { isPreviewMode } from './preview.js';
+import { $, esc, fmtDateTime, localDateStr, monthEndDate, toast } from './util.js';
+import { getTargets } from './profile.js';
+import {
+  aggregateMonthlyOverview, buildMonthKeys, compactFoodForOverview, readOverviewCache, writeOverviewCache
+} from './overviewLogic.js';
 import { iconSvg } from './icons.js';
 import { bindChartInspector } from './ui.js';
 
-let root, dashboardData = null, loading = false, activeSection = 'health';
+let root = null;
+let rangeMonths = 6;
+let seq = 0;
+let cachedRangeKey = '';
+let cachedFood = [];
+let cachedUpdatedAt = 0;
+let cachedFromStorage = false;
+let lastFoodError = '';
+let isLoading = false;
 
-const DASHBOARD_THEME_COLORS = {
-  'baby-blue': {
-    weight: '#4A9AD6',
-    kcal: '#D97736',
-    workout: '#3B9E78',
-    expense: '#D9647A',
-    axis: '#64748b',
-    muted: '#94a3b8'
-  },
-  pastel: {
-    weight: '#8E9CE6',
-    kcal: '#E58A5C',
-    workout: '#58B58B',
-    expense: '#D66D9B',
-    axis: '#7D6374',
-    muted: '#A68B9C'
-  },
-  cozy: {
-    weight: '#8B5E3C',
-    kcal: '#C97B38',
-    workout: '#4F8A64',
-    expense: '#B85A4A',
-    axis: '#7C6858',
-    muted: '#9E8B7B'
-  },
-  dark: {
-    weight: '#60B2EC',
-    kcal: '#F59E56',
-    workout: '#5AD1A2',
-    expense: '#F48FB1',
-    axis: '#98A9BE',
-    muted: '#6F829C'
+const fmtMoney = n => Math.round(n || 0).toLocaleString('th-TH');
+
+function renderBarChart(months, valueKey, {
+  color = '#8b5cf6',
+  emptyText = 'ยังไม่มีข้อมูลในช่วงเวลานี้',
+  targetValue = null,
+  targetLabel = '',
+  formatTooltip = (m, v) => `${m.label}: ${v}`
+} = {}) {
+  const vals = months.map(m => m[valueKey]);
+  const numericVals = vals.filter(v => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  if (!numericVals.length) {
+    return `<p class="text-xs text-slate-500 py-8 text-center">${esc(emptyText)}</p>`;
   }
 };
 
-function getDashboardPalette() {
-  const theme = typeof document !== 'undefined' ? document.documentElement?.dataset?.theme : 'baby-blue';
-  return DASHBOARD_THEME_COLORS[theme] || DASHBOARD_THEME_COLORS['baby-blue'];
+  const W = 440, H = 165, padX = 28, padTop = 20, padBottom = 26;
+  const maxVal = Math.max(...numericVals, targetValue || 0, 1);
+  const bw = (W - padX * 2) / months.length;
+  const yPos = v => H - padBottom - (Math.max(0, v) / maxVal) * (H - padTop - padBottom);
+
+  const targetLine = targetValue && targetValue > 0
+    ? `<line x1="${padX}" x2="${W - padX}" y1="${yPos(targetValue)}" y2="${yPos(targetValue)}" stroke="#ec4899" stroke-dasharray="4 3" stroke-width="1.2"/>
+       <text x="${W - padX}" y="${Math.max(11, yPos(targetValue) - 4)}" font-size="9" text-anchor="end" fill="#ec4899">${esc(targetLabel)}</text>`
+    : '';
+
+  const bars = months.map((m, i) => {
+    const v = typeof m[valueKey] === 'number' ? m[valueKey] : 0;
+    const barW = Math.max(8, Math.min(28, bw - 8));
+    const x = padX + i * bw + (bw - barW) / 2;
+    const y = yPos(v);
+    const h = Math.max(0, H - padBottom - y);
+    const showLabel = months.length <= 6 || i % 2 === 0 || i === months.length - 1;
+    const tipText = formatTooltip(m, v);
+    return `<g>
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${v > 0 ? color : '#e2e8f0'}"></rect>
+      <rect x="${padX + i * bw}" y="${padTop}" width="${bw}" height="${H - padTop - padBottom}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(tipText)}" data-chart-color="${v > 0 ? color : '#94a3b8'}" aria-label="${esc(tipText)}"><title>${esc(tipText)}</title></rect>
+      ${showLabel ? `<text x="${x + barW / 2}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${esc(m.label)}</text>` : ''}
+    </g>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="${esc(emptyText)}">${bars}${targetLine}</svg>`;
 }
 
 function monthLabel(ms) {
@@ -101,32 +116,15 @@ export function mountDashboard(el) {
     <div id="db-weekly" class="hidden lg:col-span-3 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8" aria-live="polite"></div>
   </div>`;
 
-  let monthCount = 6;
-  const setRange = n => {
-    monthCount = n;
-    [3, 6, 12].forEach(r => {
-      const b = $('#db-range-' + r, root);
-      b.setAttribute('aria-pressed', String(r === n));
-    });
-    if (dashboardData) render(monthCount);
-  };
-  $('#db-range-3', root).addEventListener('click', () => setRange(3));
-  $('#db-range-6', root).addEventListener('click', () => setRange(6));
-  $('#db-range-12', root).addEventListener('click', () => setRange(12));
-  $('#db-refresh', root).addEventListener('click', () => loadAndRender(monthCount));
-  $('#db-content', root).addEventListener('click', event => {
-    const tab = event.target.closest('[data-db-section]');
-    if (!tab) return;
-    activeSection = tab.dataset.dbSection;
-    $('#db-content', root).querySelectorAll('[data-db-section]').forEach(button => {
-      const selected = button.dataset.dbSection === activeSection;
-      button.classList.toggle('is-active', selected);
-      button.setAttribute('aria-selected', String(selected));
-    });
-    $('#db-content', root).querySelectorAll('[data-db-panel]').forEach(panel => {
-      panel.hidden = panel.dataset.dbPanel !== activeSection;
-    });
-  });
+  const dots = points.map(p => {
+    const tip = `${p.m.label}: เฉลี่ย ${p.v} กก.`;
+    const sub = `ล่าสุด ${p.m.weightLatest} กก.`;
+    return `<g>
+      <circle cx="${xAt(p.i)}" cy="${yAt(p.v)}" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="1.5"></circle>
+      <circle cx="${xAt(p.i)}" cy="${yAt(p.v)}" r="12" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="#3b82f6" aria-label="${esc(tip)}"><title>${esc(`${tip} (${sub})`)}</title></circle>
+      <text x="${xAt(p.i)}" y="${Math.max(12, yAt(p.v) - 8)}" font-size="9" text-anchor="middle" fill="#1e40af">${p.v}</text>
+    </g>`;
+  }).join('');
 
   window.addEventListener('trackme:theme', () => {
     if (root?.isConnected && dashboardData) render(monthCount);
@@ -139,10 +137,20 @@ export function resetDashboardToToday() {
   if (root) loadAndRender(6);
 }
 
-export function resetDashboardState() {
-  dashboardData = null;
-  activeSection = 'health';
-}
+  const preview = isPreviewMode();
+  const storageHit = preview ? null : readOverviewCache(state.uid, rangeMonths, { today });
+  if (!forceRefresh && storageHit) {
+    cachedFood = storageHit.food;
+    cachedUpdatedAt = storageHit.updatedAt;
+    cachedFromStorage = true;
+    cachedRangeKey = key;
+    lastFoodError = '';
+    if (storageHit.fresh) {
+      renderView();
+      return;
+    }
+    renderView();
+  }
 
 export function renderDashboard() {
   if (root && !loading) void loadAndRender(6);
@@ -155,10 +163,41 @@ async function loadAndRender(monthCount) {
   if (btn) { btn.disabled = true; btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })}<span>กำลังโหลด…</span>`; }
   $('#db-content', root).innerHTML = '<p class="db-loading">กำลังรวบรวมข้อมูล…</p>';
   try {
-    dashboardData = await loadData(monthCount);
-    render(monthCount);
-  } catch (e) {
-    $('#db-content', root).innerHTML = `<p class="text-sm text-rose-600">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`;
+    const snap = await getFoodRecordsInRange(state.uid, start, end);
+    if (mySeq !== seq) return;
+    const foodRows = compactFoodForOverview(snap.docs.map(d => d.data()));
+    cachedFood = foodRows;
+    cachedRangeKey = key;
+    cachedUpdatedAt = Date.now();
+    cachedFromStorage = false;
+    if (!preview) {
+      const summarySnapshot = aggregateMonthlyOverview({
+        monthsCount: rangeMonths,
+        today,
+        food: foodRows,
+        workouts: state.workouts || [],
+        body: state.body || [],
+        expenses: state.expenses || []
+      });
+      writeOverviewCache(state.uid, rangeMonths, {
+        today,
+        food: foodRows,
+        overviewSummary: summarySnapshot,
+        now: cachedUpdatedAt
+      });
+    }
+  } catch (err) {
+    if (mySeq !== seq) return;
+    if (storageHit) {
+      cachedFood = storageHit.food;
+      cachedUpdatedAt = storageHit.updatedAt;
+      cachedFromStorage = true;
+      cachedRangeKey = key;
+      lastFoodError = 'โหลดข้อมูลล่าสุดไม่สำเร็จ กำลังแสดงยอดสรุปจากแคชในเครื่อง';
+    } else {
+      lastFoodError = 'โหลดข้อมูลแคลอรี่ย้อนหลังบางส่วนไม่สำเร็จ (แสดงเฉพาะข้อมูลที่มีในแคช)';
+    }
+    if (forceRefresh) toast('รีเฟรชข้อมูลอาหารไม่สำเร็จ: ' + (err?.message || 'ตรวจสอบการเชื่อมต่อ'), 'err');
   } finally {
     loading = false;
     if (btn) { btn.disabled = false; btn.innerHTML = `${iconSvg('rotate-right', { size: 14 })}<span>รีเฟรช</span>`; }
@@ -294,41 +333,43 @@ function barChart(data, valueKey, color, unit, decimals = 0, palette = getDashbo
   </svg>`;
 }
 
-function statCard(label, value, sub, colorClass) {
-  return `<article class="db-stat">
-    <p class="db-stat-label">${esc(label)}</p>
-    <p class="db-stat-value ${colorClass}">${esc(value)}</p>
-    ${sub ? `<p class="db-stat-note">${esc(sub)}</p>` : ''}
-  </article>`;
+  $('#ov-table-body', root).innerHTML = months.slice().reverse().map(m => `
+    <tr>
+      <td class="p-2.5 font-medium text-slate-800 whitespace-nowrap">${esc(m.label)}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.weightLatest !== null ? `${m.weightLatest} กก.` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.calAvgPerLoggedDay !== null ? `${m.calAvgPerLoggedDay.toLocaleString()} (${m.foodDays}ว.)` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.workoutCount ? `${m.workoutCount} ครั้ง` : '—'}</td>
+      <td class="p-2.5 text-right whitespace-nowrap tabular-nums">${m.expenseTotal ? `฿${fmtMoney(m.expenseTotal)}` : '—'}</td>
+    </tr>`).join('');
+  $('#ov-charts', root).querySelectorAll('.card').forEach(card => {
+    bindChartInspector(card, { hint: 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลรายเดือน' });
+  });
 }
 
-function render(monthCount) {
-  if (!root || !dashboardData) return;
-  const d = dashboardData;
-  const latest = d[d.length - 1];
-  const first = d[0];
-  const palette = getDashboardPalette();
-
-  const weightTrend = (latest?.weight != null && first?.weight != null) ? round1(latest.weight - first.weight) : null;
-  const weightStr = weightTrend != null
-    ? (weightTrend > 0 ? `+${weightTrend} กก.` : `${weightTrend} กก.`)
-    : '-';
-  const weightClass = weightTrend != null ? (weightTrend > 0 ? 'text-rose-600' : 'text-emerald-700') : 'text-slate-400';
-
-  const totalWorkout = d.reduce((a, r) => a + r.workoutCount, 0);
-  const totalExpense = d.reduce((a, r) => a + r.expenseTotal, 0);
-  const totalIncome = d.reduce((a, r) => a + r.incomeTotal, 0);
-
-  $('#db-content', root).innerHTML = `
-    <section class="db-metrics" aria-label="สรุปตัวเลขสำคัญ">
-      ${statCard('น้ำหนักล่าสุด', latest?.weight != null ? latest.weight + ' กก.' : '-', weightTrend != null ? `เปลี่ยน ${weightStr}` : 'จาก ' + d.length + ' เดือน', weightClass)}
-      ${statCard('แคลอรี่เฉลี่ย/วัน', latest?.avgKcal != null ? latest.avgKcal + ' kcal' : '-', latest?.avgKcal != null ? 'เดือนล่าสุด' : '-', 'text-amber-600')}
-      ${statCard('ออกกำลังกาย', totalWorkout + ' ครั้ง', `รวม ${d.reduce((a, r) => a + r.workoutMin, 0)} นาที · ${d.length} เดือน`, 'text-brand-dark')}
-      ${statCard('ค่าใช้จ่ายสุทธิ', totalIncome - totalExpense >= 0 ? '+' + (totalIncome - totalExpense).toLocaleString() : (totalIncome - totalExpense).toLocaleString(), `รายรับ ${totalIncome.toLocaleString()} · จ่าย ${totalExpense.toLocaleString()} · ${d.length} เดือน`, totalIncome - totalExpense >= 0 ? 'text-emerald-700' : 'text-rose-600')}
-    </section>
-
-    <div role="tablist" aria-label="หมวดสรุปภาพรวม" class="tm-seg tm-seg--4">
-      ${[['health','สุขภาพ'],['nutrition','โภชนาการ'],['activity','กิจกรรม'],['finance','การเงิน']].map(([key,label]) => `<button type="button" role="tab" id="db-tab-${key}" class="tm-seg-btn ${activeSection===key?'is-active':''}" aria-controls="db-panel-${key}" aria-selected="${activeSection===key}" data-db-section="${key}">${label}</button>`).join('')}
+export function mountOverview(el) {
+  root = el;
+  root.innerHTML = `
+  <div class="lg:col-span-3 space-y-6">
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 19, className: 'text-brand' })}<span>แดชบอร์ดภาพรวมรายเดือน</span></h2>
+          <p class="text-xs text-slate-600">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" id="ov-go-weekly" class="chip bg-sky-soft text-blue-700 whitespace-nowrap">${iconSvg('weekly', { size: 14 })} สรุปรายสัปดาห์</button>
+            <button type="button" id="ov-go-report" class="chip bg-lav-soft text-brand-dark whitespace-nowrap">${iconSvg('report', { size: 14 })} รายงานสุขภาพ</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-ov-range="3" class="chip whitespace-nowrap">3 เดือน</button>
+          <button type="button" data-ov-range="6" class="chip whitespace-nowrap">6 เดือน</button>
+          <button type="button" data-ov-range="12" class="chip whitespace-nowrap">12 เดือน</button>
+          <button type="button" id="ov-refresh" class="btn btn-soft text-xs whitespace-nowrap">${iconSvg('rotate-right', { size: 14 })} รีเฟรช</button>
+        </div>
+      </div>
+      <p id="ov-cache-info" class="hidden text-[11px] text-slate-500"></p>
+      <p id="ov-notice" class="hidden text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2"></p>
+      <div id="ov-kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
     </div>
 
     <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="db-chart-panel" ${activeSection!=='health'?'hidden':''}>
@@ -377,4 +418,32 @@ function render(monthCount) {
   $('#db-content', root).querySelectorAll('.db-chart-card').forEach(card => {
     bindChartInspector(card, { hint: 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลรายเดือน' });
   });
+
+  $('#ov-go-weekly', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'weekly' } })));
+  $('#ov-go-report', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'report' } })));
+  $('#ov-refresh', root).addEventListener('click', () => {
+    void loadFoodForRange(true);
+  });
+
+  renderView();
+}
+
+export function renderOverview({ refreshFood = false } = {}) {
+  if (!root || !state.uid) return;
+  renderView();
+  const panel = $('#tab-overview');
+  const isVisible = panel && !panel.classList.contains('hidden');
+  if (isVisible || refreshFood) {
+    void loadFoodForRange(refreshFood);
+  }
+}
+
+export function resetOverviewState() {
+  cachedRangeKey = '';
+  cachedFood = [];
+  cachedUpdatedAt = 0;
+  cachedFromStorage = false;
+  lastFoodError = '';
+  isLoading = false;
+  seq++;
 }

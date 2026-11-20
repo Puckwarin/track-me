@@ -1,12 +1,11 @@
-import { getDocs, query, where } from 'firebase/firestore';
-import { userCol } from './firebase.js';
 import { state } from './state.js';
-import { isDemoMode } from './demo.js';
+import { getFoodRecordsInRange } from './foodService.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
 import { TYPES } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
 import { iconSvg } from './icons.js';
+import { bindChartInspector } from './ui.js';
 
 let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
@@ -49,14 +48,14 @@ export function mountWeekly(el) {
   root.innerHTML = `
   <div class="lg:col-span-3 space-y-6">
     <div class="card space-y-3">
-      <div class="flex justify-center gap-2">
-        <button id="sum-week" type="button" class="chip whitespace-nowrap min-h-[38px]">รายสัปดาห์</button>
-        <button id="sum-month" type="button" class="chip whitespace-nowrap min-h-[38px]">รายเดือน</button>
+      <div class="tm-seg tm-seg--2 max-w-xs mx-auto" role="tablist" aria-label="ช่วงสรุปข้อมูล">
+        <button id="sum-week" type="button" role="tab" aria-selected="true" class="tm-seg-btn is-active">รายสัปดาห์</button>
+        <button id="sum-month" type="button" role="tab" aria-selected="false" class="tm-seg-btn">รายเดือน</button>
       </div>
       <div class="flex items-center justify-between gap-3">
         <button id="wk-prev" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงก่อน">${iconSvg('chevron-left', { size: 16 })}</button>
         <div class="text-center min-w-0">
-          <h2 id="wk-title" class="font-bold text-slate-800 inline-flex items-center justify-center gap-1.5">${iconSvg('health', { size: 18, className: 'text-brand' })}<span>สรุปสุขภาพ</span></h2>
+          <h2 id="wk-title" class="font-bold text-slate-800 inline-flex items-center justify-center gap-1.5">${iconSvg('health', { size: 18, className: 'text-brand' })}<span>สรุป</span></h2>
           <p id="wk-range" class="text-sm text-slate-600 tabular-nums"></p>
         </div>
         <button id="wk-next" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงถัดไป">${iconSvg('chevron-right', { size: 16 })}</button>
@@ -80,9 +79,13 @@ export function resetWeeklyToToday() {
 const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {
-  if (!root || (!state.uid && !isDemoMode())) return;
-  $('#sum-week', root).className = `chip whitespace-nowrap min-h-[38px] ${summaryMode === 'weekly' ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
-  $('#sum-month', root).className = `chip whitespace-nowrap min-h-[38px] ${summaryMode === 'monthly' ? 'bg-brand text-white' : 'bg-lav-soft text-brand-dark'}`;
+  if (!root || !state.uid) return;
+  const weekBtn = $('#sum-week', root);
+  const monthBtn = $('#sum-month', root);
+  weekBtn.className = `tm-seg-btn ${summaryMode === 'weekly' ? 'is-active' : ''}`;
+  monthBtn.className = `tm-seg-btn ${summaryMode === 'monthly' ? 'is-active' : ''}`;
+  weekBtn.setAttribute('aria-selected', String(summaryMode === 'weekly'));
+  monthBtn.setAttribute('aria-selected', String(summaryMode === 'monthly'));
   $('#wk-prev', root).setAttribute('aria-label', summaryMode === 'monthly' ? 'เดือนก่อน' : 'สัปดาห์ก่อน');
   $('#wk-next', root).setAttribute('aria-label', summaryMode === 'monthly' ? 'เดือนถัดไป' : 'สัปดาห์ถัดไป');
   if (summaryMode === 'monthly') return renderMonthly();
@@ -90,18 +93,14 @@ export async function renderWeekly() {
   const my = ++seq, end = addDays(weekStart, 6), days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   $('#wk-range', root).textContent = `${fmtDate(weekStart)} – ${fmtDate(end)}${weekStart === mondayOf(localDateStr()) ? ' (สัปดาห์นี้)' : ''}`;
   $('#wk-next', root).disabled = weekStart >= mondayOf(localDateStr());
-  renderLoadingSkeleton('กำลังโหลดสรุปสัปดาห์...');
+  renderLoadingSkeleton('กำลังโหลดสรุปรายสัปดาห์...');
 
   let food = [];
   let foodError = false;
-  if (isDemoMode()) {
-    food = (state.demoFoodRecords || []).filter(item => item.date >= weekStart && item.date <= end);
-  } else {
-    try {
-      food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', weekStart), where('date', '<=', end)))).docs.map(d => d.data());
-    } catch {
-      foodError = true;
-    }
+  try {
+    food = (await getFoodRecordsInRange(state.uid, weekStart, end)).docs.map(d => d.data());
+  } catch {
+    foodError = true;
   }
   if (my !== seq) return;
 
@@ -116,11 +115,15 @@ export async function renderWeekly() {
   const y = v => H - P - v / max * (H - 2 * P);
   const bars = days.map((d, i) => {
     const v = byDay[d].cal, x = P + i * bw + 4, h = H - P - y(v), c = v > T.kcal * 1.1 ? '#fbbf24' : '#a78bfa';
-    return `<rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#e2e8f0'}"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
-      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#64748b">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>`;
+    const sub = v ? (v > T.kcal * 1.1 ? 'เกินเป้า' : v < T.kcal * 0.8 ? 'ต่ำกว่าเป้า' : 'ใกล้เคียงเป้า') : 'ไม่มีบันทึก';
+    return `<g>
+      <rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#e2e8f0'}"></rect>
+      <rect x="${P + i * bw}" y="6" width="${bw}" height="${H - P - 6}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${esc(sub)}" data-chart-color="${v ? c : '#94a3b8'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
+      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#64748b">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>
+    </g>`;
   }).join('');
   const chart = logged.length
-    ? `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟพลังงานรายวันตลอดสัปดาห์">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#ec4899" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#ec4899">เป้า ${T.kcal}</text></svg>`
+    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟพลังงานรายวันตลอดสัปดาห์">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#ec4899" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#ec4899">เป้า ${T.kcal}</text></svg></div>`
     : `<p class="text-xs text-slate-500 bg-slate-50 rounded-xl py-6 text-center">${foodError ? 'โหลดบันทึกอาหารไม่สำเร็จในขณะนี้' : 'สัปดาห์นี้ยังไม่มีบันทึกอาหาร'}</p>`;
 
   const wOf = (a, b) => state.body.filter(r => typeof r.weight === 'number' && r.date >= a && r.date <= b).sort((p, q) => p.date.localeCompare(q.date));
@@ -195,6 +198,7 @@ export async function renderWeekly() {
     </div>
     <div class="card lg:col-span-3"><h3 class="font-bold text-slate-800 mb-2">ข้อสังเกต</h3>${tips.length ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-600">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้</p>'}
       <p class="text-[11px] text-slate-500 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
+  bindChartInspector($('#wk-food-chart', root), { hint: 'แตะแท่งกราฟเพื่อดูแคลอรี่แต่ละวัน' });
 }
 
 async function renderMonthly() {
@@ -205,14 +209,10 @@ async function renderMonthly() {
 
   let food = [];
   let foodError = false;
-  if (isDemoMode()) {
-    food = (state.demoFoodRecords || []).filter(item => item.date >= start && item.date <= end);
-  } else {
-    try {
-      food = (await getDocs(query(userCol(state.uid, 'food_records'), where('date', '>=', start), where('date', '<=', end)))).docs.map(d => d.data());
-    } catch {
-      foodError = true;
-    }
+  try {
+    food = (await getFoodRecordsInRange(state.uid, start, end)).docs.map(d => d.data());
+  } catch {
+    foodError = true;
   }
   if (my !== seq) return;
 
@@ -228,11 +228,14 @@ async function renderMonthly() {
   const yPos = v => H - P - v / maxCal * (H - 2 * P);
   const bars = daysInMonth.map((d, i) => {
     const v = byDay[d].cal, x = P + i * bw, h = Math.max(H - P - yPos(v), 0);
-    return `<rect x="${x}" y="${yPos(v)}" width="${Math.max(bw - 1.5, 1)}" height="${h}" rx="1.5" fill="${v ? '#a78bfa' : '#e2e8f0'}"><title>${d}: ${Math.round(v)} kcal</title></rect>`
-      + (i % 5 === 0 || i === daysInMonth.length - 1 ? `<text x="${x}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${i + 1}</text>` : '');
+    return `<g>
+      <rect x="${x}" y="${yPos(v)}" width="${Math.max(bw - 1.5, 1)}" height="${h}" rx="1.5" fill="${v ? '#a78bfa' : '#e2e8f0'}"></rect>
+      <rect x="${x}" y="8" width="${Math.max(bw, 8)}" height="${H - P - 8}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${v ? `โปรตีน ${Math.round(byDay[d].p)} g` : 'ไม่มีบันทึก'}" data-chart-color="${v ? '#a78bfa' : '#94a3b8'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
+      ${(i % 5 === 0 || i === daysInMonth.length - 1 ? `<text x="${x}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${i + 1}</text>` : '')}
+    </g>`;
   }).join('');
   const chart = loggedDays.size
-    ? `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแคลอรี่รายเดือน">${bars}</svg><p class="text-[11px] text-slate-500">แท่งกราฟ = แคลอรี่รวมต่อวัน (แตะแต่ละแท่งเพื่อดูตัวเลข)</p>`
+    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแคลอรี่รายเดือน">${bars}</svg></div>`
     : `<p class="text-xs text-slate-500 bg-slate-50 rounded-xl py-6 text-center">${foodError ? 'โหลดบันทึกอาหารเดือนนี้ไม่สำเร็จ' : 'เดือนนี้ยังไม่มีบันทึกอาหาร'}</p>`;
 
   const ssMonth = state.body.filter(x => x.date >= start && x.date <= end);
@@ -255,4 +258,5 @@ async function renderMonthly() {
       <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> รายการ (ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b>)</p>
       <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนที่ถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''}</p></div>
   </div>`;
+  bindChartInspector($('#wk-food-chart', root), { hint: 'แตะแท่งกราฟเพื่อดูแคลอรี่แต่ละวัน' });
 }

@@ -2,6 +2,7 @@
 export const state = {
   user: null,
   uid: null,
+  isPreview: false,
   period: [],
   body: [],
   customFoods: [],

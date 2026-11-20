@@ -1,8 +1,7 @@
 import { getDocs, query, where } from 'firebase/firestore';
-import { userCol } from './firebase.js';
+import { userCol, auth } from './firebase.js';
 import { state } from './state.js';
-import { isDemoMode } from './demo.js';
-import { auth } from './firebase.js';
+import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
 import { $, esc, fmtDate, fmtDateTime, localDateStr, addDays, daysBetween, round1, toCsv, downloadFile, toast } from './util.js';
 import { periodStats } from './period.js';
 import { sortBodyDesc, weightChartSvg } from './body.js';
@@ -45,7 +44,7 @@ export function mountReport(el) {
   </div>`;
   $('#r-from', root).value = addDays(localDateStr(), -90);
   $('#r-to', root).value = localDateStr();
-  $('#r-name', root).value = auth.currentUser?.displayName || '';
+  $('#r-name', root).value = isPreviewMode() ? 'ตัวอย่างผู้ใช้งาน (Preview)' : (auth.currentUser?.displayName || '');
   $('#r-gen', root).addEventListener('click', generate);
   $('#r-print', root).addEventListener('click', () => window.print());
   $('#r-csv', root).addEventListener('click', csv);
@@ -61,8 +60,10 @@ export function resetReportToToday() {
 async function load() {
   const from = $('#r-from', root).value, to = $('#r-to', root).value;
   if (!from || !to || from > to) throw new Error('ช่วงวันที่ไม่ถูกต้อง');
-  const range = name => getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
-    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+  const range = name => isPreviewMode()
+    ? Promise.resolve(getPreviewRecordsInRange(name, from, to))
+    : getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
+        .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
   // ประจำเดือน/น้ำหนักอยู่ในหน่วยความจำแล้ว; อาหาร/อาการดึงตามช่วงวันที่ (ตอนออฟไลน์จะอ่านจากแคชในเครื่อง)
   const [food, symptoms, workouts] = isDemoMode()
     ? [

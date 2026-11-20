@@ -17,13 +17,14 @@ export const catOf = tab => CATEGORIES.find(c => c.tab === tab);
 export const GROUPS = {
   home: ['home'],
   food: ['food'],
-  health: ['overview', 'weekly', 'workout', 'period', 'symptoms', 'body', 'report'],
-  care: ['expense', 'care', 'remind', 'inventory'],
+  health: ['overview', 'workout', 'period', 'symptoms', 'body'],
+  expense: ['expense'],
+  care: ['care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
   overview: { icon: 'overview', emoji: '📈', label: 'แดชบอร์ด', cat: 'cat-neutral' },
-  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุปสัปดาห์', cat: 'cat-neutral' },
+  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุป', cat: 'cat-neutral' },
   workout: { icon: 'workout', emoji: '🏃‍♀️', label: 'ออกกำลังกาย', cat: 'cat-workout' },
   period: { icon: 'period', emoji: '🌸', label: 'ประจำเดือน', cat: 'cat-period' },
   symptoms: { icon: 'symptoms', emoji: '🌿', label: 'อาการ & ผิว', cat: 'cat-symptoms' },
@@ -36,4 +37,4 @@ export const SUBTABS = {
   notifications: { icon: 'notifications', emoji: '🔔', label: 'แจ้งเตือน', cat: 'cat-body' },
   settings: { icon: 'settings', emoji: '⚙️', label: 'ตั้งค่า', cat: 'cat-neutral' }
 };
-export const groupOf = tab => Object.keys(GROUPS).find(g => GROUPS[g].includes(tab)) || 'home';
+export const groupOf = tab => ['weekly', 'report'].includes(tab) ? 'health' : Object.keys(GROUPS).find(g => GROUPS[g].includes(tab)) || 'home';

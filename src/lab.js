@@ -5,6 +5,8 @@ import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } fro
 import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
 import { iconSvg } from './icons.js';
+import { guardPreviewWrite } from './preview.js';
+import { bindChartInspector } from './ui.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -124,7 +126,9 @@ export function mountLab(el) {
   });
   $('#lb-list', root).addEventListener('click', e => {
     const d = e.target.closest('[data-del]');
-    if (d && confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
+    if (!d) return;
+    if (guardPreviewWrite('การลบผลตรวจ')) return;
+    if (confirm('ลบผลตรวจนี้?')) deleteDoc(userDoc(state.uid, 'lab_records', d.dataset.del)).catch(err => toast(err.message, 'err'));
   });
   render();
 }
@@ -204,6 +208,7 @@ async function onScanLabPhoto(e) {
       </div>`, { wide: true });
 
     $('#lbs-save', m.el).addEventListener('click', async () => {
+      if (guardPreviewWrite('การบันทึกผลตรวจจากรูปภาพ')) return;
       const date = $('#lbs-date', m.el).value;
       const globalNote = $('#lbs-note', m.el).value.trim();
       if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
@@ -287,6 +292,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
     </div>`, { wide: true });
 
   $('#lbb-save', m.el).addEventListener('click', () => {
+    if (guardPreviewWrite('การบันทึกผลตรวจเป็นชุด')) return;
     const date = $('#lbb-date', m.el).value;
     const note = $('#lbb-note', m.el).value.trim().slice(0, 200);
     if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
@@ -393,6 +399,7 @@ export function resetLabToToday() {
 }
 
 function save() {
+  if (guardPreviewWrite('การบันทึกผลตรวจ')) return;
   const name = $('#lb-name', root).value.trim(), value = toNum($('#lb-value', root).value), date = $('#lb-date', root).value;
   if (!name || value === null || !date) return toast('กรอกวันที่ รายการตรวจ และผลที่ได้', 'err');
   const low = toNum($('#lb-low', root).value), high = toNum($('#lb-high', root).value);
@@ -406,9 +413,21 @@ function save() {
 
 function spark(rows) {
   if (rows.length < 2) return '';
-  const W = 120, H = 32, vs = rows.map(r => r.value), min = Math.min(...vs), max = Math.max(...vs), rng = max - min || 1;
-  const pts = rows.map((r, i) => `${(i / (rows.length - 1) * (W - 6) + 3).toFixed(1)},${(H - 4 - (r.value - min) / rng * (H - 8)).toFixed(1)}`).join(' ');
-  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-28 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2" stroke-linecap="round"/></svg>`;
+  const W = 128, H = 34, vs = rows.map(r => r.value), min = Math.min(...vs), max = Math.max(...vs), rng = max - min || 1;
+  const cx = i => (i / (rows.length - 1) * (W - 10) + 5);
+  const cy = r => (H - 5 - (r.value - min) / rng * (H - 10));
+  const pts = rows.map((r, i) => `${cx(i).toFixed(1)},${cy(r).toFixed(1)}`).join(' ');
+  const dots = rows.map((r, i) => {
+    const x = cx(i).toFixed(1), y = cy(r).toFixed(1);
+    const valStr = `${r.value}${r.unit ? ' ' + r.unit : ''}`;
+    const flag = labFlag(r);
+    const sub = `${fmtDate(r.date)}${flag && FLAG[flag] ? ` · ${FLAG[flag][0]}` : ''}`;
+    return `<g>
+      <circle cx="${x}" cy="${y}" r="2.6" fill="#8b7ae0"/>
+      <circle cx="${x}" cy="${y}" r="9" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(r.name)}: ${esc(valStr)}" data-chart-sub="${esc(sub)}" data-chart-color="#8b7ae0" aria-label="${esc(r.name)} ${esc(fmtDate(r.date))} ${esc(valStr)}"><title>${esc(fmtDate(r.date))}: ${esc(valStr)}</title></circle>
+    </g>`;
+  }).join('');
+  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-32 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
 }
 
 export function render() {
@@ -442,15 +461,24 @@ export function render() {
     .sort((a, b) => b[b.length - 1].date.localeCompare(a[a.length - 1].date));
 
   const hasAny = (state.labs || []).length > 0;
-  $('#lb-list', root).innerHTML = cards.length ? cards.map(rows => {
+  const listEl = $('#lb-list', root);
+  listEl.innerHTML = cards.length ? cards.map(rows => {
     const last = rows[rows.length - 1], f = labFlag(last), prev = rows[rows.length - 2];
     const arrow = prev ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : '';
     const displayRows = mode === 'abnormal'
       ? rows.slice().reverse().filter(r => { const rf = labFlag(r); return rf === 'low' || rf === 'high'; })
       : rows.slice().reverse();
-    return `<details class="card !p-3" ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
+    return `<div class="card !p-3" data-lab-card><details ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500 tabular-nums">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
       <div class="flex items-center gap-3 tabular-nums">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-500">${arrow}</span></p>${f ? `<span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
-      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}">${iconSvg('trash', { size: 14 })}</button></span></div>`).join('')}</div></details>`;
+      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}">${iconSvg('trash', { size: 14 })}</button></span></div>`).join('')}</div></details><div class="tm-chart-readout is-empty hidden mt-2" data-lab-readout aria-live="polite"></div></div>`;
   }).join('') : `<p class="text-sm text-slate-500 py-4 text-center">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : hasAny ? 'ไม่พบผลตรวจที่ตรงกับคำค้นหาหรือช่วงวันที่ที่เลือก' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย ใช้ชุดกรอกเร็ว หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
+
+  listEl.querySelectorAll('[data-lab-card]').forEach(card => {
+    bindChartInspector(card, {
+      hint: 'แตะจุดบนกราฟเล็กเพื่อดูค่าแต่ละครั้ง',
+      readoutEl: card.querySelector('[data-lab-readout]'),
+      stopSummaryToggle: true
+    });
+  });
 }

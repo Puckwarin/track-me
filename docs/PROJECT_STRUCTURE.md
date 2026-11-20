@@ -23,23 +23,23 @@
 | ไฟล์/กลุ่ม | ความรับผิดชอบ |
 |---|---|
 | `app.js` | entry point, tab navigation, lazy loading หน้า/ฟีเจอร์เมื่อคลิก และ orchestration (รวมตัวฟัง Firestore หลักและ Share Target routing) |
-| `auth.js`, `firebase.js` | Google Authentication, PIN lock และ Firebase helpers |
+| `auth.js`, `firebase.js`, `preview.js` | Google Authentication, PIN lock, Firebase helpers และโหมดดูตัวอย่างโดยไม่เข้าสู่ระบบ (`PREVIEW_UID = 'preview-guest'`, `guardPreviewWrite()`) |
 | `state.js`, `sync.js` | in-memory app state, event bus, Firestore listeners, สถานะ offline/sync และ unit tests ใน `sync.test.js` |
 | `schema.js` | sanitizers, collection labels และ document ID สำหรับ backup/restore |
-| `util.js`, `style.css`, `design-tokens.css`, `theme.js`, `ui.js`, `icons.js`, `version.js` | utilities (รวม `trapFocus`), local calendar date helpers (`localDateStr`, `localMonthStr`, `addDays`), shared styles, design tokens, ระบบ 4 ธีม (`baby-blue`, `pastel`, `cozy`, `dark`), shared UI components/ticker, Lucide inline SVGs และเลขเวอร์ชันเว็บแอป |
-| `navigation.js`, `navigationSettings.js`, `homeWidgetSettings.js` | จัดการเมนูย่อย ปุ่มลัดหน้า Home และการตั้งค่าแสดง/เรียงลำดับวิดเจ็ต |
-| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร, สแกนปุ่มเดียว (บาร์โค้ด → OCR ฉลากในเครื่อง → AI), โภชนาการ, AI consumers และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
+| `util.js`, `style.css`, `home.css`, `design-tokens.css`, `theme.js`, `ui.js`, `icons.js`, `version.js` | utilities (รวม `trapFocus`), local calendar date helpers (`localDateStr`, `localMonthStr`, `addDays`), shared styles, Home Calm Wellness styles, design tokens, ระบบ 4 ธีม (`baby-blue`, `pastel`, `cozy`, `dark`), shared UI components/ticker, Phosphor Duotone inline SVGs ทั้งแอป และเลขเวอร์ชันเว็บแอป |
+| `navigation.js`, `navigationSettings.js`, `homeWidgetSettings.js` | จัดการเมนูย่อย (รวมการ์ดไอคอนสุขภาพ/ดูแล), ปุ่มลัดหน้า Home และการตั้งค่าแสดง/เรียงลำดับวิดเจ็ต |
+| `food.js`, `food*.js`, `foodsearch.js`, `nutrition.js` | บันทึก/ค้นหาอาหาร (รวมตัวสลับมุมมองบันทึก/สรุป และซิงค์การแก้ไขคลังอาหารไปยังฟอร์มและรายการที่เลือกไว้), สแกนปุ่มเดียว (บาร์โค้ด → OCR ฉลากในเครื่อง → AI), โภชนาการ, AI consumers และตัวช่วยประมวลผลหลายภาพ (`runImageBatch`) |
 | `period.js`, `body.js`, `zeppParser.js`, `symptoms.js`, `profile.js`, `lab.js`, `labTemplates.js` | สุขภาพ, สัดส่วนร่างกาย + การนอน/ก้าวเดิน (กรอกเอง / นำเข้า Zepp CSV ฟรี), เป้าหมายและผลตรวจ (ชุดเทมเพลตแล็บ & วางหลายบรรทัดในเครื่อง + สแกนหลายภาพ) |
 | `expense.js`, `expenseLogic.js`, `statementParser.js`, `slipOcr.js` | รายรับ-รายจ่าย, งบ/รายการประจำ, วิเคราะห์จ่ายซ้ำรายเดือน, กฎหมวดหมู่, Statement และ OCR สลิป |
-| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง (อาการน้องหมา, เทมเพลตอาหารเดิม & สแกนซองหลายภาพ, teaser โหลด `lab.js` แบบ lazy), สต๊อก, Planner (รวมกิจวัตรวันเดียว `once` โหลดแบบ lazy จากหน้า Home) และการเตือนแบบพิมพ์เองพร้อมตัวช่วยแพตเทิร์น (0 โทเค็น) |
+| `care.js`, `inventory.js`, `reminders.js`, `remindLog.js`, `planner.js` | สัตว์เลี้ยง (อาการน้องหมา, เทมเพลตอาหารเดิม & สแกนซองหลายภาพ, teaser โหลด `lab.js` แบบ lazy), สต๊อก, Weekly Planner (แถบวันเลื่อนซ้าย-ขวา, เมนู **วางแผน**, กิจกรรมวันเดียว/รายสัปดาห์/สลับ A-B โหลดและแสดงบนสุดของหน้า Home) และการเตือนแบบพิมพ์เองพร้อมตัวช่วยแพตเทิร์น (0 โทเค็น) |
 | `workout.js`, `workoutActive.js`, `workoutParser.js`, `workoutPresets.js`, `workoutConstants.js` | แผน/บันทึก workout, เทมเพลตสำเร็จรูป 5 ชุด (0 โทเค็น), ตัวแปลงข้อความและตาราง, กรอบภาพ และโหมดจับเวลาพัก |
-| `overview.js`, `overviewLogic.js`, `reports.js`, `weekly.js`, `summary.js`, `home.js` | แดชบอร์ดภาพรวมรายเดือน (3/6/12 เดือน + แคช `trackme_overview_cache_v1` ใน `localStorage`), หน้าสรุปและรายงาน (รวมสรุปการนอน/ก้าวเดิน และ teaser โหลด `planner.js` แบบ lazy) |
+| `dashboard.js`, `overviewLogic.js`, `reports.js`, `weekly.js`, `summary.js`, `home.js` | แดชบอร์ดภาพรวมแบบ Responsive (3/6/12 เดือน + ปุ่มสลับมุมมอง `overview`/`weekly`/`report`), หน้าสรุปและรายงาน, การคำนวณสรุป และหน้า Home ที่จัดแสดง Planner ด้านบนสุด |
 | `settings.js`, `backup.js`, `migrate.js`, `onboarding.js` | ตั้งค่า, คีย์ AI, ทางลัดโน้ต/Feedback (lazy load `chatWidget.js`), backup/restore แบบทดสอบได้ (`backup.test.js`), migration และ first-run UX |
 | `services/aiService.js` | AI provider transport/model selection/retry/cooldown (แยกตามรายโมเดลและ provider)/fallback |
 | `services/chatRoles.js` | นิยามโหมดแพตเทิร์น (`LOCAL_ROLE`) + 5 บทบาท AI และการจับคู่ model preset แบบ lightweight สำหรับ UI |
-| `services/localAssistant.js`, `services/aiAssistant.js`, `chatWidget.js` | ตัวประมวลผลคำสั่งแพตเทิร์น 0 โทเค็นในเครื่อง, AI Read/Write tools (พร้อม `shouldAttachToolsForTurn`), system prompt, Markdown renderer, หน้าต่างแชทและหน้าต่างโน้ต/Feedback (lazy load เมื่อคลิก FAB หรือทางลัดในตั้งค่า) |
+| `services/localAssistant.js`, `services/aiAssistant.js`, `chatWidget.js` | ตัวประมวลผลคำสั่งแพตเทิร์น 0 โทเค็นในเครื่อง, AI Read/Write tools (พร้อม `shouldAttachToolsForTurn`), system prompt, Markdown renderer, หน้าต่างแชทและหน้าต่างโน้ต/Feedback (lazy load เมื่อคลิก Header AI Chat หรือทางลัดในตั้งค่า) |
 | `runtimeErrorMonitor.js` | error report ที่จำกัด metadata และปริมาณ |
-| `*.test.js` | Vitest tests วางข้างโมดูลที่ทดสอบ |
+| `*.test.js` | Vitest tests วางข้างโมดูลที่ทดสอบ (รวม `preview.test.js` และ `icons.test.js`) |
 
 `public/` มี `icon-192.png`, `icon-512.png` และ `push-sw.js`; `scripts/daily-push.mjs` ใช้ Firebase Admin SDK และ `web-push` จาก dependencies ที่แยกใน `scripts/package.json` และ `scripts/check-lockfile.mjs` ใช้ตรวจสอบความครบถ้วนของ `package-lock.json` (`npm run lock:check`)
 
