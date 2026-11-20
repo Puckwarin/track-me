@@ -159,6 +159,14 @@ input.input::-webkit-datetime-edit { padding: 0; }
 /* ---------- เมนูย่อย (ชิปเลื่อนแนวนอน) ---------- */
 .page { margin-top: 1rem; }
 .subnav { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top)); z-index: 35; margin-top: .5rem; padding-block: .25rem; background: color-mix(in srgb, var(--color-app-bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* ไล่สีจาง ๆ ที่ขอบขวา บอกว่าแถวนี้เลื่อนดูต่อได้ */
+.subnav { position: relative; }
+.subnav::after {
+  content: ''; position: absolute; right: 0; top: .25rem; bottom: .35rem; width: 2.25rem;
+  background: linear-gradient(to right, transparent, var(--color-app-bg) 80%);
+  pointer-events: none; z-index: 1;
+}
+
 .subnav-row { display: flex; gap: .5rem; overflow-x: auto; scrollbar-width: none; padding: .15rem .1rem .35rem; scroll-snap-type: x proximity; }
 .subnav-row::-webkit-scrollbar { display: none; }
 .sub-chip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; padding: .55rem .95rem; border-radius: 9999px; font-size: .82rem; font-weight: 500; background: #fff; color: #526277; border: 1px solid #E1EBF5; scroll-snap-align: center; transition: background .15s, color .15s; cursor: pointer; }
@@ -510,6 +518,9 @@ html[data-theme="dark"] .bg-green-50 *, html[data-theme="dark"] .bg-green-100 * 
 }
 .fab-scroll-btn:hover { background: var(--color-lav-soft); color: var(--color-brand-dark); }
 .fab-scroll-btn:active { transform: scale(.92); }
+.scroll-fabs { transition: opacity .2s, transform .2s; }
+.scroll-fabs.is-hidden { opacity: 0; transform: translateY(.5rem) scale(.85); pointer-events: none; }
+
 html[data-theme="pastel"] .fab-scroll-btn { border-color: #F0DFEE; color: #6E4760; }
 html[data-theme="dark"] .fab-scroll-btn {
   background: rgb(24 34 50 / .92);

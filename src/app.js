@@ -495,12 +495,19 @@ on('auth', user => {
 
 document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goToGroup(b.dataset.nav)));
 $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) goTo(b.dataset.sub); });
+window.addEventListener('trackme:goto', e => { if (e.detail?.tab) goTo(e.detail.tab); });
 $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));
 $('#btn-copy-summary').addEventListener('click', copySummary);
 $('#fab-top')?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-$('#fab-bottom')?.addEventListener('click', () => window.scrollTo({ top: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight), behavior: 'smooth' }));
+// ปุ่ม "ขึ้นบนสุด" โผล่เฉพาะตอนเลื่อนลงไปพอสมควร ไม่ใช่ลอยค้างตลอดเวลา
+const scrollFabs = $('#scroll-fabs');
+if (scrollFabs) {
+  const toggleScrollFab = () => scrollFabs.classList.toggle('is-hidden', window.scrollY < 400);
+  window.addEventListener('scroll', toggleScrollFab, { passive: true });
+  toggleScrollFab();
+}
 $('#btn-quick-add').addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {

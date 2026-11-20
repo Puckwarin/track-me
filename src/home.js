@@ -11,12 +11,12 @@ import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { animateNumberTicker } from './ui.js';
 
-export const HOME_WIDGET_IDS = ['daily-overview', 'quick-access', 'planner', 'daily-activity', 'reminders'];
+export const HOME_WIDGET_IDS = ['daily-overview', 'quick-access', 'daily-activity', 'planner', 'reminders'];
 export const HOME_WIDGET_DEFS = [
   { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
   { id: 'quick-access', label: 'ทางลัดบันทึกด่วน' },
-  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
   { id: 'daily-activity', label: 'กิจกรรม & บันทึกล่าสุด' },
+  { id: 'planner', label: 'Weekly Planner & กิจวัตร' },
   { id: 'reminders', label: 'แจ้งเตือนที่ต้องดูแล' }
 ];
 
@@ -150,8 +150,8 @@ export function mountHome(navigate) {
     <div id="home-widgets" class="space-y-4">
       <div id="home-slot-daily-overview"></div>
       <div id="home-slot-quick-access"></div>
-      <div id="home-planner"></div>
       <div id="home-slot-daily-activity"></div>
+      <div id="home-planner"></div>
       <div id="home-slot-reminders"></div>
     </div>`;
 

@@ -298,6 +298,10 @@ export function mountOverview(el) {
         <div>
           <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('overview', { size: 19, className: 'text-brand' })}<span>แดชบอร์ดภาพรวมรายเดือน</span></h2>
           <p class="text-xs text-slate-600">เปรียบเทียบน้ำหนัก แคลอรี่ การออกกำลังกาย และค่าใช้จ่ายย้อนหลังในหน้าเดียว</p>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" id="ov-go-weekly" class="chip bg-sky-soft text-blue-700 whitespace-nowrap">${iconSvg('weekly', { size: 14 })} สรุปรายสัปดาห์</button>
+            <button type="button" id="ov-go-report" class="chip bg-lav-soft text-brand-dark whitespace-nowrap">${iconSvg('report', { size: 14 })} รายงานสุขภาพ</button>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" data-ov-range="3" class="chip whitespace-nowrap">3 เดือน</button>
@@ -340,6 +344,8 @@ export function mountOverview(el) {
     });
   });
 
+  $('#ov-go-weekly', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'weekly' } })));
+  $('#ov-go-report', root).addEventListener('click', () => window.dispatchEvent(new CustomEvent('trackme:goto', { detail: { tab: 'report' } })));
   $('#ov-refresh', root).addEventListener('click', () => {
     void loadFoodForRange(true);
   });
