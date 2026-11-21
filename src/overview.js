@@ -126,10 +126,6 @@ export function mountDashboard(el) {
     </g>`;
   }).join('');
 
-  window.addEventListener('trackme:theme', () => {
-    if (root?.isConnected && dashboardData) render(monthCount);
-  });
-
   loadAndRender(monthCount);
 }
 

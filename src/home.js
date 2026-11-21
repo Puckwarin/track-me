@@ -228,7 +228,7 @@ function buildQuickAccessHtml(config) {
       </div>
       <div class="hx-cats">
         ${items.map(c => `
-          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat ${c.cat}">
+          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat">
             <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 24 })}</span>
             <span class="hx-cat-label">${esc(c.label)}</span>
           </button>`).join('')}
@@ -407,11 +407,10 @@ function buildRemindersHtml(today, reminders) {
           ${ordered.slice(0, 4).map(r => {
             const u = formatUrgency(r);
             const rIcon = CATEGORIES.find(c => c.tab === r.tab)?.icon || 'notifications';
-            const rCat = CATEGORIES.find(c => c.tab === r.tab)?.cat || 'cat-lab';
             return `
               <li>
                 <button type="button" data-go="${esc(r.tab || 'notifications')}" class="hx-list-row">
-                  <span class="hx-list-icon ${rCat}" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
+                  <span class="hx-list-icon" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
                   <span class="hx-tl-body">
                     <span class="hx-tl-title">${esc(r.label)}</span>
                     <span class="hx-tl-sub"><span class="hx-due ${u.cls} tabular-nums">${esc(u.text)}</span>${r.detail ? ` · ${esc(r.detail)}` : ''}</span>

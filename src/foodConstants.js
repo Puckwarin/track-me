@@ -2,11 +2,11 @@ import { state } from './state.js';
 import { guessFoodCategory } from './foodParser.js';
 
 export const MEAL_ORDER = ['มื้อเช้า', 'มื้อกลางวัน', 'มื้อเย็น', 'ของว่าง/เครื่องดื่ม'];
-export const MEAL_COLORS = {
-  'มื้อเช้า': { header: 'bg-amber-100 text-amber-900', row: 'bg-amber-50/60', icon: 'fa-sun' },
-  'มื้อกลางวัน': { header: 'bg-sky-100 text-sky-900', row: 'bg-sky-50/60', icon: 'fa-cloud-sun' },
-  'มื้อเย็น': { header: 'bg-violet-100 text-violet-900', row: 'bg-violet-50/60', icon: 'fa-moon' },
-  'ของว่าง/เครื่องดื่ม': { header: 'bg-pink-100 text-pink-900', row: 'bg-pink-50/60', icon: 'fa-mug-hot' }
+export const MEAL_ICONS = {
+  'มื้อเช้า': 'fa-sun',
+  'มื้อกลางวัน': 'fa-cloud-sun',
+  'มื้อเย็น': 'fa-moon',
+  'ของว่าง/เครื่องดื่ม': 'fa-mug-hot'
 };
 
 export const DEFAULT_PRESETS = [

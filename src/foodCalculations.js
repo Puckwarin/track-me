@@ -124,18 +124,10 @@ export function buildFoodRecordUpdatesFromLibrary(item, updatedFood, previousFoo
   return updates;
 }
 
-export const MEAL_PIE_PALETTE = ['#3E8FCF', '#7CC2F0', '#7E66B0', '#4EA885', '#E89B54', '#5CA4B8', '#94A3B8'];
+export const MEAL_PIE_PALETTE = ['#4D936B', '#8FCBA7', '#34443B', '#C9D2C9', '#A8D8B9', '#68756D', '#E1E6DF'];
 
-export const THEME_PIE_PALETTES = {
-  'baby-blue': ['#3E8FCF', '#7CC2F0', '#7E66B0', '#4EA885', '#E89B54', '#5CA4B8', '#94A3B8'],
-  pastel: ['#C87FA8', '#8E9CE6', '#F2A37E', '#6EC49B', '#B085D6', '#7EC4DF', '#B8A8B8'],
-  cozy: ['#8B5E3C', '#C48A5A', '#5D8A66', '#D4A553', '#A66353', '#7A8C99', '#A69585'],
-  dark: ['#5EB1EB', '#93C5FD', '#A78BFA', '#6EE7B7', '#FBBF24', '#F472B6', '#94A3B8']
-};
-
-export function getMealPiePalette(theme = '') {
-  const key = theme || (typeof document !== 'undefined' ? document.documentElement?.dataset?.theme : '') || 'baby-blue';
-  return THEME_PIE_PALETTES[key] || MEAL_PIE_PALETTE;
+export function getMealPiePalette() {
+  return MEAL_PIE_PALETTE;
 }
 
 export function buildMealCaloriePieData(items = [], meals = [], palette = MEAL_PIE_PALETTE) {

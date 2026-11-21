@@ -112,10 +112,10 @@ function render() {
       <h2 id="onboarding-title" class="text-xl font-bold text-slate-800">ยินดีต้อนรับสู่ Track Me</h2>
       <p class="text-sm text-slate-600">ดูแลตัวเองได้ในที่เดียว ทั้งอาหาร สุขภาพ การออกกำลังกาย การเงิน และการดูแลสัตว์เลี้ยง</p>
       <ul class="grid grid-cols-2 gap-2 text-xs text-slate-700">
-        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('food', { small: true, cat: 'cat-food' })}<span>บันทึกอาหารและโภชนาการ</span></li>
-        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('period', { small: true, cat: 'cat-period' })}<span>สุขภาพและรอบเดือน</span></li>
-        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('workout', { small: true, cat: 'cat-workout' })}<span>ออกกำลังกายและน้ำหนัก</span></li>
-        <li class="rounded-xl bg-lav-soft/60 p-3 flex items-center gap-2">${iconBubble('care', { small: true, cat: 'cat-care' })}<span>สัตว์เลี้ยงและของใช้</span></li>
+        <li class="rounded-xl bg-mint-soft/60 p-3 flex items-center gap-2">${iconBubble('food', { small: true })}<span>บันทึกอาหารและโภชนาการ</span></li>
+        <li class="rounded-xl bg-mint-soft/60 p-3 flex items-center gap-2">${iconBubble('period', { small: true })}<span>สุขภาพและรอบเดือน</span></li>
+        <li class="rounded-xl bg-mint-soft/60 p-3 flex items-center gap-2">${iconBubble('workout', { small: true })}<span>ออกกำลังกายและน้ำหนัก</span></li>
+        <li class="rounded-xl bg-mint-soft/60 p-3 flex items-center gap-2">${iconBubble('care', { small: true })}<span>สัตว์เลี้ยงและของใช้</span></li>
       </ul>
       <p class="text-xs text-slate-500">ตั้งค่าแต่ละอย่างได้ตามสะดวก หรือข้ามไปเริ่มใช้งานได้เลย</p>
     </div>`,

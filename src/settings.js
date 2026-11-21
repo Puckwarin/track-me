@@ -15,7 +15,6 @@ import { state } from './state.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { mountNavigationSettings } from './navigationSettings.js';
 import { mountHomeWidgetSettings } from './homeWidgetSettings.js';
-import { applyTheme, THEMES } from './theme.js';
 import { hasDevicePin, saveDevicePin, removeDevicePin } from './local-lock.js';
 import {
   hasEnvVapidKey,
@@ -53,12 +52,6 @@ export function mountSettings(el) {
       </div>
       <p id="st-user" class="text-sm text-slate-600"></p>
       <button id="st-out" class="btn btn-ghost">ออกจากระบบ</button>
-    </div>
-
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('palette', { size: 18, className: 'text-brand' })}<span>ธีมแอป</span></h3>
-      <p class="text-xs text-slate-500">เลือก Baby Blue, Pastel, Cozy หรือ Dark mode เก็บการตั้งค่าไว้ในอุปกรณ์นี้</p>
-      <select id="st-theme" class="input">${Object.entries(THEMES).map(([value, name]) => `<option value="${value}">${name}</option>`).join('')}</select>
     </div>
 
     <section class="card space-y-4 lg:col-span-2" id="st-nav-customize" aria-labelledby="st-nav-title">
@@ -228,10 +221,6 @@ export function mountSettings(el) {
     } finally { btn.disabled = false; }
   });
   mountProfile($('#st-profile', el));
-  const theme = $('#st-theme', el);
-  const savedTheme = localStorage.getItem('trackme-theme');
-  theme.value = savedTheme === 'minimal' ? 'baby-blue' : (savedTheme && Object.hasOwn(THEMES, savedTheme) ? savedTheme : 'baby-blue');
-  theme.addEventListener('change', () => applyTheme(theme.value));
   mountNavigationSettings($('#st-nav-customize', el));
   mountHomeWidgetSettings($('#st-home-widget-controls', el));
   const pinState = $('#st-pin-state', el), updatePinState = () => {

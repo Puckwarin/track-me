@@ -9,7 +9,7 @@ function tabMetadata(tab) {
   const item = SUBTABS[tab];
   if (item) return item;
   const category = CATEGORIES.find(candidate => candidate.tab === tab);
-  return category ? { label: category.label, emoji: category.emoji, icon: category.icon, cat: category.cat } : {};
+  return category ? { label: category.label, emoji: category.emoji, icon: category.icon } : {};
 }
 
 function uniqueAllowedTabs(values, allowed = ALL_TABS) {

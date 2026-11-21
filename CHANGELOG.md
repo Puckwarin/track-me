@@ -3,6 +3,14 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.5.0] - 2026-11-21
+
+### Warm Wellness Brand, Single Palette & Neutral Food Navigation
+- **ยกเลิกตัวเลือกธีม**: ถอดตัวเลือกธีมจากหน้าตั้งค่าและเลิกโหลดตัวเปลี่ยนธีม; แอปใช้ Warm Wellness palette ชุดเดียวผ่าน semantic tokens พร้อมคงสีสถานะ Success / Warning / Error
+- **ยกเลิกสีประจำหมวดหมู่**: นำ `cat` และคลาสสีหมวดออกจากข้อมูลเมนู ทางลัด และแผ่นบันทึกด่วน; ไอคอน Navigation ใช้สี Charcoal/Neutral และสถานะ Active ใช้ Soft Mint
+- **ปรับหน้าอาหาร**: ปุ่มเครื่องมือเพิ่มเติมทั้ง 4 ปุ่มใช้พื้นขาว ขอบ Neutral และไอคอน Charcoal; สี Hover เป็น Mint อ่อน โดยคง ID/Event Listener เดิม; หัวมื้ออาหารใช้ Neutral พร้อมไอคอนแยกตามมื้อ, คง `MEAL_ORDER` และชื่อมื้อกำหนดเอง; แท็บบันทึก/สรุปใช้พื้นขาวนวลและ Active Mint โดยคง Radio Inputs และเงื่อนไข `:has()` เดิม
+- **อัปเดตเวอร์ชันเป็น v5.5.0** ในแอป, package manifests และเอกสาร; ไม่มีการเปลี่ยน Firestore schema หรือ business logic
+
 ## [v5.4.0] - 2026-11-20
 
 ### Unified Segmented Tabs, Food Pie Chart & Swipe/DnD, Compact Mobile Typography & "สรุป" View Unification

@@ -297,7 +297,7 @@ function ensureShell() {
     <section id="ai-chat-drawer" class="ai-chat-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="ai-chat-title" tabindex="-1">
       <header class="ai-chat-header">
         <div class="flex items-center gap-2.5 min-w-0">
-          <span class="emoji-bubble emoji-sm cat-symptoms !mr-0">${iconSvg('chat', { size: 17 })}</span>
+          <span class="emoji-bubble emoji-sm !mr-0">${iconSvg('chat', { size: 17 })}</span>
           <div class="min-w-0">
             <h2 id="ai-chat-title" class="text-sm font-bold text-slate-800 truncate">ผู้ช่วย Track Me</h2>
             <p id="ai-chat-subtitle" class="text-[11px] text-slate-500 truncate">คุยได้ทุกเรื่อง + ช่วยดูแลข้อมูล</p>

@@ -9,7 +9,7 @@ import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
 import { guessFoodCategory, parseBulkFoodText } from './foodParser.js';
-import { DEFAULT_PRESETS, MEAL_ORDER, MEAL_COLORS, BUILTIN_FAV_KEY, HIDDEN_BUILTINS_KEY, builtinFavorites, categoryNames, getPresets, gramsInUnit, hiddenBuiltins, label } from './foodConstants.js';
+import { DEFAULT_PRESETS, MEAL_ORDER, MEAL_ICONS, BUILTIN_FAV_KEY, HIDDEN_BUILTINS_KEY, builtinFavorites, categoryNames, getPresets, gramsInUnit, hiddenBuiltins, label } from './foodConstants.js';
 import {
   buildFoodAdvice,
   buildFoodRecordUpdatesFromLibrary,
@@ -82,10 +82,10 @@ export function mountFood(el) {
           <details class="relative">
             <summary class="chip bg-slate-100 text-slate-700 min-h-[36px] whitespace-nowrap list-none cursor-pointer">${iconSvg('ellipsis', { size: 14 })} เครื่องมือเพิ่มเติม</summary>
             <div class="tm-tools-menu absolute right-0 top-full z-10 mt-2 flex min-w-52 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-              <button id="f-bulk-log" type="button" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]">${iconSvg('zap', { size: 14 })} เพิ่มหลายเมนู</button>
-              <button id="f-online" type="button" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]">${iconSvg('globe', { size: 14 })} ค้นหาโภชนาการ</button>
-              <button id="f-hiwpinto-sync" type="button" class="chip justify-start bg-emerald-100 text-emerald-800 min-h-[40px]">${iconSvg('cloud-download', { size: 14 })} Sync Hiwpinto</button>
-              <button id="f-library" type="button" class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]">${iconSvg('book', { size: 14 })} คลังอาหาร</button>
+              <button id="f-bulk-log" type="button" class="chip tm-tool-button justify-start min-h-[40px]">${iconSvg('zap', { size: 14 })} เพิ่มหลายเมนู</button>
+              <button id="f-online" type="button" class="chip tm-tool-button justify-start min-h-[40px]">${iconSvg('globe', { size: 14 })} ค้นหาโภชนาการ</button>
+              <button id="f-hiwpinto-sync" type="button" class="chip tm-tool-button justify-start min-h-[40px]">${iconSvg('cloud-download', { size: 14 })} Sync Hiwpinto</button>
+              <button id="f-library" type="button" class="chip tm-tool-button justify-start min-h-[40px]">${iconSvg('book', { size: 14 })} คลังอาหาร</button>
             </div>
           </details>
         </div>
@@ -226,9 +226,6 @@ export function mountFood(el) {
   lastCustomFoodsSnapshot = new Map((state.customFoods || []).map(f => [f.id, { ...f }]));
   on('customFoods', handleCustomFoodsUpdate);
   on('profile', fillMealSelect);
-  window.addEventListener('trackme:theme', () => {
-    if (root?.isConnected) renderDay();
-  });
   refreshDatalist();
   syncFoodWeightForm();
   renderDay();
@@ -1025,10 +1022,9 @@ function setupFoodBodyGestures() {
 }
 
 function buildMealPieSvg(slices, totalKcal) {
-  const theme = typeof document !== 'undefined' ? document.documentElement?.dataset?.theme : 'baby-blue';
-  const sepStroke = theme === 'dark' ? '#182232' : (theme === 'cozy' ? '#FFFDF9' : '#FFFFFF');
-  const emptyStroke = theme === 'dark' ? '#374966' : (theme === 'cozy' ? '#DFD0BF' : (theme === 'pastel' ? '#EAD8EA' : '#CBDCEB'));
-  const mutedText = theme === 'dark' ? '#98A9BE' : (theme === 'cozy' ? '#7C6858' : '#64748b');
+  const sepStroke = '#FFFFFF';
+  const emptyStroke = '#E1E6DF';
+  const mutedText = '#68756D';
 
   const active = slices.filter(s => s.kcal > 0);
   if (!totalKcal || !active.length) {
@@ -1150,16 +1146,16 @@ function renderDay() {
   body.innerHTML = items.length ? meals.map(meal => {
     const rows = items.filter(i => (i.meal || 'ไม่ระบุมื้อ') === meal);
     if (!rows.length) return '';
-    const tone = MEAL_COLORS[meal] || { header: 'bg-slate-100 text-slate-700', row: 'bg-slate-50/60', icon: 'food' };
+    const mealIcon = MEAL_ICONS[meal] || 'food';
     const mealCalories = rows.reduce((sum, i) => sum + num(i.calories), 0);
     const mealProtein = rows.reduce((sum, i) => sum + num(i.protein), 0);
     const allMealSelected = rows.every(i => selectedFoodIds.has(i.id));
     return `
       <section class="tm-meal-group" data-meal-drop="${esc(meal)}">
-        <header class="tm-meal-group-head ${tone.header}">
+        <header class="tm-meal-group-head">
           <label class="inline-flex items-center gap-2 cursor-pointer font-semibold text-sm min-w-0">
             <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-violet-500 w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
-            <span class="inline-flex items-center gap-1.5 truncate">${iconSvg(tone.icon, { size: 14 })}<span class="truncate">${esc(meal)}</span></span>
+            <span class="inline-flex items-center gap-1.5 truncate">${iconSvg(mealIcon, { size: 14 })}<span class="truncate">${esc(meal)}</span></span>
           </label>
           <span class="text-[11px] font-medium tabular-nums shrink-0">${rows.length} รายการ · ${Math.round(mealCalories)} kcal · P ${round1(mealProtein)}g</span>
         </header>

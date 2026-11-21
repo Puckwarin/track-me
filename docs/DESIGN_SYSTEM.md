@@ -14,20 +14,18 @@ The design tokens CSS is auto-loaded via `src/app.js` — no additional import n
 
 ## Design Tokens
 
-### Color Palette
+### Warm Wellness Palette
 
 | Token | Hex | Role |
 |---|---|---|
-| `--color-primary-300` | `#8ECDF7` | Baby Blue — Primary soft accent |
-| `--color-secondary-300` | `#B39EDB` | Soft Lavender — Secondary accent |
-| `--color-accent-300` | `#EDAFC0` | Soft Pink — Gentle highlight |
-| `--color-sage-300` | `#94D0B2` | Soft Mint — Activity & positive states |
-| `--color-peach-300` | `#F4C39E` | Pastel Peach — Warm category accent |
-| `--color-app-bg` | `#F4F8FC` | Ice Mist — Main background (Baby Blue default) |
+| `--color-brand` | `#34443B` | Charcoal — Primary actions and brand icons |
+| `--color-mint` | `#A8D8B9` | Soft Mint — Brand accent |
+| `--color-mint-soft` | `#E5F3E9` | Active Navigation and hover surfaces |
+| `--color-app-bg` | `#F5F6F1` | Warm Neutral — Main background |
 | `--color-surface` | `#FFFFFF` | Cards and input surfaces |
-| `--color-ink` | `#1E293B` | Slate 800 — Primary text |
+| `--color-ink` | `#2F3B34` | Charcoal — Primary text |
 
-Each color has a full ramp (50–900). Use semantic tokens (`--color-success`, `--color-error`, etc.) for state colors — they adapt across all themes automatically.
+Use semantic tokens for shared UI colors. The app has one fixed Warm Wellness palette; users cannot switch themes or category colors.
 
 ### State Colors
 
@@ -54,15 +52,9 @@ Each color has a full ramp (50–900). Use semantic tokens (`--color-success`, `
 
 `--touch-min` = 2.75rem (44px) — all interactive components meet this minimum.
 
-### Theme Compatibility
+### Semantic Tokens
 
-All tokens automatically adapt to 4 themes (`src/theme.js`, `src/design-tokens.css`):
-- **Baby Blue** (`baby-blue`, default; legacy `'minimal'` maps here): Ice Mist background (`#F4F8FC`), Baby Blue accents (`#8ECDF7` / `#4A9AD6`), Slate text
-- **Pastel** (`pastel`): Soft pink-lavender background (`#FCF6FB`), muted rose/lavender accents
-- **Cozy** (`cozy`): Warm cream background (`#FAF6F0`), warm surface (`#FFFDF9`), brown accents (`#C7956D` / `#8B5E3C`)
-- **Dark** (`dark`): Deep slate-navy surfaces (`#0F1622` / `#182232`), accessible light text and softened accents
-
-Set theme via `applyTheme('baby-blue' | 'pastel' | 'cozy' | 'dark')` or `document.documentElement.dataset.theme = 'baby-blue' | 'pastel' | 'cozy' | 'dark'`.
+`src/design-tokens.css` defines the single Warm Wellness palette and reusable tokens for app background, surfaces, text, borders, brand, and mint active states. Success, Warning, Error, and Info remain semantic state tokens and should only be used for their respective states.
 
 ---
 
@@ -409,21 +401,16 @@ Animates numeric KPI updates smoothly via `requestAnimationFrame`, respects `pre
 - Modals/sheets/drawers: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, Tab focus trapping (`trapFocus`), Escape-to-close, and trigger focus restoration
 - Screen-reader-only utility: `.tm-sr-only`
 - Color is never the sole indicator — badges include icons or dots
-- WCAG 2.2 AA contrast verified for text/surface combinations across themes
+- Use charcoal text on neutral/mint surfaces and the dedicated foreground token on status backgrounds; do not use color alone to convey state
 
-### Contrast Verification (Default Baby Blue Theme)
+### Contrast Pairing
 
-| Combination | Foreground / Background | Status |
-|---|---|---|
-| `--color-ink` on `--color-surface` | `#1E293B` on `#FFFFFF` | Pass (AAA) |
-| `--color-ink` on `--color-app-bg` | `#1E293B` on `#F4F8FC` | Pass (AAA) |
-| `--color-ink-muted` on `--color-surface` | `#526277` on `#FFFFFF` | Pass (AA) |
-| `--color-primary-700` on `--color-primary-50` | `#276594` on `#EFF7FE` | Pass (AA) |
-| `--color-success-fg` on `--color-success-bg` | `#22563E` on `#F0FAF4` | Pass (AAA) |
-| `--color-error-fg` on `--color-error-bg` | `#8B2F3D` on `#FDF2F4` | Pass (AA) |
-| `--color-warning-fg` on `--color-warning-bg` | `#7D421B` on `#FFF8F2` | Pass (AA) |
-| `--color-ink` on `--color-primary-300` | `#1E293B` on `#8ECDF7` | Pass (AA) |
-| `--color-ink` on `--color-accent-300` | `#1E293B` on `#EDAFC0` | Pass (AA) |
+| Surface | Foreground |
+|---|---|
+| `--color-surface`, `--color-app-bg`, `--color-mint-soft` | `--color-ink` |
+| `--color-success-bg` | `--color-success-fg` |
+| `--color-warning-bg` | `--color-warning-fg` |
+| `--color-error-bg` | `--color-error-fg` |
 
 ---
 
@@ -447,7 +434,7 @@ Key responsive behaviors:
 
 ## Icons (Offline 100%)
 
-- **Phosphor Duotone (`src/icons.js`)**: ใช้สำหรับไอคอนทุกส่วนทั้งแอป เมนูหลัก, การ์ด **หมวดหมู่** บนหน้าแรก, แท็บหมวดหมู่ย่อยของ **สุขภาพ (`health`)** และ **ดูแล (`care`)**, แผ่นบันทึกด่วน (`+`), และหน้าตั้งค่า (`@phosphor-icons/core/assets/duotone/*-duotone.svg?raw`) แบบ tree-shaken และรองรับ `currentColor` ปรับสีตามทั้ง 4 ธีมอัตโนมัติ (พร้อม alias `fa-*` และชื่อหมวดหมู่ครบถ้วน)
+- **Phosphor Duotone (`src/icons.js`)**: ใช้สำหรับไอคอนทุกส่วนทั้งแอป เมนูหลัก, การ์ดหมวดหมู่, แท็บย่อย, แผ่นบันทึกด่วน (`+`) และหน้าตั้งค่า (`@phosphor-icons/core/assets/duotone/*-duotone.svg?raw`) แบบ tree-shaken รองรับ `currentColor` และ alias `fa-*`
   - แกลเลอรีหลัก (เลือกน้ำหนัก **Duotone**): <https://phosphoricons.com/> หรือ <https://icon-sets.iconify.design/ph/>
 
 ---
@@ -456,10 +443,9 @@ Key responsive behaviors:
 
 | File | Purpose |
 |---|---|
-| `src/design-tokens.css` | Design tokens (colors, spacing, radius, shadows, 4-theme overrides) + component utility classes |
+| `src/design-tokens.css` | Warm Wellness semantic tokens (colors, spacing, radius, shadows) + component utility classes |
 | `src/ui.js` | Shared UI component factory functions (JS → HTML string) and `animateNumberTicker` |
 | `src/icons.js` | Central Phosphor Duotone inline SVG registry (`iconSvg`, `iconBubble`, `hydrateStaticIcons`) |
-| `src/theme.js` | 4-theme switcher (`baby-blue`, `pastel`, `cozy`, `dark`) + legacy `'minimal'` mapping |
 | `docs/DESIGN_SYSTEM.md` | This document |
 
 ## Integration Notes
@@ -467,7 +453,7 @@ Key responsive behaviors:
 1. **Import CSS**: `src/design-tokens.css` is loaded by `src/app.js` — no manual import needed.
 2. **Import components**: `import { ... } from './ui.js'` and `import { iconSvg } from './icons.js'` in any feature module.
 3. **Backward compatibility**: Existing `.card`, `.btn`, `.input`, `.chip`, `.modal-backdrop` classes in `style.css` are preserved. New `tm-` prefixed classes are additive — no existing markup breaks.
-4. **Theme switching**: Uses `html[data-theme]` attribute (`baby-blue`, `pastel`, `cozy`, `dark`). Tokens in `design-tokens.css` and utilities in `style.css` adapt per theme.
+4. **Brand colors**: There is no theme switcher. Use the fixed semantic tokens in `design-tokens.css`; reserve Success, Warning, Error, and Info tokens for their state meanings.
 5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken **Phosphor Duotone** inline SVGs (`@phosphor-icons/core` via `src/icons.js`); UI markup works 100% offline with zero external CDN webfonts.
 
 ## Known Limitations

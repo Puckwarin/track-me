@@ -1,4 +1,4 @@
-// ชุดไอคอน Phosphor Duotone กลางสำหรับ Track Me (Tree-shaken SVG, สองโทนปรับสีตามธีมอัตโนมัติ, ทำงานออฟไลน์ 100%)
+// ชุดไอคอน Phosphor Duotone กลางสำหรับ Track Me (Tree-shaken SVG, สีตาม currentColor, ทำงานออฟไลน์ 100%)
 import archive from '@phosphor-icons/core/assets/duotone/archive-duotone.svg?raw';
 import arrowClockwise from '@phosphor-icons/core/assets/duotone/arrow-clockwise-duotone.svg?raw';
 import arrowCounterClockwise from '@phosphor-icons/core/assets/duotone/arrow-counter-clockwise-duotone.svg?raw';
