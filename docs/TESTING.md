@@ -16,7 +16,13 @@ Install dependencies with `npm ci`, then run:
 | `npm run test:rules` | Starts the Firestore Emulator and runs Rules integration tests |
 | `npm run build` | Builds the production site |
 
+## โหมด Demo Preview
+
+รัน `npm run dev` แล้วเลือก **ดูตัวอย่างโดยไม่เข้าสู่ระบบ** ที่หน้า Login ได้ในโหมด Development เท่านั้น โหมดนี้แสดงข้อมูลสมมติในหน่วยความจำ ไม่เชื่อม Firestore และปิดการบันทึก/แก้ไขข้อมูล; กด **ออกจากตัวอย่าง** เพื่อกลับหน้า Login
+
 Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover local date helpers (`localDateStr`, `localMonthStr`, `addDays` in `src/util.test.js`), parsers (food, workout, reminder, statement, slip OCR, Zepp CSV), schema sanitizers, backup/restore planning & batched commits (`src/backup.test.js`), Firestore snapshot listener lifecycle & offline/pending sync indicators (`src/sync.test.js`), expense rules/budgets/recurrence, monthly overview dashboard aggregation & `localStorage` caching (`src/overviewLogic.test.js`), TDEE calculations, cycle statistics, food validation, nutrition/USDA/OFF/exercise image persistent caches (`src/nutrition.test.js`, `src/foodsearch.test.js`, `src/exerciseMedia.test.js`), local OCR sufficiency threshold, AI per-model & provider fallback/cooldown/model routing, 0-token local assistant & fuzzy food matching (`src/services/localAssistant.test.js`), AI assistant roles/tools/notes/feedback/markdown sanitization/write rollback, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 15 active tests, `src/services/aiAssistant.test.js` has 13 active tests, `src/services/localAssistant.test.js` has 7 active tests, `src/util.test.js` has 6 active tests, `src/zeppParser.test.js` has 9 active tests, `src/nutrition.test.js` has 5 active tests, `src/backup.test.js` has 5 active tests, `src/overviewLogic.test.js` has 4 active tests, `src/sync.test.js` has 2 active tests, `src/foodsearch.test.js` has 2 active tests, `src/exerciseMedia.test.js` has 1 active test, and `src/schema.test.js` has 7 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
+
+การเปลี่ยน UI/Brand ใน v5.5.0 ไม่ได้รัน Lint, Tests หรือ Build ตามคำขอผู้ใช้
 
 ผลตรวจสอบ v5.4.0 (2026-11-20):
 

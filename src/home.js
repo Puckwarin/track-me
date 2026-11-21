@@ -107,6 +107,7 @@ export function ensureHomePlannerLoaded() {
 }
 
 const num = v => (Number.isFinite(+v) ? +v : 0);
+const hasNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(+v);
 const baht = (v, digits = 0) => `฿${num(v).toLocaleString('th-TH', { maximumFractionDigits: digits })}`;
 
 function greeting() {
@@ -157,19 +158,25 @@ function buildDailyOverviewHtml(today, foods, targets) {
   const moveMin = doneWorkouts.reduce((a, w) => a + num(w.durationMin), 0);
   const body = bodyLatest(state.body || []);
 
+  const sleepVal = hasNum(body?.sleepHours?.v) ? `${round1(body.sleepHours.v)}` : '—';
+  const sleepSub = hasNum(body?.sleepHours?.v) ? 'ชม.' : '';
+  const weightVal = hasNum(body?.weight?.v) ? `${body.weight.v}` : '—';
+  const weightSub = hasNum(body?.weight?.v) ? 'กก.' : '';
+
   const stats = [
-    { tab: 'food', icon: 'food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: 'kcal' },
-    { tab: 'workout', icon: 'steps', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : 'แผน' },
-    { tab: 'body', icon: 'moon', label: 'นอน', value: body.sleepHours ? `${round1(body.sleepHours.v)}` : '—', sub: 'ชม.' },
-    { tab: 'body', icon: 'body', label: 'น้ำหนัก', value: body.weight ? `${body.weight.v}` : '—', sub: 'กก.' }
+    { tone: 'is-food', tab: 'food', icon: 'food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: foods.length ? 'kcal' : '' },
+    { tone: 'is-workout', tab: 'workout', icon: 'steps', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : todayWorkouts.length ? 'แผน' : '' },
+    { tone: 'is-sleep', tab: 'body', icon: 'moon', label: 'นอน', value: sleepVal, sub: sleepSub },
+    { tone: 'is-weight', tab: 'body', icon: 'body', label: 'น้ำหนัก', value: weightVal, sub: weightSub }
   ];
 
   const macroTile = (tone, label, v, g) => {
-    const p = g ? Math.min(100, Math.round((v / g) * 100)) : 0;
+    const hasGoal = hasNum(g) && num(g) > 0;
+    const p = hasGoal ? Math.min(100, Math.round((v / num(g)) * 100)) : 0;
     return `
       <div class="hx-macro ${tone}">
         <span class="hx-macro-label">${label}</span>
-        <span class="hx-macro-value tabular-nums">${foods.length ? Math.round(v) : 0}<small> / ${g ?? '-'} g</small></span>
+        <span class="hx-macro-value tabular-nums">${foods.length ? Math.round(v) : '—'}<small>${hasGoal ? ` / ${num(g)} g` : ''}</small></span>
         <span class="hx-macro-bar" aria-hidden="true"><span style="width:${p}%"></span></span>
       </div>`;
   };
@@ -183,18 +190,18 @@ function buildDailyOverviewHtml(today, foods, targets) {
           <button type="button" data-go="food" class="hx-hero-kcal tabular-nums">
             ${!foodLoaded && !foods.length
               ? '<span>กำลังโหลด...</span>'
-              : `<b id="home-kcal-ticker">${kcal.toLocaleString()}</b><span> / ${goal.toLocaleString()} kcal</span>`}
+              : `<b id="home-kcal-ticker">${kcal.toLocaleString()}</b><span> / ${goal ? goal.toLocaleString() : '—'} kcal</span>`}
           </button>
-          <p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>
+          <p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${goal ? (left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`) : 'ยังไม่ได้ตั้งเป้าหมายพลังงาน'}</p>
         </div>
         ${progressRing(pct, 'ของเป้าวันนี้', `${kcal} จาก ${goal} kcal`)}
       </div>
       <div class="hx-stats" role="list">
         ${stats.map(s => `
-          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)}">
+          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat ${s.tone}" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)}">
             ${iconSvg(s.icon, { size: 17 })}
             <span class="hx-stat-label">${esc(s.label)}</span>
-            <span class="hx-stat-value tabular-nums">${esc(s.value)}<small> ${esc(s.sub)}</small></span>
+            <span class="hx-stat-value tabular-nums">${esc(s.value)}${s.sub ? `<small> ${esc(s.sub)}</small>` : ''}</span>
           </button>`).join('')}
       </div>
       <div class="hx-macros">
@@ -221,8 +228,8 @@ function buildQuickAccessHtml(config) {
       </div>
       <div class="hx-cats">
         ${items.map(c => `
-          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat ${c.cat}">
-            <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 26 })}</span>
+          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat">
+            <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 24 })}</span>
             <span class="hx-cat-label">${esc(c.label)}</span>
           </button>`).join('')}
       </div>
@@ -245,15 +252,29 @@ function mealSlotOf(food) {
   return 'snack';
 }
 
+function resolveActivityState(itemTime, isDone, nowHhMm) {
+  if (isDone) return { key: 'done', badge: 'ทำแล้ว' };
+  if (itemTime && /^\d{2}:\d{2}$/.test(itemTime) && itemTime > nowHhMm) {
+    return { key: 'upcoming', badge: 'กำลังจะถึง' };
+  }
+  return { key: 'pending', badge: 'รอทำ' };
+}
+
 function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
+  const now = new Date();
+  const nowHhMm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const rows = [];
+
   MEAL_SLOTS.forEach(slot => {
     const items = foods.filter(f => mealSlotOf(f) === slot.id);
     if (!items.length && slot.id === 'snack') return;
     const kcal = Math.round(items.reduce((a, f) => a + num(f.calories), 0));
+    const st = resolveActivityState(slot.time, items.length > 0, nowHhMm);
     rows.push({
       time: slot.time,
-      done: items.length > 0,
+      done: st.key === 'done',
+      stateKey: st.key,
+      stateBadge: st.badge,
       title: slot.label,
       sub: items.length ? `${items.map(f => f.name).join(' · ')} · ${kcal.toLocaleString()} kcal` : 'ยังไม่ได้บันทึก · แตะเพื่อจด',
       tab: 'food',
@@ -262,9 +283,13 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
   });
 
   (state.workouts || []).filter(w => w.date === today).forEach(w => {
+    const t = w.time || '17:00';
+    const st = resolveActivityState(t, w.status !== 'planned', nowHhMm);
     rows.push({
-      time: w.time || '17:00',
-      done: w.status !== 'planned',
+      time: t,
+      done: st.key === 'done',
+      stateKey: st.key,
+      stateBadge: st.badge,
       title: w.title || TYPES[w.type] || 'ออกกำลังกาย',
       sub: `${w.durationMin ? `${w.durationMin} นาที` : 'ออกกำลังกาย'}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}`,
       tab: 'workout'
@@ -272,9 +297,13 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
   });
 
   remindersForDate(today).slice(0, 3).forEach(r => {
+    const t = r.dueTime || '—';
+    const st = resolveActivityState(t, false, nowHhMm);
     rows.push({
-      time: r.dueTime || '—',
+      time: t,
       done: false,
+      stateKey: st.key,
+      stateBadge: st.badge,
       title: r.label,
       sub: r.detail || 'แจ้งเตือนวันนี้',
       tab: r.tab || 'notifications'
@@ -297,11 +326,14 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
       <ol class="hx-timeline">
         ${rows.map(r => `
           <li>
-            <button type="button" data-go="${esc(r.tab)}" ${r.focus ? `data-focus="${r.focus}"` : ''} class="hx-tl-row ${r.done ? 'is-done' : ''}">
+            <button type="button" data-go="${esc(r.tab)}" ${r.focus ? `data-focus="${r.focus}"` : ''} class="hx-tl-row is-${r.stateKey}">
               <span class="hx-tl-time tabular-nums">${esc(r.time)}</span>
               <span class="hx-tl-dot" aria-hidden="true">${r.done ? iconSvg('check', { size: 12, strokeWidth: 2.6 }) : ''}</span>
               <span class="hx-tl-body">
-                <span class="hx-tl-title">${esc(r.title)}<span class="sr-only">${r.done ? ' (ทำแล้ว)' : ' (ยังไม่ทำ)'}</span></span>
+                <span class="hx-tl-title-wrap">
+                  <span class="hx-tl-title">${esc(r.title)}</span>
+                  <span class="hx-tl-status is-${r.stateKey}">${esc(r.stateBadge)}</span>
+                </span>
                 <span class="hx-tl-sub">${esc(r.sub)}</span>
               </span>
               ${iconSvg('chevron-right', { size: 14, className: 'hx-tl-chev' })}
@@ -343,6 +375,12 @@ function renderPlannerTeaser(host, today) {
     </section>`;
 }
 
+function urgencyRank(r, today) {
+  if (r.date && r.date < today) return 0;
+  if (r.date === today) return 1;
+  return 2;
+}
+
 function buildRemindersHtml(today, reminders) {
   const formatUrgency = r => {
     if (!r.date) return { text: 'กำหนดการ', cls: '' };
@@ -352,22 +390,27 @@ function buildRemindersHtml(today, reminders) {
     return { text: diff === 1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`, cls: '' };
   };
 
+  const ordered = [...reminders].sort((a, b) => {
+    const rankDiff = urgencyRank(a, today) - urgencyRank(b, today);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a.date || '9999-99-99').localeCompare(String(b.date || '9999-99-99'));
+  });
+
   return `
     <section class="hx-section" aria-labelledby="hx-rem-title">
       <div class="hx-section-head">
         <h2 id="hx-rem-title" class="hx-section-title">ใกล้ถึงกำหนด</h2>
         <button type="button" data-go="notifications" class="hx-link">ดูทั้งหมด</button>
       </div>
-      ${reminders.length ? `
+      ${ordered.length ? `
         <ul class="hx-list">
-          ${reminders.slice(0, 4).map(r => {
+          ${ordered.slice(0, 4).map(r => {
             const u = formatUrgency(r);
             const rIcon = CATEGORIES.find(c => c.tab === r.tab)?.icon || 'notifications';
-            const rCat = CATEGORIES.find(c => c.tab === r.tab)?.cat || 'cat-lab';
             return `
               <li>
                 <button type="button" data-go="${esc(r.tab || 'notifications')}" class="hx-list-row">
-                  <span class="hx-list-icon ${rCat}" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
+                  <span class="hx-list-icon" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
                   <span class="hx-tl-body">
                     <span class="hx-tl-title">${esc(r.label)}</span>
                     <span class="hx-tl-sub"><span class="hx-due ${u.cls} tabular-nums">${esc(u.text)}</span>${r.detail ? ` · ${esc(r.detail)}` : ''}</span>
@@ -447,9 +490,9 @@ export function renderHome() {
   const todayExps = monthExps.filter(x => x.date === today);
 
   const slots = {
+    'planner': $('#home-planner', el),
     'daily-overview': $('#home-slot-daily-overview', el),
     'quick-access': $('#home-slot-quick-access', el),
-    'planner': $('#home-planner', el),
     'daily-activity': $('#home-slot-daily-activity', el),
     'reminders': $('#home-slot-reminders', el)
   };
@@ -464,17 +507,6 @@ export function renderHome() {
     });
   }
 
-  if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
-    slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets);
-    const tickerEl = $('#home-kcal-ticker', el);
-    if (foods.length && tickerEl) {
-      const totalKcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
-      animateNumberTicker(tickerEl, totalKcal);
-    }
-  }
-  if (slots['quick-access'] && !config.hidden.has('quick-access')) {
-    slots['quick-access'].innerHTML = buildQuickAccessHtml(config);
-  }
   if (slots['planner'] && !config.hidden.has('planner')) {
     if (plannerExpanded && plannerFeature) {
       plannerFeature.mountPlanner(slots['planner'], go);
@@ -485,6 +517,17 @@ export function renderHome() {
     } else {
       renderPlannerTeaser(slots['planner'], today);
     }
+  }
+  if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
+    slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets);
+    const tickerEl = $('#home-kcal-ticker', el);
+    if (foods.length && tickerEl) {
+      const totalKcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
+      animateNumberTicker(tickerEl, totalKcal);
+    }
+  }
+  if (slots['quick-access'] && !config.hidden.has('quick-access')) {
+    slots['quick-access'].innerHTML = buildQuickAccessHtml(config);
   }
   if (slots['daily-activity'] && !config.hidden.has('daily-activity')) {
     slots['daily-activity'].innerHTML = buildDailyActivityHtml(today, foods, monthExps, todayExps);

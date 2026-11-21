@@ -9,9 +9,9 @@ describe('Phosphor Duotone icon registry', () => {
       expect(svg).toContain('class="tm-svg-icon ph-duotone"');
       expect(svg).toContain('viewBox="0 0 256 256"');
       expect(svg).toContain('<path');
-      const bubble = iconBubble(c.icon || c.key, { cat: c.cat });
+      const bubble = iconBubble(c.icon || c.key);
       expect(bubble).toContain('icon-bubble');
-      expect(bubble).toContain(c.cat);
+      expect(c).not.toHaveProperty('cat');
     }
 
     for (const [tab, meta] of Object.entries(SUBTABS)) {
@@ -36,6 +36,6 @@ describe('Phosphor Duotone icon registry', () => {
       expect(svg).toContain('<path');
     }
     expect(iconSvg('fa-solid fa-spinner fa-spin')).toContain('animate-spin');
-    expect(iconBubble('food', { small: true, cat: 'cat-food' })).toContain('emoji-bubble icon-bubble emoji-sm cat-food');
+    expect(iconBubble('food', { small: true })).toContain('emoji-bubble icon-bubble emoji-sm');
   });
 });

@@ -21,7 +21,6 @@ import { APP_VERSION_LABEL } from './version.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth, exitPreviewMode } from './auth.js';
 import { isPreviewMode, getPreviewCollection, getPreviewFoodByDate } from './preview.js';
-import './theme.js';
 import { CATEGORIES, GROUPS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { iconSvg, iconBubble } from './icons.js';
@@ -88,9 +87,9 @@ function renderSubnav(group, name) {
   nav.classList.toggle('subnav--tiles', useTiles);
   if (!show) { nav.innerHTML = ''; return; }
   if (useTiles) {
-    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 24 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
+    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 24 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
   } else {
-    nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button type="button" data-sub="${esc(item.tab)}" class="sub-chip ${esc(item.cat)} ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${esc(item.label)}</button>`).join('')}</div>`;
+    nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button type="button" data-sub="${esc(item.tab)}" class="sub-chip ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${esc(item.label)}</button>`).join('')}</div>`;
   }
   nav.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
@@ -109,7 +108,7 @@ function renderHomeShortcuts() {
   const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
   section.classList.toggle('hidden', shortcuts.length === 0);
   section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
-  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut ${item.cat || ''}"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
+  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
 
 function makeLazyFeature(loader, onMount, errorLabel) {
@@ -334,7 +333,7 @@ function openQuick(event) {
   quickTrigger = event?.currentTarget instanceof HTMLElement
     ? event.currentTarget
     : (document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add'));
-  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile ${c.cat}">${iconBubble(c.icon || c.key, { size: 22, cat: c.cat })}<span>${c.label}</span></button>`).join('');
+  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile">${iconBubble(c.icon || c.key, { size: 22 })}<span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   $('#btn-quick-add')?.setAttribute('aria-expanded', 'true');
@@ -661,7 +660,7 @@ on('auth', user => {
   unmountOnboarding();
   overviewLoader.get()?.resetDashboardState?.();
   resetHomePlannerState();
-  state.period = []; state.body = []; state.customFoods = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
+  state.period = []; state.body = []; state.customFoods = []; state.demoFoodRecords = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   $('#preview-banner')?.classList.toggle('hidden', !isPreviewMode());
   window.dispatchEvent(new Event('trackme:auth-change'));
@@ -686,6 +685,7 @@ on('auth', user => {
 
 document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goToGroup(b.dataset.nav)));
 $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) goTo(b.dataset.sub); });
+window.addEventListener('trackme:goto', e => { if (e.detail?.tab) goTo(e.detail.tab); });
 $('#btn-logo').addEventListener('click', () => goTo('home'));
 $('#btn-bell').addEventListener('click', () => goTo('notifications'));
 $('#btn-settings').addEventListener('click', () => goTo('settings'));

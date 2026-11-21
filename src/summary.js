@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { isPreviewMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, addMonthsLocal, mondayOf } from './util.js';
 import { periodStats } from './period.js';
 import { bodyLatest } from './body.js';
@@ -80,7 +81,9 @@ export function renderSummary() {
   let s = null;
   if (live) {
     s = buildLiveSummary();
-    try { localStorage.setItem(cacheKey(), JSON.stringify(s)); } catch {}
+    if (!isPreviewMode()) {
+      try { localStorage.setItem(cacheKey(), JSON.stringify(s)); } catch {}
+    }
   } else {
     try { s = JSON.parse(localStorage.getItem(cacheKey()) || 'null'); } catch { s = null; }
   }
@@ -174,7 +177,7 @@ export function renderSummary() {
 
   const desktopEmptyState = hasAnyValue ? '' : `
     <div class="summary-all-empty col-span-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center space-y-2">
-      <div class="flex justify-center">${iconBubble('overview', { cat: 'cat-lab' })}</div>
+      <div class="flex justify-center">${iconBubble('overview')}</div>
       <p class="text-sm font-semibold text-slate-800">ยังไม่มีข้อมูลสรุปในตอนนี้</p>
       <p class="text-xs text-slate-500 leading-relaxed">เริ่มบันทึกอาหาร น้ำหนัก ออกกำลังกาย หรือรายรับ-รายจ่าย เพื่อดูสรุปภาพรวมทั้งหมดที่นี่</p>
     </div>`;
