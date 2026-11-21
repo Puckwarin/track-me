@@ -301,7 +301,7 @@ function render(monthCount) {
         <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน <span class="ml-1 text-xs font-normal text-slate-500">แตะเพื่อดูรายละเอียด</span></span></summary>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">
-          <thead class="bg-lav-soft/50">
+          <thead class="bg-white border border-slate-100">
             <tr>
               <th class="p-2">เดือน</th>
               <th class="p-2 text-right">น้ำหนัก</th>

@@ -68,9 +68,9 @@ export function mountProfile(el) {
       <div><label class="lbl">ไขมัน (% ของพลังงาน) · ขั้นต่ำ ${FAT_MIN}</label><input id="pf-fat" type="number" min="${FAT_MIN}" max="${FAT_MAX}" inputmode="numeric" class="input"></div>
       <p id="pf-macro-hint" class="col-span-2 text-[11px] text-slate-500"></p>
     </div>
-    <div id="pf-result" class="rounded-xl bg-lav-soft/50 p-3 text-sm space-y-1"></div>
+    <div id="pf-result" class="rounded-xl bg-white border border-slate-100 p-3 text-sm space-y-1"></div>
     <p class="text-xs text-slate-400">ค่าที่คำนวณเป็นค่าประมาณทั่วไป (สูตร Mifflin-St Jeor) ไม่ใช่คำแนะนำทางการแพทย์ — มีโรคประจำตัว ตั้งครรภ์ หรือต้องการลดน้ำหนักมาก ควรปรึกษาแพทย์/นักกำหนดอาหาร</p>
-    <hr class="border-lav-soft">
+    <hr class="border-slate-200">
     <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('food', { size: 17, className: 'text-brand shrink-0' })}<span>มื้ออาหารของฉัน</span></h3>
     <p class="text-xs text-slate-500">เพิ่ม/ลด/เปลี่ยนชื่อมื้อได้ (เช่น มื้อสาย มื้อบ่าย) — หน้าอาหารจะแสดงกราฟพลังงานที่กินแต่ละมื้อเปรียบเทียบกันเอง</p>
     <div id="pf-meals" class="space-y-2"></div>

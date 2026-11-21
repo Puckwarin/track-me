@@ -372,7 +372,7 @@ function renderTaskListHtml(dateStr) {
         const kindBadge = it.kind === 'workout'
           ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-green-800' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
           : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.weekPattern === 'once' ? 'bg-emerald-100 text-emerald-800 font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
-        return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-80' : 'border-lav-soft/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40 min-h-[44px]">
+        return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-80' : 'border-slate-200/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40 min-h-[44px]">
           <span class="flex items-start gap-2.5 min-w-0 flex-1">
             <input type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
             <span class="min-w-0 flex-1">
@@ -472,7 +472,7 @@ export function renderPlanner() {
 
     <div class="space-y-2.5">
       ${stripHtml}
-      <div class="rounded-2xl border border-lav-soft/80 bg-slate-50/40 p-3 space-y-2.5">
+      <div class="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-3 space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
           <span class="text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
           <span class="text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>

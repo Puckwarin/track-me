@@ -307,12 +307,12 @@ export async function detectBarcode(file) {
 export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, onSaveLibrary }) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 hover:text-slate-600 p-1 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-    <div class="flex flex-wrap gap-2"><input id="os-q" class="input min-w-[12rem] flex-1" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button><button id="os-test-connections" type="button" class="btn btn-soft shrink-0">ตรวจการเชื่อมต่อ</button></div>
+    <div class="flex flex-col sm:flex-row gap-2"><div class="flex flex-wrap gap-2"><input id="os-q" class="input min-w-[12rem] flex-1" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button><button id="os-test-connections" type="button" class="btn btn-soft shrink-0">ตรวจการเชื่อมต่อ</button></div>
     <p id="os-hint" class="text-xs text-slate-500 mt-2">ค้นหาอัตโนมัติตามลำดับ: คลังอาหารในเครื่อง → USDA (DEMO_KEY) → Open Food Facts → AI (Gemini → Groq → OpenRouter)</p>
     <p id="os-connection-status" class="text-xs text-slate-500" aria-live="polite"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
     <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('forward', { size: 13 })} ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
-    <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
+    <div id="os-calc" class="hidden mt-3 bg-slate-50 rounded-xl p-3 space-y-2">
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label id="os-g-lbl" class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" step="0.1" inputmode="decimal" class="input">
       <p id="os-out" class="text-sm font-semibold text-blue-700"></p>
@@ -343,7 +343,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       const nut = r.servingOnly ? r.perServing : r.per100;
       const basis = r.servingOnly ? `ต่อ ${esc(r.servingText || '1 หน่วย')}` : 'ต่อ 100 g';
       return `
-      <button data-i="${i}" class="w-full text-left py-2.5 px-2 hover:bg-lav-soft/50 rounded-lg min-h-[44px]">
+      <button data-i="${i}" class="w-full text-left py-3 px-3 hover:bg-slate-50 rounded-xl min-h-[44px]">
         <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''}<span class="text-xs font-normal text-slate-500"> · ${esc(sourceLabel(r.source))}</span></p>
         <p class="text-xs text-slate-500 tabular-nums mt-0.5">${basis}: ${nut.calories} kcal · P ${nut.protein ?? '-'} · C ${nut.carbs ?? '-'} · F ${nut.fat ?? '-'}${!r.servingOnly && r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
       </button>`;

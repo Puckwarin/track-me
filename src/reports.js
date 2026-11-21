@@ -102,8 +102,8 @@ async function generate() {
   }
   const d = data, inc = k => $('#r-inc-' + k, root).checked;
   const name = $('#r-name', root).value.trim();
-  const sec = (title, body) => `<section class="report-section mt-6"><h3 class="font-bold text-slate-800 border-b border-lav-soft pb-1 mb-2">${title}</h3>${body}</section>`;
-  const tbl = (head, rows) => `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-lav-soft/50"><tr>${head.map(h => `<th class="p-2 whitespace-nowrap">${h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100 tabular-nums">${rows.map(r => `<tr>${r.map(c => `<td class="p-2">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const sec = (title, body) => `<section class="report-section mt-6"><h3 class="font-bold text-slate-800 border-b border-slate-200 pb-1 mb-2">${title}</h3>${body}</section>`;
+  const tbl = (head, rows) => `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-white border border-slate-100"><tr>${head.map(h => `<th class="p-2 whitespace-nowrap">${h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100 tabular-nums">${rows.map(r => `<tr>${r.map(c => `<td class="p-2">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   let h = `<div><h2 class="text-xl font-bold text-brand-dark">รายงานสุขภาพ Track Me</h2>
     <p class="text-sm text-slate-600 tabular-nums">${name ? 'ชื่อ: ' + esc(name) + ' · ' : ''}ช่วงข้อมูล: ${esc(fmtDate(d.from))} – ${esc(fmtDate(d.to))}</p>
     <p class="text-xs text-slate-500 tabular-nums">ออกรายงานเมื่อ ${esc(fmtDateTime(Date.now()))} · ${esc(syncLineText())}</p></div>`;

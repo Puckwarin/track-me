@@ -16,7 +16,7 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
     : scan.basis === 'per_100g' ? 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 100 กรัม/มล.</b>' : 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 1 หน่วยบริโภค</b>';
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${id ? 'แก้ไขเมนู' : scan ? 'ตรวจสอบข้อมูลจากฉลาก' : 'เพิ่มเมนูของฉัน'}</h3><button data-close class="text-slate-400 hover:text-slate-600 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-    ${scan ? `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1 mb-3">
+    ${scan ? `<div class="bg-amber-50/70 border border-amber-200/70 rounded-xl p-3 text-sm text-amber-900 space-y-1 mb-3">
       <p>${basisMsg}${scan.servingSizeText ? ` · หน่วยบริโภคบนฉลาก: ${esc(scan.servingSizeText)}` : ''}</p>
       <p>ช่องสีเหลืองคือค่าที่ AI อ่านไม่ชัดหรือไม่พบ — กรุณากรอกเองจากฉลาก (ระบบไม่เดาให้)</p>
       ${scan.notes ? `<p>หมายเหตุ: ${esc(scan.notes)}</p>` : ''}</div>` : ''}

@@ -160,7 +160,7 @@ export async function renderWeekly() {
   const fin = financeRangeSummary(weekStart, end);
   const invRem = inventoryAndReminderSummary(today);
 
-  const stat = (label, val, sub = '') => `<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${val}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
+  const stat = (label, val, sub = '') => `<div class="bg-white border border-slate-100 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${val}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
   $('#wk-body', root).innerHTML = `
     <div class="card space-y-3 lg:col-span-2">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -174,7 +174,7 @@ export async function renderWeekly() {
         ${stat('เกิน / ต่ำกว่าเป้า', logged.length ? `${over} / ${under} วัน` : '—', 'เกิน >110% · ต่ำ <80%')}
       </div>${chart}</div>
     <div class="space-y-6">
-      <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('body', { size: 17, className: 'text-blue-500' })}<span>น้ำหนัก · การนอน · ก้าวเดิน</span></h3>
+      <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('body', { size: 17, className: 'text-brand' })}<span>น้ำหนัก · การนอน · ก้าวเดิน</span></h3>
         ${wAvg === null ? '<p class="text-xs text-slate-500">ไม่มีการชั่งน้ำหนักในสัปดาห์นี้</p>' : `<p class="text-lg font-bold tabular-nums">${round1(wAvg)} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${wk.length} ครั้ง)</span></p>
         <p class="text-xs text-slate-600 tabular-nums">${wk.length > 1 ? `ต้นสัปดาห์ ${wk[0].weight} → ปลาย ${wk[wk.length - 1].weight} กก.` : ''}</p>
         <p class="text-xs tabular-nums ${wDelta === null ? 'text-slate-500' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}
@@ -220,7 +220,7 @@ async function renderMonthly() {
   const weights = state.body.filter(x => x.date >= start && x.date <= end && typeof x.weight === 'number').sort((a, b) => a.date.localeCompare(b.date));
   const workouts = state.workouts.filter(x => x.date >= start && x.date <= end && x.status !== 'planned'), minutes = workouts.reduce((a, x) => a + (x.durationMin || 0), 0);
   const symptoms = state.symptoms.filter(x => x.date >= start && x.date <= end && Object.values(x.symptoms || {}).some(v => v > 0)).length, targets = getTargets();
-  const stat = (label, value, sub = '') => `<div class="bg-lav-soft/50 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${value}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
+  const stat = (label, value, sub = '') => `<div class="bg-white border border-slate-100 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${value}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
   const daysInMonth = Array.from({ length: new Date(y, m, 0).getDate() }, (_, i) => `${selectedMonth}-${String(i + 1).padStart(2, '0')}`);
   const byDay = Object.fromEntries(daysInMonth.map(d => [d, { cal: 0, p: 0 }]));
   food.forEach(f => { const x = byDay[f.date]; if (x) { x.cal += num(f.calories); x.p += num(f.protein); } });

@@ -91,7 +91,7 @@ export function mountFood(el) {
         </div>
 
         <div class="space-y-1.5">
-          <label class="border border-dashed border-slate-300 bg-slate-50 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
+          <label class="border border-dashed border-slate-300 bg-slate-50 hover:bg-white border border-slate-100 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
             <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
             <span class="inline-flex text-brand">${iconSvg('camera', { size: 22 })}</span>
             <span class="block text-sm font-semibold text-slate-800 mt-1">ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
@@ -99,9 +99,9 @@ export function mountFood(el) {
           </label>
           <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
         </div>
-        <div id="f-photo-lib-bar" class="hidden rounded-xl bg-sky-soft/50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div id="f-photo-lib-bar" class="hidden rounded-xl bg-slate-50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span id="f-photo-lib-text" class="text-slate-700 font-medium"></span>
-          <button id="f-photo-lib-btn" type="button" class="chip bg-white text-brand-dark border border-lav-soft">${iconSvg('bookmark', { size: 13 })} บันทึกลงคลังอาหาร</button>
+          <button id="f-photo-lib-btn" type="button" class="chip bg-white text-brand-dark border border-slate-200">${iconSvg('bookmark', { size: 13 })} บันทึกลงคลังอาหาร</button>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

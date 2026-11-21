@@ -135,7 +135,7 @@ export function mountBackup(el) {
       <button id="bk-export" class="btn btn-primary">${iconSvg('download', { size: 15 })} สำรองข้อมูล (JSON)</button>
       <label class="btn btn-soft cursor-pointer">${iconSvg('upload', { size: 15 })} เลือกไฟล์เพื่อกู้คืน<input id="bk-file" type="file" accept="application/json,.json" class="hidden"></label>
     </div>
-    <div id="bk-preview" class="hidden space-y-2 text-sm bg-lav-soft/50 rounded-xl p-3"></div>`;
+    <div id="bk-preview" class="hidden space-y-2 text-sm bg-white border border-slate-100 rounded-xl p-3"></div>`;
   $('#bk-export', el).addEventListener('click', () => exportData(el));
   $('#bk-file', el).addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) readFile(f, el); });
 }
