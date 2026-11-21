@@ -65,7 +65,7 @@ async function load() {
     : getDocs(query(userCol(state.uid, name), where('date', '>=', from), where('date', '<=', to)))
         .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
   // ประจำเดือน/น้ำหนักอยู่ในหน่วยความจำแล้ว; อาหาร/อาการดึงตามช่วงวันที่ (ตอนออฟไลน์จะอ่านจากแคชในเครื่อง)
-  const [food, symptoms, workouts] = isDemoMode()
+  const [food, symptoms, workouts] = isPreviewMode()
     ? [
       (state.demoFoodRecords || []).filter(item => item.date >= from && item.date <= to),
       state.symptoms.filter(item => item.date >= from && item.date <= to),

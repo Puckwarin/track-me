@@ -28,10 +28,10 @@ describe('demo preview mode', () => {
 
   it('seeds sample data and removes demo mode on exit', async () => {
     const { state } = await import('./state.js');
-    const { enterDemoMode, exitDemoMode, isDemoMode, seedDemoState } = await import('./demo.js');
+    const { enterDemoMode, exitDemoMode, isPreviewMode, seedDemoState } = await import('./demo.js');
 
     expect(enterDemoMode()).toBe(true);
-    expect(isDemoMode()).toBe(true);
+    expect(isPreviewMode()).toBe(true);
     expect(document.documentElement.dataset.demoMode).toBe('true');
 
     seedDemoState();
@@ -42,7 +42,7 @@ describe('demo preview mode', () => {
     expect(state.loaded.todayFood).toBe(true);
 
     exitDemoMode();
-    expect(isDemoMode()).toBe(false);
+    expect(isPreviewMode()).toBe(false);
     expect(document.documentElement.dataset.demoMode).toBeUndefined();
   });
 

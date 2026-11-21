@@ -3,7 +3,7 @@ import { addDays, localDateStr } from './util.js';
 
 let active = false;
 
-export const isDemoMode = () => active;
+export const isPreviewMode = () => active;
 export const isDemoAvailable = () => import.meta.env.DEV;
 
 export function enterDemoMode() {

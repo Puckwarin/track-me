@@ -51,7 +51,7 @@ export function syncLineText() {
 
 export function renderSyncStatus() {
   const online = navigator.onLine;
-  if (isDemoMode()) {
+  if (isPreviewMode()) {
     const dot = $('#sync-dot'), text = $('#sync-text');
     if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400';
     if (text) text.textContent = 'โหมดตัวอย่าง';

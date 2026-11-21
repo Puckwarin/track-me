@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { isDemoMode } from './demo.js';
+import { isPreviewMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, addMonthsLocal, mondayOf } from './util.js';
 import { periodStats } from './period.js';
 import { bodyLatest } from './body.js';
@@ -81,7 +81,7 @@ export function renderSummary() {
   let s = null;
   if (live) {
     s = buildLiveSummary();
-    if (!isDemoMode()) {
+    if (!isPreviewMode()) {
       try { localStorage.setItem(cacheKey(), JSON.stringify(s)); } catch {}
     }
   } else {
