@@ -7,8 +7,8 @@ export function openFoodHistorySearch() {
   const today = localDateStr();
   const m = openModal(`
     <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg inline-flex items-center gap-1.5">${iconSvg('search', { size: 18, className: 'text-brand' })}<span>ค้นหาประวัติอาหารที่บันทึก</span></h3><button data-close class="text-slate-400 hover:text-slate-600 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-      <input id="fh-q" class="input" placeholder="🔍 ชื่อเมนู (เว้นว่าง = ดูทั้งหมด)">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+      <input id="fh-q" class="input" placeholder="ค้นหาชื่อเมนู">
       <input id="fh-from" type="date" class="input" value="${addDays(today, -30)}">
       <input id="fh-to" type="date" class="input" value="${today}">
     </div>
@@ -31,7 +31,7 @@ export function openFoodHistorySearch() {
         .sort((a, b) => b.date.localeCompare(a.date));
       out.innerHTML = rows.length
         ? `<p class="text-xs text-slate-500 mb-2">พบ ${rows.length} รายการ</p>` + rows.slice(0, 100).map(r => `
-          <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3 py-3">
             <div class="min-w-0">
               <p class="font-semibold text-slate-800 truncate">${esc(r.name)}</p>
               <p class="text-xs text-slate-500">${esc(r.date)} · ${esc(r.meal || '-')}</p>
