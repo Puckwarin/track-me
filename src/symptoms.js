@@ -221,7 +221,7 @@ export function renderList() {
   const rows = state.symptoms.slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
   $('#s-list', root).innerHTML = rows.length ? rows.map(r => {
     const sx = SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl hover:bg-pink-soft/50 border border-pink-soft tabular-nums">
+    return `<button data-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl bg-white border border-slate-200 hover:bg-primary-50 hover:border-primary-300 transition-colors tabular-nums">
       <b>${esc(fmtDate(r.id))}</b> <span class="text-slate-600">${esc(sx || 'ไม่มีอาการ')}</span>${r.mood ? ` · ${esc(MOODS[r.mood])}` : ''}</button>`;
   }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกอาการ</p>';
   loadForm();
@@ -233,7 +233,7 @@ export function renderSkinList() {
   const rows = (state.skinRecords || []).slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
   $('#skin-list', root).innerHTML = rows.length ? rows.map(r => {
     const signs = SKIN_FIELDS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl border border-rose-100 hover:bg-rose-50 tabular-nums"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
+    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl bg-white border border-slate-200 hover:bg-primary-50 hover:border-primary-300 transition-colors tabular-nums"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
   }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกผิว</p>';
   loadSkinForm();
 }

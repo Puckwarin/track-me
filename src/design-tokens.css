@@ -1,63 +1,63 @@
 /*  Track Me Warm Wellness design tokens  */
 
-/* ---- Warm Wellness semantic tokens ---- */
+/* ---- Cool Sky Blue, Periwinkle, Cream & Navy Palette (#E9F1FC, #D7EBF6, #D0DBF7, #E4E8F3, #E3F1FB, #C1E4F3, #A8D0EF, #99C3E4, #FFF9E6, #1F4A74, #194971) ---- */
 @theme {
   /* Typography */
   --font-sans: "Prompt", ui-sans-serif, system-ui, sans-serif;
   --font-heading: "Prompt", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --color-primary-50: #EFF7F1;
-  --color-primary-100: #E5F3E9;
-  --color-primary-200: #CDE7D5;
-  --color-primary-300: #B4DCC2;
-  --color-primary-400: #8FCBA7;
-  --color-primary-500: #68AE84;
-  --color-primary-600: #4D936B;
-  --color-primary-700: #397653;
-  --color-primary-800: #2D5C42;
-  --color-primary-900: #234A35;
+  --color-primary-50: #E9F1FC;
+  --color-primary-100: #E3F1FB;
+  --color-primary-200: #D7EBF6;
+  --color-primary-300: #C1E4F3;
+  --color-primary-400: #A8D0EF;
+  --color-primary-500: #99C3E4;
+  --color-primary-600: #4A7FAE;
+  --color-primary-700: #1F4A74;
+  --color-primary-800: #194971;
+  --color-primary-900: #10324F;
 
   /* Semantic surface tokens */
   --color-surface: #FFFFFF;
   --color-surface-raised: #FFFFFF;
-  --color-surface-subtle: #F5F6F1;
-  --color-surface-overlay: #FBFCF8;
-  --color-app-bg: #F5F6F1;
+  --color-surface-subtle: #E3F1FB;
+  --color-surface-overlay: #E9F1FC;
+  --color-app-bg: #E9F1FC;
 
   /* Semantic text tokens */
-  --color-ink: #2F3B34;   /* Slate 800 â€” Primary text */
-  --color-ink-secondary: #46534C;
-  --color-ink-muted: #68756D;
-  --color-ink-subtle: #879189;
+  --color-ink: #194971;
+  --color-ink-secondary: #1F4A74;
+  --color-ink-muted: #4A6685;
+  --color-ink-subtle: #647F9C;
   --color-ink-inverse: #FFFFFF;
 
   /* Semantic border/divider tokens */
-  --color-border: #E1E6DF;
-  --color-border-strong: #C9D2C9;
-  --color-divider: #EBEEE8;
+  --color-border: #D7E4F2;
+  --color-border-strong: #C1D7EE;
+  --color-divider: #E4E8F3;
 
   /* State colors */
-  --color-success: #4D936B;
-  --color-success-fg: #28553A;
-  --color-success-bg: #EFF7F1;
-  --color-success-border: #C7E2CF;
+  --color-success: #217A68;
+  --color-success-fg: #145245;
+  --color-success-bg: #E4F4F0;
+  --color-success-border: #A8DCD1;
 
-  --color-warning: #D49A47;   /* Peach */
-  --color-warning-fg: #76501D;
-  --color-warning-bg: #FBF4E8;
-  --color-warning-border: #E9D4AD;
+  --color-warning: #C58F1E;
+  --color-warning-fg: #5F4307;
+  --color-warning-bg: #FFF9E6;
+  --color-warning-border: #E8D59B;
 
-  --color-error: #C85F5D;
-  --color-error-fg: #813B39;
-  --color-error-bg: #FBEEEE;
-  --color-error-border: #EAC9C7;
+  --color-error: #C95B72;
+  --color-error-fg: #86263C;
+  --color-error-bg: #FCECEF;
+  --color-error-border: #EFAEC0;
 
-  --color-info: #6E9AB8;
-  --color-info-fg: #355C76;
-  --color-info-bg: #EFF4F6;
-  --color-info-border: #CFDDE4;
+  --color-info: #1F4A74;
+  --color-info-fg: #194971;
+  --color-info-bg: #D7EBF6;
+  --color-info-border: #99C3E4;
 
-  /* Spacing scale â€” 8px base */
+  /* Spacing scale — 8px base */
   --space-0: 0;
   --space-1: 0.25rem;   /* 4px */
   --space-2: 0.5rem;    /* 8px */
@@ -82,11 +82,11 @@
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgb(48 49 59 / .04), 0 2px 8px -4px rgb(48 49 59 / .08);
-  --shadow-md: 0 1px 2px rgb(48 49 59 / .06), 0 6px 20px -8px rgb(48 49 59 / .10);
-  --shadow-lg: 0 4px 8px -2px rgb(48 49 59 / .08), 0 12px 36px -12px rgb(48 49 59 / .16);
-  --shadow-xl: 0 20px 50px -12px rgb(48 49 59 / .25);
-  --shadow-focus: 0 0 0 4px color-mix(in srgb, var(--color-primary-300) 45%, transparent);
+  --shadow-sm: 0 1px 2px rgb(25 73 113 / .05), 0 2px 8px -4px rgb(25 73 113 / .08);
+  --shadow-md: 0 1px 2px rgb(25 73 113 / .06), 0 6px 20px -8px rgb(25 73 113 / .11);
+  --shadow-lg: 0 4px 8px -2px rgb(25 73 113 / .08), 0 12px 36px -12px rgb(25 73 113 / .16);
+  --shadow-xl: 0 20px 50px -12px rgb(25 73 113 / .24);
+  --shadow-focus: 0 0 0 4px color-mix(in srgb, #A8D0EF 55%, transparent);
 
   /* Transitions */
   --transition-fast: 120ms ease-out;
@@ -104,49 +104,52 @@
   --bp-xl: 1280px;
   --bp-2xl: 1440px;
   --bp-3xl: 1920px;
-  --color-brand: #34443B;
-  --color-brand-dark: #26372E;
-  --color-brand-strong: #26372E;
-  --color-mint: #A8D8B9;
-  --color-mint-strong: #4D936B;
-  --color-mint-soft: #E5F3E9;
-  --color-lav-soft: #E5F3E9;
-  --color-pink-soft: #FBEEEE;
-  --color-sky-soft: #EFF4F6;
-  --color-ok-soft: #EFF7F1;
-  --color-slate-50: #FBFCF8;
-  --color-slate-100: #F5F6F1;
-  --color-slate-200: #E7EBE4;
-  --color-slate-300: #D6DED5;
-  --color-slate-400: #AEB9AF;
-  --color-slate-500: #748077;
-  --color-slate-600: #58645B;
-  --color-slate-700: #414D45;
-  --color-slate-800: #2F3B34;
-  --color-slate-900: #202B24;
-  --color-blue-50: #EFF4F6;
-  --color-blue-400: #8FCBA7;
-  --color-blue-500: #4D936B;
-  --color-blue-600: #397653;
-  --color-blue-700: #26372E;
-  --color-sky-50: #EFF4F6;
-  --color-sky-100: #E5F3E9;
-  --color-pink-50: #FBEEEE;
-  --color-pink-100: #F8E7E6;
-  --color-pink-200: #EAC9C7;
-  --color-pink-300: #DCA6A3;
-  --color-pink-400: #C85F5D;
-  --color-pink-500: #B14C4A;
-  --color-pink-600: #983F3D;
-  --color-pink-700: #813B39;
-  --color-violet-50: #EFF7F1;
-  --color-violet-100: #E5F3E9;
-  --color-violet-400: #8FCBA7;
-  --color-violet-500: #4D936B;
-  --color-violet-600: #397653;
-  --color-amber-50: #FBF4E8;
-  --color-amber-100: #F5E9D2;
-  --shadow-focus: 0 0 0 4px color-mix(in srgb, var(--color-mint) 45%, transparent);
+  --color-brand: #1F4A74;
+  --color-brand-dark: #194971;
+  --color-brand-strong: #194971;
+  --color-yellow: #FFF9E6;
+  --color-yellow-soft: #FFF9E6;
+  --color-yellow-strong: #5F4307;
+  --color-mint: #C1E4F3;
+  --color-mint-strong: #1F4A74;
+  --color-mint-soft: #D7EBF6;
+  --color-lav-soft: #D0DBF7;
+  --color-pink-soft: #FCECEF;
+  --color-sky-soft: #E3F1FB;
+  --color-ok-soft: #D7EBF6;
+  --color-slate-50: #F4F8FD;
+  --color-slate-100: #E9F1FC;
+  --color-slate-200: #E4E8F3;
+  --color-slate-300: #C1D7EE;
+  --color-slate-400: #647F9C;
+  --color-slate-500: #4A6685;
+  --color-slate-600: #2C5379;
+  --color-slate-700: #1F4A74;
+  --color-slate-800: #194971;
+  --color-slate-900: #10324F;
+  --color-blue-50: #E9F1FC;
+  --color-blue-400: #A8D0EF;
+  --color-blue-500: #99C3E4;
+  --color-blue-600: #1F4A74;
+  --color-blue-700: #194971;
+  --color-sky-50: #E3F1FB;
+  --color-sky-100: #D7EBF6;
+  --color-pink-50: #FCECEF;
+  --color-pink-100: #F9DCE3;
+  --color-pink-200: #EFAEC0;
+  --color-pink-300: #E089A0;
+  --color-pink-400: #C95B72;
+  --color-pink-500: #B03F58;
+  --color-pink-600: #922D45;
+  --color-pink-700: #86263C;
+  --color-violet-50: #E9F1FC;
+  --color-violet-100: #D0DBF7;
+  --color-violet-400: #99C3E4;
+  --color-violet-500: #1F4A74;
+  --color-violet-600: #194971;
+  --color-amber-50: #FFF9E6;
+  --color-amber-100: #F5E7B8;
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, #A8D0EF 75%, transparent);
 }
 
 /* ============================================================
@@ -520,73 +523,77 @@
   .tm-modal-box { padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* Single Warm Wellness palette used across every app surface. */
+/* Cool Sky Blue, Periwinkle, Cream & Navy palette (#E9F1FC, #D7EBF6, #D0DBF7, #E4E8F3, #E3F1FB, #C1E4F3, #A8D0EF, #99C3E4, #FFF9E6, #1F4A74, #194971) */
 :root {
-  --color-app-bg: #F5F6F1;
+  --color-app-bg: #E9F1FC;
   --color-surface: #FFFFFF;
   --color-surface-raised: #FFFFFF;
-  --color-surface-subtle: #F5F6F1;
-  --color-surface-overlay: #FBFCF8;
-  --color-ink: #2F3B34;
-  --color-ink-secondary: #46534C;
-  --color-ink-muted: #68756D;
-  --color-ink-subtle: #879189;
+  --color-surface-subtle: #E3F1FB;
+  --color-surface-overlay: #E9F1FC;
+  --color-ink: #194971;
+  --color-ink-secondary: #1F4A74;
+  --color-ink-muted: #4A6685;
+  --color-ink-subtle: #647F9C;
   --color-ink-inverse: #FFFFFF;
-  --color-border: #E1E6DF;
-  --color-border-strong: #C9D2C9;
-  --color-divider: #EBEEE8;
+  --color-border: #D7E4F2;
+  --color-border-strong: #C1D7EE;
+  --color-divider: #E4E8F3;
 
-  --color-brand: #34443B;
-  --color-brand-strong: #26372E;
-  --color-mint: #A8D8B9;
-  --color-mint-strong: #4D936B;
-  --color-mint-soft: #E5F3E9;
+  --color-brand: #1F4A74;
+  --color-brand-dark: #194971;
+  --color-brand-strong: #194971;
+  --color-yellow: #FFF9E6;
+  --color-yellow-soft: #FFF9E6;
+  --color-yellow-strong: #5F4307;
+  --color-mint: #C1E4F3;
+  --color-mint-strong: #1F4A74;
+  --color-mint-soft: #D7EBF6;
 
-  --color-lav-soft: var(--color-mint-soft);
-  --color-pink-soft: #FBEEEE;
-  --color-sky-soft: #EFF4F6;
-  --color-ok-soft: var(--color-success-bg);
+  --color-lav-soft: #D0DBF7;
+  --color-pink-soft: #FCECEF;
+  --color-sky-soft: #E3F1FB;
+  --color-ok-soft: #D7EBF6;
 
-  --color-slate-50: #FBFCF8;
-  --color-slate-100: #F5F6F1;
-  --color-slate-200: #E7EBE4;
-  --color-slate-300: #D6DED5;
-  --color-slate-400: #AEB9AF;
-  --color-slate-500: #748077;
-  --color-slate-600: #58645B;
-  --color-slate-700: #414D45;
-  --color-slate-800: #2F3B34;
-  --color-slate-900: #202B24;
+  --color-slate-50: #F4F8FD;
+  --color-slate-100: #E9F1FC;
+  --color-slate-200: #E4E8F3;
+  --color-slate-300: #C1D7EE;
+  --color-slate-400: #647F9C;
+  --color-slate-500: #4A6685;
+  --color-slate-600: #2C5379;
+  --color-slate-700: #1F4A74;
+  --color-slate-800: #194971;
+  --color-slate-900: #10324F;
 
-  --color-primary-50: #EFF7F1;
-  --color-primary-100: #E5F3E9;
-  --color-primary-200: #CDE7D5;
-  --color-primary-300: #B4DCC2;
-  --color-primary-400: #8FCBA7;
-  --color-primary-500: #68AE84;
-  --color-primary-600: #4D936B;
-  --color-primary-700: #397653;
-  --color-primary-800: #2D5C42;
-  --color-primary-900: #234A35;
+  --color-primary-50: #E9F1FC;
+  --color-primary-100: #E3F1FB;
+  --color-primary-200: #D7EBF6;
+  --color-primary-300: #C1E4F3;
+  --color-primary-400: #A8D0EF;
+  --color-primary-500: #99C3E4;
+  --color-primary-600: #4A7FAE;
+  --color-primary-700: #1F4A74;
+  --color-primary-800: #194971;
+  --color-primary-900: #10324F;
 
-  --color-success: #4D936B;
-  --color-success-fg: #28553A;
-  --color-success-bg: #EFF7F1;
-  --color-success-border: #C7E2CF;
-  --color-warning: #D49A47;
-  --color-warning-fg: #76501D;
-  --color-warning-bg: #FBF4E8;
-  --color-warning-border: #E9D4AD;
-  --color-error: #C85F5D;
-  --color-error-fg: #813B39;
-  --color-error-bg: #FBEEEE;
-  --color-error-border: #EAC9C7;
-  --color-info: #6E9AB8;
-  --color-info-fg: #355C76;
-  --color-info-bg: #EFF4F6;
-  --color-info-border: #CFDDE4;
+  --color-success: #217A68;
+  --color-success-fg: #145245;
+  --color-success-bg: #E4F4F0;
+  --color-success-border: #A8DCD1;
+  --color-warning: #C58F1E;
+  --color-warning-fg: #5F4307;
+  --color-warning-bg: #FFF9E6;
+  --color-warning-border: #E8D59B;
+  --color-error: #C95B72;
+  --color-error-fg: #86263C;
+  --color-error-bg: #FCECEF;
+  --color-error-border: #EFAEC0;
+  --color-info: #1F4A74;
+  --color-info-fg: #194971;
+  --color-info-bg: #D7EBF6;
+  --color-info-border: #99C3E4;
 
-  --shadow-focus: 0 0 0 4px color-mix(in srgb, var(--color-mint) 45%, transparent);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, #A8D0EF 75%, transparent);
 }
 
 /* ---- Reduced motion ---- */

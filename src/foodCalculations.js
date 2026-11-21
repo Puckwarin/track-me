@@ -45,11 +45,18 @@ const num = value => typeof value === 'number' ? value : 0;
 
 export const canWeigh = base => Boolean(base && base.gramsPerUnit > 0 && !base.edibleFraction && !(base.unit === 'g' && base.gramsPerUnit === 1));
 
-export function foodQuantityFromInput(raw, base) {
-  if (raw === null || !canWeigh(base)) return raw;
-  const gramThreshold = base.gramsPerUnit * 0.9;
-  const looksLikeGrams = base.gramsPerUnit >= 15 ? raw >= gramThreshold : raw >= 10;
-  return looksLikeGrams ? raw / base.gramsPerUnit : raw;
+export const isGramUnitLabel = unit => /^\s*(?:\d+(?:\.\d+)?\s*)?(?:g|gram|grams|กรัม)\s*$/i.test(String(unit || '').trim());
+
+export function defaultFoodInputMode(base) {
+  if (!base) return 'unit';
+  if (base.unit === 'g' && base.gramsPerUnit === 1) return 'grams';
+  if (canWeigh(base) && isGramUnitLabel(base.unit)) return 'grams';
+  return 'unit';
+}
+
+export function foodQuantityFromInput(raw, base, inputMode = defaultFoodInputMode(base)) {
+  if (raw === null || !Number.isFinite(raw) || !canWeigh(base)) return raw;
+  return inputMode === 'grams' || inputMode === 'g' ? raw / base.gramsPerUnit : raw;
 }
 
 const r1 = v => Math.round(v * 10) / 10;
@@ -124,7 +131,7 @@ export function buildFoodRecordUpdatesFromLibrary(item, updatedFood, previousFoo
   return updates;
 }
 
-export const MEAL_PIE_PALETTE = ['#4D936B', '#8FCBA7', '#34443B', '#C9D2C9', '#A8D8B9', '#68756D', '#E1E6DF'];
+export const MEAL_PIE_PALETTE = ['#1F4A74', '#A8D0EF', '#D0DBF7', '#FFF9E6', '#99C3E4', '#C1E4F3', '#D7EBF6'];
 
 export function getMealPiePalette() {
   return MEAL_PIE_PALETTE;

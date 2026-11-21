@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#F5F6F1">
+  <meta name="theme-color" content="#E9F1FC">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Track Me">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="%BASE_URL%icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%icon-192.png">
   
@@ -105,36 +106,79 @@
       </div>
     </div>
     <nav id="desktop-nav" class="desktop-nav" aria-label="เมนูหลัก">
-      <div class="rail-section-label hidden lg:block">เมนูหลัก</div>
-      <button data-nav="food" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="19"></span>
-        <span>อาหาร</span>
-      </button>
-      <button data-nav="health" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="19"></span>
-        <span>สุขภาพ</span>
-      </button>
-      <button data-nav="expense" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="expense" data-ph-size="19"></span>
-        <span>การเงิน</span>
-      </button>
-      <button data-nav="care" class="desktop-nav-item">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="19"></span>
-        <span>ดูแล</span>
-      </button>
-      <button id="desktop-quick-add" type="button" class="desktop-nav-plus" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet">
-        <span class="rail-ico" aria-hidden="true" data-ph-icon="plus" data-ph-size="18"></span>
-        <span class="hidden lg:inline">บันทึกด่วน</span>
-        <span class="lg:hidden">บันทึก</span>
-      </button>
+      <div class="rail-section-label">เมนูหลัก</div>
+      <div id="desktop-nav-list" class="desktop-nav-list">
+        <button type="button" data-nav="home" data-tab="home" class="desktop-nav-item">
+          <span class="rail-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="19"></span>
+          <span>หน้าหลัก</span>
+        </button>
+        <button type="button" data-nav="food" data-tab="food" class="desktop-nav-item">
+          <span class="rail-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="19"></span>
+          <span>อาหาร</span>
+        </button>
+        <details class="desktop-nav-group" data-nav-group="health" open>
+          <summary class="desktop-nav-group-btn">
+            <span class="rail-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="19"></span>
+            <span class="flex-1 text-left">สุขภาพ</span>
+            <span class="rail-chev" aria-hidden="true" data-ph-icon="chevron-down" data-ph-size="14"></span>
+          </summary>
+          <div class="desktop-nav-sublist">
+            <button type="button" data-nav="health" data-tab="overview" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="overview" data-ph-size="16"></span>
+              <span>แดชบอร์ด</span>
+            </button>
+            <button type="button" data-nav="health" data-tab="workout" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="workout" data-ph-size="16"></span>
+              <span>ออกกำลังกาย</span>
+            </button>
+            <button type="button" data-nav="health" data-tab="period" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="period" data-ph-size="16"></span>
+              <span>ประจำเดือน</span>
+            </button>
+            <button type="button" data-nav="health" data-tab="symptoms" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="symptoms" data-ph-size="16"></span>
+              <span>อาการ &amp; ผิว</span>
+            </button>
+            <button type="button" data-nav="health" data-tab="body" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="body" data-ph-size="16"></span>
+              <span>น้ำหนัก · นอน/ก้าว</span>
+            </button>
+          </div>
+        </details>
+        <button type="button" data-nav="expense" data-tab="expense" class="desktop-nav-item">
+          <span class="rail-ico" aria-hidden="true" data-ph-icon="expense" data-ph-size="19"></span>
+          <span>การเงิน</span>
+        </button>
+        <details class="desktop-nav-group" data-nav-group="care" open>
+          <summary class="desktop-nav-group-btn">
+            <span class="rail-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="19"></span>
+            <span class="flex-1 text-left">ดูแล</span>
+            <span class="rail-chev" aria-hidden="true" data-ph-icon="chevron-down" data-ph-size="14"></span>
+          </summary>
+          <div class="desktop-nav-sublist">
+            <button type="button" data-nav="care" data-tab="care" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="16"></span>
+              <span>สัตว์เลี้ยง &amp; ผลตรวจ</span>
+            </button>
+            <button type="button" data-nav="care" data-tab="remind" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="remind" data-ph-size="16"></span>
+              <span>บันทึกเตือน</span>
+            </button>
+            <button type="button" data-nav="care" data-tab="inventory" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true" data-ph-icon="inventory" data-ph-size="16"></span>
+              <span>ของใช้ &amp; สต๊อก</span>
+            </button>
+          </div>
+        </details>
+      </div>
       <div class="rail-version" aria-label="เวอร์ชันเว็บแอป"><span class="tm-app-version"></span></div>
     </nav>
     <div id="reminder-banner" class="hidden bg-pink-soft text-pink-800"></div>
 
     <nav id="subnav" class="subnav hidden max-w-7xl mx-auto px-4 md:px-6" aria-label="หน้าย่อย"></nav>
 
-    <main id="tab-home" class="page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
-      <div id="home-today" class="space-y-4"></div>
+    <main id="tab-home" class="page max-w-[74rem] mx-auto px-4 md:px-6 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,19.5rem)] gap-4 md:gap-6 xl:gap-7">
+      <div id="home-today"></div>
       <section id="summary-section" class="space-y-4">
         <div class="card">
           <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
@@ -166,23 +210,23 @@
     <main id="tab-notifications" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
     <main id="tab-settings" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
 
-    <!-- แถบเมนูมือถือ; data-nav ใช้ binding กลุ่มเดิมใน app.js -->
+    <!-- แถบเมนูมือถือ 5 ตำแหน่ง: หน้าหลัก, อาหาร, โลโก้แอป (Bottom Sheet), ออกกำลังกาย, ดูแล -->
     <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">
       <div class="bottom-nav-inner">
-        <button data-nav="food" class="nav-item">
+        <button type="button" data-nav="home" data-tab="home" class="nav-item">
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="20"></span>
+          <span>หน้าหลัก</span>
+        </button>
+        <button type="button" data-nav="food" data-tab="food" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="20"></span>
           <span>อาหาร</span>
         </button>
-        <button data-nav="health" class="nav-item">
-          <span class="nav-ico" aria-hidden="true" data-ph-icon="health" data-ph-size="20"></span>
-          <span>สุขภาพ</span>
+        <button id="btn-quick-add" type="button" class="nav-plus nav-plus--logo" data-ph-icon="brand" data-ph-size="25" data-ph-class="nav-plus-logo-svg" aria-label="เปิดเมนูบันทึกข้อมูลด่วน" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
+        <button type="button" data-nav="workout" data-tab="workout" class="nav-item">
+          <span class="nav-ico" aria-hidden="true" data-ph-icon="workout" data-ph-size="20"></span>
+          <span>ออกกำลัง</span>
         </button>
-        <button id="btn-quick-add" class="nav-plus" data-ph-icon="plus" data-ph-size="24" data-ph-class="nav-plus-svg" aria-label="บันทึกข้อมูลใหม่" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
-        <button data-nav="expense" class="nav-item">
-          <span class="nav-ico" aria-hidden="true" data-ph-icon="expense" data-ph-size="20"></span>
-          <span>การเงิน</span>
-        </button>
-        <button data-nav="care" class="nav-item">
+        <button type="button" data-nav="care" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="care" data-ph-size="20"></span>
           <span>ดูแล</span>
         </button>

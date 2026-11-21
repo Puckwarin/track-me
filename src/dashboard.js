@@ -8,6 +8,11 @@ import { bindChartInspector } from './ui.js';
 
 let root, dashboardData = null, loading = false, activeSection = 'health';
 
+function cssToken(name, fallback) {
+  if (typeof getComputedStyle !== 'function' || !document?.documentElement) return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
 function monthLabel(ms) {
   const [y, m] = ms.split('-');
   const d = new Date(+y, +m - 1, 1);
@@ -86,6 +91,10 @@ export function mountDashboard(el) {
     $('#db-content', root).querySelectorAll('[data-db-panel]').forEach(panel => {
       panel.hidden = panel.dataset.dbPanel !== activeSection;
     });
+  });
+
+  window.addEventListener('trackme:theme', () => {
+    if (root?.isConnected && dashboardData) render(monthCount);
   });
 
   loadAndRender(monthCount);
@@ -211,12 +220,12 @@ function lineChart(data, valueKey, color, unit, decimals = 0) {
       <circle cx="${cx}" cy="${cy}" r="11" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(d.label)}: ${esc(valStr)}" data-chart-color="${color}" aria-label="${esc(d.label)} ${esc(valStr)}"><title>${esc(d.label)}: ${esc(valStr)}</title></circle>
     </g>`;
   }).join('');
-  const labels = data.map((d, i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#94a3b8" text-anchor="middle">${esc(d.label)}</text>`).join('');
+  const labels = data.map((d, i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#647F9C" text-anchor="middle">${esc(d.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
     <polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round"/>
     ${dots}
-    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#64748b">${esc(fmtV(max))}</text>
-    <text x="4" y="${y(min) + 4}" font-size="9.5" fill="#64748b">${esc(fmtV(min))}</text>
+    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtV(max))}</text>
+    <text x="4" y="${y(min) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtV(min))}</text>
     ${labels}
   </svg>`;
 }
@@ -237,15 +246,15 @@ function barChart(data, valueKey, color, unit, decimals = 0) {
     const bx = x(i).toFixed(1);
     const bh = v > 0 ? H - P - y(v) : 0;
     return `<g>
-      ${v > 0 ? `<rect x="${bx}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" opacity="0.85"></rect>` : ''}
-      <rect x="${bx}" y="12" width="${Math.max(bw, 16).toFixed(1)}" height="${H - P - 12}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(d.label)}: ${v > 0 ? esc(valStr) : 'ไม่มีข้อมูล'}" data-chart-color="${v > 0 ? color : '#94a3b8'}" aria-label="${esc(d.label)} ${esc(valStr)}"><title>${esc(d.label)}: ${esc(valStr)}</title></rect>
+      ${v > 0 ? `<rect x="${bx}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" opacity="0.88"></rect>` : ''}
+      <rect x="${bx}" y="12" width="${Math.max(bw, 16).toFixed(1)}" height="${H - P - 12}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(d.label)}: ${v > 0 ? esc(valStr) : 'ไม่มีข้อมูล'}" data-chart-color="${v > 0 ? color : '#647F9C'}" aria-label="${esc(d.label)} ${esc(valStr)}"><title>${esc(d.label)}: ${esc(valStr)}</title></rect>
     </g>`;
   }).join('');
-  const labels = data.map((d, i) => `<text x="${(x(i) + bw / 2).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#94a3b8" text-anchor="middle">${esc(d.label)}</text>`).join('');
+  const labels = data.map((d, i) => `<text x="${(x(i) + bw / 2).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="#647F9C" text-anchor="middle">${esc(d.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
     ${bars}
-    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#64748b">${esc(fmtV(max))}</text>
-    <text x="4" y="${y(0)}" font-size="9.5" fill="#94a3b8">0</text>
+    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtV(max))}</text>
+    <text x="4" y="${y(0)}" font-size="9.5" fill="#647F9C">0</text>
     ${labels}
   </svg>`;
 }
@@ -274,10 +283,13 @@ function render(monthCount) {
   const totalExpense = d.reduce((a, r) => a + r.expenseTotal, 0);
   const totalIncome = d.reduce((a, r) => a + r.incomeTotal, 0);
 
+  const brandColor = cssToken('--color-brand', '#1F4A74');
+  const expenseColor = cssToken('--color-error', '#C95B72');
+
   $('#db-content', root).innerHTML = `
     <section class="db-metrics" aria-label="สรุปตัวเลขสำคัญ">
       ${statCard('น้ำหนักล่าสุด', latest?.weight != null ? latest.weight + ' กก.' : '-', weightTrend != null ? `เปลี่ยน ${weightStr}` : 'จาก ' + d.length + ' เดือน', weightClass)}
-      ${statCard('แคลอรี่เฉลี่ย/วัน', latest?.avgKcal != null ? latest.avgKcal + ' kcal' : '-', latest?.avgKcal != null ? 'เดือนล่าสุด' : '-', 'text-amber-600')}
+      ${statCard('แคลอรี่เฉลี่ย/วัน', latest?.avgKcal != null ? latest.avgKcal + ' kcal' : '-', latest?.avgKcal != null ? 'เดือนล่าสุด' : '-', 'text-slate-700')}
       ${statCard('ออกกำลังกาย', totalWorkout + ' ครั้ง', `รวม ${d.reduce((a, r) => a + r.workoutMin, 0)} นาที · ${d.length} เดือน`, 'text-brand-dark')}
       ${statCard('ค่าใช้จ่ายสุทธิ', totalIncome - totalExpense >= 0 ? '+' + (totalIncome - totalExpense).toLocaleString() : (totalIncome - totalExpense).toLocaleString(), `รายรับ ${totalIncome.toLocaleString()} · จ่าย ${totalExpense.toLocaleString()} · ${d.length} เดือน`, totalIncome - totalExpense >= 0 ? 'text-emerald-700' : 'text-rose-600')}
     </section>
@@ -287,16 +299,16 @@ function render(monthCount) {
     </div>
 
     <section role="tabpanel" id="db-panel-health" aria-labelledby="db-tab-health" data-db-panel="health" class="db-chart-panel" ${activeSection!=='health'?'hidden':''}>
-      <div class="db-chart-card"><h3>${iconSvg('body', { size: 16, className: 'text-brand shrink-0' })}<span>น้ำหนัก (กก.)</span></h3>${lineChart(d, 'weight', '#6366f1', 'กก.', 1)}</div>
+      <div class="db-chart-card"><h3>${iconSvg('body', { size: 16, className: 'text-brand shrink-0' })}<span>น้ำหนัก (กก.)</span></h3>${lineChart(d, 'weight', brandColor, 'กก.', 1)}</div>
     </section>
     <section role="tabpanel" id="db-panel-nutrition" aria-labelledby="db-tab-nutrition" data-db-panel="nutrition" class="db-chart-panel" ${activeSection!=='nutrition'?'hidden':''}>
-      <div class="db-chart-card"><h3>${iconSvg('flame', { size: 16, className: 'text-orange-500 shrink-0' })}<span>แคลอรี่เฉลี่ย/วัน (kcal)</span></h3>${lineChart(d, 'avgKcal', '#f97316', 'kcal', 0)}</div>
+      <div class="db-chart-card"><h3>${iconSvg('flame', { size: 16, className: 'text-brand shrink-0' })}<span>แคลอรี่เฉลี่ย/วัน (kcal)</span></h3>${lineChart(d, 'avgKcal', brandColor, 'kcal', 0)}</div>
     </section>
     <section role="tabpanel" id="db-panel-activity" aria-labelledby="db-tab-activity" data-db-panel="activity" class="db-chart-panel" ${activeSection!=='activity'?'hidden':''}>
-      <div class="db-chart-card"><h3>${iconSvg('workout', { size: 16, className: 'text-emerald-600 shrink-0' })}<span>จำนวนครั้งออกกำลังกาย</span></h3>${barChart(d, 'workoutCount', '#10b981', 'ครั้ง', 0)}</div>
+      <div class="db-chart-card"><h3>${iconSvg('workout', { size: 16, className: 'text-brand shrink-0' })}<span>จำนวนครั้งออกกำลังกาย</span></h3>${barChart(d, 'workoutCount', brandColor, 'ครั้ง', 0)}</div>
     </section>
     <section role="tabpanel" id="db-panel-finance" aria-labelledby="db-tab-finance" data-db-panel="finance" class="db-chart-panel space-y-4" ${activeSection!=='finance'?'hidden':''}>
-      <div class="db-chart-card"><h3>${iconSvg('expense', { size: 16, className: 'text-rose-500 shrink-0' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>${barChart(d, 'expenseTotal', '#f43f5e', 'บาท', 0)}</div>
+      <div class="db-chart-card"><h3>${iconSvg('expense', { size: 16, className: 'text-rose-500 shrink-0' })}<span>ค่าใช้จ่ายรายเดือน (บาท)</span></h3>${barChart(d, 'expenseTotal', expenseColor, 'บาท', 0)}</div>
       <details class="card space-y-3">
         <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm flex items-center gap-2">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน <span class="ml-1 text-xs font-normal text-slate-500">แตะเพื่อดูรายละเอียด</span></span></summary>
       <div class="overflow-x-auto">

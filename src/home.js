@@ -1,7 +1,7 @@
 // หน้า Home: Daily Overview, Quick Access, Planner, Daily Activity และ Reminders
 import { state } from './state.js';
 import { isPreviewMode } from './preview.js';
-import { $, esc, localDateStr, round1, toast, daysBetween } from './util.js';
+import { $, esc, localDateStr, parseLocal, round1, toast, daysBetween } from './util.js';
 import { getTargets } from './profile.js';
 import { collectReminders, remindersForDate } from './reminders.js';
 import { CATEGORIES } from './categories.js';
@@ -81,16 +81,14 @@ export function ensureHomePlannerLoaded() {
   const container = $('#home-planner');
   if (!container) return Promise.resolve();
   if (!plannerMountPromise) {
-    const btn = $('#home-planner-open', container);
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังโหลด Planner...`;
-    }
+    renderPlannerLoading(container);
     plannerMountPromise = import('./planner.js')
       .then(module => {
         plannerFeature = module;
-        module.mountPlanner(container, go);
-        module.renderPlanner();
+        if (plannerExpanded && container.isConnected) {
+          module.mountPlanner(container, go);
+          container.dataset.plMounted = '1';
+        }
       })
       .catch(error => {
         plannerMountPromise = null;
@@ -100,8 +98,12 @@ export function ensureHomePlannerLoaded() {
         renderHome();
       });
   } else if (plannerFeature) {
-    plannerFeature.mountPlanner(container, go);
-    plannerFeature.renderPlanner();
+    if (container.dataset.plMounted !== '1') {
+      plannerFeature.mountPlanner(container, go);
+      container.dataset.plMounted = '1';
+    } else {
+      plannerFeature.renderPlanner();
+    }
   }
   return plannerMountPromise;
 }
@@ -119,29 +121,37 @@ function greeting() {
   return 'ราตรีสวัสดิ์';
 }
 
-function moodLine(pct, hasFood) {
+function moodLine(pct, hasFood, goal) {
   if (!hasFood) return ['เริ่มวันใหม่แบบสบาย ๆ', 'จดมื้อแรกของวัน แล้วค่อย ๆ ดูแลตัวเองไปด้วยกัน'];
-  if (pct < 40) return ['เริ่มต้นได้ดีแล้ว', 'อย่าลืมกินให้พอดีกับเป้าหมายของวันนี้นะ'];
-  if (pct <= 100) return ['วันนี้ดูแลตัวเองได้ดี', 'พลังงานกำลังพอดี ไปต่อแบบนี้เลย'];
-  return ['วันนี้กินเกินเป้าเล็กน้อย', 'ไม่เป็นไร ลองขยับร่างกายเพิ่มอีกนิดก็พอ'];
+  if (!goal) return ['บันทึกมื้อวันนี้แล้ว', 'ตั้งเป้าหมายพลังงานเพิ่มได้ในหน้าตั้งค่า เพื่อให้สรุปตรงกับคุณมากขึ้น'];
+  if (pct < 40) return ['เริ่มต้นได้ดีแล้ว', 'ค่อย ๆ จดมื้ออาหารให้ครบตามจังหวะของวันนะ'];
+  if (pct <= 100) return ['วันนี้ดูแลตัวเองได้ดี', 'พลังงานอยู่ในช่วงเป้าหมายที่ตั้งไว้'];
+  return ['บันทึกครบตามมื้อวันนี้แล้ว', 'พลังงานวันนี้สูงกว่าเป้าหมายที่ตั้งไว้เล็กน้อย ใช้ดูเป็นข้อมูลภาพรวมได้'];
 }
 
-function progressRing(pct, label, sub) {
+function progressRing(pct, label, sub, { hasGoal = true } = {}) {
   const r = 52;
   const c = 2 * Math.PI * r;
-  const shown = Math.max(0, Math.min(100, pct));
+  const shown = hasGoal ? Math.max(0, Math.min(100, pct)) : 0;
   const offset = c - (shown / 100) * c;
   return `
-    <div class="hx-ring" role="img" aria-label="${esc(label)} ${pct}% ${esc(sub)}">
+    <div class="hx-ring" role="img" aria-label="${esc(hasGoal ? `${label} ${pct}% ${sub}` : 'ยังไม่ได้ตั้งเป้าหมายพลังงาน')}">
       <svg viewBox="0 0 120 120" aria-hidden="true">
         <circle class="hx-ring-track" cx="60" cy="60" r="${r}" />
-        <circle class="hx-ring-bar ${pct > 100 ? 'is-over' : ''}" cx="60" cy="60" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" />
+        <circle class="hx-ring-bar ${hasGoal && pct > 100 ? 'is-over' : ''}" cx="60" cy="60" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" />
       </svg>
       <div class="hx-ring-center">
-        <span class="hx-ring-value tabular-nums">${pct}<small>%</small></span>
-        <span class="hx-ring-label">${esc(label)}</span>
+        <span class="hx-ring-value tabular-nums">${hasGoal ? `${pct}<small>%</small>` : '—'}</span>
+        <span class="hx-ring-label">${esc(hasGoal ? label : 'ยังไม่มีเป้า')}</span>
       </div>
     </div>`;
+}
+
+function latestDateNote(dateStr, today) {
+  if (!dateStr) return 'ยังไม่มีข้อมูล';
+  if (dateStr === today) return 'ล่าสุด · วันนี้';
+  if (daysBetween(dateStr, today) === 1) return 'ล่าสุด · เมื่อวาน';
+  return 'ล่าสุด · ' + parseLocal(dateStr).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
 }
 
 function buildDailyOverviewHtml(today, foods, targets) {
@@ -151,7 +161,7 @@ function buildDailyOverviewHtml(today, foods, targets) {
   const goal = num(targets.kcal) || 0;
   const pct = goal ? Math.round((kcal / goal) * 100) : 0;
   const left = goal - kcal;
-  const [title, subtitle] = moodLine(pct, foods.length > 0);
+  const [title, subtitle] = moodLine(pct, foods.length > 0, goal);
 
   const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
   const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned');
@@ -164,10 +174,10 @@ function buildDailyOverviewHtml(today, foods, targets) {
   const weightSub = hasNum(body?.weight?.v) ? 'กก.' : '';
 
   const stats = [
-    { tone: 'is-food', tab: 'food', icon: 'food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: foods.length ? 'kcal' : '' },
-    { tone: 'is-workout', tab: 'workout', icon: 'steps', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : todayWorkouts.length ? 'แผน' : '' },
-    { tone: 'is-sleep', tab: 'body', icon: 'moon', label: 'นอน', value: sleepVal, sub: sleepSub },
-    { tone: 'is-weight', tab: 'body', icon: 'body', label: 'น้ำหนัก', value: weightVal, sub: weightSub }
+    { tone: 'is-food', tab: 'food', icon: 'food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: foods.length ? 'kcal' : '', meta: foods.length ? 'วันนี้' : 'ยังไม่มีรายการ' },
+    { tone: 'is-workout', tab: 'workout', icon: 'steps', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : todayWorkouts.length ? 'แผน' : '', meta: todayWorkouts.length ? 'วันนี้' : 'ยังไม่มีรายการ' },
+    { tone: 'is-sleep', tab: 'body', icon: 'moon', label: 'นอนล่าสุด', value: sleepVal, sub: sleepSub, meta: latestDateNote(body?.sleepHours?.d, today) },
+    { tone: 'is-weight', tab: 'body', icon: 'body', label: 'น้ำหนักล่าสุด', value: weightVal, sub: weightSub, meta: latestDateNote(body?.weight?.d, today) }
   ];
 
   const macroTile = (tone, label, v, g) => {
@@ -190,18 +200,21 @@ function buildDailyOverviewHtml(today, foods, targets) {
           <button type="button" data-go="food" class="hx-hero-kcal tabular-nums">
             ${!foodLoaded && !foods.length
               ? '<span>กำลังโหลด...</span>'
-              : `<b id="home-kcal-ticker">${kcal.toLocaleString()}</b><span> / ${goal ? goal.toLocaleString() : '—'} kcal</span>`}
+              : `<b id="home-kcal-ticker">${kcal.toLocaleString()}</b><span>${goal ? ` / ${goal.toLocaleString()} kcal` : (foods.length ? ' kcal' : ' kcal · ยังไม่มีรายการวันนี้')}</span>`}
           </button>
-          <p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${goal ? (left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`) : 'ยังไม่ได้ตั้งเป้าหมายพลังงาน'}</p>
+          ${goal
+            ? `<p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>`
+            : `<button type="button" data-go="settings" class="hx-hero-left is-link">ยังไม่ได้ตั้งเป้าหมายพลังงาน · แตะเพื่อตั้งค่า</button>`}
         </div>
-        ${progressRing(pct, 'ของเป้าวันนี้', `${kcal} จาก ${goal} kcal`)}
+        ${progressRing(pct, 'ของเป้าวันนี้', `${kcal} จาก ${goal} kcal`, { hasGoal: goal > 0 })}
       </div>
       <div class="hx-stats" role="list">
         ${stats.map(s => `
-          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat ${s.tone}" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)}">
+          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat ${s.tone}" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)} (${esc(s.meta)})">
             ${iconSvg(s.icon, { size: 17 })}
             <span class="hx-stat-label">${esc(s.label)}</span>
             <span class="hx-stat-value tabular-nums">${esc(s.value)}${s.sub ? `<small> ${esc(s.sub)}</small>` : ''}</span>
+            <span class="hx-stat-meta">${esc(s.meta)}</span>
           </button>`).join('')}
       </div>
       <div class="hx-macros">
@@ -272,6 +285,7 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
     const st = resolveActivityState(slot.time, items.length > 0, nowHhMm);
     rows.push({
       time: slot.time,
+      trackable: true,
       done: st.key === 'done',
       stateKey: st.key,
       stateBadge: st.badge,
@@ -287,6 +301,7 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
     const st = resolveActivityState(t, w.status !== 'planned', nowHhMm);
     rows.push({
       time: t,
+      trackable: true,
       done: st.key === 'done',
       stateKey: st.key,
       stateBadge: st.badge,
@@ -301,6 +316,7 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
     const st = resolveActivityState(t, false, nowHhMm);
     rows.push({
       time: t,
+      trackable: false,
       done: false,
       stateKey: st.key,
       stateBadge: st.badge,
@@ -311,7 +327,10 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
   });
 
   rows.sort((a, b) => String(a.time).localeCompare(String(b.time)));
-  const doneCount = rows.filter(r => r.done).length;
+  const trackableRows = rows.filter(r => r.trackable);
+  const doneCount = trackableRows.filter(r => r.done).length;
+  const totalCount = trackableRows.length;
+  const reminderCount = rows.length - totalCount;
 
   const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
   const incomeMonth = monthExps.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
@@ -321,7 +340,7 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
     <section class="hx-section" aria-labelledby="hx-today-title">
       <div class="hx-section-head">
         <h2 id="hx-today-title" class="hx-section-title">วันนี้</h2>
-        <span class="hx-muted tabular-nums">ทำแล้ว ${doneCount}/${rows.length}</span>
+        <span class="hx-muted tabular-nums">ทำแล้ว ${doneCount}/${totalCount}${reminderCount ? ` · เตือน ${reminderCount}` : ''}</span>
       </div>
       <ol class="hx-timeline">
         ${rows.map(r => `
@@ -352,26 +371,42 @@ function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
     </button>`;
 }
 
+function renderPlannerLoading(host) {
+  if (!host) return;
+  host.innerHTML = `
+    <section class="hx-plan-compact" aria-label="Weekly Planner">
+      <div class="hx-plan-compact-main">
+        <span class="hx-plan-compact-ico" aria-hidden="true">${iconSvg('planner', { size: 18 })}</span>
+        <div class="min-w-0">
+          <p class="hx-plan-compact-title">Weekly Planner</p>
+          <p class="hx-plan-compact-sub">กำลังโหลดแผนประจำสัปดาห์...</p>
+        </div>
+      </div>
+      <span class="hx-plan-compact-spin" aria-hidden="true">${iconSvg('fa-spinner fa-spin', { size: 16 })}</span>
+    </section>`;
+}
+
 function renderPlannerTeaser(host, today) {
   if (!host) return;
   const routines = Array.isArray(state.planner?.routines) ? state.planner.routines : [];
   const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
   const doneMapToday = Array.isArray(state.planner?.doneMap?.[today]) ? state.planner.doneMap[today].length : 0;
-  const desc = routines.length
+  const desc = routines.length || todayWorkouts.length
     ? `กิจกรรม ${routines.length} รายการ${doneMapToday ? ` · ทำแล้ว ${doneMapToday}` : ''}${todayWorkouts.length ? ` · ออกกำลังกาย ${todayWorkouts.length}` : ''}`
-    : 'วางแผนกิจกรรมและการออกกำลังกายทั้งสัปดาห์ในที่เดียว';
+    : 'วางแผนกิจกรรมและการออกกำลังกายประจำสัปดาห์';
 
   host.innerHTML = `
-    <section class="hx-plan" aria-labelledby="hx-plan-title">
-      <div class="hx-plan-copy">
-        <span class="hx-eyebrow">Weekly Planner</span>
-        <h2 id="hx-plan-title" class="hx-plan-title">วางแผนสัปดาห์นี้<br>ให้สบายขึ้น</h2>
-        <p class="hx-plan-sub">${esc(desc)}</p>
-        <button type="button" id="home-planner-open" class="hx-plan-btn">
-          เปิด Planner ${iconSvg('arrow-right', { size: 15 })}
-        </button>
+    <section class="hx-plan-compact" aria-labelledby="hx-plan-title">
+      <div class="hx-plan-compact-main">
+        <span class="hx-plan-compact-ico" aria-hidden="true">${iconSvg('planner', { size: 18 })}</span>
+        <div class="min-w-0">
+          <h2 id="hx-plan-title" class="hx-plan-compact-title">Weekly Planner</h2>
+          <p class="hx-plan-compact-sub">${esc(desc)}</p>
+        </div>
       </div>
-      <div class="hx-plan-art" aria-hidden="true">${iconSvg('weekly', { size: 42 })}</div>
+      <button type="button" id="home-planner-open" class="hx-plan-compact-btn">
+        กางดู ${iconSvg('chevron-down', { size: 14 })}
+      </button>
     </section>`;
 }
 
@@ -443,6 +478,14 @@ export function mountHome(navigate) {
       void ensureHomePlannerLoaded();
       return;
     }
+    const collapseBtn = e.target.closest('[data-pl-collapse]');
+    if (collapseBtn) {
+      plannerExpanded = false;
+      const slot = $('#home-planner', el);
+      if (slot) delete slot.dataset.plMounted;
+      renderPlannerTeaser(slot, localDateStr());
+      return;
+    }
     const pushBtn = e.target.closest('#home-push-btn');
     if (pushBtn) {
       pushBtn.disabled = true;
@@ -509,12 +552,17 @@ export function renderHome() {
 
   if (slots['planner'] && !config.hidden.has('planner')) {
     if (plannerExpanded && plannerFeature) {
-      plannerFeature.mountPlanner(slots['planner'], go);
-      plannerFeature.renderPlanner();
+      if (slots['planner'].dataset.plMounted !== '1') {
+        plannerFeature.mountPlanner(slots['planner'], go);
+        slots['planner'].dataset.plMounted = '1';
+      } else {
+        plannerFeature.renderPlanner();
+      }
     } else if (plannerExpanded) {
-      if (!slots['planner'].hasChildNodes()) renderPlannerTeaser(slots['planner'], today);
+      if (!slots['planner'].hasChildNodes()) renderPlannerLoading(slots['planner']);
       void ensureHomePlannerLoaded();
     } else {
+      delete slots['planner'].dataset.plMounted;
       renderPlannerTeaser(slots['planner'], today);
     }
   }

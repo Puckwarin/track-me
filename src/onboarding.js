@@ -92,18 +92,18 @@ function render() {
   const year = new Date().getFullYear();
   const progressPercent = Math.round(currentStep / ONBOARDING_STEP_COUNT * 100);
   const welcomeIllustration = `
-    <div class="w-16 h-16 rounded-2xl bg-sky-soft/80 border border-sky-200/80 flex items-center justify-center text-brand-dark" aria-hidden="true">
+    <div class="w-16 h-16 rounded-2xl bg-[#FFF9E6] border border-[#E4E8F3] flex items-center justify-center text-[#194971]" aria-hidden="true">
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="17" fill="#E8F4FE" stroke="#93CEFA" stroke-width="1.5"/>
-        <path d="M20 30s-9-5.6-11.5-11.1C6.5 14.6 9.3 10.5 13.8 10.5c2.6 0 4.7 1.35 6.2 3.35 1.5-2 3.6-3.35 6.2-3.35 4.5 0 7.3 4.1 5.3 8.4C29 24.4 20 30 20 30Z" fill="#BAE2FF" stroke="#276594" stroke-width="1.7" stroke-linejoin="round"/>
-        <path d="M13.2 19h2.8l1.9-3.2 2.4 5.8 1.9-2.6h4.6" stroke="#276594" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="20" r="17" fill="#D7EBF6" stroke="#1F4A74" stroke-width="1.5"/>
+        <path d="M20 30s-9-5.6-11.5-11.1C6.5 14.6 9.3 10.5 13.8 10.5c2.6 0 4.7 1.35 6.2 3.35 1.5-2 3.6-3.35 6.2-3.35 4.5 0 7.3 4.1 5.3 8.4C29 24.4 20 30 20 30Z" fill="#D0DBF7" stroke="#194971" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M13.2 19h2.8l1.9-3.2 2.4 5.8 1.9-2.6h4.6" stroke="#194971" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>`;
   const readyIllustration = `
-    <div class="w-16 h-16 mx-auto rounded-2xl bg-ok-soft border border-emerald-200 flex items-center justify-center text-emerald-700" aria-hidden="true">
+    <div class="w-16 h-16 mx-auto rounded-2xl bg-[#D7EBF6] border border-[#A8D0EF] flex items-center justify-center text-[#194971]" aria-hidden="true">
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="17" fill="#DCFCE7" stroke="#86EFAC" stroke-width="1.5"/>
-        <path d="M13 20.5 17.8 25 27.5 15" stroke="#15803D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="20" r="17" fill="#C1E4F3" stroke="#1F4A74" stroke-width="1.5"/>
+        <path d="M13 20.5 17.8 25 27.5 15" stroke="#194971" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>`;
   const stepContent = [

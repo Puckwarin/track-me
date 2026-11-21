@@ -20,7 +20,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'push-sw.js'],
+      includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png', 'push-sw.js'],
       manifest: {
         id: BASE,
         name: 'Track Me — อาหาร ประจำเดือน น้ำหนัก & Planner',
@@ -30,9 +30,10 @@ export default defineConfig({
         start_url: BASE,
         scope: BASE,
         display: 'standalone',
-        background_color: '#F4F8FC',
-        theme_color: '#F4F8FC',
+        background_color: '#E9F1FC',
+        theme_color: '#E9F1FC',
         icons: [
+          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
         ],

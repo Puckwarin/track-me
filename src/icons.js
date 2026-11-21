@@ -80,7 +80,7 @@ import pawPrint from '@phosphor-icons/core/assets/duotone/paw-print-duotone.svg?
 import pencilSimple from '@phosphor-icons/core/assets/duotone/pencil-simple-duotone.svg?raw';
 import pill from '@phosphor-icons/core/assets/duotone/pill-duotone.svg?raw';
 import play from '@phosphor-icons/core/assets/duotone/play-duotone.svg?raw';
-import plus from '@phosphor-icons/core/assets/duotone/plus-duotone.svg?raw';
+import plus from '@phosphor-icons/core/assets/bold/plus-bold.svg?raw';
 import plusCircle from '@phosphor-icons/core/assets/duotone/plus-circle-duotone.svg?raw';
 import printer from '@phosphor-icons/core/assets/duotone/printer-duotone.svg?raw';
 import pulse from '@phosphor-icons/core/assets/duotone/pulse-duotone.svg?raw';

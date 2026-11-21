@@ -423,11 +423,11 @@ function spark(rows) {
     const flag = labFlag(r);
     const sub = `${fmtDate(r.date)}${flag && FLAG[flag] ? ` · ${FLAG[flag][0]}` : ''}`;
     return `<g>
-      <circle cx="${x}" cy="${y}" r="2.6" fill="#8b7ae0"/>
-      <circle cx="${x}" cy="${y}" r="9" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(r.name)}: ${esc(valStr)}" data-chart-sub="${esc(sub)}" data-chart-color="#8b7ae0" aria-label="${esc(r.name)} ${esc(fmtDate(r.date))} ${esc(valStr)}"><title>${esc(fmtDate(r.date))}: ${esc(valStr)}</title></circle>
+      <circle cx="${x}" cy="${y}" r="2.6" fill="#1F4A74"/>
+      <circle cx="${x}" cy="${y}" r="9" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(r.name)}: ${esc(valStr)}" data-chart-sub="${esc(sub)}" data-chart-color="#1F4A74" aria-label="${esc(r.name)} ${esc(fmtDate(r.date))} ${esc(valStr)}"><title>${esc(fmtDate(r.date))}: ${esc(valStr)}</title></circle>
     </g>`;
   }).join('');
-  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-32 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#8b7ae0" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
+  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-32 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#1F4A74" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
 }
 
 export function render() {

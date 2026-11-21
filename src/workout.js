@@ -144,7 +144,7 @@ export function mountWorkout(el) {
         <div id="w-day-plans" class="space-y-1.5"></div>
       </div>
 
-      <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-slate-200 bg-[#F7F3EE] p-3 space-y-2">
+      <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-slate-200 bg-[#E9F1FC] p-3 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-semibold text-brand-dark inline-flex items-center gap-1">${iconSvg('edit-square', { size: 14 })}<span>กำลังแก้ไขเทมเพลต:</span></span>
           <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต">

@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.5.0
+# Project Setup — ตั้งค่า Track Me v5.6.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -296,6 +296,11 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
 
 ---
+
+## อัปเดต v5.6.0 (Food Mobile + Desktop UX/UI Unification)
+
+- **ปรับ UX/UI หมวดอาหารและหน้าต่างย่อยทั้งหมด**: ใช้ Brand Palette และพื้นผิว Neutral เดียวกัน (ไม่แยกสีมื้ออาหารหรือหมวดอาหาร), พื้นที่กดขั้นต่ำ `44px`, จัดเลย์เอาต์ 2 คอลัมน์บน Desktop ในสรุปด้านบน ฟอร์ม+รายการอาหาร, `foodEditor.js`, `foodsearch.js` และตาราง 6 คอลัมน์ในคลังอาหาร, แสดงปุ่ม `★ โปรด` / `แก้ไข` / `ลบ` ชัดเจนบน Desktop, เพิ่มพรีวิวภาพสแกนชั่วคราวฝั่ง Client (ไม่บันทึกรูปลง Firestore) และเพิ่มการคัดลอกมื้อ/เมนูในหน้าต่างค้นหาประวัติอาหาร
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: เปลี่ยนเฉพาะฝั่ง client UI, modal lifecycle (`onClose` cleanup) และเลขเวอร์ชัน
 
 ## อัปเดต v5.5.0 (Warm Wellness Brand & ยกเลิกตัวเลือกธีม)
 

@@ -306,54 +306,94 @@ export async function detectBarcode(file) {
 // ---- UI ----
 export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, onSaveLibrary }) {
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ค้นหาโภชนาการ</h3><button data-close class="text-slate-400 hover:text-slate-600 p-1 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-    <div class="flex flex-col sm:flex-row gap-2"><div class="flex flex-wrap gap-2"><input id="os-q" class="input min-w-[12rem] flex-1" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search"><button id="os-go" class="btn btn-primary shrink-0">ค้นหา</button><button id="os-test-connections" type="button" class="btn btn-soft shrink-0">ตรวจการเชื่อมต่อ</button></div>
-    <p id="os-hint" class="text-xs text-slate-500 mt-2">ค้นหาอัตโนมัติตามลำดับ: คลังอาหารในเครื่อง → USDA (DEMO_KEY) → Open Food Facts → AI (Gemini → Groq → OpenRouter)</p>
-    <p id="os-connection-status" class="text-xs text-slate-500" aria-live="polite"></p>
-    <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
-    <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('forward', { size: 13 })} ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
-    <div id="os-calc" class="hidden mt-3 bg-slate-50 rounded-xl p-3 space-y-2">
-      <p id="os-pick" class="text-sm font-semibold"></p>
-      <label id="os-g-lbl" class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" step="0.1" inputmode="decimal" class="input">
-      <p id="os-out" class="text-sm font-semibold text-blue-700"></p>
-      <div class="flex flex-wrap gap-2">
-        <button id="os-use" class="btn btn-primary">ใช้ในฟอร์มบันทึก</button>
-        <button id="os-both" class="btn btn-sky">ใช้ + เก็บเข้าคลัง</button>
-        <button id="os-lib" class="btn btn-soft">เก็บเข้าคลัง (ต่อ 100 g)</button>
+    <div class="flex justify-between items-center gap-2 mb-3">
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('search', { size: 18, className: 'text-brand' })}<span>ค้นหาโภชนาการ</span></h3>
+      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input id="os-q" class="input w-full flex-1 min-h-[44px]" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search" aria-label="ค้นหาชื่ออาหารหรือเลขบาร์โค้ด">
+      <div class="grid grid-cols-2 sm:flex gap-2 shrink-0">
+        <button id="os-go" type="button" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('search', { size: 15 })} ค้นหา</button>
+        <button id="os-test-connections" type="button" class="btn btn-ghost min-h-[44px] justify-center text-xs sm:text-sm">ตรวจการเชื่อมต่อ</button>
       </div>
-    </div>`, { wide: true });
+    </div>
+    <p id="os-hint" class="text-xs text-slate-500 mt-2">แหล่งข้อมูลตามลำดับ: คลังอาหารของฉัน → USDA → Open Food Facts → AI</p>
+    <p id="os-connection-status" class="text-xs text-slate-500 mt-1" aria-live="polite"></p>
+    <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-4 items-start mt-3">
+      <div class="min-w-0 space-y-2.5">
+        <div id="os-res" class="space-y-2 md:max-h-[55vh] md:overflow-y-auto md:pr-1"></div>
+        <div id="os-next-wrap" class="hidden">
+          <button id="os-next" type="button" class="btn btn-ghost w-full justify-center min-h-[44px] text-xs font-semibold">${iconSvg('forward', { size: 14 })} ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button>
+        </div>
+      </div>
+      <div class="min-w-0 md:sticky md:top-0">
+        <div id="os-calc-empty" class="hidden md:flex flex-col items-center justify-center text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 min-h-[14rem] text-xs text-slate-500 gap-2">
+          ${iconSvg('food', { size: 24, className: 'text-slate-400' })}
+          <p class="font-medium text-slate-600">เลือกรายการอาหารทางซ้าย</p>
+          <p>เพื่อกำหนดน้ำหนักหรือจำนวนหน่วยและดูค่าพลังงานก่อนนำไปบันทึก</p>
+        </div>
+        <div id="os-calc" class="hidden rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <div class="space-y-0.5">
+            <p class="text-[11px] font-semibold text-slate-500">รายการที่เลือก</p>
+            <p id="os-pick" class="text-sm font-bold text-slate-800"></p>
+          </div>
+          <div>
+            <label id="os-g-lbl" class="lbl" for="os-g">น้ำหนักที่กิน (กรัม/มล.)</label>
+            <input id="os-g" type="number" step="0.1" inputmode="decimal" class="input min-h-[44px]">
+          </div>
+          <div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+            <p class="text-[11px] text-slate-500">ค่าโภชนาการตามปริมาณที่ระบุ</p>
+            <p id="os-out" class="text-sm font-bold text-slate-800 tabular-nums mt-0.5"></p>
+          </div>
+          <div class="flex flex-col sm:flex-row md:flex-col gap-2">
+            <button id="os-use" type="button" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('check', { size: 15 })} ใช้ในฟอร์มบันทึก</button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button id="os-both" type="button" class="btn btn-sky min-h-[44px] justify-center text-xs">ใช้ + เก็บเข้าคลัง</button>
+              <button id="os-lib" type="button" class="btn btn-ghost min-h-[44px] justify-center text-xs">เก็บเข้าคลัง (100 g)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`, { size: 'xl' });
 
-  let results = [], cur = null, activeQuery = '', pipelineStage = 0;
+  let results = [], cur = null, activeQuery = '', pipelineStage = 0, selectedIndex = -1;
   const upd = () => {
     const val = toNum($('#os-g', m.el).value) || 0;
     if (cur.servingOnly) {
       const p = cur.perServing;
-      $('#os-out', m.el).textContent = `${Math.round(p.calories * val)} kcal · P ${round1((p.protein || 0) * val)} · C ${round1((p.carbs || 0) * val)} · F ${round1((p.fat || 0) * val)}`;
+      $('#os-out', m.el).textContent = `${Math.round(p.calories * val)} kcal · P ${round1((p.protein || 0) * val)}g · C ${round1((p.carbs || 0) * val)}g · F ${round1((p.fat || 0) * val)}g`;
     } else {
       const k = val / 100, p = cur.per100;
-      $('#os-out', m.el).textContent = `${Math.round(p.calories * k)} kcal · P ${round1((p.protein || 0) * k)} · C ${round1((p.carbs || 0) * k)} · F ${round1((p.fat || 0) * k)}`;
+      $('#os-out', m.el).textContent = `${Math.round(p.calories * k)} kcal · P ${round1((p.protein || 0) * k)}g · C ${round1((p.carbs || 0) * k)}g · F ${round1((p.fat || 0) * k)}g`;
     }
   };
-  const sourceLabel = src => ({ local: 'คลังอาหารของฉัน', off: 'Open Food Facts', usda: 'USDA', groq: 'Groq AI', gemini: 'Gemini AI', openrouter: 'OpenRouter AI', cache: 'แคช AI ในเครื่อง' })[src] || src;
+  const sourceLabel = src => ({ local: 'คลังในเครื่อง', off: 'Open Food Facts', usda: 'USDA', groq: 'AI (Groq)', gemini: 'AI (Gemini)', openrouter: 'AI (OpenRouter)', cache: 'แคช AI ในเครื่อง' })[src] || src;
   const renderResults = (errors = [], canContinue = false) => {
     const warnings = errors.map(x => `<p class="text-xs ${x.missing ? 'text-amber-700' : 'text-rose-600'} py-1"><b>${esc(x.label)}:</b> ${esc(x.message)}</p>`).join('');
-    const doneBanner = results.length ? `<p class="text-xs text-green-700 font-semibold py-1">✓ พบ ${results.length} รายการ (ค้นหาเสร็จสิ้น)</p>` : '';
+    const doneBanner = results.length ? `<p class="text-xs text-green-700 font-semibold py-1">✓ พบ ${results.length} รายการ</p>` : '';
     $('#os-next-wrap', m.el).classList.toggle('hidden', !canContinue);
     $('#os-res', m.el).innerHTML = warnings + doneBanner + (results.length ? results.map((r, i) => {
       const nut = r.servingOnly ? r.perServing : r.per100;
       const basis = r.servingOnly ? `ต่อ ${esc(r.servingText || '1 หน่วย')}` : 'ต่อ 100 g';
+      const isSelected = i === selectedIndex;
       return `
-      <button data-i="${i}" class="w-full text-left py-3 px-3 hover:bg-slate-50 rounded-xl min-h-[44px]">
-        <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''}<span class="text-xs font-normal text-slate-500"> · ${esc(sourceLabel(r.source))}</span></p>
-        <p class="text-xs text-slate-500 tabular-nums mt-0.5">${basis}: ${nut.calories} kcal · P ${nut.protein ?? '-'} · C ${nut.carbs ?? '-'} · F ${nut.fat ?? '-'}${!r.servingOnly && r.servingText ? ' · หน่วยบริโภค ' + esc(r.servingText) : ''}</p>
-      </button>`;
-    }).join('') : '<p class="text-sm text-slate-500 py-3">ไม่พบผลลัพธ์ — ลองคำอื่น หรือใช้ปุ่มสแกนภาพ/ฉลาก</p>');
+      <div class="rounded-xl border ${isSelected ? 'border-brand bg-slate-50/80' : 'border-slate-200 bg-white'} p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition">
+        <div class="min-w-0 flex-1 space-y-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <p class="text-sm font-semibold text-slate-800">${esc(r.name)}${r.brand ? ` <span class="text-slate-500 font-normal">· ${esc(r.brand)}</span>` : ''}</p>
+            <span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">${esc(sourceLabel(r.source))}</span>
+          </div>
+          <p class="text-xs text-slate-600 tabular-nums">${basis}: <b class="text-slate-800">${nut.calories} kcal</b> · P ${nut.protein ?? '-'}g · C ${nut.carbs ?? '-'}g · F ${nut.fat ?? '-'}g${!r.servingOnly && r.servingText ? ' · หน่วย ' + esc(r.servingText) : ''}</p>
+        </div>
+        <button type="button" data-i="${i}" class="btn ${isSelected ? 'btn-primary' : 'btn-ghost'} min-h-[44px] px-4 text-xs font-semibold shrink-0 justify-center">เลือก</button>
+      </div>`;
+    }).join('') : '<p class="text-sm text-slate-500 py-4 text-center rounded-xl border border-slate-200 bg-white">ไม่พบผลลัพธ์ — ลองคำอื่น หรือใช้ปุ่มสแกนภาพ/ฉลาก</p>');
   };
 
-  const setStatus = text => { $('#os-res', m.el).innerHTML = `<p class="text-sm text-slate-500 py-2 inline-flex items-center gap-1.5">${iconSvg('fa-spinner fa-spin', { size: 15 })}<span>${esc(text)}</span></p>`; };
+  const setStatus = text => { $('#os-res', m.el).innerHTML = `<p class="text-sm text-slate-500 py-3 inline-flex items-center gap-1.5">${iconSvg('fa-spinner fa-spin', { size: 15 })}<span>${esc(text)}</span></p>`; };
 
   const runPipelineFromStage = async (q, startStage = 0, append = false) => {
-    if (!append) results = [];
+    if (!append) { results = []; selectedIndex = -1; }
     const errors = [];
     const isBarcode = /^\d{8,14}$/.test(q);
 
@@ -426,7 +466,9 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
     if (!q) return;
     activeQuery = q;
     pipelineStage = 0;
+    selectedIndex = -1;
     $('#os-calc', m.el).classList.add('hidden');
+    $('#os-calc-empty', m.el)?.classList.remove('hidden');
     $('#os-next-wrap', m.el).classList.add('hidden');
     await runPipelineFromStage(q, 0, false);
   };
@@ -434,12 +476,12 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
   $('#os-test-connections', m.el).addEventListener('click', async event => {
     const btn = event.currentTarget, status = $('#os-connection-status', m.el);
     btn.disabled = true;
-    status.className = 'text-xs text-slate-500';
+    status.className = 'text-xs text-slate-500 mt-1';
     status.textContent = 'กำลังตรวจ USDA และ Open Food Facts (ไม่เรียก AI)...';
     try {
       const checks = await testFoodSearchConnections();
       const failed = checks.filter(check => !check.ok);
-      status.className = failed.length ? 'text-xs text-amber-700' : 'text-xs text-green-700';
+      status.className = failed.length ? 'text-xs text-amber-700 mt-1' : 'text-xs text-green-700 mt-1';
       status.textContent = checks.map(check => `${check.ok ? '✓' : '✕'} ${check.label}: ${check.message}`).join(' · ');
     } finally {
       btn.disabled = false;
@@ -452,8 +494,10 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
   if (initialQuery) run();
   $('#os-res', m.el).addEventListener('click', e => {
     const b = e.target.closest('[data-i]'); if (!b) return;
-    cur = results[+b.dataset.i];
-    $('#os-pick', m.el).textContent = cur.name;
+    selectedIndex = +b.dataset.i;
+    cur = results[selectedIndex];
+    if (!cur) return;
+    $('#os-pick', m.el).textContent = `${cur.name}${cur.brand ? ' · ' + cur.brand : ''}`;
     if (cur.servingOnly) {
       $('#os-g-lbl', m.el).textContent = `จำนวน (${cur.servingText || 'หน่วย'})`;
       $('#os-g', m.el).value = 1;
@@ -465,7 +509,10 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
       $('#os-lib', m.el).classList.remove('hidden');
       $('#os-both', m.el).classList.remove('hidden');
     }
-    $('#os-calc', m.el).classList.remove('hidden'); upd();
+    $('#os-calc-empty', m.el)?.classList.add('hidden');
+    $('#os-calc', m.el).classList.remove('hidden');
+    renderResults([], pipelineStage < 4 && !/^\d{8,14}$/.test(activeQuery));
+    upd();
     $('#os-calc', m.el).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
   $('#os-g', m.el).addEventListener('input', () => cur && upd());

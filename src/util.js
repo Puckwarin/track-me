@@ -115,7 +115,7 @@ export function trapFocus(el, { autoFocus = true } = {}) {
 }
 
 // Modal เล็ก ๆ ใช้ซ้ำได้
-export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop } = {}) {
+export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop, onClose = null } = {}) {
   const widthClass = size === 'xl' ? 'max-w-5xl' : (size === 'lg' || wide ? 'max-w-2xl' : 'max-w-lg');
   const bodyClass = flush ? 'is-flush p-0 overflow-hidden flex flex-col' : 'overflow-y-auto p-6';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -146,6 +146,9 @@ export function openModal(innerHtml, { wide = false, size = '', flush = false, s
     releaseTrap();
     document.removeEventListener('keydown', onKey);
     el.remove();
+    if (typeof onClose === 'function') {
+      try { onClose(); } catch {}
+    }
     if (trigger?.isConnected) trigger.focus();
   };
   document.addEventListener('keydown', onKey);

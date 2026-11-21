@@ -22,6 +22,7 @@ let goFn = () => {};
 let selectedDate = localDateStr();
 let shouldCenterStrip = true;
 let docClickBound = false;
+const boundContainers = new WeakSet();
 
 function weekdayIdx(dateStr) {
   return (parseLocal(dateStr).getDay() + 6) % 7; // 0 = จ ... 6 = อา
@@ -261,7 +262,10 @@ export function mountPlanner(el, navigate) {
     });
   }
 
-  root.addEventListener('click', async e => {
+  if (!boundContainers.has(root)) {
+    boundContainers.add(root);
+
+    root.addEventListener('click', async e => {
     const menu = $('#pl-plan-menu', root);
     const closePlanMenu = () => {
       if (menu) menu.open = false;
@@ -359,7 +363,8 @@ export function mountPlanner(el, navigate) {
       }
       await savePlanner({ ...p, doneMap, recentDone });
     }
-  });
+    });
+  }
 
   renderPlanner();
 }
@@ -429,15 +434,15 @@ export function renderPlanner() {
         const isSel = m.date === selectedDate;
         const isToday = m.date === today;
         const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-2 px-0.5 min-h-[56px] text-xs transition ${
+        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 min-h-[48px] text-xs transition ${
           isSel ? 'bg-brand text-white border-brand shadow-sm'
             : isToday ? 'bg-white border-brand/60 text-brand-dark font-semibold hover:bg-lav-soft/60'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
         }">
           ${m.remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ"></span>` : ''}
-          <span class="text-[11px] opacity-85">${m.wd}</span>
-          <span class="text-sm font-bold leading-tight">${Number(m.date.slice(8))}</span>
-          <span class="text-[10px] mt-0.5 ${isSel ? 'text-white/95' : allDone ? 'text-emerald-700 font-semibold' : 'text-slate-500'}">
+          <span class="text-[10px] opacity-85">${m.wd}</span>
+          <span class="text-xs sm:text-sm font-bold leading-tight">${Number(m.date.slice(8))}</span>
+          <span class="text-[10px] ${isSel ? 'text-white/95' : allDone ? 'text-emerald-700 font-semibold' : 'text-slate-500'}">
             ${m.items.length ? `${m.done}/${m.items.length}` : '·'}
           </span>
         </button>`;
@@ -445,39 +450,41 @@ export function renderPlanner() {
     </div>`;
 
   root.innerHTML = `
-  <section class="card space-y-3.5">
+  <section class="card pl-card space-y-2.5 sm:space-y-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <h2 class="text-base sm:text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>Weekly Planner</span></h2>
-        <p class="text-xs text-slate-500 tabular-nums">${esc(fmtDate(selectedDate))} · เสร็จแล้ว ${selectedDone}/${selectedItems.length} รายการ</p>
+      <div class="min-w-0">
+        <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
+        <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">${esc(fmtDate(selectedDate))} · เสร็จแล้ว ${selectedDone}/${selectedItems.length} รายการ</p>
       </div>
       <div class="flex flex-wrap items-center gap-1.5">
         ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบ ${weekCode}</span>
-        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} สลับ A↔B</button>` : ''}
+        <button type="button" data-pl-flip-parity class="chip min-h-[34px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} สลับ A↔B</button>` : ''}
         <details id="pl-plan-menu" class="relative">
-          <summary class="chip bg-lav-soft text-brand-dark min-h-[36px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} วางแผน</summary>
+          <summary class="chip bg-lav-soft text-brand-dark min-h-[34px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} วางแผน</summary>
           <div class="tm-tools-menu absolute right-0 top-full z-20 mt-2 flex min-w-48 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
             <button type="button" data-pl-routines class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]">${iconSvg('repeat', { size: 14 })} กิจกรรม (${routinesCount})</button>
             <button type="button" data-pl-go="workout" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]">${iconSvg('workout', { size: 14 })} ออกกำลังกาย</button>
             <button type="button" data-pl-go="remind" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]">${iconSvg('pin', { size: 14 })} นัดหมาย</button>
           </div>
         </details>
+        <button type="button" data-pl-collapse class="chip min-h-[34px] bg-white border border-slate-200 text-slate-600 text-xs" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 14 })}</button>
       </div>
     </div>
 
-    ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
-      <span>💡 ตั้งกิจกรรมประจำสัปดาห์หรือตารางสลับสัปดาห์อัตโนมัติ (เช่น สัปดาห์ A จ-พ-ศ-อา / สัปดาห์ B อ-พฤ-ส) ครั้งเดียวใช้ได้ยาว</span>
-      <button type="button" data-pl-routines class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold">ตั้งค่าเลย</button>
-    </div>` : ''}
-
-    <div class="space-y-2.5">
-      ${stripHtml}
-      <div class="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-3 space-y-2.5">
+    <div class="pl-layout">
+      <div class="pl-strip-col space-y-2">
+        ${stripHtml}
+        ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-2 flex items-center justify-between gap-2 text-[11px] text-amber-900">
+          <span class="min-w-0">ตั้งกิจกรรมประจำสัปดาห์หรือสลับรอบ A/B อัตโนมัติ</span>
+          <button type="button" data-pl-routines class="chip min-h-[32px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">ตั้งค่า</button>
+        </div>` : ''}
+      </div>
+      <div class="pl-day-panel rounded-2xl border border-slate-200/80 bg-slate-50/40 p-2.5 sm:p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
-          <span class="text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
-          <span class="text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>
+          <span class="text-xs sm:text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
+          <span class="text-[11px] sm:text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>
         </div>
-        ${renderTaskListHtml(selectedDate)}
+        <div class="pl-task-list">${renderTaskListHtml(selectedDate)}</div>
       </div>
     </div>
   </section>`;

@@ -8,17 +8,17 @@ import { guardPreviewWrite } from './preview.js';
 import { bindChartInspector } from './ui.js';
 
 const CHART_METRICS = [
-  { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#3b82f6' },
-  { key: 'waist', label: 'รอบเอว', unit: 'ซม.', color: '#8b5cf6' },
-  { key: 'hip', label: 'สะโพก', unit: 'ซม.', color: '#ec4899' },
-  { key: 'arm', label: 'รอบแขน', unit: 'ซม.', color: '#10b981' },
-  { key: 'thigh', label: 'รอบขา', unit: 'ซม.', color: '#f59e0b' },
-  { key: 'bust', label: 'รอบอก', unit: 'ซม.', color: '#06b6d4' }
+  { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#1F4A74' },
+  { key: 'waist', label: 'รอบเอว', unit: 'ซม.', color: '#4A7FAE' },
+  { key: 'hip', label: 'สะโพก', unit: 'ซม.', color: '#C95B72' },
+  { key: 'arm', label: 'รอบแขน', unit: 'ซม.', color: '#217A68' },
+  { key: 'thigh', label: 'รอบขา', unit: 'ซม.', color: '#C58F1E' },
+  { key: 'bust', label: 'รอบอก', unit: 'ซม.', color: '#647F9C' }
 ];
 
 const SLEEP_STEPS_METRICS = [
-  { key: 'sleepHours', label: 'การนอน (ชม.)', unit: 'ชม.', color: '#6366f1', decimals: 1 },
-  { key: 'steps', label: 'ก้าวเดิน', unit: 'ก้าว', color: '#10b981', decimals: 0 }
+  { key: 'sleepHours', label: 'การนอน (ชม.)', unit: 'ชม.', color: '#1F4A74', decimals: 1 },
+  { key: 'steps', label: 'ก้าวเดิน', unit: 'ก้าว', color: '#217A68', decimals: 0 }
 ];
 
 const BODY_MEASUREMENT_KEYS = ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'];
@@ -116,7 +116,7 @@ export function mountBody(el) {
       <div class="card space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-brand' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
+            <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-brand' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-blue-700">(รองรับ Zepp CSV)</span></h2>
             <p class="text-xs text-slate-500 mt-0.5">นำเข้าไฟล์ CSV จาก Zepp ได้หลายไฟล์พร้อมกัน (ระบบรวมวันเดียวกันให้อัตโนมัติ) หรือกดปุ่มบันทึกเอง</p>
           </div>
         </div>
@@ -249,9 +249,9 @@ export function metricChartSvg(items, metricKey = 'weight') {
     </g>`;
   }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแนวโน้ม${esc(meta.label)}"><polyline points="${line}" fill="none" stroke="${meta.color}" stroke-width="2.2"/>${dots}
-    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#64748b">${esc(fmtVal(max))}</text><text x="4" y="${y(min) + 4}" font-size="9.5" fill="#64748b">${esc(fmtVal(min))}</text>
-    <text x="${P}" y="${H - 6}" font-size="10" fill="#64748b">${esc(fmtDate(pts[0].date))}</text>
-    <text x="${W - P}" y="${H - 6}" font-size="10" fill="#64748b" text-anchor="end">${esc(fmtDate(pts[pts.length - 1].date))}</text></svg>`;
+    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtVal(max))}</text><text x="4" y="${y(min) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtVal(min))}</text>
+    <text x="${P}" y="${H - 6}" font-size="10" fill="#4A6685">${esc(fmtDate(pts[0].date))}</text>
+    <text x="${W - P}" y="${H - 6}" font-size="10" fill="#4A6685" text-anchor="end">${esc(fmtDate(pts[pts.length - 1].date))}</text></svg>`;
 }
 
 export function weightChartSvg(items) {
@@ -291,17 +291,17 @@ export function sleepCandlestickSvg(items) {
     const yTop = yOf(r.hours);
     const yBottom = yOf(0);
 
-    let bodyHtml = `<line x1="${cx.toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="#94a3b8" stroke-width="1.3"/>
-      <line x1="${(cx - 3).toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${(cx + 3).toFixed(1)}" y2="${Math.max(PT, yTop - 3).toFixed(1)}" stroke="#94a3b8" stroke-width="1.2"/>`;
+    let bodyHtml = `<line x1="${cx.toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="#647F9C" stroke-width="1.3"/>
+      <line x1="${(cx - 3).toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${(cx + 3).toFixed(1)}" y2="${Math.max(PT, yTop - 3).toFixed(1)}" stroke="#647F9C" stroke-width="1.2"/>`;
 
     if (hasStages) {
       const denom = Math.max(totalMin, stageSum, 1);
       const bodyH = Math.max(4, yBottom - yTop);
       const segs = [
-        { min: deep, color: '#4338ca' },
-        { min: rem, color: '#8b5cf6' },
-        { min: light, color: '#38bdf8' },
-        { min: Math.max(0, totalMin - stageSum), color: '#94a3b8' }
+        { min: deep, color: '#194971' },
+        { min: rem, color: '#C95B72' },
+        { min: light, color: '#A8D0EF' },
+        { min: Math.max(0, totalMin - stageSum), color: '#D0DBF7' }
       ].filter(s => s.min > 0);
       let cursorY = yBottom;
       segs.forEach(seg => {
@@ -311,7 +311,7 @@ export function sleepCandlestickSvg(items) {
         cursorY = sy;
       });
     } else {
-      const fill = r.hours >= 7 ? '#10b981' : '#f59e0b';
+      const fill = r.hours >= 7 ? '#217A68' : '#C58F1E';
       bodyHtml += `<rect x="${xLeft.toFixed(1)}" y="${yTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${Math.max(4, yBottom - yTop).toFixed(1)}" rx="3" fill="${fill}" opacity="0.9"/>`;
     }
 
@@ -319,9 +319,9 @@ export function sleepCandlestickSvg(items) {
     const stageSub = hasStages
       ? `ลึก ${Math.round(deep)}น. · ตื้น ${Math.round(light)}น.${rem ? ` · REM ${Math.round(rem)}น.` : ''}`
       : (r.bedTime || r.wakeTime ? `${r.bedTime || '?'}–${r.wakeTime || '?'}` : sourceBadgeLabel(r.source));
-    const tipColor = hasStages ? '#4338ca' : (r.hours >= 7 ? '#10b981' : '#f59e0b');
+    const tipColor = hasStages ? '#1F4A74' : (r.hours >= 7 ? '#217A68' : '#C58F1E');
     const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
-    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#64748b">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#4A6685">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
 
     return `<g>
       ${bodyHtml}
@@ -332,17 +332,17 @@ export function sleepCandlestickSvg(items) {
 
   return `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนการนอนและระยะหลับลึกตื้น">
-      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#6366f1" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.7"/>
-      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#6366f1">เป้า 7 ชม.</text>
-      <text x="4" y="${PT + 6}" font-size="9" fill="#64748b">${Math.round(maxHours)}ชม.</text>
-      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#64748b">0</text>
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#4A7FAE" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.75"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#194971">เป้า 7 ชม.</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="#4A6685">${Math.round(maxHours)}ชม.</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#4A6685">0</text>
       ${candles}
     </svg>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#4338ca]"></span>หลับลึก</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#8b5cf6]"></span>REM</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#38bdf8]"></span>หลับตื้น</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#10b981]"></span>ไม่มีข้อมูลระยะ (≥7ชม.)</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#194971]"></span>หลับลึก</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#C95B72]"></span>REM</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#A8D0EF]"></span>หลับตื้น</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#217A68]"></span>ไม่มีข้อมูลระยะ (≥7ชม.)</span>
     </div>`;
 }
 
@@ -369,7 +369,7 @@ export function stepsCandlestickSvg(items) {
     const open = prev;
     const close = r.steps;
     const bull = close >= open;
-    const color = bull ? '#10b981' : '#f43f5e';
+    const color = bull ? '#217A68' : '#C95B72';
     const topV = Math.max(open, close);
     const botV = Math.min(open, close);
     const wickLow = Math.max(0, Math.round(botV * 0.8));
@@ -384,7 +384,7 @@ export function stepsCandlestickSvg(items) {
       : `${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ก้าวเทียบวันก่อน`;
     const sub = `${diffStr}${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}`;
     const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
-    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#64748b">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#4A6685">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
 
     return `<g>
       <line x1="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1.5"/>
@@ -396,15 +396,15 @@ export function stepsCandlestickSvg(items) {
 
   return `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนก้าวเดินรายวัน">
-      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#10b981" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.65"/>
-      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#059669">เป้า 8,000 ก้าว</text>
-      <text x="4" y="${PT + 6}" font-size="9" fill="#64748b">${Math.round(maxSteps / 1000)}k</text>
-      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#64748b">0</text>
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#217A68" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.7"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#145245">เป้า 8,000 ก้าว</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="#4A6685">${Math.round(maxSteps / 1000)}k</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#4A6685">0</text>
       ${candles}
     </svg>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#10b981]"></span>เพิ่ม / คงที่จากวันก่อน</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#f43f5e]"></span>ลดลงจากวันก่อน</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#217A68]"></span>เพิ่ม / คงที่จากวันก่อน</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#C95B72]"></span>ลดลงจากวันก่อน</span>
     </div>`;
 }
 
@@ -489,8 +489,8 @@ function renderSleepStepsList(desc) {
             <span class="text-[11px] text-slate-500">· ${esc(sourceBadgeLabel(r.source))}</span>
           </div>
           <div class="flex flex-wrap gap-2 text-slate-700">
-            ${durText ? `<span class="inline-flex items-center gap-1 font-medium text-indigo-700">นอน ${esc(durText)}${timeRange ? ` <span class="text-slate-500 font-normal">(${esc(timeRange)})</span>` : ''}</span>` : ''}
-            ${typeof r.steps === 'number' ? `<span class="inline-flex items-center gap-1 font-medium text-emerald-700">${r.steps.toLocaleString()} ก้าว${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}${typeof r.activeKcal === 'number' ? ` · ${r.activeKcal} kcal` : ''}</span>` : ''}
+            ${durText ? `<span class="inline-flex items-center gap-1 font-medium text-blue-700">นอน ${esc(durText)}${timeRange ? ` <span class="text-slate-500 font-normal">(${esc(timeRange)})</span>` : ''}</span>` : ''}
+            ${typeof r.steps === 'number' ? `<span class="inline-flex items-center gap-1 font-medium text-primary-700">${r.steps.toLocaleString()} ก้าว${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}${typeof r.activeKcal === 'number' ? ` · ${r.activeKcal} kcal` : ''}</span>` : ''}
           </div>
           ${stageParts.length ? `<p class="text-[11px] text-slate-500">${esc(stageParts.join(' · '))}</p>` : ''}
           ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}

@@ -101,7 +101,7 @@ export function mountPeriod(el) {
       <div class="flex flex-wrap gap-3 text-xs text-slate-600">
         <span><span class="inline-block w-3 h-3 rounded bg-pink-500 align-middle"></span> มีประจำเดือน</span>
         <span><span class="inline-block w-3 h-3 rounded border border-dashed border-pink-400 bg-pink-50 align-middle"></span> คาดการณ์ (ค่าประมาณ)</span>
-        <span><span class="inline-block w-2 h-2 rounded-full bg-violet-600 align-middle"></span> มีบันทึกอาการ</span>
+        <span><span class="inline-block w-2 h-2 rounded-full bg-slate-700 align-middle"></span> มีบันทึกอาการ</span>
       </div>
     </div>
   </div>
@@ -116,7 +116,7 @@ export function mountPeriod(el) {
     <div class="card space-y-3 lg:col-span-2">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-pink-500' })}<span>ประวัติประจำเดือน</span></h3>
       <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-pink-soft/50 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
+        <thead class="bg-slate-100 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
         <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
     </div>
   </div>`;

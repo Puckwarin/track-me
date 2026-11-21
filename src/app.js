@@ -76,6 +76,67 @@ window.addEventListener('vite:preloadError', event => {
 
 const TABS = ['home', 'food', 'overview', 'workout', 'weekly', 'period', 'symptoms', 'care', 'remind', 'expense', 'inventory', 'body', 'report', 'notifications', 'settings'];
 const lastSub = {};   // จำหน้าย่อยล่าสุดของแต่ละกลุ่ม (เช่น สุขภาพ → ประจำเดือน)
+const collapsedDesktopGroups = new Set();
+
+function renderDesktopNav(activeTab = document.documentElement.dataset.page || 'home') {
+  const host = $('#desktop-nav-list');
+  if (!host) return;
+  const preferences = readNavigationPreferences(state.uid);
+  const activeSub = activeTab === 'weekly' || activeTab === 'report' ? 'overview' : activeTab;
+
+  const renderGroup = (groupKey, iconName, label) => {
+    const items = getSubnavTabs(groupKey, preferences, activeSub);
+    const isOpen = !collapsedDesktopGroups.has(groupKey);
+    return `
+      <details class="desktop-nav-group" data-nav-group="${esc(groupKey)}" ${isOpen ? 'open' : ''}>
+        <summary class="desktop-nav-group-btn">
+          <span class="rail-ico" aria-hidden="true">${iconSvg(iconName, { size: 19 })}</span>
+          <span class="flex-1 text-left">${esc(label)}</span>
+          <span class="rail-chev" aria-hidden="true">${iconSvg('chevron-down', { size: 14 })}</span>
+        </summary>
+        <div class="desktop-nav-sublist">
+          ${items.map(item => `
+            <button type="button" data-nav="${esc(groupKey)}" data-tab="${esc(item.tab)}" class="desktop-nav-subitem">
+              <span class="rail-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span>
+              <span>${esc(item.label)}</span>
+            </button>`).join('')}
+        </div>
+      </details>`;
+  };
+
+  host.innerHTML = `
+    <button type="button" data-nav="home" data-tab="home" class="desktop-nav-item">
+      <span class="rail-ico" aria-hidden="true">${iconSvg('home', { size: 19 })}</span>
+      <span>หน้าหลัก</span>
+    </button>
+    <button type="button" data-nav="food" data-tab="food" class="desktop-nav-item">
+      <span class="rail-ico" aria-hidden="true">${iconSvg('food', { size: 19 })}</span>
+      <span>อาหาร</span>
+    </button>
+    ${renderGroup('health', 'health', 'สุขภาพ')}
+    <button type="button" data-nav="expense" data-tab="expense" class="desktop-nav-item">
+      <span class="rail-ico" aria-hidden="true">${iconSvg('expense', { size: 19 })}</span>
+      <span>การเงิน</span>
+    </button>
+    ${renderGroup('care', 'care', 'ดูแล')}`;
+
+  syncNavActiveState(activeTab);
+}
+
+function syncNavActiveState(name) {
+  const group = groupOf(name);
+  const activeSub = name === 'weekly' || name === 'report' ? 'overview' : name;
+  document.querySelectorAll('[data-nav]').forEach(b => {
+    const on_ = b.dataset.tab ? b.dataset.tab === activeSub : b.dataset.nav === group;
+    b.classList.toggle('is-active', on_);
+    if (on_) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.desktop-nav-group[data-nav-group]').forEach(groupEl => {
+    const summary = $('.desktop-nav-group-btn', groupEl);
+    if (summary) summary.classList.toggle('is-group-active', groupEl.dataset.navGroup === group);
+  });
+}
 
 function renderSubnav(group, name) {
   const nav = $('#subnav');
@@ -232,7 +293,12 @@ export function showTab(name, { preserveDate = false } = {}) {
   TABS.forEach(t => { const panel = $('#tab-' + t); if (panel) panel.classList.toggle('hidden', t !== visibleTab); });
   const group = groupOf(name);
   lastSub[group] = name === 'weekly' || name === 'report' ? 'overview' : name;
-  document.querySelectorAll('[data-nav]').forEach(b => { const on_ = b.dataset.nav === group; b.classList.toggle('is-active', on_); if (on_) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  const activeSub = lastSub[group];
+  if (!document.querySelector(`#desktop-nav-list [data-tab="${activeSub}"]`) && (group === 'health' || group === 'care')) {
+    renderDesktopNav(name);
+  } else {
+    syncNavActiveState(name);
+  }
   $('#btn-bell').classList.toggle('is-active', name === 'notifications');
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
@@ -337,7 +403,6 @@ function openQuick(event) {
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   $('#btn-quick-add')?.setAttribute('aria-expanded', 'true');
-  $('#desktop-quick-add')?.setAttribute('aria-expanded', 'true');
   releaseQuickTrap();
   releaseQuickTrap = trapFocus(panel, { autoFocus: false });
   $('#quick-grid button')?.focus({ preventScroll: true });
@@ -348,7 +413,6 @@ function closeQuick() {
   releaseQuickTrap = () => {};
   sheet.classList.remove('is-open');
   $('#btn-quick-add')?.setAttribute('aria-expanded', 'false');
-  $('#desktop-quick-add')?.setAttribute('aria-expanded', 'false');
   setTimeout(() => sheet.classList.add('hidden'), 200);
   if (quickTrigger?.isConnected) quickTrigger.focus({ preventScroll: true });
   quickTrigger = null;
@@ -683,7 +747,20 @@ on('auth', user => {
   renderSyncStatus();
 });
 
-document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => goToGroup(b.dataset.nav)));
+const onNavClick = e => {
+  const b = e.target.closest('[data-nav]');
+  if (!b) return;
+  if (b.dataset.tab) void goTo(b.dataset.tab);
+  else goToGroup(b.dataset.nav);
+};
+$('#desktop-nav')?.addEventListener('click', onNavClick);
+$('#bottom-nav')?.addEventListener('click', onNavClick);
+$('#desktop-nav')?.addEventListener('toggle', e => {
+  const groupEl = e.target.closest('.desktop-nav-group[data-nav-group]');
+  if (!groupEl) return;
+  if (groupEl.open) collapsedDesktopGroups.delete(groupEl.dataset.navGroup);
+  else collapsedDesktopGroups.add(groupEl.dataset.navGroup);
+}, true);
 $('#subnav').addEventListener('click', e => { const b = e.target.closest('[data-sub]'); if (b) goTo(b.dataset.sub); });
 window.addEventListener('trackme:goto', e => { if (e.detail?.tab) goTo(e.detail.tab); });
 $('#btn-logo').addEventListener('click', () => goTo('home'));
@@ -704,7 +781,6 @@ $('#fab-scroll')?.addEventListener('mouseleave', () => {
 window.addEventListener('scroll', () => updateScrollFab({ reveal: true }), { passive: true });
 window.addEventListener('resize', () => updateScrollFab({ reveal: false }), { passive: true });
 $('#btn-quick-add')?.addEventListener('click', openQuick);
-$('#desktop-quick-add')?.addEventListener('click', openQuick);
 $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {
   if (e.target.id === 'quick-sheet') return closeQuick();
@@ -720,11 +796,15 @@ document.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
-window.addEventListener('trackme:goto', e => { if (e.detail?.tab) void goTo(e.detail.tab); });
 window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderHomeShortcuts(); renderSummary(); });
+window.addEventListener('trackme:auth-change', () => {
+  renderDesktopNav(document.documentElement.dataset.page || 'home');
+});
 window.addEventListener('trackme:navigation-change', () => {
+  const page = document.documentElement.dataset.page || 'home';
   renderHomeShortcuts();
-  renderSubnav(groupOf(document.documentElement.dataset.page || 'home'), document.documentElement.dataset.page || 'home');
+  renderDesktopNav(page);
+  renderSubnav(groupOf(page), lastSub[groupOf(page)] || page);
 });
 window.addEventListener('trackme:reminders', updateBell);
 window.addEventListener('trackme:push-change', () => renderHome());
@@ -741,4 +821,5 @@ function hydrateStaticIcons() {
 }
 
 hydrateStaticIcons();
+renderDesktopNav();
 initAuth();

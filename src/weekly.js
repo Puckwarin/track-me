@@ -114,16 +114,16 @@ export async function renderWeekly() {
   const W = 320, H = 150, P = 22, max = Math.max(T.kcal * 1.3, ...days.map(d => byDay[d].cal), 1), bw = (W - 2 * P) / 7;
   const y = v => H - P - v / max * (H - 2 * P);
   const bars = days.map((d, i) => {
-    const v = byDay[d].cal, x = P + i * bw + 4, h = H - P - y(v), c = v > T.kcal * 1.1 ? '#fbbf24' : '#a78bfa';
+    const v = byDay[d].cal, x = P + i * bw + 4, h = H - P - y(v), c = v > T.kcal * 1.1 ? '#C58F1E' : '#1F4A74';
     const sub = v ? (v > T.kcal * 1.1 ? 'เกินเป้า' : v < T.kcal * 0.8 ? 'ต่ำกว่าเป้า' : 'ใกล้เคียงเป้า') : 'ไม่มีบันทึก';
     return `<g>
-      <rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#e2e8f0'}"></rect>
-      <rect x="${P + i * bw}" y="6" width="${bw}" height="${H - P - 6}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${esc(sub)}" data-chart-color="${v ? c : '#94a3b8'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
-      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#64748b">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>
+      <rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#E4E8F3'}"></rect>
+      <rect x="${P + i * bw}" y="6" width="${bw}" height="${H - P - 6}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${esc(sub)}" data-chart-color="${v ? c : '#647F9C'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
+      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#4A6685">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>
     </g>`;
   }).join('');
   const chart = logged.length
-    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟพลังงานรายวันตลอดสัปดาห์">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#ec4899" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#ec4899">เป้า ${T.kcal}</text></svg></div>`
+    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟพลังงานรายวันตลอดสัปดาห์">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#C95B72" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#B03F58">เป้า ${T.kcal}</text></svg></div>`
     : `<p class="text-xs text-slate-500 bg-slate-50 rounded-xl py-6 text-center">${foodError ? 'โหลดบันทึกอาหารไม่สำเร็จในขณะนี้' : 'สัปดาห์นี้ยังไม่มีบันทึกอาหาร'}</p>`;
 
   const wOf = (a, b) => state.body.filter(r => typeof r.weight === 'number' && r.date >= a && r.date <= b).sort((p, q) => p.date.localeCompare(q.date));
@@ -188,11 +188,11 @@ export async function renderWeekly() {
              ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}`
           : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกออกกำลังกายในสัปดาห์นี้</p>'}
         ${sx ? `<p class="text-xs text-slate-500 pt-1 tabular-nums">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-emerald-600' })}<span>การเงินสัปดาห์นี้</span></h3>
+      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>การเงินสัปดาห์นี้</span></h3>
         ${fin.count ? `<p class="text-sm tabular-nums">รับ <b class="text-emerald-700">฿${fmtMoney(fin.income)}</b> · จ่าย <b class="text-rose-600">฿${fmtMoney(fin.expense)}</b></p>
         <p class="text-xs text-slate-600 tabular-nums">สุทธิ: <b class="${fin.net < 0 ? 'text-rose-600' : 'text-emerald-700'}">${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</b> (${fin.count} รายการ)</p>
         ${fin.topCats.length ? `<p class="text-[11px] text-slate-500 tabular-nums">ใช้จ่ายหลัก: ${fin.topCats.map(([c, v]) => `${esc(c)} ฿${fmtMoney(v)}`).join(' · ')}</p>` : ''}` : '<p class="text-xs text-slate-500">ไม่มีรายการรายรับ-รายจ่ายในช่วงนี้</p>'}</div>
-      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-sky-600' })}<span>สต๊อก & แจ้งเตือน</span></h3>
+      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-brand' })}<span>สต๊อก & แจ้งเตือน</span></h3>
         <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> · ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b></p>
         <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''} · ทั้งหมด ${invRem.scheduledTotal} กำหนดการ</p></div>
     </div>
@@ -229,9 +229,9 @@ async function renderMonthly() {
   const bars = daysInMonth.map((d, i) => {
     const v = byDay[d].cal, x = P + i * bw, h = Math.max(H - P - yPos(v), 0);
     return `<g>
-      <rect x="${x}" y="${yPos(v)}" width="${Math.max(bw - 1.5, 1)}" height="${h}" rx="1.5" fill="${v ? '#a78bfa' : '#e2e8f0'}"></rect>
-      <rect x="${x}" y="8" width="${Math.max(bw, 8)}" height="${H - P - 8}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${v ? `โปรตีน ${Math.round(byDay[d].p)} g` : 'ไม่มีบันทึก'}" data-chart-color="${v ? '#a78bfa' : '#94a3b8'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
-      ${(i % 5 === 0 || i === daysInMonth.length - 1 ? `<text x="${x}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#64748b">${i + 1}</text>` : '')}
+      <rect x="${x}" y="${yPos(v)}" width="${Math.max(bw - 1.5, 1)}" height="${h}" rx="1.5" fill="${v ? '#1F4A74' : '#E4E8F3'}"></rect>
+      <rect x="${x}" y="8" width="${Math.max(bw, 8)}" height="${H - P - 8}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${v ? `โปรตีน ${Math.round(byDay[d].p)} g` : 'ไม่มีบันทึก'}" data-chart-color="${v ? '#1F4A74' : '#647F9C'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
+      ${(i % 5 === 0 || i === daysInMonth.length - 1 ? `<text x="${x}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#4A6685">${i + 1}</text>` : '')}
     </g>`;
   }).join('');
   const chart = loggedDays.size
@@ -250,11 +250,11 @@ async function renderMonthly() {
     ${(mSleep.length || mSteps.length) ? stat('การนอน / ก้าวเดิน', mSleep.length ? `${round1(avg(mSleep))} ชม.` : `${Math.round(avg(mSteps)).toLocaleString()} ก้าว`, `${mSleep.length ? `นอน ${mSleep.length} คืน` : ''}${mSleep.length && mSteps.length ? ' · ' : ''}${mSteps.length ? `เดินเฉลี่ย ${Math.round(avg(mSteps)).toLocaleString()} ก้าว/วัน` : ''}`) : ''}
   </div>${chart}<p class="text-xs text-slate-500">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
   <div class="space-y-6">
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-emerald-600' })}<span>การเงินเดือนนี้</span></h3>
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>การเงินเดือนนี้</span></h3>
       ${fin.count ? `${stat('รายรับ / รายจ่าย', `฿${fmtMoney(fin.income)} / ฿${fmtMoney(fin.expense)}`, `สุทธิ ${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)} (${fin.count} รายการ)`)}
       ${fin.topCats.length ? `<p class="text-xs text-slate-600 tabular-nums">หมวดใช้จ่ายสูง: ${fin.topCats.map(([c, v]) => `${esc(c)} (฿${fmtMoney(v)})`).join(', ')}</p>` : ''}`
         : '<p class="text-xs text-slate-500">ยังไม่มีรายการรายรับ-รายจ่ายในเดือนนี้</p>'}</div>
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-sky-600' })}<span>สต๊อก & แจ้งเตือน</span></h3>
+    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-brand' })}<span>สต๊อก & แจ้งเตือน</span></h3>
       <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> รายการ (ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b>)</p>
       <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนที่ถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''}</p></div>
   </div>`;

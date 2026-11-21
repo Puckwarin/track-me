@@ -10,30 +10,89 @@ const EDIT_FIELDS = [['calories', 'แคลอรี่ (kcal)'], ['protein', '
 
 export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   const v = prefill;
-  const warn = k => scan && (v[k] === null || v[k] === undefined) ? 'border-amber-400 bg-amber-50' : '';
+  const isRequiredScanMissing = k => scan && (k === 'calories') && (v[k] === null || v[k] === undefined);
+  const warn = k => isRequiredScanMissing(k) ? 'border-amber-400 bg-amber-50' : '';
   const basisMsg = !scan ? '' : scan.basis === 'unknown'
-    ? '⚠️ ระบบไม่แน่ใจว่าตัวเลขบนฉลากเป็น "ต่อหน่วยบริโภค" หรือ "ต่อ 100 กรัม" — ดูที่ฉลากแล้วระบุหน่วยด้านล่าง'
-    : scan.basis === 'per_100g' ? 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 100 กรัม/มล.</b>' : 'ตัวเลขบนฉลากเป็นค่า <b>ต่อ 1 หน่วยบริโภค</b>';
+    ? 'ไม่พบเกณฑ์บนฉลาก — โปรดระบุหน่วยบริโภค (ต่อ 1 หน่วย หรือ ต่อ 100 กรัม) ให้ตรงกับตัวเลข'
+    : scan.basis === 'per_100g'
+      ? 'ตัวเลขเป็นค่า <b>ต่อ 100 กรัม/มล.</b>'
+      : 'ตัวเลขเป็นค่า <b>ต่อ 1 หน่วยบริโภค</b>';
+  const nutritionSubtitle = !scan
+    ? 'กรอกสารอาหารตามหน่วยบริโภคที่ระบุ (เช่น ต่อ 1 หน่วย หรือ ต่อ 100 กรัม)'
+    : scan.basis === 'per_100g'
+      ? 'แสดงค่าต่อ 100 กรัม/มล. (กดแปลงด้านล่างได้หากมีน้ำหนักต่อหน่วย)'
+      : 'แสดงค่าต่อ 1 หน่วยบริโภคตามฉลาก';
+
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${id ? 'แก้ไขเมนู' : scan ? 'ตรวจสอบข้อมูลจากฉลาก' : 'เพิ่มเมนูของฉัน'}</h3><button data-close class="text-slate-400 hover:text-slate-600 min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-    ${scan ? `<div class="bg-amber-50/70 border border-amber-200/70 rounded-xl p-3 text-sm text-amber-900 space-y-1 mb-3">
-      <p>${basisMsg}${scan.servingSizeText ? ` · หน่วยบริโภคบนฉลาก: ${esc(scan.servingSizeText)}` : ''}</p>
-      <p>ช่องสีเหลืองคือค่าที่ AI อ่านไม่ชัดหรือไม่พบ — กรุณากรอกเองจากฉลาก (ระบบไม่เดาให้)</p>
-      ${scan.notes ? `<p>หมายเหตุ: ${esc(scan.notes)}</p>` : ''}</div>` : ''}
-    <div class="grid grid-cols-2 gap-3">
-      <div class="col-span-2"><label class="lbl">ชื่ออาหาร *</label><input id="e-name" class="input" value="${esc(v.name || '')}"></div>
-      <div class="col-span-2"><label class="lbl">หมวดหมู่ (ประเมินอัตโนมัติ ปรับได้)</label><select id="e-category" class="input">${categoryNames.map(c => `<option ${((v.category || guessFoodCategory(v.name || '')) === c) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
-      <div><label class="lbl">ยี่ห้อ</label><input id="e-brand" class="input" value="${esc(v.brand || '')}"></div>
-      <div><label class="lbl">หน่วยบริโภค * (เช่น 1 ซอง, 100 กรัม)</label><input id="e-unit" class="input ${scan && !v.unit ? 'border-amber-400 bg-amber-50' : ''}" value="${esc(v.unit || '')}"></div>
-      <div><label class="lbl">น้ำหนักต่อ 1 หน่วย (กรัม/มล.)</label><input id="e-grams" type="number" class="input" value="${v.gramsPerUnit ?? ''}"></div>
-      <div><label class="lbl">สัดส่วนที่กินได้ (%) (ไม่บังคับ)</label><input id="e-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input" value="${Number.isFinite(v.edibleFraction) ? Math.round(v.edibleFraction * 100) : ''}" placeholder="เช่น 54"></div>
-      <p class="col-span-2 text-xs text-slate-500">ถ้าชั่งรวมเปลือกหรือซัง ให้ใส่สัดส่วนโดยประมาณของส่วนที่กินได้ ระบบจะให้ชั่งน้ำหนักรวมเพียงครั้งเดียว และใช้โภชนาการต่อหน่วยของส่วนที่กินได้</p>
-      ${EDIT_FIELDS.map(([k, t]) => `<div><label class="lbl">${t}${k === 'calories' ? ' *' : ''}</label><input id="e-${k}" type="number" step="0.1" inputmode="decimal" class="input ${warn(k)}" value="${v[k] ?? ''}"></div>`).join('')}
+    <div class="flex justify-between items-center gap-2 mb-3">
+      <h3 class="font-bold text-lg text-slate-800">${id ? 'แก้ไขเมนู' : scan ? 'ตรวจสอบข้อมูลจากฉลาก' : 'เพิ่มเมนูของฉัน'}</h3>
+      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <label class="flex items-center gap-2 mt-3 text-sm"><input id="e-fav" type="checkbox" ${v.favorite ? 'checked' : ''}> ⭐ เมนูโปรด</label>
-    ${scan && scan.basis === 'per_100g' && scan.servingGrams ? `<button id="e-convert" class="btn btn-soft mt-3 text-xs">แปลงเป็นค่าต่อ 1 หน่วยบริโภค (${scan.servingGrams} g)</button>` : ''}
-    ${scan ? `<label class="flex items-start gap-2 mt-3 text-sm bg-ok-soft/60 rounded-lg p-2"><input id="e-confirm" type="checkbox" class="mt-1"> ฉันตรวจตัวเลขกับฉลากจริงแล้ว และถูกต้อง</label>` : ''}
-    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="e-save" class="btn btn-primary">บันทึกเมนู</button></div>`, { wide: true });
+    ${scan ? `<div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 space-y-1 mb-3">
+      <p class="inline-flex items-center gap-1.5 font-medium">${iconSvg('alert', { size: 15, className: 'text-amber-600 shrink-0' })}<span>${basisMsg}${scan.servingSizeText ? ` · บนฉลาก: ${esc(scan.servingSizeText)}` : ''}</span></p>
+      ${scan.notes ? `<p class="text-slate-500 pl-5">หมายเหตุ: ${esc(scan.notes)}</p>` : ''}
+    </div>` : ''}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <section class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+        <h4 class="text-xs font-bold text-slate-700">ข้อมูลอาหารและหน่วยบริโภค</h4>
+        <div>
+          <label class="lbl" for="e-name">ชื่ออาหาร *</label>
+          <input id="e-name" class="input min-h-[44px]" value="${esc(v.name || '')}" placeholder="เช่น อกไก่ต้ม, กราโนล่า">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl" for="e-category">หมวดหมู่</label>
+            <select id="e-category" class="input min-h-[44px]">${categoryNames.map(c => `<option ${((v.category || guessFoodCategory(v.name || '')) === c) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label class="lbl" for="e-brand">ยี่ห้อ (ไม่บังคับ)</label>
+            <input id="e-brand" class="input min-h-[44px]" value="${esc(v.brand || '')}" placeholder="เช่น CP, Diamond Grains">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="lbl" for="e-unit">หน่วยบริโภค * (เช่น 1 ซอง, 100 กรัม)</label>
+            <input id="e-unit" class="input min-h-[44px] ${scan && !v.unit ? 'border-amber-400 bg-amber-50' : ''}" value="${esc(v.unit || '')}" placeholder="1 หน่วย / 100 กรัม">
+          </div>
+          <div>
+            <label class="lbl" for="e-grams">น้ำหนักต่อ 1 หน่วย (g / ml)</label>
+            <input id="e-grams" type="number" min="0" step="0.1" inputmode="decimal" class="input min-h-[44px]" value="${v.gramsPerUnit ?? ''}" placeholder="เช่น 100">
+          </div>
+        </div>
+        <div>
+          <label class="lbl" for="e-edible">สัดส่วนที่กินได้ (%) (ไม่บังคับ)</label>
+          <input id="e-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]" value="${Number.isFinite(v.edibleFraction) ? Math.round(v.edibleFraction * 100) : ''}" placeholder="เช่น 54 สำหรับผลไม้ชั่งรวมเปลือก/ซัง">
+          <p class="mt-1 text-[11px] text-slate-500 leading-snug">ใช้กรณีชั่งน้ำหนักรวมเปลือกหรือแกน ระบบจะคำนวณเฉพาะส่วนที่กินได้ให้อัตโนมัติ</p>
+        </div>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-1 text-sm text-slate-700 cursor-pointer">
+          <input id="e-fav" type="checkbox" class="w-4 h-4 accent-violet-500" ${v.favorite ? 'checked' : ''}>
+          <span>บันทึกเป็นเมนูโปรด</span>
+        </label>
+      </section>
+
+      <section class="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3">
+        <div class="space-y-0.5">
+          <h4 class="text-xs font-bold text-slate-700">พลังงานและสารอาหาร</h4>
+          <p class="text-[11px] text-slate-500">${nutritionSubtitle}</p>
+        </div>
+        ${scan && scan.basis === 'per_100g' && scan.servingGrams ? `<button id="e-convert" type="button" class="btn btn-ghost w-full justify-center min-h-[44px] text-xs">${iconSvg('swap', { size: 15 })} แปลงเป็นค่าต่อ 1 หน่วยบริโภค (${scan.servingGrams} g)</button>` : ''}
+        <div>
+          <label class="lbl" for="e-calories">แคลอรี่ (kcal) *</label>
+          <input id="e-calories" type="number" min="0" step="0.1" inputmode="decimal" class="input min-h-[44px] font-semibold ${warn('calories')}" value="${v.calories ?? ''}" placeholder="0">
+        </div>
+        <div class="grid grid-cols-3 gap-2.5">
+          ${EDIT_FIELDS.slice(1, 4).map(([k, t]) => `<div><label class="lbl" for="e-${k}">${t}</label><input id="e-${k}" type="number" min="0" step="0.1" inputmode="decimal" class="input min-h-[44px] ${warn(k)}" value="${v[k] ?? ''}" placeholder="0"></div>`).join('')}
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          ${EDIT_FIELDS.slice(4).map(([k, t]) => `<div><label class="lbl" for="e-${k}">${t}</label><input id="e-${k}" type="number" min="0" step="0.1" inputmode="decimal" class="input min-h-[44px] ${warn(k)}" value="${v[k] ?? ''}" placeholder="ไม่ระบุ"></div>`).join('')}
+        </div>
+        ${scan ? `<label class="flex items-start gap-2.5 min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700 cursor-pointer"><input id="e-confirm" type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 shrink-0"><span>ฉันตรวจตัวเลขพลังงานและสารอาหารกับฉลากจริงแล้ว และถูกต้อง</span></label>` : ''}
+      </section>
+    </div>
+    <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
+      <button data-close type="button" class="btn btn-ghost min-h-[44px] justify-center">ยกเลิก</button>
+      <button id="e-save" type="button" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('save', { size: 15 })} บันทึกเมนู</button>
+    </div>`, { size: 'xl' });
 
   const g = k => $('#e-' + k, m.el);
   let categoryTouched = !!v.category;
