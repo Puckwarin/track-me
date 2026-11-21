@@ -33,7 +33,7 @@ function renderBarChart(months, valueKey, {
   if (!numericVals.length) {
     return `<p class="text-xs text-slate-500 py-8 text-center">${esc(emptyText)}</p>`;
   }
-};
+
 
   const W = 440, H = 165, padX = 28, padTop = 20, padBottom = 26;
   const maxVal = Math.max(...numericVals, targetValue || 0, 1);
@@ -340,7 +340,6 @@ function barChart(data, valueKey, color, unit, decimals = 0, palette = getDashbo
   $('#ov-charts', root).querySelectorAll('.card').forEach(card => {
     bindChartInspector(card, { hint: 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลรายเดือน' });
   });
-}
 
 export function mountOverview(el) {
   root = el;

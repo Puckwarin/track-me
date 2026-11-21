@@ -665,7 +665,6 @@ on('auth', user => {
   $('#preview-banner')?.classList.toggle('hidden', !isPreviewMode());
   window.dispatchEvent(new Event('trackme:auth-change'));
   if (user) {
-    if (isPreviewMode()) seedDemoState();
     mountAll();
     updateStickyOffsets();
     settingsLoader.get()?.refreshAccount?.();
