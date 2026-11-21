@@ -47,7 +47,7 @@ export function mountLab(el) {
   <div class="lg:col-span-1 space-y-6">
     <div class="card space-y-3">
       <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('stethoscope', { size: 18, className: 'text-brand shrink-0' })}<span>บันทึกผลตรวจ / ผลเลือด</span></h2>
-      <label class="border-2 border-dashed border-lav-soft bg-lav-soft/40 rounded-xl p-3 text-center cursor-pointer block">
+      <label class="border-2 border-dashed border-slate-200 bg-lav-soft/40 rounded-xl p-3 text-center cursor-pointer block">
         <input type="file" id="lb-photo" accept="image/*" multiple class="hidden">
         <span class="flex justify-center text-brand mb-1">${iconSvg('camera', { size: 20 })}</span>
         <span class="block text-sm font-semibold text-slate-700">ถ่ายรูป / เลือกรูปใบผลตรวจ (เลือกได้หลายรูป)</span>

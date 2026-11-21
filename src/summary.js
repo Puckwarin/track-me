@@ -108,7 +108,7 @@ export function renderSummary() {
     c2 = card('cycle', 'text-pink-500', 'รอบเฉลี่ย', empty, 'รอรอบเดือนที่บันทึก', false);
   }
 
-  const c3 = card('body', 'text-blue-500', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : 'บันทึกได้ที่แท็บน้ำหนัก', !!b.weight);
+  const c3 = card('body', 'text-brand', 'น้ำหนักล่าสุด', b.weight ? b.weight.v + ' กก.' : empty, b.weight ? esc(fmtDate(b.weight.d)) : 'บันทึกได้ที่แท็บน้ำหนัก', !!b.weight);
   const m = [['อก', 'bust'], ['เอว', 'waist'], ['สะโพก', 'hip'], ['แขน', 'arm'], ['ขา', 'thigh']].map(([t, k]) => `${t} ${b[k] ? b[k].v : '-'}`).join(' / ');
   const sleepStepsSub = [
     b.sleepHours ? `นอน ${round1(b.sleepHours.v)} ชม. (${esc(fmtDate(b.sleepHours.d))})` : '',
@@ -116,7 +116,7 @@ export function renderSummary() {
   ].filter(Boolean).join(' · ');
   const hasBodyMeasurements = !!(b.bust || b.waist || b.hip || b.arm || b.thigh);
   const hasBodySummary = hasBodyMeasurements || !!sleepStepsSub;
-  const c4 = card('ruler', 'text-blue-500', 'สัดส่วน · นอน/ก้าว', hasBodyMeasurements ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), hasBodyMeasurements ? sleepStepsSub : (sleepStepsSub ? '' : 'รอกรอกสัดส่วนหรือชั่วโมงนอน'), hasBodySummary);
+  const c4 = card('ruler', 'text-brand', 'สัดส่วน · นอน/ก้าว', hasBodyMeasurements ? `<span class="text-xs sm:text-sm">${m}</span>` : (sleepStepsSub ? `<span class="text-xs sm:text-sm">${sleepStepsSub}</span>` : empty), hasBodyMeasurements ? sleepStepsSub : (sleepStepsSub ? '' : 'รอกรอกสัดส่วนหรือชั่วโมงนอน'), hasBodySummary);
 
   const nut = s?.nutrition;
   const hasFoodToday = !!(nut && nut.count > 0);

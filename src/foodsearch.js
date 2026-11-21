@@ -312,7 +312,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
     <p id="os-connection-status" class="text-xs text-slate-500" aria-live="polite"></p>
     <div id="os-res" class="mt-3 divide-y divide-slate-100"></div>
     <div id="os-next-wrap" class="hidden mt-2"><button id="os-next" type="button" class="chip bg-sky-soft text-blue-700">${iconSvg('forward', { size: 13 })} ไม่ตรงที่ต้องการ? ค้นหาต่อในแหล่งถัดไป</button></div>
-    <div id="os-calc" class="hidden mt-3 bg-sky-soft/50 rounded-xl p-3 space-y-2">
+    <div id="os-calc" class="hidden mt-3 bg-slate-50 rounded-xl p-3 space-y-2">
       <p id="os-pick" class="text-sm font-semibold"></p>
       <label id="os-g-lbl" class="lbl">น้ำหนักที่กิน (กรัม/มล.)</label><input id="os-g" type="number" step="0.1" inputmode="decimal" class="input">
       <p id="os-out" class="text-sm font-semibold text-blue-700"></p>

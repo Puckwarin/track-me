@@ -131,7 +131,7 @@ export function mountWorkout(el) {
         <span id="w-edit-badge" class="hidden text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800">กำลังแก้ไขบันทึกเดิม</span>
       </div>
 
-      <div class="rounded-2xl border border-lav-soft bg-slate-50/70 p-3 space-y-2.5">
+      <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('weekly', { size: 15, className: 'text-brand' })}<span>วางแผนรายสัปดาห์ (จ–อา)</span></span>
           <div class="flex items-center gap-1">
@@ -144,7 +144,7 @@ export function mountWorkout(el) {
         <div id="w-day-plans" class="space-y-1.5"></div>
       </div>
 
-      <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-violet-200 bg-lav-soft/60 p-3 space-y-2">
+      <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-slate-200 bg-[#F7F3EE] p-3 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-semibold text-brand-dark inline-flex items-center gap-1">${iconSvg('edit-square', { size: 14 })}<span>กำลังแก้ไขเทมเพลต:</span></span>
           <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต">
@@ -1168,7 +1168,7 @@ async function copyFormAsTemplate() {
 
 function renderSections() {
   $('#w-sections', root).innerHTML = SECTIONS.map(([k, title, icon], si) => `
-    <div class="rounded-2xl border border-lav-soft bg-white p-3 space-y-2.5">
+    <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
         <h4 class="font-semibold text-slate-700 text-sm inline-flex items-center gap-1.5"><span class="text-brand">${si + 1}.</span>${iconSvg(icon, { size: 15, className: 'text-brand' })}<span>${title}</span></h4>
         <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
@@ -1396,7 +1396,7 @@ function renderWeekStrip() {
   const dayList = byDate[selected] || [];
   $('#w-day-plans', root).innerHTML = dayList.length ? dayList.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
-    return `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-lav-soft px-3 py-2 text-xs tabular-nums">
+    return `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 text-xs tabular-nums">
       <div class="min-w-0 flex-1 break-words">
         <span class="font-semibold mr-1 ${w.status === 'planned' ? 'text-amber-700' : 'text-green-700'}">[${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}]</span>
         <b>${esc(w.title || TYPES[w.type] || w.type)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
@@ -1528,7 +1528,7 @@ function renderHistory() {
         <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">${iconSvg('trash', { size: 12 })} ลบ</button>
       </div>`;
 
-    return `<div class="rounded-xl border border-lav-soft p-2.5 space-y-2">
+    return `<div class="rounded-xl border border-slate-200 p-2.5 space-y-2">
       <details>
         <summary class="cursor-pointer text-sm break-words tabular-nums">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
         <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : actionsHtml}</div>

@@ -89,7 +89,7 @@ export function mountSymptoms(el) {
     </div>
 
     <div id="sx-panel-symptoms" class="card space-y-4 lg:col-span-2">
-      <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
+      <div class="rounded-2xl border border-slate-200 bg-white px-3 divide-y divide-slate-100">
         ${SYMPTOMS.map(([k, t]) => sliderRow(t, 's-' + k, SEVERITY)).join('')}
         ${sliderRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['', '1', '2', '3', '4', '5'])}
         ${sliderRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['', '1', '2', '3', '4', '5'])}
@@ -110,7 +110,7 @@ export function mountSymptoms(el) {
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
         <p class="text-xs text-slate-500">ติดตามอาการระคายเคืองและผลลัพธ์ต่อผิวตามวันที่เลือกด้านบน</p>
       </header>
-      <div class="rounded-2xl border border-pink-100/80 bg-slate-50/40 px-3 divide-y divide-slate-100">
+      <div class="rounded-2xl border border-slate-200 bg-white px-3 divide-y divide-slate-100">
         ${SKIN_FIELDS.map(([k, t]) => sliderRow(t, 'skin-' + k, SEVERITY)).join('')}
       </div>
       <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">

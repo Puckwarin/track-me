@@ -77,7 +77,7 @@ export function mountBody(el) {
   <div id="b-panel-body" class="md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
     <div class="space-y-6">
       <div class="card space-y-4">
-        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-blue-500' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
+        <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-brand' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div><label class="lbl">วันที่</label><input type="date" id="b-date" class="input"></div>
           <div><label class="lbl">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
@@ -93,18 +93,18 @@ export function mountBody(el) {
       </div>
 
       <div class="card space-y-3">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-blue-500' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
         <div id="b-history-wrap">
           <div id="b-mobile-list" class="sm:hidden space-y-2 tabular-nums"></div>
           <div class="hidden sm:block overflow-x-auto"><table class="w-full text-left text-sm">
-            <thead class="bg-sky-soft/50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
+            <thead class="bg-slate-50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
             <tbody id="b-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
         </div>
       </div>
     </div>
     <div class="space-y-6">
       <div class="card space-y-3">
-        <h3 id="b-chart-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('health', { size: 17, className: 'text-blue-500' })}<span>แนวโน้มน้ำหนัก & สัดส่วน</span></h3>
+        <h3 id="b-chart-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('health', { size: 17, className: 'text-brand' })}<span>แนวโน้มน้ำหนัก & สัดส่วน</span></h3>
         <div id="b-chart-tabs" class="tm-seg tm-seg--scroll" role="tablist" aria-label="เลือกสัดส่วน"></div>
         <div id="b-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
         <div id="b-chart"></div>
@@ -116,7 +116,7 @@ export function mountBody(el) {
       <div class="card space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-indigo-500' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
+            <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2 flex-wrap">${iconSvg('sleep', { size: 19, className: 'text-brand' })}<span>การนอน & ก้าวเดิน</span> <span class="text-xs font-medium text-indigo-600">(รองรับ Zepp CSV)</span></h2>
             <p class="text-xs text-slate-500 mt-0.5">นำเข้าไฟล์ CSV จาก Zepp ได้หลายไฟล์พร้อมกัน (ระบบรวมวันเดียวกันให้อัตโนมัติ) หรือกดปุ่มบันทึกเอง</p>
           </div>
         </div>
@@ -140,7 +140,7 @@ export function mountBody(el) {
     </div>
     <div class="space-y-6">
       <div class="card space-y-3">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('moon', { size: 17, className: 'text-indigo-500' })}<span>แนวโน้มการนอน & ก้าวเดิน</span></h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('moon', { size: 17, className: 'text-brand' })}<span>แนวโน้มการนอน & ก้าวเดิน</span></h3>
         <div id="bz-chart-tabs" class="tm-seg tm-seg--2" role="tablist" aria-label="เลือกกราฟการนอนและก้าวเดิน"></div>
         <div id="bz-chart-meta" class="text-xs text-slate-600 tabular-nums"></div>
         <div id="bz-chart"></div>
@@ -516,8 +516,8 @@ export function render() {
         <p class="text-[10px] text-slate-500 truncate">${esc(sub)}</p>
       </div>`;
     snap.innerHTML =
-      snapTile('น้ำหนักล่าสุด', latest.weight ? `${latest.weight.v} กก.` : 'ยังไม่บันทึก', latest.weight ? fmtDate(latest.weight.d) : 'ชั่งและจดได้เลย', 'body', 'text-blue-500') +
-      snapTile('การนอนล่าสุด', latest.sleepHours ? `${round1(latest.sleepHours.v)} ชม.` : 'ยังไม่บันทึก', latest.sleepHours ? fmtDate(latest.sleepHours.d) : 'นำเข้า CSV หรือกรอกเอง', 'sleep', 'text-indigo-500') +
+      snapTile('น้ำหนักล่าสุด', latest.weight ? `${latest.weight.v} กก.` : 'ยังไม่บันทึก', latest.weight ? fmtDate(latest.weight.d) : 'ชั่งและจดได้เลย', 'body', 'text-brand') +
+      snapTile('การนอนล่าสุด', latest.sleepHours ? `${round1(latest.sleepHours.v)} ชม.` : 'ยังไม่บันทึก', latest.sleepHours ? fmtDate(latest.sleepHours.d) : 'นำเข้า CSV หรือกรอกเอง', 'sleep', 'text-brand') +
       snapTile('ก้าวเดินล่าสุด', latest.steps ? `${Math.round(latest.steps.v).toLocaleString()} ก้าว` : 'ยังไม่บันทึก', latest.steps ? fmtDate(latest.steps.d) : 'ติดตามการเดินรายวัน', 'steps', 'text-emerald-600');
   }
   const desc = sortBodyDesc(state.body);
@@ -622,7 +622,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   const modalRes = openModal(`
     <div id="zepp-preview-box">
       <div class="flex justify-between items-center mb-2">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('upload', { size: 17, className: 'text-indigo-500' })}<span>ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</span></h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('upload', { size: 17, className: 'text-brand' })}<span>ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</span></h3>
         <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
@@ -741,7 +741,7 @@ function openSleepStepsModal(prefill = null) {
   const modal = openModal(`
     <div id="bz-manual-box" class="space-y-4">
       <div class="flex items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('sleep', { size: 18, className: 'text-indigo-500' })}<span>บันทึกการนอน & ก้าวเดิน</span></h3>
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('sleep', { size: 18, className: 'text-brand' })}<span>บันทึกการนอน & ก้าวเดิน</span></h3>
         <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <div class="grid grid-cols-2 gap-3">
