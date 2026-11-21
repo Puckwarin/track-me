@@ -48,7 +48,7 @@ export function getHomeWidgetConfig() {
 }
 
 export function saveHomeWidgetConfig(config) {
-  if (!state.uid || typeof localStorage !== 'undefined') return false;
+  if (!state.uid || typeof localStorage === 'undefined') return false;
   const requestedOrder = Array.isArray(config?.order) ? [...new Set(config.order.filter(id => HOME_WIDGET_IDS.includes(id)))] : [];
   const validShortcuts = new Set(CATEGORIES.flatMap(category => [category.key, category.tab]));
   const safe = {

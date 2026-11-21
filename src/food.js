@@ -49,7 +49,7 @@ export function mountFood(el) {
         <input type="date" id="f-date" class="input !w-auto ml-auto" aria-label="เลือกวันที่">
       </div>
       <div id="f-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
-      <div class="bg-lav-soft/70 rounded-2xl px-3.5 py-3 space-y-2.5">
+      <div class="bg-white border border-slate-200 rounded-2xl px-3.5 py-3 space-y-2.5">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1 space-y-0.5">
             <span id="f-daylabel" class="block text-xs text-brand-dark font-medium">แคลอรี่รวมวันนี้</span>
@@ -91,7 +91,7 @@ export function mountFood(el) {
         </div>
 
         <div class="space-y-1.5">
-          <label class="border-2 border-dashed border-brand/40 bg-lav-soft/30 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
+          <label class="border border-dashed border-slate-300 bg-slate-50 hover:bg-lav-soft/50 rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
             <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
             <span class="inline-flex text-brand">${iconSvg('camera', { size: 22 })}</span>
             <span class="block text-sm font-semibold text-slate-800 mt-1">ถ่ายรูป / อัปโหลดอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
@@ -1278,7 +1278,7 @@ function renderDay() {
     <div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-600"><span>${name}</span></div>
     <p class="text-sm font-bold text-slate-800 tabular-nums">${hasItems ? round1(v) : '—'} <span class="text-[11px] font-normal text-slate-500">/ ${goal} g</span></p>
     <div class="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1"><div class="${color} h-full transition-all" style="width:${hasItems ? Math.min(v / goal * 100, 100) : 0}%"></div></div></div>`;
-  $('#f-stats', root).innerHTML = macroCard('โปรตีน', t.p, targets.protein, 'bg-blue-400') + macroCard('คาร์บ', t.c, targets.carbs, 'bg-violet-400') + macroCard('ไขมัน', t.f, targets.fat, 'bg-pink-400') +
+  $('#f-stats', root).innerHTML = macroCard('โปรตีน', t.p, targets.protein, 'bg-mint') + macroCard('คาร์บ', t.c, targets.carbs, 'bg-mint') + macroCard('ไขมัน', t.f, targets.fat, 'bg-mint') +
     `<div class="bg-slate-50 rounded-xl p-2.5"><div class="flex justify-between text-[11px] font-semibold text-slate-600"><span>น้ำตาล · โซเดียม</span></div>
     <p class="text-sm font-bold text-slate-800 tabular-nums">${hasItems ? `${round1(t.sugar)} g · ${Math.round(t.na)} mg` : '—'}</p>
     <p class="text-[11px] text-slate-500">เฉพาะรายการที่กรอกค่านี้</p></div>`;

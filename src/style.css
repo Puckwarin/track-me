@@ -1391,9 +1391,9 @@ html[data-theme="dark"] .tm-gradient-text {
 .tm-day-pill .tm-day-num { font-size: .88rem; font-weight: 700; line-height: 1.15; }
 .tm-day-pill.is-today { border-color: #60B2EC; color: #1D4F76; }
 .tm-day-pill.is-active {
-  background: linear-gradient(180deg, #60B2EC, #3E8FCF);
-  border-color: #3E8FCF;
-  color: #FFFFFF;
+  background: var(--color-mint);
+  border-color: var(--color-mint);
+  color: var(--color-ink);
   box-shadow: 0 4px 12px -4px rgb(62 143 207 / .55);
 }
 .tm-day-pill.is-active .tm-day-dow { opacity: .95; }
