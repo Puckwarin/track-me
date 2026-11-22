@@ -4,6 +4,7 @@ import { state, on, emit } from './state.js';
 import { $, $$, esc, localDateStr, addDays, mondayOf, numField, round1, toast, openModal, toNum } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindChartInspector } from './ui.js';
+import { buildMealDonutParts, DONUT_TOOLTIP_HINT } from './donutChart.js';
 import { analyzeFoodImage, isLocalNutritionSufficient, readNutritionLabelLocally, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
@@ -66,11 +67,12 @@ export function mountFood(el) {
           <div class="tm-progress-track" aria-hidden="true"><div id="f-cal-bar" class="tm-progress-fill" style="width:0%"></div></div>
           <div id="f-macro-strip" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
         </div>
-        <div id="f-pie-wrap" class="space-y-1.5 lg:border-l lg:border-slate-200 lg:pl-5">
-          <div id="f-meals-pie" class="flex flex-col sm:flex-row items-center gap-3">
-            <div id="f-meals-pie-svg" class="shrink-0"></div>
+        <div id="f-pie-wrap" class="space-y-2.5 lg:border-l lg:border-slate-200 lg:pl-5">
+          <div id="f-meals-pie" class="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            <div id="f-meals-pie-svg" class="tm-donut-col shrink-0"></div>
             <div id="f-meals" class="w-full space-y-1 min-w-0"></div>
           </div>
+          <div id="f-pie-readout-slot"></div>
         </div>
       </div>
     </section>
@@ -175,7 +177,7 @@ export function mountFood(el) {
           </div>
           <div id="f-drag-targets" class="tm-drag-drop-bar hidden" aria-label="วางเพื่อย้ายไปมื้ออื่น"></div>
           <div id="f-body" class="space-y-3"></div>
-          <p id="f-swipe-hint" class="hidden md:hidden text-[11px] text-slate-400">ปัดซ้ายเพื่อแก้ไข/ลบ · ปัดขวาเพื่อบันทึกโปรด · ลากที่ไอคอน ⠿ เพื่อย้ายมื้อ</p>
+          <p id="f-swipe-hint" class="hidden lg:hidden text-[11px] text-slate-400">ปัดซ้ายเพื่อแก้ไข/ลบ · ปัดขวาเพื่อบันทึกโปรด · ลากที่ไอคอน ⠿ เพื่อย้ายมื้อ</p>
         </div>
       </div>
     </section>
@@ -1014,7 +1016,7 @@ function setupFoodBodyGestures() {
       return;
     }
 
-    if (window.matchMedia?.('(min-width: 768px)').matches) return;
+    if (window.matchMedia?.('(min-width: 1024px)').matches) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.target.closest('.tm-swipe-actions, input, button, a')) return;
     const row = e.target.closest('.tm-swipe-row');
@@ -1105,51 +1107,6 @@ function setupFoodBodyGestures() {
   document.addEventListener('click', e => {
     if (!body.contains(e.target)) closeAllSwipes();
   });
-}
-
-function buildMealPieSvg(slices, totalKcal) {
-  const sepStroke = '#FFFFFF';
-  const emptyStroke = '#D0DBF7';
-  const mutedText = '#4A6685';
-  const sliceTextColor = fill => (fill === '#1F4A74' || fill === '#194971' ? '#FFFFFF' : '#194971');
-
-  const active = slices.filter(s => s.kcal > 0);
-  if (!totalKcal || !active.length) {
-    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="ยังไม่มีข้อมูลพลังงานแต่ละมื้อ">
-      <circle cx="80" cy="80" r="64" fill="none" stroke="${emptyStroke}" stroke-width="2" stroke-dasharray="5 5"/>
-      <text x="80" y="78" text-anchor="middle" font-size="12" font-weight="700" fill="${mutedText}">0 kcal</text>
-      <text x="80" y="94" text-anchor="middle" font-size="9.5" fill="${mutedText}">ยังไม่บันทึก</text>
-    </svg>`;
-  }
-  const cx = 80, cy = 80, r = 66;
-  if (active.length === 1) {
-    const s = active[0];
-    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (100%)`;
-    const sub = `${s.count} รายการ`;
-    return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมพลังงานแต่ละมื้อ">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><title>${esc(tip)}</title></circle>
-      <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="${sliceTextColor(s.color)}" pointer-events="none">100%</text>
-    </svg>`;
-  }
-  let angle = -Math.PI / 2;
-  const paths = active.map(s => {
-    const sweep = (s.kcal / totalKcal) * Math.PI * 2;
-    const x1 = cx + r * Math.cos(angle);
-    const y1 = cy + r * Math.sin(angle);
-    const nextAngle = angle + sweep;
-    const x2 = cx + r * Math.cos(nextAngle);
-    const y2 = cy + r * Math.sin(nextAngle);
-    const largeArc = sweep > Math.PI ? 1 : 0;
-    const mid = angle + sweep / 2;
-    const share = Math.round((s.kcal / totalKcal) * 100);
-    const lx = cx + r * 0.6 * Math.cos(mid);
-    const ly = cy + r * 0.6 * Math.sin(mid);
-    angle = nextAngle;
-    const tip = `${s.meal}: ${s.kcal.toLocaleString()} kcal (${share}%)`;
-    const sub = `${s.count} รายการ`;
-    return `<g tabindex="0" role="button" data-chart-tip="${esc(tip)}" data-chart-sub="${esc(sub)}" data-chart-color="${esc(s.color)}"><path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}" stroke="${sepStroke}" stroke-width="2" stroke-linejoin="round"><title>${esc(tip)}</title></path>${share >= 10 ? `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${sliceTextColor(s.color)}" pointer-events="none">${share}%</text>` : ''}</g>`;
-  }).join('');
-  return `<svg viewBox="0 0 160 160" class="w-28 h-28 sm:w-32 sm:h-32" role="img" aria-label="กราฟวงกลมสัดส่วนพลังงานแต่ละมื้อ">${paths}</svg>`;
 }
 
 function editFoodQuantity(id) {
@@ -1386,8 +1343,16 @@ function renderDay() {
 
   const mealList = getMeals();
   const pie = buildMealCaloriePieData(items, mealList, getMealPiePalette());
+  const donut = buildMealDonutParts({
+    slices: pie.slices,
+    totalKcal: pie.totalKcal,
+    targetKcal: targets.kcal,
+    hasData: hasItems && pie.totalKcal > 0
+  });
   const pieSvgEl = $('#f-meals-pie-svg', root);
-  if (pieSvgEl) pieSvgEl.innerHTML = buildMealPieSvg(pie.slices, pie.totalKcal);
+  if (pieSvgEl) pieSvgEl.innerHTML = `${donut.ringHtml}${donut.legendHtml}`;
+  const readoutSlot = $('#f-pie-readout-slot', root);
+  if (readoutSlot) readoutSlot.innerHTML = donut.readoutHtml;
   $('#f-meals', root).innerHTML = pie.slices.map(s => `
     <div class="flex items-center justify-between gap-2 text-xs min-h-[44px]">
       <div class="flex items-center gap-2 min-w-0">
@@ -1399,7 +1364,7 @@ function renderDay() {
         <button data-meal="${esc(s.meal)}" type="button" class="text-brand font-semibold px-2.5 min-h-[44px] inline-flex items-center rounded-lg hover:bg-slate-50">+ เพิ่ม</button>
       </div>
     </div>`).join('');
-  bindChartInspector($('#f-pie-wrap', root), { hint: 'แตะส่วนกราฟวงกลมเพื่อดูพลังงานแต่ละมื้อ' });
+  bindChartInspector($('#f-pie-wrap', root), { hint: DONUT_TOOLTIP_HINT });
 
   const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
   const burnEl = $('#f-burn', root);

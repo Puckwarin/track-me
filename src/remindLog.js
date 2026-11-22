@@ -6,6 +6,7 @@ import { REMIND_OPTIONS, remindLabel } from './period.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
+import { bindSwipeRows } from './ui.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -166,7 +167,7 @@ export function mountRemind(el) {
         <select id="rm-bulk-remind" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button id="rm-bulk-apply" type="button" class="chip min-h-[36px] bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
       </div>
-      <div id="rm-list" class="space-y-2.5"></div>
+      <div id="rm-list" class="tm-swipe-list tm-swipe-list--cards"></div>
     </section>
   </div>`;
 
@@ -518,7 +519,8 @@ export function renderRemind() {
       ? 'ทุกรายการทำเสร็จแล้ว 🎉 (ติ๊ก “แสดงที่ทำเสร็จแล้ว” เพื่อดูย้อนหลัง)'
       : 'ไม่พบบันทึกแจ้งเตือนที่ตรงกับเงื่อนไขการค้นหาหรือช่วงวันที่';
 
-  $r('#rm-list').innerHTML = rows.length ? rows.map(x => {
+  const listEl = $r('#rm-list');
+  listEl.innerHTML = rows.length ? rows.map(x => {
     const due = x.nextDate;
     const diff = due ? daysBetween(today, due) : null;
     const statusBadge = x.done
@@ -529,32 +531,42 @@ export function renderRemind() {
       : diff <= Math.max(0, x.remindDays) ? `<span class="rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-[11px] font-medium">อีก ${diff} วัน</span>`
       : `<span class="text-[11px] text-slate-500">· อีก ${diff} วัน</span>`;
     const rep = repeatText(x);
-    return `<article class="rounded-2xl border ${!x.done && diff !== null && diff < 0 ? 'border-rose-200 bg-rose-50/40' : !x.done && diff === 0 ? 'border-amber-200 bg-amber-50/35' : 'border-slate-200 bg-slate-50/60'} p-3 space-y-2 tabular-nums">
-      <div class="flex items-start justify-between gap-2">
-        <label class="flex items-start gap-2.5 min-w-0 cursor-pointer flex-1">
-          <input type="checkbox" class="mt-1 shrink-0" data-rm-sel="${esc(x.uidKey)}" ${selectedKeys.has(x.uidKey) ? 'checked' : ''}>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span class="text-sm font-bold text-slate-800">${iconOf(x.kind)} ${esc(x.title)}</span>
-              <span class="text-[11px] text-slate-500">· ${esc(x.kind)}</span>
-              ${statusBadge}
-            </div>
-            <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · 🔁 ${esc(rep)}` : ''}</p>
-            ${x.note ? `<p class="text-xs text-slate-500 mt-0.5">${esc(x.note)}</p>` : ''}
-          </div>
-        </label>
+    const toneCls = !x.done && diff !== null && diff < 0 ? 'is-rose' : !x.done && diff === 0 ? 'is-amber' : 'is-soft';
+    return `<article class="tm-swipe-row ${toneCls} tabular-nums">
+      <div class="tm-swipe-actions">
+        <button type="button" data-edit="${esc(x.uidKey)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(x.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-del="${esc(x.uidKey)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(x.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
-        <div class="flex items-center gap-1.5">
-          <span class="text-[11px] text-slate-500">เตือน:</span>
-          <select data-rm-remind="${esc(x.uidKey)}" class="input !w-auto !py-1 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <div class="tm-swipe-card tm-swipe-card--stack !p-3 space-y-2">
+        <div class="flex items-start justify-between gap-2">
+          <label class="flex items-start gap-2.5 min-w-0 cursor-pointer flex-1">
+            <input type="checkbox" class="mt-1 shrink-0" data-rm-sel="${esc(x.uidKey)}" ${selectedKeys.has(x.uidKey) ? 'checked' : ''}>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-sm font-bold text-slate-800">${iconOf(x.kind)} ${esc(x.title)}</span>
+                <span class="text-[11px] text-slate-500">· ${esc(x.kind)}</span>
+                ${statusBadge}
+              </div>
+              <p class="text-xs text-slate-600 mt-0.5">ทำล่าสุด ${esc(fmtDate(x.date))}${due ? ` · ครบกำหนด <b>${esc(fmtDate(due))}</b>` : ''}${x.dueTime ? ` · ⏰ <b>${esc(x.dueTime)} น.</b>` : ''}${rep ? ` · 🔁 ${esc(rep)}` : ''}</p>
+              ${x.note ? `<p class="text-xs text-slate-500 mt-0.5">${esc(x.note)}</p>` : ''}
+            </div>
+          </label>
         </div>
-        <div class="flex flex-wrap gap-1.5">
-          <button data-done="${esc(x.uidKey)}" class="chip min-h-[36px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
-          <button data-edit="${esc(x.uidKey)}" class="chip min-h-[36px] bg-sky-soft text-blue-700">แก้ไข</button>
-          <button data-del="${esc(x.uidKey)}" class="chip min-h-[36px] bg-pink-soft text-rose-600">ลบ</button>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-slate-500">เตือน:</span>
+            <select data-rm-remind="${esc(x.uidKey)}" class="input !w-auto !py-1 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button data-done="${esc(x.uidKey)}" class="chip min-h-[38px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
+            <div class="tm-row-actions">
+              <button type="button" data-edit="${esc(x.uidKey)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(x.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-del="${esc(x.uidKey)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(x.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>
+          </div>
         </div>
       </div>
     </article>`;
   }).join('') : `<p class="text-sm text-slate-500 text-center py-6">${emptyMsg}</p>`;
+  bindSwipeRows(listEl);
 }

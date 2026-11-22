@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, toast } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
+import { bindSwipeRows } from './ui.js';
 
 export const SYMPTOMS = [
   ['cramps', 'ปวดท้อง'], ['backache', 'ปวดหลัง'], ['headache', 'ปวดหัว'],
@@ -102,7 +103,7 @@ export function mountSymptoms(el) {
         <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
         <button id="s-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการ</button>
       </div>
-      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="space-y-1 text-sm"></div></div>
+      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div></div>
     </div>
 
     <section id="sx-panel-skin" class="card space-y-4 lg:col-span-2 hidden">
@@ -121,7 +122,7 @@ export function mountSymptoms(el) {
         <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
         <button id="skin-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการผิว</button>
       </div>
-      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="space-y-1 text-sm"></div></div>
+      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div></div>
     </section>`;
 
   $('#s-date', root).value = localDateStr();
@@ -164,8 +165,26 @@ export function mountSymptoms(el) {
   $('#s-del', root).addEventListener('click', del);
   $('#skin-save', root).addEventListener('click', saveSkin);
   $('#skin-del', root).addEventListener('click', delSkin);
-  $('#s-list', root).addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) selectDate(b.dataset.d, 'symptoms'); });
-  $('#skin-list', root).addEventListener('click', e => { const b = e.target.closest('[data-skin-d]'); if (b) selectDate(b.dataset.skinD, 'skin'); });
+  $('#s-list', root).addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-del-sx]');
+    if (delBtn) {
+      if (guardPreviewWrite('การลบบันทึกอาการ')) return;
+      if (confirm('ลบบันทึกอาการของวันที่เลือก?')) deleteDoc(userDoc(state.uid, 'symptom_records', delBtn.dataset.delSx)).catch(err => toast(err.message, 'err'));
+      return;
+    }
+    const b = e.target.closest('[data-d]');
+    if (b) selectDate(b.dataset.d, 'symptoms');
+  });
+  $('#skin-list', root).addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-del-skin]');
+    if (delBtn) {
+      if (guardPreviewWrite('การลบบันทึกผิว')) return;
+      if (confirm('ลบบันทึกผิวของวันที่เลือก?')) deleteDoc(userDoc(state.uid, 'skin_records', delBtn.dataset.delSkin)).catch(err => toast(err.message, 'err'));
+      return;
+    }
+    const b = e.target.closest('[data-skin-d]');
+    if (b) selectDate(b.dataset.skinD, 'skin');
+  });
   setSymptomsTab('symptoms');
   loadForm();
 }
@@ -219,11 +238,26 @@ function loadSkinForm() {
 export function renderList() {
   if (!root) return;
   const rows = state.symptoms.slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
-  $('#s-list', root).innerHTML = rows.length ? rows.map(r => {
+  const sListEl = $('#s-list', root);
+  sListEl.innerHTML = rows.length ? rows.map(r => {
     const sx = SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl bg-white border border-slate-200 hover:bg-primary-50 hover:border-primary-300 transition-colors tabular-nums">
-      <b>${esc(fmtDate(r.id))}</b> <span class="text-slate-600">${esc(sx || 'ไม่มีอาการ')}</span>${r.mood ? ` · ${esc(MOODS[r.mood])}` : ''}</button>`;
+    return `<div class="tm-swipe-row">
+      <div class="tm-swipe-actions">
+        <button type="button" data-d="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไขอาการ ${esc(fmtDate(r.id))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-del-sx="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบอาการ ${esc(fmtDate(r.id))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+      </div>
+      <div class="tm-swipe-card !flex-row items-center justify-between gap-2 !px-3 !py-2">
+        <button type="button" data-d="${esc(r.id)}" class="min-w-0 flex-1 text-left py-1 min-h-[44px] tabular-nums">
+          <b>${esc(fmtDate(r.id))}</b> <span class="text-slate-600">${esc(sx || 'ไม่มีอาการ')}</span>${r.mood ? ` · ${esc(MOODS[r.mood])}` : ''}
+        </button>
+        <div class="tm-row-actions">
+          <button type="button" data-d="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไขอาการ ${esc(fmtDate(r.id))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-del-sx="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบอาการ ${esc(fmtDate(r.id))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+        </div>
+      </div>
+    </div>`;
   }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกอาการ</p>';
+  bindSwipeRows(sListEl);
   loadForm();
   renderSkinList();
 }
@@ -231,10 +265,26 @@ export function renderList() {
 export function renderSkinList() {
   if (!root) return;
   const rows = (state.skinRecords || []).slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
-  $('#skin-list', root).innerHTML = rows.length ? rows.map(r => {
+  const skinListEl = $('#skin-list', root);
+  skinListEl.innerHTML = rows.length ? rows.map(r => {
     const signs = SKIN_FIELDS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
-    return `<button data-skin-d="${esc(r.id)}" class="w-full text-left px-3 py-2.5 min-h-[44px] rounded-xl bg-white border border-slate-200 hover:bg-primary-50 hover:border-primary-300 transition-colors tabular-nums"><b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}<span class="block text-xs text-slate-500">${esc(r.result || '')}</span></button>`;
+    return `<div class="tm-swipe-row">
+      <div class="tm-swipe-actions">
+        <button type="button" data-skin-d="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไขบันทึกผิว ${esc(fmtDate(r.id))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-del-skin="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบบันทึกผิว ${esc(fmtDate(r.id))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+      </div>
+      <div class="tm-swipe-card !flex-row items-center justify-between gap-2 !px-3 !py-2">
+        <button type="button" data-skin-d="${esc(r.id)}" class="min-w-0 flex-1 text-left py-1 min-h-[44px] tabular-nums">
+          <b>${esc(fmtDate(r.id))}</b> · ${esc(signs || 'ไม่มีอาการผิว')}${r.result ? `<span class="block text-xs text-slate-500">${esc(r.result)}</span>` : ''}
+        </button>
+        <div class="tm-row-actions">
+          <button type="button" data-skin-d="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไขบันทึกผิว ${esc(fmtDate(r.id))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-del-skin="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบบันทึกผิว ${esc(fmtDate(r.id))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+        </div>
+      </div>
+    </div>`;
   }).join('') : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกผิว</p>';
+  bindSwipeRows(skinListEl);
   loadSkinForm();
 }
 

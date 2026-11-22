@@ -6,6 +6,7 @@ import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
+import { bindSwipeRows } from './ui.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const DEFAULT_ALT_ANCHOR = '2026-01-05'; // วันจันทร์อ้างอิงสำหรับสลับสัปดาห์ A / B
@@ -20,8 +21,8 @@ const DAY_PRESETS = [
 let root;
 let goFn = () => {};
 let selectedDate = localDateStr();
-let shouldCenterStrip = true;
 let docClickBound = false;
+let dragPayload = null;
 const boundContainers = new WeakSet();
 
 function weekdayIdx(dateStr) {
@@ -47,6 +48,19 @@ export function routineAppliesToDate(r, dateStr, altAnchor) {
   if (!r.days.includes(weekdayIdx(dateStr))) return false;
   if (!r.weekPattern || r.weekPattern === 'every') return true;
   return r.weekPattern === weekCodeForDate(dateStr, altAnchor);
+}
+
+export function weekRangeLabel(mondayStr) {
+  const start = parseLocal(mondayStr);
+  const end = parseLocal(addDays(mondayStr, 6));
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    const monthYear = end.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+    return `${start.getDate()}–${end.getDate()} ${monthYear}`;
+  }
+  const sTxt = start.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+  const eTxt = end.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+  return `${sTxt} – ${eTxt}`;
 }
 
 const ROUTINE_EMOJI_RULES = [
@@ -144,57 +158,218 @@ export function matchingDayPreset(daysSet) {
 
 export function resetPlannerToToday() {
   selectedDate = localDateStr();
-  shouldCenterStrip = true;
+}
+
+function normalizePlannerState(raw = {}) {
+  return {
+    routines: Array.isArray(raw.routines) ? raw.routines : [],
+    doneMap: raw.doneMap && typeof raw.doneMap === 'object' ? raw.doneMap : {},
+    recentDone: Array.isArray(raw.recentDone) ? raw.recentDone : [],
+    moves: Array.isArray(raw.moves) ? raw.moves : [],
+    skips: Array.isArray(raw.skips) ? raw.skips : [],
+    altAnchor: isDateStr(raw.altAnchor) ? raw.altAnchor : DEFAULT_ALT_ANCHOR,
+    ...(raw.extras && typeof raw.extras === 'object' ? { extras: raw.extras } : {})
+  };
 }
 
 function getPlanner() {
-  const p = state.planner || {};
+  return normalizePlannerState(state.planner || {});
+}
+
+function isRoutineActiveOnDate(planner, r, dateStr) {
+  if (!r || !isDateStr(dateStr)) return false;
+  const moves = Array.isArray(planner.moves) ? planner.moves : [];
+  const skips = Array.isArray(planner.skips) ? planner.skips : [];
+  if (skips.some(s => s?.routineId === r.id && s?.date === dateStr)) return false;
+  if (moves.some(m => m?.routineId === r.id && m?.to === dateStr)) return true;
+  if (routineAppliesToDate(r, dateStr, planner.altAnchor)) {
+    return !moves.some(m => m?.routineId === r.id && m?.from === dateStr);
+  }
+  return false;
+}
+
+function transferDoneState(doneMap, recentDone, routineId, fromDate, toDate) {
+  const nextDoneMap = { ...(doneMap || {}) };
+  const fromSet = new Set(nextDoneMap[fromDate] || []);
+  const wasDone = fromSet.has(routineId);
+  if (wasDone) {
+    fromSet.delete(routineId);
+    if (fromSet.size) nextDoneMap[fromDate] = [...fromSet];
+    else delete nextDoneMap[fromDate];
+
+    const toSet = new Set(nextDoneMap[toDate] || []);
+    toSet.add(routineId);
+    nextDoneMap[toDate] = [...toSet];
+  }
+  const nextRecentDone = (Array.isArray(recentDone) ? recentDone : []).map(x =>
+    x?.id === routineId && x?.date === fromDate ? { ...x, date: toDate } : x
+  );
+  return { doneMap: nextDoneMap, recentDone: nextRecentDone };
+}
+
+/**
+ * ย้ายงานประจำ/งานวันเดียวจาก fromDate ไป toDate โดยไม่สร้างซ้ำ รักษาสถานะเดิม และไม่กระทบสัปดาห์อื่น
+ */
+export function moveRoutineOccurrence(rawPlanner, { routineId, fromDate, toDate }) {
+  const planner = normalizePlannerState(rawPlanner);
+  if (!routineId || !isDateStr(fromDate) || !isDateStr(toDate)) {
+    return { ok: false, reason: 'invalid', message: 'ข้อมูลวันที่หรือรายการไม่ถูกต้อง' };
+  }
+  if (fromDate === toDate) {
+    return { ok: false, reason: 'same_date', message: 'เป็นวันเดียวกันอยู่แล้ว' };
+  }
+  const targetRoutine = planner.routines.find(r => r.id === routineId);
+  if (!targetRoutine) {
+    return { ok: false, reason: 'not_found', message: 'ไม่พบรายการที่ต้องการย้าย' };
+  }
+  if (isRoutineActiveOnDate(planner, targetRoutine, toDate)) {
+    return { ok: false, reason: 'duplicate', message: `วัน${WEEKDAYS[weekdayIdx(toDate)]} (${fmtDate(toDate)}) มี "${targetRoutine.title}" อยู่แล้ว` };
+  }
+
+  let nextRoutines = planner.routines;
+  let nextMoves = [...planner.moves];
+  const nextSkips = planner.skips.filter(s => !(s.routineId === routineId && s.date === toDate));
+
+  if (targetRoutine.weekPattern === 'once') {
+    nextRoutines = planner.routines.map(r =>
+      r.id === routineId ? { ...r, date: toDate, days: [weekdayIdx(toDate)] } : r
+    );
+  } else {
+    const existingMoveIdx = nextMoves.findIndex(m => m.routineId === routineId && m.to === fromDate);
+    if (existingMoveIdx >= 0) {
+      const origFrom = nextMoves[existingMoveIdx].from;
+      if (origFrom === toDate) {
+        nextMoves.splice(existingMoveIdx, 1);
+      } else {
+        nextMoves[existingMoveIdx] = { routineId, from: origFrom, to: toDate };
+      }
+    } else if (routineAppliesToDate(targetRoutine, fromDate, planner.altAnchor)) {
+      nextMoves.push({ routineId, from: fromDate, to: toDate });
+    } else {
+      return { ok: false, reason: 'not_scheduled', message: 'ไม่พบงานนี้ในวันที่ต้นทาง' };
+    }
+  }
+
+  const transferred = transferDoneState(planner.doneMap, planner.recentDone, routineId, fromDate, toDate);
   return {
-    routines: Array.isArray(p.routines) ? p.routines : [],
-    doneMap: p.doneMap && typeof p.doneMap === 'object' ? p.doneMap : {},
-    recentDone: Array.isArray(p.recentDone) ? p.recentDone : [],
-    altAnchor: isDateStr(p.altAnchor) ? p.altAnchor : DEFAULT_ALT_ANCHOR
+    ok: true,
+    planner: {
+      ...planner,
+      routines: nextRoutines,
+      moves: nextMoves,
+      skips: nextSkips,
+      doneMap: transferred.doneMap,
+      recentDone: transferred.recentDone
+    }
+  };
+}
+
+/**
+ * ลบ/นำงานออกจากวันที่กำหนด (ถ้าเป็นงานเฉพาะวันเดียวจะลบรายการนั้น, ถ้าเป็นงานประจำจะซ่อนเฉพาะวันที่เลือกโดยไม่กระทบสัปดาห์อื่น)
+ */
+export function skipRoutineOccurrence(rawPlanner, { routineId, dateStr }) {
+  const planner = normalizePlannerState(rawPlanner);
+  const targetRoutine = planner.routines.find(r => r.id === routineId);
+  if (!targetRoutine || !isDateStr(dateStr)) {
+    return { ok: false, message: 'ไม่พบรายการที่ต้องการนำออก' };
+  }
+
+  let nextRoutines = planner.routines;
+  let nextMoves = [...planner.moves];
+  let nextSkips = [...planner.skips];
+  const nextDoneMap = { ...planner.doneMap };
+
+  if (nextDoneMap[dateStr]) {
+    const filtered = nextDoneMap[dateStr].filter(id => id !== routineId);
+    if (filtered.length) nextDoneMap[dateStr] = filtered;
+    else delete nextDoneMap[dateStr];
+  }
+
+  if (targetRoutine.weekPattern === 'once') {
+    nextRoutines = planner.routines.filter(r => r.id !== routineId);
+    nextMoves = nextMoves.filter(m => m.routineId !== routineId);
+    nextSkips = nextSkips.filter(s => s.routineId !== routineId);
+  } else {
+    const movedInIdx = nextMoves.findIndex(m => m.routineId === routineId && m.to === dateStr);
+    if (movedInIdx >= 0) {
+      const origFrom = nextMoves[movedInIdx].from;
+      nextMoves.splice(movedInIdx, 1);
+      if (!nextSkips.some(s => s.routineId === routineId && s.date === origFrom)) {
+        nextSkips.push({ routineId, date: origFrom });
+      }
+    } else if (!nextSkips.some(s => s.routineId === routineId && s.date === dateStr)) {
+      nextSkips.push({ routineId, date: dateStr });
+    }
+  }
+
+  return {
+    ok: true,
+    planner: {
+      ...planner,
+      routines: nextRoutines,
+      moves: nextMoves,
+      skips: nextSkips,
+      doneMap: nextDoneMap,
+      recentDone: planner.recentDone.filter(x => !(x?.id === routineId && x?.date === dateStr))
+    }
   };
 }
 
 async function savePlanner(next) {
-  if (!state.uid) return;
+  if (!state.uid) return false;
   const today = localDateStr();
-  const minKeep = addDays(today, -45);
-  const maxKeep = addDays(today, 60);
+  const minKeep = addDays(today, -60);
+  const maxKeep = addDays(today, 90);
   const pruneObj = obj => Object.fromEntries(
     Object.entries(obj || {}).filter(([d]) => d >= minKeep && d <= maxKeep)
   );
+  const prevRaw = state.planner;
   const cur = getPlanner();
   const payload = {
     routines: (next.routines || []).slice(0, 80),
     doneMap: pruneObj(next.doneMap),
     recentDone: (Array.isArray(next.recentDone) ? next.recentDone : cur.recentDone).slice(0, 40),
+    moves: (Array.isArray(next.moves) ? next.moves : cur.moves)
+      .filter(m => m && m.routineId && isDateStr(m.from) && isDateStr(m.to) && m.from !== m.to && (m.to >= minKeep || m.from >= minKeep) && (m.to <= maxKeep || m.from <= maxKeep))
+      .slice(-160),
+    skips: (Array.isArray(next.skips) ? next.skips : cur.skips)
+      .filter(s => s && s.routineId && isDateStr(s.date) && s.date >= minKeep && s.date <= maxKeep)
+      .slice(-160),
     altAnchor: isDateStr(next.altAnchor) ? next.altAnchor : cur.altAnchor,
+    ...(cur.extras || next.extras ? { extras: pruneObj(next.extras || cur.extras) } : {}),
     updatedAt: new Date()
   };
   state.planner = { id: 'planner', ...payload };
   renderPlanner();
   if (isPreviewMode()) {
     window.dispatchEvent(new Event('trackme:data-change'));
-    return;
+    return true;
   }
   try {
-    setDoc(userDoc(state.uid, 'settings', 'planner'), payload)
-      .catch(e => toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err'));
+    await setDoc(userDoc(state.uid, 'settings', 'planner'), payload);
+    return true;
   } catch (e) {
+    state.planner = prevRaw;
+    renderPlanner();
     toast('บันทึก Planner ไม่สำเร็จ: ' + e.message, 'err');
+    return false;
   }
 }
 
 // Planner รวมเฉพาะ 2 กลุ่มงาน:
 // (ก) ตารางออกกำลังกายที่วางแผนไว้ในวันนั้นๆ
-// (ข) กิจกรรมประจำวัน/งานบ้านที่ตั้งค่าทำซ้ำได้ (ทั้งวันเดียว ทุกสัปดาห์ และสลับสัปดาห์ A/B อัตโนมัติ)
-export function itemsForDate(dateStr) {
-  const { routines, doneMap, altAnchor } = getPlanner();
+// (ข) กิจกรรมประจำวัน/งานบ้าน (รองรับเฉพาะวัน, ทุกสัปดาห์, สลับ A/B และงานที่ย้ายวันมา)
+export function itemsForDate(dateStr, rawPlanner = null) {
+  const planner = rawPlanner ? normalizePlannerState(rawPlanner) : getPlanner();
+  const { routines, doneMap, altAnchor, moves, skips } = planner;
   const doneSet = new Set(doneMap[dateStr] || []);
+  const skipSet = new Set(skips.filter(s => s?.date === dateStr).map(s => s.routineId));
+  const movedAwaySet = new Set(moves.filter(m => m?.from === dateStr).map(m => m.routineId));
+  const movedInMap = new Map(
+    moves.filter(m => m?.to === dateStr).map(m => [m.routineId, m.from])
+  );
 
-  const workouts = (state.workouts || [])
+  const workouts = rawPlanner ? [] : (state.workouts || [])
     .filter(w => w.date === dateStr)
     .map(w => ({
       kind: 'workout',
@@ -206,10 +381,19 @@ export function itemsForDate(dateStr) {
       sub: w.note || (w.sections ? `${Object.values(w.sections).reduce((a, r) => a + (r?.length || 0), 0)} ท่า` : '')
     }));
 
-  const dayRoutines = routines
-    .filter(r => routineAppliesToDate(r, dateStr, altAnchor))
-    .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))
-    .map(r => ({
+  const seenRoutineIds = new Set();
+  const dayRoutines = [];
+  for (const r of routines) {
+    if (!r?.id || seenRoutineIds.has(r.id) || skipSet.has(r.id)) continue;
+    const movedFrom = movedInMap.get(r.id) || '';
+    const nativeHere = routineAppliesToDate(r, dateStr, altAnchor) && !movedAwaySet.has(r.id);
+    if (!nativeHere && !movedFrom) continue;
+    seenRoutineIds.add(r.id);
+
+    const movedFromLabel = movedFrom
+      ? `ย้ายมาจาก ${WEEKDAYS[weekdayIdx(movedFrom)]} ${Number(movedFrom.slice(8))}/${Number(movedFrom.slice(5, 7))}`
+      : '';
+    dayRoutines.push({
       kind: 'routine',
       id: r.id,
       title: r.title,
@@ -218,14 +402,19 @@ export function itemsForDate(dateStr) {
       icon: inferRoutineEmoji(r.title, r.icon),
       weekPattern: r.weekPattern || 'every',
       date: r.date || '',
-      sub: r.weekPattern === 'once'
-        ? 'เฉพาะวันนี้'
-        : r.weekPattern === 'A'
-          ? 'สลับสัปดาห์ (รอบ A)'
-          : r.weekPattern === 'B'
-            ? 'สลับสัปดาห์ (รอบ B)'
-            : 'กิจกรรมประจำสัปดาห์'
-    }));
+      movedFrom,
+      sub: movedFromLabel || (
+        r.weekPattern === 'once'
+          ? 'เฉพาะวันนี้'
+          : r.weekPattern === 'A'
+            ? 'สลับสัปดาห์ (รอบ A)'
+            : r.weekPattern === 'B'
+              ? 'สลับสัปดาห์ (รอบ B)'
+              : 'ประจำสัปดาห์'
+      )
+    });
+  }
+  dayRoutines.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 
   return [...workouts, ...dayRoutines];
 }
@@ -248,6 +437,114 @@ function renderDayReminderBanner(dateStr) {
     </div>`;
 }
 
+async function toggleTaskStatus(kind, d, id, checked) {
+  if (kind === 'workout') {
+    const prevWorkouts = state.workouts || [];
+    const target = prevWorkouts.find(w => w.id === id);
+    if (!target) return false;
+    const prevStatus = target.status;
+    state.workouts = prevWorkouts.map(w => w.id === id ? { ...w, status: checked ? 'done' : 'planned' } : w);
+    renderPlanner();
+    if (isPreviewMode()) {
+      window.dispatchEvent(new Event('trackme:data-change'));
+      toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว (โหมดดูตัวอย่าง)' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+      return true;
+    }
+    try {
+      await updateDoc(userDoc(state.uid, 'workout_records', id), {
+        status: checked ? 'done' : 'planned',
+        updatedAt: new Date()
+      });
+      toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว 💪' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+      return true;
+    } catch (err) {
+      state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, status: prevStatus } : w);
+      renderPlanner();
+      toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
+      return false;
+    }
+  }
+
+  if (kind === 'routine') {
+    const p = getPlanner();
+    const cur = new Set(p.doneMap[d] || []);
+    if (checked) cur.add(id);
+    else cur.delete(id);
+    const doneMap = { ...p.doneMap };
+    if (cur.size) doneMap[d] = [...cur];
+    else delete doneMap[d];
+
+    let recentDone = [...(p.recentDone || [])];
+    const matchedRoutine = p.routines.find(r => r.id === id);
+    if (checked && matchedRoutine) {
+      const cleanTitle = String(matchedRoutine.title || '').trim();
+      recentDone = [
+        {
+          id: matchedRoutine.id,
+          title: cleanTitle,
+          icon: inferRoutineEmoji(cleanTitle, matchedRoutine.icon),
+          date: d
+        },
+        ...recentDone.filter(x => String(x?.title || '').trim().toLowerCase() !== cleanTitle.toLowerCase())
+      ].slice(0, 40);
+    } else if (!checked) {
+      recentDone = recentDone.filter(x => !(x?.id === id && x?.date === d));
+    }
+    return savePlanner({ ...p, doneMap, recentDone });
+  }
+  return false;
+}
+
+async function rescheduleTask(kind, fromDate, id, toDate) {
+  if (!isDateStr(fromDate) || !isDateStr(toDate)) return false;
+  if (fromDate === toDate) {
+    toast('เลือกวันใหม่ที่ต่างจากวันเดิม');
+    return false;
+  }
+
+  if (kind === 'workout') {
+    const target = (state.workouts || []).find(w => w.id === id);
+    if (!target) return false;
+    const prevDate = target.date;
+    state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, date: toDate } : w);
+    selectedDate = toDate;
+    renderPlanner();
+    if (isPreviewMode()) {
+      window.dispatchEvent(new Event('trackme:data-change'));
+      toast(`ย้ายแผนออกกำลังกายไป ${fmtDate(toDate)} แล้ว (โหมดดูตัวอย่าง)`);
+      return true;
+    }
+    try {
+      await updateDoc(userDoc(state.uid, 'workout_records', id), {
+        date: toDate,
+        updatedAt: new Date()
+      });
+      toast(`ย้ายแผนออกกำลังกายไป ${fmtDate(toDate)} แล้ว`);
+      return true;
+    } catch (err) {
+      state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, date: prevDate } : w);
+      selectedDate = prevDate;
+      renderPlanner();
+      toast('ย้ายวันไม่สำเร็จ: ' + err.message, 'err');
+      return false;
+    }
+  }
+
+  if (kind === 'routine') {
+    const res = moveRoutineOccurrence(getPlanner(), { routineId: id, fromDate, toDate });
+    if (!res.ok) {
+      toast(res.message, 'err');
+      return false;
+    }
+    selectedDate = toDate;
+    const saved = await savePlanner(res.planner);
+    if (saved) toast(`ย้ายงานไป ${fmtDate(toDate)} แล้ว`);
+    return saved;
+  }
+
+  return false;
+}
+
 export function mountPlanner(el, navigate) {
   root = el;
   goFn = navigate || (() => {});
@@ -266,103 +563,158 @@ export function mountPlanner(el, navigate) {
     boundContainers.add(root);
 
     root.addEventListener('click', async e => {
-    const menu = $('#pl-plan-menu', root);
-    const closePlanMenu = () => {
-      if (menu) menu.open = false;
-    };
+      const menu = $('#pl-plan-menu', root);
+      const closePlanMenu = () => {
+        if (menu) menu.open = false;
+      };
 
-    if (e.target.closest('[data-pl-flip-parity]')) {
-      const p = getPlanner();
-      const nextAnchor = p.altAnchor === '2026-01-05' ? '2026-01-12' : '2026-01-05';
-      await savePlanner({ ...p, altAnchor: nextAnchor });
-      toast('สลับรอบสัปดาห์ A ↔ B แล้ว');
-      return;
-    }
-
-    const dayBtn = e.target.closest('[data-pl-day]');
-    if (dayBtn) {
-      selectedDate = dayBtn.dataset.plDay;
-      renderPlanner();
-      return;
-    }
-
-    if (e.target.closest('[data-pl-routines]')) {
-      closePlanMenu();
-      openRoutinesModal({ initialDate: selectedDate });
-      return;
-    }
-
-    const goBtn = e.target.closest('[data-pl-go]');
-    if (goBtn) {
-      closePlanMenu();
-      goFn(goBtn.dataset.plGo);
-      return;
-    }
-
-    const editW = e.target.closest('[data-pl-edit-workout]');
-    if (editW) {
-      goFn('workout', 'w-date');
-      return;
-    }
-  });
-
-  root.addEventListener('change', async e => {
-    const chk = e.target.closest('[data-pl-toggle]');
-    if (!chk) return;
-    const [kind, d, id] = chk.dataset.plToggle.split(':');
-    const checked = chk.checked;
-
-    if (kind === 'workout') {
-      if (isPreviewMode()) {
-        state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, status: checked ? 'done' : 'planned' } : w);
-        renderPlanner();
-        window.dispatchEvent(new Event('trackme:data-change'));
-        toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว (โหมดดูตัวอย่าง)' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+      if (e.target.closest('[data-pl-flip-parity]')) {
+        const p = getPlanner();
+        const nextAnchor = p.altAnchor === '2026-01-05' ? '2026-01-12' : '2026-01-05';
+        await savePlanner({ ...p, altAnchor: nextAnchor });
+        toast('สลับรอบสัปดาห์ A ↔ B แล้ว');
         return;
       }
-      try {
-        updateDoc(userDoc(state.uid, 'workout_records', id), {
-          status: checked ? 'done' : 'planned',
-          updatedAt: new Date()
-        }).catch(err => {
-          chk.checked = !checked;
-          toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
-        });
-        toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว 💪' : 'เปลี่ยนกลับเป็นวางแผนไว้');
-      } catch (err) {
-        chk.checked = !checked;
-        toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
-      }
-      return;
-    }
 
-    if (kind === 'routine') {
-      const p = getPlanner();
-      const cur = new Set(p.doneMap[d] || []);
-      if (checked) cur.add(id);
-      else cur.delete(id);
-      const doneMap = { ...p.doneMap };
-      if (cur.size) doneMap[d] = [...cur];
-      else delete doneMap[d];
-
-      let recentDone = [...(p.recentDone || [])];
-      const matchedRoutine = p.routines.find(r => r.id === id);
-      if (checked && matchedRoutine) {
-        const cleanTitle = String(matchedRoutine.title || '').trim();
-        recentDone = [
-          {
-            id: matchedRoutine.id,
-            title: cleanTitle,
-            icon: inferRoutineEmoji(cleanTitle, matchedRoutine.icon),
-            date: d
-          },
-          ...recentDone.filter(x => String(x?.title || '').trim().toLowerCase() !== cleanTitle.toLowerCase())
-        ].slice(0, 40);
-      } else if (!checked) {
-        recentDone = recentDone.filter(x => !(x?.id === id && x?.date === d));
+      const weekShiftBtn = e.target.closest('[data-pl-week-shift]');
+      if (weekShiftBtn) {
+        const delta = Number(weekShiftBtn.dataset.plWeekShift) || 0;
+        const curMon = mondayOf(selectedDate);
+        const nextMon = addDays(curMon, delta * 7);
+        const offset = weekdayIdx(selectedDate);
+        selectedDate = addDays(nextMon, offset);
+        renderPlanner();
+        return;
       }
-      await savePlanner({ ...p, doneMap, recentDone });
-    }
+
+      if (e.target.closest('[data-pl-week-today]')) {
+        selectedDate = localDateStr();
+        renderPlanner();
+        return;
+      }
+
+      const dayBtn = e.target.closest('[data-pl-day]');
+      if (dayBtn) {
+        selectedDate = dayBtn.dataset.plDay;
+        renderPlanner();
+        return;
+      }
+
+      const quickAddBtn = e.target.closest('[data-pl-quick-add]');
+      if (quickAddBtn) {
+        closePlanMenu();
+        const d = quickAddBtn.dataset.plQuickAdd || selectedDate;
+        selectedDate = d;
+        openRoutinesModal({ initialDate: d, initialPattern: 'once' });
+        return;
+      }
+
+      if (e.target.closest('[data-pl-routines]')) {
+        closePlanMenu();
+        openRoutinesModal({ initialDate: selectedDate });
+        return;
+      }
+
+      const moveBtn = e.target.closest('[data-pl-move]');
+      if (moveBtn) {
+        const [kind, d, id] = moveBtn.dataset.plMove.split(':');
+        openRescheduleModal(kind, d, id);
+        return;
+      }
+
+      const editTaskBtn = e.target.closest('[data-pl-edit]');
+      if (editTaskBtn) {
+        const [kind, d, id] = editTaskBtn.dataset.plEdit.split(':');
+        if (kind === 'routine') openRoutinesModal({ editId: id, initialDate: d });
+        else if (kind === 'workout') goFn('workout', 'w-date');
+        return;
+      }
+
+      const delTaskBtn = e.target.closest('[data-pl-del]');
+      if (delTaskBtn) {
+        const [kind, d, id] = delTaskBtn.dataset.plDel.split(':');
+        if (kind === 'routine') {
+          const item = itemsForDate(d).find(x => x.kind === 'routine' && x.id === id);
+          const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: d });
+          if (!res.ok) return toast(res.message, 'err');
+          const saved = await savePlanner(res.planner);
+          if (saved) toast(item?.weekPattern === 'once' ? 'ลบงานแล้ว' : `นำ "${item?.title || 'กิจกรรม'}" ออกจาก ${fmtDate(d)} แล้ว`);
+        }
+        return;
+      }
+
+      const goBtn = e.target.closest('[data-pl-go]');
+      if (goBtn) {
+        closePlanMenu();
+        goFn(goBtn.dataset.plGo);
+        return;
+      }
+
+      const editW = e.target.closest('[data-pl-edit-workout]');
+      if (editW) {
+        goFn('workout', 'w-date');
+        return;
+      }
+    });
+
+    root.addEventListener('change', async e => {
+      const chk = e.target.closest('[data-pl-toggle]');
+      if (!chk) return;
+      const [kind, d, id] = chk.dataset.plToggle.split(':');
+      const ok = await toggleTaskStatus(kind, d, id, chk.checked);
+      if (!ok) chk.checked = !chk.checked;
+    });
+
+    // Desktop Drag & Drop ระหว่างคอลัมน์วันจันทร์–อาทิตย์
+    root.addEventListener('dragstart', e => {
+      const card = e.target.closest('[data-pl-drag]');
+      if (!card) return;
+      const [kind, date, id] = card.dataset.plDrag.split(':');
+      dragPayload = { kind, date, id };
+      card.classList.add('is-dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.dataset.plDrag);
+      }
+    });
+
+    root.addEventListener('dragend', () => {
+      dragPayload = null;
+      root.querySelectorAll('.is-dragging, .is-drop-target').forEach(node => {
+        node.classList.remove('is-dragging', 'is-drop-target');
+      });
+    });
+
+    root.addEventListener('dragover', e => {
+      const col = e.target.closest('[data-pl-drop-date]');
+      if (!col || !dragPayload) return;
+      if (col.dataset.plDropDate === dragPayload.date) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      root.querySelectorAll('[data-pl-drop-date].is-drop-target').forEach(node => {
+        if (node !== col) node.classList.remove('is-drop-target');
+      });
+      col.classList.add('is-drop-target');
+    });
+
+    root.addEventListener('dragleave', e => {
+      const col = e.target.closest('[data-pl-drop-date]');
+      if (!col) return;
+      if (e.relatedTarget && col.contains(e.relatedTarget)) return;
+      col.classList.remove('is-drop-target');
+    });
+
+    root.addEventListener('drop', async e => {
+      const col = e.target.closest('[data-pl-drop-date]');
+      if (!col || !dragPayload) return;
+      e.preventDefault();
+      col.classList.remove('is-drop-target');
+      const { kind, date: fromDate, id } = dragPayload;
+      dragPayload = null;
+      const toDate = col.dataset.plDropDate;
+      if (toDate && toDate !== fromDate) {
+        await rescheduleTask(kind, fromDate, id, toDate);
+      }
     });
   }
 
@@ -375,68 +727,125 @@ function renderTaskListHtml(dateStr) {
     ? items.map(it => {
         const key = `${it.kind}:${dateStr}:${it.id}`;
         const kindBadge = it.kind === 'workout'
-          ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-green-800' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
-          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.weekPattern === 'once' ? 'bg-emerald-100 text-emerald-800 font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
-        return `<label class="flex items-start justify-between gap-2 rounded-xl border ${it.done ? 'border-slate-100 bg-slate-50/70 opacity-80' : 'border-slate-200/70 bg-white'} px-3 py-2.5 cursor-pointer transition hover:border-brand/40 min-h-[44px]">
-          <span class="flex items-start gap-2.5 min-w-0 flex-1">
-            <input type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
-            <span class="min-w-0 flex-1">
-              <span class="flex flex-wrap items-center gap-1.5">
-                <span class="text-sm font-medium ${it.done ? 'line-through text-slate-500' : 'text-slate-800'}">${it.icon} ${esc(it.title)}</span>
-                ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700 tabular-nums">${esc(it.time)} น.</span>` : ''}
-                ${kindBadge}
+          ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-slate-700' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
+          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.movedFrom ? 'bg-sky-soft text-brand-dark font-semibold' : it.weekPattern === 'once' ? 'bg-sky-soft text-brand-dark font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
+        const swipeActions = it.kind === 'routine'
+          ? `<div class="tm-swipe-actions">
+              <button type="button" data-pl-edit="${esc(key)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(it.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-pl-del="${esc(key)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(it.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>`
+          : `<div class="tm-swipe-actions tm-swipe-actions--single">
+              <button type="button" data-pl-edit="${esc(key)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(it.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+            </div>`;
+        return `<div class="tm-swipe-row ${it.done ? 'is-muted' : ''}">
+          ${swipeActions}
+          <div class="tm-swipe-card pl-mobile-task !flex-row items-center justify-between gap-2 !px-3 !py-2 min-h-[52px]">
+            <label class="flex items-start gap-2.5 min-w-0 flex-1 cursor-pointer py-1">
+              <input type="checkbox" class="mt-0.5 w-4 h-4 accent-brand rounded shrink-0" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''}>
+              <span class="min-w-0 flex-1">
+                <span class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-sm font-medium ${it.done ? 'line-through text-slate-500' : 'text-slate-800'}">${it.icon} ${esc(it.title)}</span>
+                  ${it.time ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700 tabular-nums">${esc(it.time)} น.</span>` : ''}
+                  ${kindBadge}
+                </span>
+                ${it.sub && it.kind === 'workout' ? `<span class="block text-[11px] text-slate-500 mt-0.5">${esc(it.sub)}</span>` : ''}
               </span>
-              ${it.sub && it.kind === 'workout' ? `<span class="block text-[11px] text-slate-500 mt-0.5">${esc(it.sub)}</span>` : ''}
-            </span>
-          </span>
-          <span class="flex items-center gap-1 shrink-0">
-            ${it.kind === 'workout' ? `<button type="button" data-pl-edit-workout="${esc(it.id)}" class="min-h-[32px] text-[11px] text-brand-dark underline px-1.5 rounded-lg">ดูแผน</button>` : ''}
-          </span>
-        </label>`;
+            </label>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" data-pl-move="${esc(key)}" class="pl-task-action-btn" aria-label="ย้ายวันหรือจัดการ ${esc(it.title)}">
+                ${iconSvg('swap', { size: 14 })}<span>ย้ายวัน</span>
+              </button>
+            </div>
+          </div>
+        </div>`;
       }).join('')
-    : `<p class="text-xs text-slate-500 text-center py-3 rounded-xl bg-slate-50/70">ยังไม่มีแผนออกกำลังกายหรือกิจกรรมในวัน${WEEKDAYS[weekdayIdx(dateStr)]}</p>`;
+    : `<p class="text-xs text-slate-500 text-center py-4 rounded-xl bg-slate-50/70">ยังไม่มีงานในวัน${WEEKDAYS[weekdayIdx(dateStr)]} · กด "+ เพิ่มงาน" เพื่อวางแผนได้เลย</p>`;
 
   return `
     ${renderDayReminderBanner(dateStr)}
-    <div class="space-y-2">${rowsHtml}</div>`;
+    <div class="tm-swipe-list tm-swipe-list--cards">${rowsHtml}</div>`;
+}
+
+function renderDesktopBoardHtml(weekDays, today) {
+  return `
+    <div class="pl-week-board" role="region" aria-label="ตารางแผนงานรายสัปดาห์ จันทร์ถึงอาทิตย์">
+      ${weekDays.map(m => {
+        const isSel = m.date === selectedDate;
+        const isToday = m.date === today;
+        const allDone = m.items.length > 0 && m.done === m.items.length;
+        return `
+          <div class="pl-day-col ${isToday ? 'is-today' : ''} ${isSel ? 'is-selected' : ''}" data-pl-drop-date="${m.date}">
+            <div class="pl-day-col-head">
+              <button type="button" data-pl-day="${m.date}" class="pl-day-col-title text-left min-w-0 flex-1" aria-label="เลือกวัน${m.wd} ${esc(fmtDate(m.date))}">
+                <span class="pl-day-col-wd">${m.wd}</span>
+                <span class="pl-day-col-num tabular-nums">${Number(m.date.slice(8))}</span>
+                ${isToday ? '<span class="pl-today-tag">วันนี้</span>' : ''}
+              </button>
+              <button type="button" data-pl-quick-add="${m.date}" class="pl-col-add-btn" title="เพิ่มงานในวัน${m.wd}" aria-label="เพิ่มงานในวัน${m.wd}">${iconSvg('plus', { size: 13 })}</button>
+            </div>
+            <div class="pl-day-col-meta tabular-nums">
+              <span class="${allDone ? 'text-emerald-700 font-semibold' : ''}">${m.items.length ? `${m.done}/${m.items.length} เสร็จ` : 'ว่าง'}</span>
+              ${m.remCount ? `<span class="pl-col-rem-badge" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ">🔔 ${m.remCount}</span>` : ''}
+            </div>
+            <div class="pl-day-col-list">
+              ${m.items.length
+                ? m.items.map(it => {
+                    const key = `${it.kind}:${m.date}:${it.id}`;
+                    return `
+                      <div class="pl-board-task ${it.done ? 'is-done' : ''}" draggable="true" data-pl-drag="${esc(key)}">
+                        <div class="pl-board-task-top">
+                          <input type="checkbox" class="mt-0.5 w-4 h-4 accent-brand rounded shrink-0 cursor-pointer" data-pl-toggle="${esc(key)}" ${it.done ? 'checked' : ''} aria-label="ทำเครื่องหมาย ${esc(it.title)}">
+                          <span class="pl-board-task-title ${it.done ? 'line-through text-slate-500' : ''}">${it.icon} ${esc(it.title)}</span>
+                        </div>
+                        <div class="pl-board-task-foot">
+                          <span class="pl-board-task-tag">${esc(it.time ? `${it.time} · ` : '')}${esc(it.movedFrom ? 'ย้ายมา' : it.kind === 'workout' ? 'ออกกำลัง' : it.weekPattern === 'once' ? 'เฉพาะวัน' : it.weekPattern !== 'every' ? `รอบ ${it.weekPattern}` : 'ประจำ')}</span>
+                          <button type="button" data-pl-move="${esc(key)}" class="pl-board-move-btn" title="ย้ายวัน / แก้ไข / ลบ" aria-label="จัดการ ${esc(it.title)}">${iconSvg('swap', { size: 13 })}<span>ย้าย</span></button>
+                        </div>
+                      </div>`;
+                  }).join('')
+                : '<p class="pl-col-empty">ลากงานมาวางที่นี่ หรือกด +</p>'}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
 }
 
 export function renderPlanner() {
   if (!root) return;
-  const prevStripScroll = $('#pl-day-strip', root)?.scrollLeft ?? null;
   const p = getPlanner();
   const today = localDateStr();
   if (!isDateStr(selectedDate)) selectedDate = today;
 
-  const baseMonday = mondayOf(today);
-  const startDay = addDays(baseMonday, -14);
-  const endDay = addDays(baseMonday, 34);
-  const stripStart = selectedDate < startDay ? mondayOf(selectedDate) : startDay;
-  const stripEnd = selectedDate > endDay ? addDays(mondayOf(selectedDate), 6) : endDay;
+  const weekMonday = mondayOf(selectedDate);
+  const currentWeekMonday = mondayOf(today);
+  const isCurrentWeek = weekMonday === currentWeekMonday;
 
-  const stripDays = [];
-  for (let d = stripStart; d <= stripEnd; d = addDays(d, 1)) {
+  const weekDays = [];
+  for (let i = 0; i < 7; i += 1) {
+    const d = addDays(weekMonday, i);
     const items = itemsForDate(d);
     const done = items.filter(x => x.done).length;
     const remCount = remindersForDate(d).length;
-    stripDays.push({ date: d, wd: WEEKDAYS[weekdayIdx(d)], items, done, remCount });
+    weekDays.push({ date: d, wd: WEEKDAYS[i], items, done, remCount });
   }
 
+  const weekTotal = weekDays.reduce((sum, d) => sum + d.items.length, 0);
+  const weekDone = weekDays.reduce((sum, d) => sum + d.done, 0);
   const weekCode = weekCodeForDate(selectedDate, p.altAnchor);
   const hasAlternating = p.routines.some(r => r.weekPattern === 'A' || r.weekPattern === 'B');
   const routinesCount = p.routines.length;
   const selectedItems = itemsForDate(selectedDate);
   const selectedDone = selectedItems.filter(x => x.done).length;
 
-  const stripHtml = `
-    <div id="pl-day-strip" class="pl-day-strip tabular-nums" role="listbox" aria-label="เลือกวันในแผน">
-      ${stripDays.map(m => {
+  const mobileStripHtml = `
+    <div id="pl-day-strip" class="pl-day-strip pl-day-strip--week tabular-nums" role="listbox" aria-label="เลือกวันจันทร์ถึงอาทิตย์ในสัปดาห์นี้">
+      ${weekDays.map(m => {
         const isSel = m.date === selectedDate;
         const isToday = m.date === today;
         const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 min-h-[48px] text-xs transition ${
+        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 min-h-[52px] text-xs transition ${
           isSel ? 'bg-brand text-white border-brand shadow-sm'
-            : isToday ? 'bg-white border-brand/60 text-brand-dark font-semibold hover:bg-lav-soft/60'
+            : isToday ? 'bg-white border-brand/70 text-brand-dark font-semibold hover:bg-sky-soft/60'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
         }">
           ${m.remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ"></span>` : ''}
@@ -450,36 +859,40 @@ export function renderPlanner() {
     </div>`;
 
   root.innerHTML = `
-  <section class="card pl-card space-y-2.5 sm:space-y-3">
+  <section class="card pl-card space-y-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0">
         <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
-        <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">${esc(fmtDate(selectedDate))} · เสร็จแล้ว ${selectedDone}/${selectedItems.length} รายการ</p>
+        <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
       </div>
       <div class="flex flex-wrap items-center gap-1.5">
+        <div class="pl-week-nav" role="group" aria-label="สลับสัปดาห์">
+          <button type="button" data-pl-week-shift="-1" class="pl-week-nav-btn" aria-label="สัปดาห์ก่อนหน้า" title="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
+          <button type="button" data-pl-week-today class="pl-week-nav-label ${isCurrentWeek ? 'is-current' : ''}" title="กลับสัปดาห์นี้">${isCurrentWeek ? 'สัปดาห์นี้' : 'กลับสัปดาห์นี้'}</button>
+          <button type="button" data-pl-week-shift="1" class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
+        </div>
         ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบ ${weekCode}</span>
-        <button type="button" data-pl-flip-parity class="chip min-h-[34px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} สลับ A↔B</button>` : ''}
+        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} A↔B</button>` : ''}
+        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 13 })} เพิ่มงาน</button>
         <details id="pl-plan-menu" class="relative">
-          <summary class="chip bg-lav-soft text-brand-dark min-h-[34px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} วางแผน</summary>
-          <div class="tm-tools-menu absolute right-0 top-full z-20 mt-2 flex min-w-48 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-            <button type="button" data-pl-routines class="chip justify-start bg-lav-soft text-brand-dark min-h-[40px]">${iconSvg('repeat', { size: 14 })} กิจกรรม (${routinesCount})</button>
-            <button type="button" data-pl-go="workout" class="chip justify-start bg-sky-soft text-blue-700 min-h-[40px]">${iconSvg('workout', { size: 14 })} ออกกำลังกาย</button>
-            <button type="button" data-pl-go="remind" class="chip justify-start bg-amber-100 text-amber-900 min-h-[40px]">${iconSvg('pin', { size: 14 })} นัดหมาย</button>
+          <summary class="chip bg-sky-soft text-brand-dark min-h-[36px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} จัดการ</summary>
+          <div class="tm-tools-menu absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <button type="button" data-pl-routines class="chip justify-start bg-lav-soft text-brand-dark min-h-[44px]">${iconSvg('repeat', { size: 14 })} กิจกรรมทั้งหมด (${routinesCount})</button>
+            <button type="button" data-pl-go="workout" class="chip justify-start bg-sky-soft text-blue-700 min-h-[44px]">${iconSvg('workout', { size: 14 })} ออกกำลังกาย</button>
+            <button type="button" data-pl-go="remind" class="chip justify-start bg-amber-100 text-amber-900 min-h-[44px]">${iconSvg('pin', { size: 14 })} นัดหมาย</button>
           </div>
         </details>
-        <button type="button" data-pl-collapse class="chip min-h-[34px] bg-white border border-slate-200 text-slate-600 text-xs" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 14 })}</button>
+        <button type="button" data-pl-collapse class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 14 })}</button>
       </div>
     </div>
 
-    <div class="pl-layout">
-      <div class="pl-strip-col space-y-2">
-        ${stripHtml}
-        ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-2 flex items-center justify-between gap-2 text-[11px] text-amber-900">
-          <span class="min-w-0">ตั้งกิจกรรมประจำสัปดาห์หรือสลับรอบ A/B อัตโนมัติ</span>
-          <button type="button" data-pl-routines class="chip min-h-[32px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">ตั้งค่า</button>
-        </div>` : ''}
-      </div>
-      <div class="pl-day-panel rounded-2xl border border-slate-200/80 bg-slate-50/40 p-2.5 sm:p-3 space-y-2">
+    <div class="pl-mobile-view space-y-2.5">
+      ${mobileStripHtml}
+      ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
+        <span class="min-w-0">เพิ่มงานวางแผนในสัปดาห์นี้ได้ทันที</span>
+        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
+      </div>` : ''}
+      <div class="pl-day-panel rounded-2xl border border-slate-200/80 bg-slate-50/45 p-2.5 sm:p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
           <span class="text-xs sm:text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
           <span class="text-[11px] sm:text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>
@@ -487,90 +900,171 @@ export function renderPlanner() {
         <div class="pl-task-list">${renderTaskListHtml(selectedDate)}</div>
       </div>
     </div>
-  </section>`;
 
-  const stripEl = $('#pl-day-strip', root);
-  if (stripEl) {
-    if (shouldCenterStrip || prevStripScroll === null) {
-      shouldCenterStrip = false;
-      const activeEl = stripEl.querySelector(`[data-pl-day="${selectedDate}"]`);
-      if (activeEl) {
-        stripEl.scrollLeft = Math.max(0, activeEl.offsetLeft - Math.max(0, (stripEl.clientWidth - activeEl.offsetWidth) / 2));
-      }
-    } else {
-      stripEl.scrollLeft = prevStripScroll;
+    <div class="pl-desktop-view space-y-2">
+      <div class="flex items-center justify-between text-xs text-slate-500">
+        <span>ลากงานข้ามวันเพื่อย้ายตาราง หรือกดปุ่ม <b>ย้าย</b> เพื่อเลือกวันโดยไม่ต้องลาก</span>
+        <span class="tabular-nums">วันที่เลือก: <b class="text-slate-700">${esc(fmtDate(selectedDate))}</b></span>
+      </div>
+      ${renderDesktopBoardHtml(weekDays, today)}
+      ${renderDayReminderBanner(selectedDate)}
+    </div>
+  </section>`;
+  bindSwipeRows($('.pl-task-list', root));
+}
+
+function openRescheduleModal(kind, fromDate, id) {
+  const items = itemsForDate(fromDate);
+  const item = items.find(x => x.kind === kind && x.id === id);
+  if (!item) return;
+
+  const weekMonday = mondayOf(fromDate);
+  const weekButtons = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(weekMonday, i);
+    const isCurrent = d === fromDate;
+    return `<button type="button" data-mv-to="${d}" ${isCurrent ? 'disabled' : ''} class="min-h-[44px] py-1.5 px-1 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center transition ${
+      isCurrent
+        ? 'bg-brand text-white border-brand opacity-75 cursor-default'
+        : 'bg-white border-slate-200 text-slate-700 hover:bg-sky-soft'
+    }">
+      <span>${WEEKDAYS[i]}</span>
+      <span class="text-[11px] font-bold tabular-nums">${Number(d.slice(8))}</span>
+    </button>`;
+  }).join('');
+
+  const m = openModal(`
+    <div class="flex justify-between items-center mb-3 gap-2">
+      <h3 class="font-bold text-base sm:text-lg text-slate-800 inline-flex items-center gap-2 min-w-0">${iconSvg('swap', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & ย้ายวันงาน</span></h3>
+      <button data-close type="button" class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 space-y-1.5 mb-4">
+      <p class="font-semibold text-sm text-slate-800">${item.icon} ${esc(item.title)}</p>
+      <p class="text-xs text-slate-500">วันที่ปัจจุบัน: <b class="text-slate-700">วัน${WEEKDAYS[weekdayIdx(fromDate)]} · ${esc(fmtDate(fromDate))}</b> · สถานะ: <b class="${item.done ? 'text-emerald-700' : 'text-slate-700'}">${item.done ? 'เสร็จแล้ว' : 'ยังไม่ทำ'}</b></p>
+    </div>
+
+    <div class="space-y-3">
+      <div>
+        <p class="lbl">ย้ายไปวันอื่นในสัปดาห์นี้ (แตะเพื่อย้ายทันที — คงสถานะเดิม)</p>
+        <div class="grid grid-cols-7 gap-1.5">${weekButtons}</div>
+      </div>
+
+      <div class="pt-1 border-t border-slate-200/80">
+        <label class="lbl" for="pl-move-date">หรือเลือกวันที่ปลายทางเอง (ย้ายข้ามสัปดาห์ได้)</label>
+        <div class="flex items-center gap-2">
+          <input id="pl-move-date" type="date" class="input min-h-[44px] flex-1" value="${esc(addDays(fromDate, 1))}">
+          <button type="button" id="pl-move-confirm" class="btn btn-primary min-h-[44px] shrink-0">ย้ายไปวันนี้</button>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" id="pl-modal-toggle" class="btn btn-ghost min-h-[44px] text-xs">${item.done ? 'เปลี่ยนเป็นยังไม่ทำ' : 'ทำเครื่องหมายเสร็จแล้ว'}</button>
+        <div class="flex flex-wrap gap-2">
+          ${kind === 'routine'
+            ? `<button type="button" id="pl-modal-edit" class="btn btn-sky min-h-[44px] text-xs">${iconSvg('edit-square', { size: 14 })} แก้ไข</button>
+               <button type="button" id="pl-modal-skip" class="btn btn-pink min-h-[44px] text-xs">${iconSvg('trash', { size: 14 })} ${item.weekPattern === 'once' ? 'ลบงานนี้' : 'เอาออกจากวันนี้'}</button>`
+            : `<button type="button" id="pl-modal-workout" class="btn btn-sky min-h-[44px] text-xs">ดูแผนในหน้าออกกำลังกาย</button>`}
+        </div>
+      </div>
+    </div>
+  `);
+
+  m.el.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-mv-to]');
+    if (!btn || btn.disabled) return;
+    const toDate = btn.dataset.mvTo;
+    const ok = await rescheduleTask(kind, fromDate, id, toDate);
+    if (ok) m.close();
+  });
+
+  $('#pl-move-confirm', m.el)?.addEventListener('click', async () => {
+    const toDate = $('#pl-move-date', m.el)?.value;
+    if (!isDateStr(toDate)) return toast('กรุณาเลือกวันที่ที่ถูกต้อง', 'err');
+    const ok = await rescheduleTask(kind, fromDate, id, toDate);
+    if (ok) m.close();
+  });
+
+  $('#pl-modal-toggle', m.el)?.addEventListener('click', async () => {
+    const ok = await toggleTaskStatus(kind, fromDate, id, !item.done);
+    if (ok) m.close();
+  });
+
+  $('#pl-modal-edit', m.el)?.addEventListener('click', () => {
+    m.close();
+    openRoutinesModal({ editId: id, initialDate: fromDate });
+  });
+
+  $('#pl-modal-skip', m.el)?.addEventListener('click', async () => {
+    const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: fromDate });
+    if (!res.ok) return toast(res.message, 'err');
+    const saved = await savePlanner(res.planner);
+    if (saved) {
+      toast(item.weekPattern === 'once' ? 'ลบงานแล้ว' : `นำ "${item.title}" ออกจาก ${fmtDate(fromDate)} แล้ว (สัปดาห์อื่นคงเดิม)`);
+      m.close();
     }
-  }
+  });
+
+  $('#pl-modal-workout', m.el)?.addEventListener('click', () => {
+    m.close();
+    goFn('workout', 'w-date');
+  });
 }
 
 function openRoutinesModal(opts = {}) {
   let editingId = null;
-  let editingLegacyTime = '';
-  let pickedDays = new Set([0, 2, 4, 6]);
+  const initialDate = isDateStr(opts.initialDate) ? opts.initialDate : (selectedDate || localDateStr());
+  let pickedDays = new Set([weekdayIdx(initialDate)]);
   let pickedIcon = '✨';
-  let pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
-  let showCustomDays = false;
-  const defaultOnceDate = isDateStr(opts.initialDate) ? opts.initialDate : (selectedDate || localDateStr());
-  const curWeekCode = weekCodeForDate(localDateStr(), getPlanner().altAnchor);
 
   const frequentRoutines = getFrequentRecentRoutines(getPlanner(), 10);
   const m = openModal(`
     <div class="flex justify-between items-center mb-3">
-      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('repeat', { size: 18, className: 'text-brand' })}<span>เพิ่มกิจกรรม</span></h3>
-      <button data-close class="min-w-[36px] min-h-[36px] rounded-lg text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>จัดการงาน & กิจกรรม</span></h3>
+      <button data-close class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">รองรับรูปแบบ<b>วันเดียว</b>, <b>ทุกสัปดาห์</b> และ<b>สลับสัปดาห์ A ↔ B</b> (สัปดาห์นี้คือ <b>รอบ ${curWeekCode}</b>)</p>
+    <p class="text-xs text-slate-500 mb-3">วางแผนงานทีละสัปดาห์โดยเลือกวันในสัปดาห์ที่ต้องการ (จันทร์–อาทิตย์)</p>
 
     <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3 mb-4">
       ${frequentRoutines.length ? `
       <div class="flex flex-wrap gap-1.5">
         ${frequentRoutines.map(item => `<button type="button" data-rt-preset="${esc(item.icon + '|' + item.title)}" class="chip bg-sky-soft/70 border border-sky-200 text-slate-700 text-xs hover:bg-sky-soft">${item.icon} ${esc(item.title)}</button>`).join('')}
       </div>` : ''}
-      <div>
-        <label class="lbl">ชื่อกิจกรรม *</label>
-        <div class="flex items-center gap-2">
-          <span id="rt-icon-badge" class="w-10 h-10 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจกรรม">✨</span>
-          <input id="rt-title" class="input flex-1" placeholder="เช่น ล้างจาน, ออกกำลังกาย, ส่งพัสดุวันนี้">
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5">
+        <div>
+          <label class="lbl" for="rt-title">ชื่องาน / กิจกรรม *</label>
+          <div class="flex items-center gap-2">
+            <span id="rt-icon-badge" class="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจกรรม">✨</span>
+            <input id="rt-title" class="input flex-1 min-h-[44px]" placeholder="เช่น ล้างจาน, ส่งงาน, ออกกำลังกาย">
+          </div>
         </div>
-      </div>
-      <div>
-        <label class="lbl">รูปแบบ</label>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5" id="rt-pattern-bar">
-          <button type="button" data-rt-pat="every" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">ทุกสัปดาห์</button>
-          <button type="button" data-rt-pat="A" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ A</button>
-          <button type="button" data-rt-pat="B" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">เฉพาะสัปดาห์ B</button>
-          <button type="button" data-rt-pat="once" class="py-1.5 px-2 rounded-xl border text-xs font-semibold">วันเดียว</button>
+        <div>
+          <label class="lbl" for="rt-time">เวลา (ไม่บังคับ)</label>
+          <input id="rt-time" type="time" class="input min-h-[44px] sm:w-32">
         </div>
-      </div>
-      <div id="rt-once-wrap" class="hidden space-y-1">
-        <label class="lbl">เลือกวันที่ทำ (แสดงเฉพาะวันนี้วันเดียว ไม่ทำซ้ำ)</label>
-        <input id="rt-once-date" type="date" class="input sm:max-w-xs" value="${esc(defaultOnceDate)}">
       </div>
       <div id="rt-days-wrap" class="space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-1.5">
-          <label class="lbl !mb-0">ทำซ้ำทุกวันไหนบ้าง?</label>
+          <label class="lbl !mb-0">วันในสัปดาห์ *</label>
           <div class="flex flex-wrap gap-1.5" id="rt-day-presets">
-            ${DAY_PRESETS.map(p => `<button type="button" data-rt-days="${p.key}" class="px-2 py-1 rounded-lg border text-[11px] font-semibold transition">${p.label}</button>`).join('')}
-            <button type="button" data-rt-days="custom" class="px-2 py-1 rounded-lg border text-[11px] font-semibold transition">เลือกวันเอง</button>
+            ${DAY_PRESETS.map(p => `<button type="button" data-rt-days="${p.key}" class="px-2.5 py-1.5 min-h-[36px] rounded-lg border text-[11px] font-semibold transition">${p.label}</button>`).join('')}
           </div>
         </div>
-        <div id="rt-days" class="grid grid-cols-7 gap-1 hidden"></div>
+        <div id="rt-days" class="grid grid-cols-7 gap-1"></div>
       </div>
       <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
         <button type="button" id="rt-cancel-edit" class="btn btn-ghost hidden text-xs">ยกเลิกแก้ไข</button>
-        <button type="button" id="rt-create-pair" class="btn btn-sky text-xs" title="สร้างรอบสัปดาห์ A ตามวันที่เลือก และสร้างรอบ B เป็นวันที่เหลือให้อัตโนมัติ">${iconSvg('swap', { size: 14 })} สร้างคู่สลับ A ↔ B</button>
-        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มกิจกรรม</button>
+        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
       </div>
     </div>
 
-    <div id="rt-list" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
+    <div id="rt-list" class="tm-swipe-list tm-swipe-list--cards max-h-64 overflow-y-auto pr-1"></div>
   `, { wide: true });
 
   const renderDays = () => {
-    const activePreset = showCustomDays ? 'custom' : matchingDayPreset(pickedDays);
+    const activePreset = matchingDayPreset(pickedDays);
     m.el.querySelectorAll('[data-rt-days]').forEach(btn => {
       const active = btn.dataset.rtDays === activePreset;
-      btn.className = `px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
+      btn.className = `px-2.5 py-1.5 min-h-[36px] rounded-lg border text-[11px] font-semibold transition ${
         active
           ? 'bg-brand text-white border-brand'
           : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -578,57 +1072,42 @@ function openRoutinesModal(opts = {}) {
     });
     const daysEl = $('#rt-days', m.el);
     if (!daysEl) return;
-    daysEl.classList.toggle('hidden', !showCustomDays);
     daysEl.innerHTML = WEEKDAYS.map((wd, idx) => `
-      <button type="button" data-rt-d="${idx}" class="py-1.5 rounded-xl border text-xs font-semibold ${pickedDays.has(idx) ? 'bg-brand text-white border-brand' : 'bg-white border-slate-200 text-slate-600'}">${wd}</button>
+      <button type="button" data-rt-d="${idx}" class="min-h-[44px] py-1.5 rounded-xl border text-xs font-semibold ${pickedDays.has(idx) ? 'bg-brand text-white border-brand' : 'bg-white border-slate-200 text-slate-600'}">${wd}</button>
     `).join('');
-  };
-
-  const renderPattern = () => {
-    const isOnce = pickedPattern === 'once';
-    m.el.querySelectorAll('[data-rt-pat]').forEach(btn => {
-      const active = btn.dataset.rtPat === pickedPattern;
-      btn.className = `py-1.5 px-2 rounded-xl border text-xs font-semibold transition ${
-        active
-          ? (pickedPattern === 'A' ? 'bg-sky-500 text-white border-sky-500'
-            : pickedPattern === 'B' ? 'bg-amber-500 text-white border-amber-500'
-            : pickedPattern === 'once' ? 'bg-emerald-600 text-white border-emerald-600'
-            : 'bg-brand text-white border-brand')
-          : 'bg-white border-slate-200 text-slate-600'
-      }`;
-    });
-    $('#rt-once-wrap', m.el)?.classList.toggle('hidden', !isOnce);
-    $('#rt-days-wrap', m.el)?.classList.toggle('hidden', isOnce);
-    $('#rt-create-pair', m.el)?.classList.toggle('hidden', isOnce || Boolean(editingId));
   };
 
   const renderList = () => {
     const list = getPlanner().routines;
-    $('#rt-list', m.el).innerHTML = list.length ? list.map(r => {
+    const listEl = $('#rt-list', m.el);
+    listEl.innerHTML = list.length ? list.map(r => {
       const icon = inferRoutineEmoji(r.title, r.icon);
-      const patBadge = r.weekPattern === 'once'
-        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">เฉพาะวันเดียว</span>'
-        : r.weekPattern === 'A'
-          ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-800 font-bold">สัปดาห์ A</span>'
-          : r.weekPattern === 'B'
-            ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">สัปดาห์ B</span>'
-            : '';
-      const schedDesc = r.weekPattern === 'once'
-        ? `📅 ${r.date ? fmtDate(r.date) : '-'} (ไม่ทำซ้ำ)`
-        : ((r.days || []).length === 7 ? 'ทุกวัน' : (r.days || []).map(d => WEEKDAYS[d]).join(', '));
+      const daysList = Array.isArray(r.days) && r.days.length
+        ? r.days
+        : (isDateStr(r.date) ? [weekdayIdx(r.date)] : []);
+      const schedDesc = daysList.length === 7
+        ? 'ทุกวัน'
+        : daysList.map(d => WEEKDAYS[d]).join(', ') || (isDateStr(r.date) ? fmtDate(r.date) : '-');
       return `
-      <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-        <div class="min-w-0">
-          <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${patBadge} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded tabular-nums">${esc(r.time)}</span>` : ''}</p>
-          <p class="text-[11px] text-slate-500">${esc(schedDesc)}</p>
+      <div class="tm-swipe-row">
+        <div class="tm-swipe-actions">
+          <button type="button" data-rt-edit="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(r.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-rt-del="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(r.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
-        <div class="flex gap-1.5 shrink-0">
-          <button type="button" data-rt-edit="${esc(r.id)}" class="chip min-h-[34px] bg-sky-soft text-blue-700 text-xs">แก้</button>
-          <button type="button" data-rt-del="${esc(r.id)}" class="chip min-h-[34px] bg-pink-soft text-rose-600 text-xs">ลบ</button>
+        <div class="tm-swipe-card !flex-row items-center justify-between gap-2 text-sm">
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded tabular-nums">${esc(r.time)}</span>` : ''}</p>
+            <p class="text-[11px] text-slate-500">${esc(schedDesc)}</p>
+          </div>
+          <div class="tm-row-actions">
+            <button type="button" data-rt-edit="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(r.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+            <button type="button" data-rt-del="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(r.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
         </div>
       </div>`;
     }).join('')
       : '<p class="text-xs text-slate-500 text-center py-4">ยังไม่มีกิจกรรมที่ตั้งไว้</p>';
+    bindSwipeRows(listEl);
   };
 
   const syncIconBadge = (titleVal = '') => {
@@ -636,19 +1115,30 @@ function openRoutinesModal(opts = {}) {
     if (badge) badge.textContent = inferRoutineEmoji(titleVal, pickedIcon);
   };
 
+  const startEditById = targetId => {
+    const r = getPlanner().routines.find(x => x.id === targetId);
+    if (!r) return;
+    editingId = r.id;
+    pickedIcon = inferRoutineEmoji(r.title, r.icon);
+    const fallbackDays = isDateStr(r.date) ? [weekdayIdx(r.date)] : [weekdayIdx(initialDate)];
+    pickedDays = new Set(Array.isArray(r.days) && r.days.length ? r.days : fallbackDays);
+    $('#rt-title', m.el).value = r.title;
+    $('#rt-time', m.el).value = r.time || '';
+    syncIconBadge(r.title);
+    $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึกการแก้ไข`;
+    $('#rt-cancel-edit', m.el).classList.remove('hidden');
+    renderDays();
+  };
+
   const resetEdit = () => {
     editingId = null;
-    editingLegacyTime = '';
     pickedIcon = '✨';
-    pickedPattern = opts.initialPattern === 'once' ? 'once' : 'every';
-    pickedDays = new Set([0, 2, 4, 6]);
-    showCustomDays = false;
+    pickedDays = new Set([weekdayIdx(initialDate)]);
     $('#rt-title', m.el).value = '';
-    $('#rt-once-date', m.el).value = defaultOnceDate;
-    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มกิจกรรม`;
+    $('#rt-time', m.el).value = '';
+    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มงาน`;
     $('#rt-cancel-edit', m.el).classList.add('hidden');
     syncIconBadge('');
-    renderPattern();
     renderDays();
   };
 
@@ -668,23 +1158,11 @@ function openRoutinesModal(opts = {}) {
       return;
     }
 
-    const patBtn = e.target.closest('[data-rt-pat]');
-    if (patBtn) {
-      pickedPattern = patBtn.dataset.rtPat;
-      renderPattern();
-      return;
-    }
-
     const dayPreset = e.target.closest('[data-rt-days]');
     if (dayPreset) {
       const v = dayPreset.dataset.rtDays;
-      if (v === 'custom') {
-        showCustomDays = true;
-      } else {
-        const found = DAY_PRESETS.find(p => p.key === v);
-        if (found) pickedDays = new Set(found.days);
-        showCustomDays = false;
-      }
+      const found = DAY_PRESETS.find(p => p.key === v);
+      if (found) pickedDays = new Set(found.days);
       renderDays();
       return;
     }
@@ -694,73 +1172,38 @@ function openRoutinesModal(opts = {}) {
       const d = Number(dBtn.dataset.rtD);
       if (pickedDays.has(d)) pickedDays.delete(d);
       else pickedDays.add(d);
-      showCustomDays = true;
       renderDays();
       return;
     }
 
     const editBtn = e.target.closest('[data-rt-edit]');
     if (editBtn) {
-      const r = getPlanner().routines.find(x => x.id === editBtn.dataset.rtEdit);
-      if (!r) return;
-      editingId = r.id;
-      editingLegacyTime = r.time || '';
-      pickedIcon = inferRoutineEmoji(r.title, r.icon);
-      pickedPattern = r.weekPattern || 'every';
-      pickedDays = new Set(r.days || []);
-      showCustomDays = matchingDayPreset(pickedDays) === 'custom';
-      $('#rt-title', m.el).value = r.title;
-      if (isDateStr(r.date)) $('#rt-once-date', m.el).value = r.date;
-      syncIconBadge(r.title);
-      $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึกการแก้ไข`;
-      $('#rt-cancel-edit', m.el).classList.remove('hidden');
-      renderPattern();
-      renderDays();
+      startEditById(editBtn.dataset.rtEdit);
       return;
     }
 
     const delBtn = e.target.closest('[data-rt-del]');
     if (delBtn) {
+      const targetId = delBtn.dataset.rtDel;
       const p = getPlanner();
-      const routines = p.routines.filter(x => x.id !== delBtn.dataset.rtDel);
-      if (editingId === delBtn.dataset.rtDel) resetEdit();
-      await savePlanner({ ...p, routines });
+      const routines = p.routines.filter(x => x.id !== targetId);
+      const moves = p.moves.filter(x => x.routineId !== targetId);
+      const skips = p.skips.filter(x => x.routineId !== targetId);
+      if (editingId === targetId) resetEdit();
+      await savePlanner({ ...p, routines, moves, skips });
       renderList();
     }
   });
 
   $('#rt-cancel-edit', m.el).addEventListener('click', resetEdit);
 
-  $('#rt-create-pair', m.el).addEventListener('click', async () => {
-    const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    const daysA = [...pickedDays].sort((a, b) => a - b);
-    if (!title) return toast('กรอกชื่อกิจกรรมก่อนค่ะ', 'err');
-    if (daysA.length === 0 || daysA.length === 7) return toast('เลือกวัน 1–6 วัน เพื่อให้สัปดาห์ B สลับเป็นวันที่เหลืออัตโนมัติ', 'err');
-    const daysB = [0, 1, 2, 3, 4, 5, 6].filter(d => !pickedDays.has(d));
-    const p = getPlanner();
-    const baseId = Date.now().toString(36);
-    const icon = inferRoutineEmoji(title, pickedIcon);
-    const recA = { id: 'ra' + baseId, title, days: daysA, weekPattern: 'A', icon };
-    const recB = { id: 'rb' + baseId, title, days: daysB, weekPattern: 'B', icon };
-    await savePlanner({ ...p, routines: [...p.routines, recA, recB] });
-    toast(`สร้างคู่สลับ "${title}" (A: ${daysA.map(d => WEEKDAYS[d]).join('/')} · B: ${daysB.map(d => WEEKDAYS[d]).join('/')}) แล้ว`);
-    resetEdit();
-    renderList();
-  });
-
   $('#rt-save', m.el).addEventListener('click', async () => {
     const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    if (!title) return toast('กรอกชื่อกิจกรรมก่อนค่ะ', 'err');
+    const timeVal = ($('#rt-time', m.el)?.value || '').trim();
+    if (!title) return toast('กรอกชื่องานก่อนค่ะ', 'err');
 
-    let days = [...pickedDays].sort((a, b) => a - b);
-    let onceDate = '';
-    if (pickedPattern === 'once') {
-      onceDate = $('#rt-once-date', m.el).value;
-      if (!isDateStr(onceDate)) return toast('กรุณาเลือกวันที่ที่ต้องการทำกิจกรรมนี้', 'err');
-      days = [weekdayIdx(onceDate)];
-    } else if (!days.length) {
-      return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
-    }
+    const days = [...pickedDays].sort((a, b) => a - b);
+    if (!days.length) return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
 
     const p = getPlanner();
     const icon = inferRoutineEmoji(title, pickedIcon);
@@ -769,21 +1212,22 @@ function openRoutinesModal(opts = {}) {
       title,
       days,
       icon,
-      ...(pickedPattern !== 'every' && { weekPattern: pickedPattern }),
-      ...(pickedPattern === 'once' && { date: onceDate }),
-      ...(editingLegacyTime && { time: editingLegacyTime })
+      ...(timeVal && { time: timeVal })
     };
     const routines = editingId
       ? p.routines.map(x => (x.id === editingId ? rec : x))
       : [...p.routines, rec];
 
     await savePlanner({ ...p, routines });
-    toast(editingId ? 'แก้ไขกิจกรรมแล้ว' : pickedPattern === 'once' ? `เพิ่มกิจกรรมเฉพาะวันที่ ${fmtDate(onceDate)} แล้ว` : 'เพิ่มกิจกรรมแล้ว');
+    toast(editingId ? 'แก้ไขงานแล้ว' : 'เพิ่มกิจกรรมแล้ว');
     resetEdit();
     renderList();
   });
 
-  renderPattern();
-  renderDays();
+  if (opts.editId) {
+    startEditById(opts.editId);
+  } else {
+    renderDays();
+  }
   renderList();
 }

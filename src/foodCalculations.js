@@ -196,7 +196,7 @@ export function buildFoodRecordUpdatesFromLibrary(item, updatedFood, previousFoo
   return updates;
 }
 
-export const MEAL_PIE_PALETTE = ['#1F4A74', '#A8D0EF', '#D0DBF7', '#FFF9E6', '#99C3E4', '#C1E4F3', '#D7EBF6'];
+export const MEAL_PIE_PALETTE = ['#4A90D4', '#7CB8EC', '#A8D4F8', '#CBE5FC', '#F5B5C1', '#95BFE8', '#DDF0FE'];
 
 export function getMealPiePalette() {
   return MEAL_PIE_PALETTE;
@@ -206,14 +206,15 @@ export function buildMealCaloriePieData(items = [], meals = [], palette = MEAL_P
   const activePalette = Array.isArray(palette) && palette.length ? palette : MEAL_PIE_PALETTE;
   const knownNames = (meals || []).map(m => (typeof m === 'string' ? m : m?.name)).filter(Boolean);
   const buckets = new Map();
-  for (const name of knownNames) buckets.set(name, { meal: name, kcal: 0, count: 0 });
+  for (const name of knownNames) buckets.set(name, { meal: name, kcal: 0, protein: 0, count: 0 });
 
   for (const item of items || []) {
     const rawMeal = item?.meal || 'มื้ออื่น ๆ';
     const key = buckets.has(rawMeal) ? rawMeal : 'มื้ออื่น ๆ';
-    if (!buckets.has(key)) buckets.set(key, { meal: key, kcal: 0, count: 0 });
+    if (!buckets.has(key)) buckets.set(key, { meal: key, kcal: 0, protein: 0, count: 0 });
     const entry = buckets.get(key);
     entry.kcal += Math.max(0, Number(item?.calories) || 0);
+    entry.protein += Math.max(0, Number(item?.protein) || 0);
     entry.count += 1;
   }
 
@@ -224,6 +225,7 @@ export function buildMealCaloriePieData(items = [], meals = [], palette = MEAL_P
     return {
       meal: b.meal,
       kcal,
+      protein: Math.round(b.protein),
       count: b.count,
       pct: totalKcal > 0 ? Math.round((kcal / totalKcal) * 100) : 0,
       color: activePalette[idx % activePalette.length]

@@ -289,6 +289,95 @@ export function chartContainer({ svgContent = '', legend = [], id = '' } = {}) {
   return `<div ${attrs.join(' ')}>${svgContent}${legendHtml}</div>`;
 }
 
+/* ---- Floating Tooltip with Viewport Collision Detection ---- */
+let floatingTipEl = null;
+let floatingTipContainer = null;
+let floatingTipScrollBound = false;
+
+export function computeTooltipPosition(anchorRect, tipSize, viewport, { margin = 8, gap = 10 } = {}) {
+  const vw = Math.max(margin * 2 + 1, viewport?.width || 360);
+  const vh = Math.max(margin * 2 + 1, viewport?.height || 640);
+  const tw = Math.min(tipSize?.width || 0, vw - margin * 2);
+  const th = Math.min(tipSize?.height || 0, vh - margin * 2);
+
+  const centerX = (anchorRect?.left || 0) + (anchorRect?.width || 0) / 2;
+  const rawLeft = centerX - tw / 2;
+  const left = Math.max(margin, Math.min(vw - tw - margin, rawLeft));
+
+  const spaceAbove = (anchorRect?.top || 0) - margin;
+  const spaceBelow = vh - (anchorRect?.bottom || 0) - margin;
+  let placement = 'top';
+  let top = (anchorRect?.top || 0) - th - gap;
+
+  if (top < margin && spaceBelow >= spaceAbove) {
+    top = (anchorRect?.bottom || 0) + gap;
+    placement = 'bottom';
+  }
+  top = Math.max(margin, Math.min(vh - th - margin, top));
+
+  return { left: Math.round(left), top: Math.round(top), placement };
+}
+
+function getFloatingTipEl() {
+  if (typeof document === 'undefined') return null;
+  if (!floatingTipEl || !floatingTipEl.isConnected) {
+    floatingTipEl = document.createElement('div');
+    floatingTipEl.className = 'tm-chart-float-tip hidden';
+    floatingTipEl.setAttribute('role', 'tooltip');
+    floatingTipEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(floatingTipEl);
+  }
+  return floatingTipEl;
+}
+
+function hideFloatingTip() {
+  if (!floatingTipEl) return;
+  floatingTipEl.classList.add('hidden');
+  floatingTipEl.setAttribute('aria-hidden', 'true');
+  floatingTipContainer = null;
+}
+
+function showFloatingTip(container, target, pointerPos = null) {
+  const tip = getFloatingTipEl();
+  if (!tip || !target?.isConnected) return;
+  const title = target.dataset.chartTip || '';
+  const sub = target.dataset.chartSub || '';
+  const color = target.dataset.chartColor || '';
+  if (!title) {
+    hideFloatingTip();
+    return;
+  }
+  floatingTipContainer = container;
+  tip.innerHTML = `<div class="tm-chart-float-row">${color ? `<span class="tm-chart-float-dot" style="background:${esc(color)}" aria-hidden="true"></span>` : ''}<span class="tm-chart-float-title">${esc(title)}</span></div>${sub ? `<div class="tm-chart-float-sub">${esc(sub)}</div>` : ''}`;
+  tip.classList.remove('hidden');
+  tip.setAttribute('aria-hidden', 'false');
+
+  const tipRect = tip.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  const usePointer = pointerPos && Number.isFinite(pointerPos.x) && Number.isFinite(pointerPos.y) && (pointerPos.x > 0 || pointerPos.y > 0);
+  const anchorRect = usePointer
+    ? { left: pointerPos.x, right: pointerPos.x, top: pointerPos.y, bottom: pointerPos.y, width: 0, height: 0 }
+    : rect;
+
+  const pos = computeTooltipPosition(
+    anchorRect,
+    { width: tipRect.width, height: tipRect.height },
+    { width: window.innerWidth || document.documentElement.clientWidth, height: window.innerHeight || document.documentElement.clientHeight }
+  );
+  tip.style.left = `${pos.left}px`;
+  tip.style.top = `${pos.top}px`;
+  tip.dataset.placement = pos.placement;
+
+  if (!floatingTipScrollBound && typeof window !== 'undefined') {
+    floatingTipScrollBound = true;
+    window.addEventListener('scroll', hideFloatingTip, { passive: true, capture: true });
+    window.addEventListener('resize', hideFloatingTip, { passive: true });
+    document.addEventListener('click', e => {
+      if (floatingTipContainer && !floatingTipContainer.contains(e.target)) hideFloatingTip();
+    });
+  }
+}
+
 /* ---- Interactive Chart Inspector (Tap/Click to Read Values) ---- */
 export function bindChartInspector(container, {
   hint = 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลละเอียด',
@@ -301,6 +390,7 @@ export function bindChartInspector(container, {
   let out = readoutEl || container.querySelector('[data-chart-readout]');
   if (!tips.length) {
     if (out) out.classList.add('hidden');
+    if (floatingTipContainer === container) hideFloatingTip();
     return;
   }
   if (!out) {
@@ -312,18 +402,31 @@ export function bindChartInspector(container, {
   }
   out.classList.remove('hidden');
 
+  const clearSelection = () => {
+    container.querySelectorAll('[data-chart-tip].is-selected').forEach(el => el.classList.remove('is-selected'));
+  };
   const showHint = () => {
+    clearSelection();
+    if (floatingTipContainer === container) hideFloatingTip();
     out.className = 'tm-chart-readout is-empty';
     out.innerHTML = `<span>${esc(hint)}</span>`;
   };
-  const showTarget = target => {
-    container.querySelectorAll('[data-chart-tip].is-selected').forEach(el => el.classList.remove('is-selected'));
-    target.classList.add('is-selected');
+  const showTarget = (target, pointerPos = null) => {
+    clearSelection();
+    const idx = target.dataset.chartIdx;
+    if (idx !== undefined && idx !== '') {
+      container.querySelectorAll(`[data-chart-idx="${CSS?.escape ? CSS.escape(idx) : idx}"]`).forEach(el => el.classList.add('is-selected'));
+    } else {
+      target.classList.add('is-selected');
+    }
     const title = target.dataset.chartTip || '';
     const sub = target.dataset.chartSub || '';
     const color = target.dataset.chartColor || '';
     out.className = 'tm-chart-readout';
-    out.innerHTML = `<span class="inline-flex items-center gap-1.5 font-semibold min-w-0">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(color)}"></span>` : ''}<span class="truncate">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
+    out.innerHTML = `<span class="inline-flex items-start gap-1.5 font-semibold min-w-0 flex-1">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${esc(color)}"></span>` : ''}<span class="tm-chart-readout-text">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
+    if (target.closest('.hx-ring, .tm-donut-legend')) {
+      showFloatingTip(container, target, pointerPos);
+    }
     if (typeof onSelect === 'function') onSelect(target);
   };
 
@@ -333,20 +436,187 @@ export function bindChartInspector(container, {
 
   const activate = e => {
     const target = e.target.closest('[data-chart-tip]');
-    if (!target || !container.contains(target)) return;
+    if (!target || !container.contains(target)) {
+      if (floatingTipContainer === container) hideFloatingTip();
+      return;
+    }
     if (stopSummaryToggle) {
       e.preventDefault();
       e.stopPropagation();
     }
-    showTarget(target);
+    showTarget(target, Number.isFinite(e.clientX) ? { x: e.clientX, y: e.clientY } : null);
   };
   container.addEventListener('click', activate);
   container.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      showHint();
+      return;
+    }
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const target = e.target.closest('[data-chart-tip]');
     if (!target || !container.contains(target)) return;
     e.preventDefault();
     if (stopSummaryToggle) e.stopPropagation();
     showTarget(target);
+  });
+  // เมาส์บนเดสก์ท็อป: เลื่อนเมาส์ผ่านก็เห็นค่าได้เลย ไม่ต้องกดก่อน (มือถือยังใช้การแตะ/คลิกตามเดิม)
+  container.addEventListener('mouseover', e => {
+    const target = e.target.closest('[data-chart-tip]');
+    if (!target || !container.contains(target)) return;
+    showTarget(target, Number.isFinite(e.clientX) ? { x: e.clientX, y: e.clientY } : null);
+  });
+  container.addEventListener('mouseleave', () => showHint());
+  // คีย์บอร์ดบนเดสก์ท็อป: ไล่โฟกัสด้วย Tab แล้วเห็นค่าทันทีโดยไม่ต้องกด Enter ซ้ำ
+  container.addEventListener(
+    'focus',
+    e => {
+      const target = e.target.closest ? e.target.closest('[data-chart-tip]') : null;
+      if (!target || !container.contains(target)) return;
+      showTarget(target);
+    },
+    true
+  );
+}
+
+/* ---- Shared Mobile Swipe Rows (< 1024px) ---- */
+const boundSwipeContainers = new WeakSet();
+const swipeContainerCallbacks = new WeakMap();
+let activeSwipeState = null;
+let globalSwipeListenersBound = false;
+
+function resetSwipeRow(row) {
+  if (!row) return;
+  row.classList.remove('is-open-left', 'is-swiping');
+  row.removeAttribute('data-swipe-dir');
+  row.style.setProperty('--swipe-x', '0px');
+}
+
+export function closeAllSwipeRows(scope = document, exceptRow = null) {
+  if (!scope?.querySelectorAll) return;
+  scope.querySelectorAll('.tm-swipe-row.is-open-left, .tm-swipe-row[data-swipe-dir]').forEach(row => {
+    if (row !== exceptRow) resetSwipeRow(row);
+  });
+}
+
+function setRowSwipeX(row, dx) {
+  row.style.setProperty('--swipe-x', `${dx}px`);
+  if (dx < -4) row.setAttribute('data-swipe-dir', 'left');
+  else if (dx > 4) row.setAttribute('data-swipe-dir', 'right');
+  else row.removeAttribute('data-swipe-dir');
+}
+
+function ensureGlobalSwipeListeners() {
+  if (globalSwipeListenersBound || typeof window === 'undefined' || typeof document === 'undefined') return;
+  globalSwipeListenersBound = true;
+
+  window.addEventListener('pointermove', e => {
+    const s = activeSwipeState;
+    if (!s || e.pointerId !== s.pointerId || s.aborted) return;
+    const rawDx = e.clientX - s.startX;
+    const rawDy = e.clientY - s.startY;
+    if (!s.locked) {
+      if (Math.abs(rawDy) > 12 && Math.abs(rawDy) > Math.abs(rawDx)) {
+        s.aborted = true;
+        return;
+      }
+      if (Math.abs(rawDx) > 10 && Math.abs(rawDx) > Math.abs(rawDy) * 1.15) {
+        s.locked = true;
+        s.row.classList.add('is-swiping');
+      } else {
+        return;
+      }
+    }
+    const minX = -(s.openWidth + 8);
+    const maxX = s.allowRight ? 116 : 0;
+    const nextX = Math.max(minX, Math.min(maxX, s.baseX + rawDx));
+    s.dx = nextX;
+    setRowSwipeX(s.row, nextX);
+  });
+
+  const finishSwipe = e => {
+    const s = activeSwipeState;
+    if (!s || e.pointerId !== s.pointerId) return;
+    activeSwipeState = null;
+    const { row, container, dx, locked, baseX, openWidth } = s;
+    row.classList.remove('is-swiping');
+    if (locked) {
+      row.dataset.justSwiped = '1';
+      setTimeout(() => { if (row.isConnected) delete row.dataset.justSwiped; }, 90);
+    }
+    if (!locked) {
+      if (baseX < 0) resetSwipeRow(row);
+      return;
+    }
+    const threshold = Math.min(56, Math.round(openWidth * 0.45));
+    if (dx <= -threshold) {
+      row.classList.add('is-open-left');
+      setRowSwipeX(row, -openWidth);
+    } else if (dx >= 68 && s.allowRight) {
+      resetSwipeRow(row);
+      const cb = swipeContainerCallbacks.get(container)?.onSwipeRight;
+      if (typeof cb === 'function') cb(row);
+    } else {
+      resetSwipeRow(row);
+    }
+  };
+
+  window.addEventListener('pointerup', finishSwipe);
+  window.addEventListener('pointercancel', finishSwipe);
+  document.addEventListener('click', e => {
+    const target = e.target instanceof Element ? e.target : null;
+    document.querySelectorAll('.tm-swipe-row.is-open-left').forEach(row => {
+      if (!target || !row.contains(target)) resetSwipeRow(row);
+    });
+  });
+}
+
+export function bindSwipeRows(container, { selector = '.tm-swipe-row', onSwipeRight } = {}) {
+  if (!container || typeof window === 'undefined') return;
+  swipeContainerCallbacks.set(container, { onSwipeRight });
+  if (boundSwipeContainers.has(container)) return;
+  boundSwipeContainers.add(container);
+  ensureGlobalSwipeListeners();
+
+  container.addEventListener('click', e => {
+    const swipedRow = e.target.closest?.(selector);
+    if (swipedRow?.dataset.justSwiped === '1') {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    const actionBtn = e.target.closest?.('.tm-swipe-actions button');
+    if (actionBtn) {
+      const row = actionBtn.closest(selector);
+      requestAnimationFrame(() => resetSwipeRow(row));
+    }
+  }, true);
+
+  container.addEventListener('pointerdown', e => {
+    if (window.matchMedia?.('(min-width: 1024px)').matches) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('.tm-swipe-actions, .tm-swipe-fav, .tm-row-actions, .tm-food-row-actions, [data-drag-handle], input, button, a, select, textarea')) return;
+    const row = e.target.closest(selector);
+    if (!row || !row.querySelector('.tm-swipe-actions')) {
+      closeAllSwipeRows(container);
+      return;
+    }
+    closeAllSwipeRows(document, row);
+    const actionsEl = row.querySelector('.tm-swipe-actions');
+    const isSingle = actionsEl?.classList.contains('tm-swipe-actions--single');
+    const openWidth = Math.round(actionsEl?.getBoundingClientRect().width || actionsEl?.offsetWidth || (isSingle ? 72 : 136)) || (isSingle ? 72 : 136);
+    const wasOpen = row.classList.contains('is-open-left');
+    activeSwipeState = {
+      row,
+      container,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: wasOpen ? -openWidth : 0,
+      dx: wasOpen ? -openWidth : 0,
+      openWidth,
+      allowRight: Boolean(onSwipeRight || row.querySelector('.tm-swipe-fav')),
+      locked: false,
+      aborted: false
+    };
   });
 }

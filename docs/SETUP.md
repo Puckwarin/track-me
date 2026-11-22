@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.6.0
+# Project Setup — ตั้งค่า Track Me v5.8.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -296,6 +296,13 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
 
 ---
+
+## อัปเดต v5.8.0 (Weekly Planner รายสัปดาห์ & ย้ายวัน, Responsive DonutChart Tooltips & Pastel Blue Theme)
+
+- **Weekly Planner รายสัปดาห์ จันทร์–อาทิตย์ และย้ายวันงาน (`src/planner.js`, `src/schema.js`)**: รองรับแสดงแผนทีละ 1 สัปดาห์พร้อมเลื่อนสัปดาห์ก่อนหน้า/ถัดไป, กระดาน 7 คอลัมน์ + Drag & Drop บน Desktop, แถบ 7 วัน + Modal ย้ายวันบน Mobile พร้อม Date Picker ข้ามสัปดาห์ โดยเก็บประวัติการย้ายเฉพาะสัปดาห์ใน `moves` / `skips` ภายใน `settings/planner` เดิม (อยู่ภายใต้ขีดจำกัด 30 fields ของ `firestore.rules` และรองรับข้อมูลบัญชีเดิมทั้งหมดโดยไม่ต้อง migration)
+- **DonutChart Tooltip ป้องกันล้นขอบจอ & Legend (`src/donutChart.js`, `src/ui.js`, `src/home.js`, `src/food.js`)**: ใช้ DonutChart ร่วมกันระหว่างหน้าหลักและหน้าอาหาร, แสดง Legend ใต้วงแหวน, และแสดง Floating Tooltip พร้อม Collision Detection ตรวจขอบจอมือถือ
+- **Pastel Blue-Primary Theme (`src/design-tokens.css`, `src/style.css`, `src/home.css`)**: ปรับชุดสีเน้นโทนฟ้าพาสเทลหลักทั้งแอปโดยคงความชัดเจนของตัวอักษรและสีสถานะเดิม
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงใช้โครงสร้าง `settings/planner` และ `workout_records` เดิมทั้งหมด
 
 ## อัปเดต v5.6.0 (Food Mobile + Desktop UX/UI Unification)
 

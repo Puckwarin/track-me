@@ -37,7 +37,7 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 ### เอกสารภายใน `settings`
 
 - `profile`: เพศ ปีเกิด ส่วนสูง/น้ำหนัก เป้าหมาย และมื้ออาหาร
-- `planner`: routines, doneMap, extras และ anchor ของแผนรายสัปดาห์
+- `planner`: routines, doneMap, moves (การย้ายวันเฉพาะสัปดาห์), skips (การข้าม/นำออกเฉพาะวัน), extras และ anchor ของแผนรายสัปดาห์
 - `push`: ข้อมูล Push subscription เฉพาะเครื่อง; ห้ามส่งออกผ่าน backup
 - `expense_rules`: กฎหมวดหมู่แบบ legacy; ยังอ่านได้เพื่อรองรับข้อมูลเดิม
 - `expense_rule_{hash}`: `{kind: 'expense_rule', keyword, category, updatedAt}`; กฎจาก manual expense และ Statement import แยกเอกสารต่อ keyword เพื่อหลีกเลี่ยงเขียนทับรายการอื่นจากข้อมูล stale
@@ -49,7 +49,7 @@ Production Rules อนุญาต read/delete เฉพาะเจ้าข�
 
 การรวมหลายกลุ่มไว้ใน `settings` เป็นรูปแบบเดิมที่แยกด้วย document ID; ยังไม่ย้ายไป collection ใหม่ เพราะต้องมี migration/ช่วงรองรับย้อนหลังและยังไม่มีเหตุผลด้านสิทธิ์ที่จำเป็นต้องเปลี่ยน path การย้ายรายจ่ายไป `expense_records` ดำเนินการแยกแล้ว
 
-`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array (รองรับ `weekPattern`: `'every' | 'A' | 'B' | 'once'` และ `date` สำหรับกิจกรรมวันเดียว), `doneMap`/`extras` เป็น map ตามวันที่, `recentDone` เป็น array ของกิจกรรมที่ทำล่าสุด (สูงสุด 40 รายการ สำหรับสรุปรายการล่าสุดที่ใช้บ่อย) และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) รวมถึง `note_*` และ `feedback_*` ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
+`settings/profile` มี `sex`/`activity` เป็น string, `birthYear` เป็น integer, ค่าร่างกาย/เป้าหมายเป็น number, `meals` เป็น array ของ `{id, name}` และ `updatedAt` เป็น timestamp. `settings/planner` มี `routines` เป็น array (รองรับ `weekPattern`: `'every' | 'A' | 'B' | 'once'`, `date` สำหรับกิจกรรมวันเดียว และ optional `time` รูปแบบ `HH:MM`), `doneMap`/`extras` เป็น map ตามวันที่, `moves` เป็น array ของ `{routineId, from, to}` (ย้ายงานประจำไปยังวันอื่นเฉพาะครั้งโดยไม่กระทบสัปดาห์อื่น), `skips` เป็น array ของ `{routineId, date}` (นำงานประจำออกจากเฉพาะวันที่ระบุ), `recentDone` เป็น array ของกิจกรรมที่ทำล่าสุด (สูงสุด 40 รายการ สำหรับสรุปรายการล่าสุดที่ใช้บ่อย) และ `altAnchor` เป็น string วันที่. `settings/push` อาจมี `enabled`/`hideDetails` เป็น boolean, `subscriptions` เป็น array ของ endpoint/key maps และค่าการเตือน; จึงไม่รวมใน backup. เอกสารตั้งค่ารายจ่าย (`expense_rule_*`, `expense_budget_*`, `expense_recurring_*`) รวมถึง `note_*` และ `feedback_*` ถูก sanitize และสำรอง/กู้คืนตาม document ID ที่ผ่าน allowlist; Push ยังคงถูกตัดออกเสมอ.
 
 สถานะ onboarding (`step`, `in_progress`/`completed`) และประวัติ/บทบาทของ AI Chat (`trackme_ai_chat_history`, `trackme_ai_chat_role`, `trackme_ai_chat_custom_role`) เก็บใน `localStorage` เฉพาะเบราว์เซอร์/อุปกรณ์นั้น ไม่ได้สร้าง collection หรือเอกสาร Firestore เพิ่ม.
 

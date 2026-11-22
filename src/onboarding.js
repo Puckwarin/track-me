@@ -92,13 +92,7 @@ function render() {
   const year = new Date().getFullYear();
   const progressPercent = Math.round(currentStep / ONBOARDING_STEP_COUNT * 100);
   const welcomeIllustration = `
-    <div class="w-16 h-16 rounded-2xl bg-[#FFF9E6] border border-[#E4E8F3] flex items-center justify-center text-[#194971]" aria-hidden="true">
-      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="17" fill="#D7EBF6" stroke="#1F4A74" stroke-width="1.5"/>
-        <path d="M20 30s-9-5.6-11.5-11.1C6.5 14.6 9.3 10.5 13.8 10.5c2.6 0 4.7 1.35 6.2 3.35 1.5-2 3.6-3.35 6.2-3.35 4.5 0 7.3 4.1 5.3 8.4C29 24.4 20 30 20 30Z" fill="#D0DBF7" stroke="#194971" stroke-width="1.7" stroke-linejoin="round"/>
-        <path d="M13.2 19h2.8l1.9-3.2 2.4 5.8 1.9-2.6h4.6" stroke="#194971" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>`;
+    <div class="logo-bubble" aria-hidden="true">${iconSvg('brand', { size: 34 })}</div>`;
   const readyIllustration = `
     <div class="w-16 h-16 mx-auto rounded-2xl bg-[#D7EBF6] border border-[#A8D0EF] flex items-center justify-center text-[#194971]" aria-hidden="true">
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none">

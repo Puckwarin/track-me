@@ -7,7 +7,7 @@ import { readPetFoodLabel, explainGeminiError, runImageBatch, formatImageProgres
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindChartInspector } from './ui.js';
+import { bindChartInspector, bindSwipeRows } from './ui.js';
 
 const PET_SYMPTOMS = [
   ['appetite', 'เบื่ออาหาร / กินน้อย'],
@@ -94,7 +94,7 @@ export function mountCare(el) {
       <div class="grid sm:grid-cols-3 gap-2"><input id="pet-food-name" class="input" placeholder="อาหาร/ขนม"><input id="pet-food-grams" type="number" min="0" step="1" class="input" placeholder="ปริมาณ (g)"><input id="pet-food-kcal" type="number" min="0" step="1" class="input" placeholder="kcal ต่อ 100g"></div>
       <div class="grid sm:grid-cols-2 gap-2"><select id="pet-food-allergy" class="input"><option value="unknown">สถานะการแพ้: ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select><input id="pet-food-notes" class="input" placeholder="อาการ/รายละเอียด เช่น คราบน้ำตา, โปรตีน 28%"></div>
       <button id="pet-food-save" class="btn btn-soft">บันทึกอาหาร</button>
-      <div id="pet-food-list" class="space-y-1.5 text-sm"></div>
+      <div id="pet-food-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
     </div>
     <p class="text-xs text-slate-500">ค่าพลังงานเป็นเพียงจุดเริ่มต้นโดยประมาณ ควรปรับตามสภาพร่างกายและคำแนะนำสัตวแพทย์</p>
   </section>
@@ -119,7 +119,7 @@ export function mountCare(el) {
       </div>
       <div class="border-t pt-3 space-y-2">
         <h4 class="font-semibold text-sm text-slate-700">ประวัติอาการล่าสุด</h4>
-        <div id="pet-sx-list" class="space-y-2 text-sm"></div>
+        <div id="pet-sx-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
       </div>
     </section>
   </div>
@@ -497,12 +497,23 @@ function renderPetDailyCare() {
 function renderPetFoods() {
   renderPetFoodPresets();
   const rows = (state.petFoods || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 10);
-  $r('#pet-food-list').innerHTML = rows.map(record => `<article class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
-    <time datetime="${esc(record.date)}" class="flex w-12 shrink-0 flex-col items-center rounded-lg bg-white px-1 py-1.5 text-center tabular-nums"><span class="text-[10px] text-slate-500">ด.${esc(record.date.slice(5, 7))}</span><b class="text-sm text-slate-700">${esc(record.date.slice(8, 10))}</b></time>
-    <div class="min-w-0 flex-1 space-y-1"><div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><b class="text-sm text-slate-800">${esc(record.name)}</b><span class="text-xs font-semibold tabular-nums text-amber-800">${esc(record.grams)} g</span>${record.kcalPer100 != null ? `<span class="text-xs tabular-nums text-slate-600">· ${Math.round(record.kcalPer100 * record.grams / 100)} kcal</span>` : ''}</div><p class="text-[11px] ${record.allergy === 'yes' ? 'text-rose-700 font-semibold' : record.allergy === 'no' ? 'text-emerald-700' : 'text-slate-500'}">${record.allergy === 'yes' ? '⚠️ สงสัยแพ้' : record.allergy === 'no' ? 'ไม่พบอาการแพ้' : 'ยังไม่ทราบการแพ้'}${record.note ? ` · ${esc(record.note)}` : ''}</p></div>
-    <button type="button" data-del-pet-food="${esc(record.id)}" class="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50" aria-label="ลบบันทึกอาหาร ${esc(record.name)}">${iconSvg('trash', { size: 14 })}</button>
+  const foodListEl = $r('#pet-food-list');
+  foodListEl.innerHTML = rows.map(record => `<article class="tm-swipe-row is-soft">
+    <div class="tm-swipe-actions tm-swipe-actions--single">
+      <button type="button" data-del-pet-food="${esc(record.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบบันทึกอาหาร ${esc(record.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+    </div>
+    <div class="tm-swipe-card !flex-row items-center justify-between gap-2.5 !p-2.5">
+      <div class="flex items-start gap-2.5 min-w-0 flex-1">
+        <time datetime="${esc(record.date)}" class="flex w-12 shrink-0 flex-col items-center rounded-lg bg-white border border-slate-100 px-1 py-1.5 text-center tabular-nums"><span class="text-[10px] text-slate-500">ด.${esc(record.date.slice(5, 7))}</span><b class="text-sm text-slate-700">${esc(record.date.slice(8, 10))}</b></time>
+        <div class="min-w-0 flex-1 space-y-1"><div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><b class="text-sm text-slate-800">${esc(record.name)}</b><span class="text-xs font-semibold tabular-nums text-amber-800">${esc(record.grams)} g</span>${record.kcalPer100 != null ? `<span class="text-xs tabular-nums text-slate-600">· ${Math.round(record.kcalPer100 * record.grams / 100)} kcal</span>` : ''}</div><p class="text-[11px] ${record.allergy === 'yes' ? 'text-rose-700 font-semibold' : record.allergy === 'no' ? 'text-emerald-700' : 'text-slate-500'}">${record.allergy === 'yes' ? '⚠️ สงสัยแพ้' : record.allergy === 'no' ? 'ไม่พบอาการแพ้' : 'ยังไม่ทราบการแพ้'}${record.note ? ` · ${esc(record.note)}` : ''}</p></div>
+      </div>
+      <div class="tm-row-actions">
+        <button type="button" data-del-pet-food="${esc(record.id)}" class="tm-row-action-btn is-del" aria-label="ลบบันทึกอาหาร ${esc(record.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+      </div>
+    </div>
   </article>`).join('') || '<p class="text-xs text-slate-500">ยังไม่มีบันทึกอาหาร</p>';
-  $r('#pet-food-list').onclick = event => {
+  bindSwipeRows(foodListEl);
+  foodListEl.onclick = event => {
     const button = event.target.closest('[data-del-pet-food]');
     if (!button) return;
     if (guardPreviewWrite('การลบบันทึกอาหารสัตว์เลี้ยง')) return;
@@ -628,19 +639,28 @@ function renderPetSymptomsList() {
       .map(([lbl, lv]) => `<span class="rounded-md px-2 py-0.5 text-[11px] ${PET_SX_COLORS[lv]}">${esc(lbl.split(' / ')[0])}: ${PET_SX_LEVELS[lv]}</span>`)
       .join('');
     return `
-      <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 flex items-start justify-between gap-2">
-        <div class="min-w-0 space-y-1">
-          <div class="flex flex-wrap items-center gap-1.5 tabular-nums">
-            <span class="font-semibold text-slate-800">${esc(fmtDate(r.date))}</span>
-            ${r.value != null ? `<span class="rounded-md bg-sky-soft text-blue-800 px-2 py-0.5 text-[11px]">🌡️ ${r.value} °C</span>` : ''}
-            ${badges || '<span class="rounded-md bg-ok-soft text-green-800 px-2 py-0.5 text-[11px]">ปกติทุกด้าน ✓</span>'}
-          </div>
-          ${r.note ? `<p class="text-xs text-slate-600">${esc(r.note)}</p>` : ''}
+      <div class="tm-swipe-row is-soft">
+        <div class="tm-swipe-actions">
+          <button type="button" data-edit-pet-sx="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไขอาการ ${esc(fmtDate(r.date))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-del-pet-sx="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบอาการ ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
-        <div class="flex gap-1.5 shrink-0">
-          <button type="button" data-edit-pet-sx="${esc(r.id)}" class="chip min-h-[36px] bg-sky-soft text-blue-700 text-xs">แก้</button>
-          <button type="button" data-del-pet-sx="${esc(r.id)}" class="chip min-h-[36px] bg-pink-soft text-rose-600 text-xs">ลบ</button>
+        <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-1.5 tabular-nums">
+                <span class="font-semibold text-slate-800">${esc(fmtDate(r.date))}</span>
+                ${r.value != null ? `<span class="rounded-md bg-sky-soft text-blue-800 px-2 py-0.5 text-[11px]">🌡️ ${r.value} °C</span>` : ''}
+                ${badges || '<span class="rounded-md bg-ok-soft text-green-800 px-2 py-0.5 text-[11px]">ปกติทุกด้าน ✓</span>'}
+              </div>
+              ${r.note ? `<p class="text-xs text-slate-600">${esc(r.note)}</p>` : ''}
+            </div>
+            <div class="tm-row-actions">
+              <button type="button" data-edit-pet-sx="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไขอาการ ${esc(fmtDate(r.date))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-del-pet-sx="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบอาการ ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>
+          </div>
         </div>
       </div>`;
   }).join('');
+  bindSwipeRows(box);
 }

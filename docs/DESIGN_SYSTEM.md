@@ -14,18 +14,21 @@ The design tokens CSS is auto-loaded via `src/app.js` — no additional import n
 
 ## Design Tokens
 
-### Warm Wellness Palette
+### Pastel Blue-Primary Palette (v5.8.0)
 
 | Token | Hex | Role |
 |---|---|---|
-| `--color-brand` | `#34443B` | Charcoal — Primary actions and brand icons |
-| `--color-mint` | `#A8D8B9` | Soft Mint — Brand accent |
-| `--color-mint-soft` | `#E5F3E9` | Active Navigation and hover surfaces |
-| `--color-app-bg` | `#F5F6F1` | Warm Neutral — Main background |
+| `--color-brand` | `#4A90D4` | Pastel Sky Blue — Primary buttons, toggles, active highlights & accents |
+| `--color-brand-strong` | `#377BBF` | Hover/Pressed primary blue |
+| `--color-mint` | `#CBE5FC` | Soft Pastel Sky — Active Navigation & subtle pills |
+| `--color-mint-soft` | `#DCEFFD` | Hover & soft accent surfaces |
+| `--color-app-bg` | `#EAF3FD` | Airy Pastel Blue — Main app background |
 | `--color-surface` | `#FFFFFF` | Cards and input surfaces |
-| `--color-ink` | `#2F3B34` | Charcoal — Primary text |
+| `--color-ink` | `#194971` | Deep Slate Blue — High-contrast primary text |
 
-Use semantic tokens for shared UI colors. The app has one fixed Warm Wellness palette; users cannot switch themes or category colors.
+Use semantic tokens for shared UI colors. The app uses one fixed Pastel Blue-Primary palette, and all brand logo marks (login, header, mobile bottom navigation `.nav-plus--logo`, onboarding, dashboard welcome mark, and PWA app icons) share the login logo sky-blue palette (`#e1f5fe` bubble, `#b3e5fc` border/shadow, `#03a9f4` icon); users cannot switch themes or category colors.
+
+Shared chart components (`src/donutChart.js` + `bindChartInspector` in `src/ui.js`) provide responsive Donut Charts with center `%` labels, interactive Legend items underneath (`.tm-donut-legend`), and collision-aware floating tooltips (`.tm-chart-float-tip` via `computeTooltipPosition()`) that clamp horizontally and flip vertically inside mobile viewports.
 
 ### State Colors
 
@@ -54,7 +57,7 @@ Use semantic tokens for shared UI colors. The app has one fixed Warm Wellness pa
 
 ### Semantic Tokens
 
-`src/design-tokens.css` defines the single Warm Wellness palette and reusable tokens for app background, surfaces, text, borders, brand, and mint active states. Success, Warning, Error, and Info remain semantic state tokens and should only be used for their respective states.
+`src/design-tokens.css` defines the single Pastel Blue-Primary palette and reusable tokens for app background, surfaces, text, borders, brand blues, and sky active states. Success, Warning, Error, and Info remain semantic state tokens and should only be used for their respective states.
 
 ---
 

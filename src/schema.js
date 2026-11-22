@@ -151,7 +151,7 @@ export const SANITIZERS = {
     if (o?.id === 'push' || Array.isArray(o?.subscriptions) || (typeof o?.enabled === 'boolean' && !Array.isArray(o?.routines))) {
       return null;
     }
-    if (Array.isArray(o?.routines) || (o?.doneMap && typeof o.doneMap === 'object') || (o?.extras && typeof o.extras === 'object')) {
+    if (Array.isArray(o?.routines) || (o?.doneMap && typeof o.doneMap === 'object') || (o?.extras && typeof o.extras === 'object') || Array.isArray(o?.moves) || Array.isArray(o?.skips)) {
       return {
         routines: (Array.isArray(o.routines) ? o.routines : []).slice(0, 80).filter(r => r && str(r.title, 80)).map(r => ({
           id: /^[\w-]{1,40}$/.test(r.id || '') ? r.id : 'r' + Math.random().toString(36).slice(2, 9),
@@ -165,6 +165,19 @@ export const SANITIZERS = {
         ...(isDateStr(o.altAnchor) && { altAnchor: o.altAnchor }),
         doneMap: o.doneMap && typeof o.doneMap === 'object' ? Object.fromEntries(Object.entries(o.doneMap).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => typeof x === 'string').slice(0, 60)])) : {},
         extras: o.extras && typeof o.extras === 'object' ? Object.fromEntries(Object.entries(o.extras).filter(([d, v]) => isDateStr(d) && Array.isArray(v)).slice(-60).map(([d, v]) => [d, v.filter(x => x && str(x.title, 80)).slice(0, 30).map(x => ({ id: str(x.id, 40), title: str(x.title, 80), done: x.done === true }))])) : {},
+        ...(Array.isArray(o.moves) && {
+          moves: o.moves.slice(0, 160).filter(m => m && /^[\w-]{1,40}$/.test(m.routineId || '') && isDateStr(m.from) && isDateStr(m.to) && m.from !== m.to).map(m => ({
+            routineId: m.routineId,
+            from: m.from,
+            to: m.to
+          }))
+        }),
+        ...(Array.isArray(o.skips) && {
+          skips: o.skips.slice(0, 160).filter(s => s && /^[\w-]{1,40}$/.test(s.routineId || '') && isDateStr(s.date)).map(s => ({
+            routineId: s.routineId,
+            date: s.date
+          }))
+        }),
         ...(Array.isArray(o.recentDone) && {
           recentDone: o.recentDone.slice(0, 40).filter(x => x && str(x.title, 80) && isDateStr(x.date)).map(x => ({
             ...(str(x.id, 40) && { id: str(x.id, 40) }),
@@ -260,7 +273,7 @@ export const docIdFor = (col, o, fallback) => {
   if (['symptom_records', 'skin_records'].includes(col)) return o.date;
   if (col === 'expense_records') return /^[\w-]{1,80}$/.test(o?.id || '') ? o.id : fallback;
   if (col !== 'settings') return fallback;
-  if (o?.id === 'planner' || Array.isArray(o?.routines) || o?.doneMap) return 'planner';
+  if (o?.id === 'planner' || Array.isArray(o?.routines) || o?.doneMap || Array.isArray(o?.moves) || Array.isArray(o?.skips)) return 'planner';
   const prefix = o?.kind === 'expense_budget' ? /^expense_budget_/
     : o?.kind === 'expense_rule' ? /^expense_rule_/
       : o?.kind === 'expense_recurring' ? /^expense_recurring_/

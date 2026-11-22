@@ -4,7 +4,7 @@ import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
 import { iconSvg } from './icons.js';
-import { animateNumberTicker } from './ui.js';
+import { animateNumberTicker, bindSwipeRows } from './ui.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
@@ -350,7 +350,7 @@ export function mountExpense(el) {
         </select>
         <select id="ex-filter-cat" class="input text-xs"><option value="">ทุกหมวดหมู่</option></select>
       </div>
-      <div id="ex-list" class="space-y-2"></div>
+      <div id="ex-list" class="tm-swipe-list tm-swipe-list--cards"></div>
     </section>
   </div>`;
 
@@ -1254,20 +1254,31 @@ export function renderExpense() {
       </div>`
     : '';
 
-  const plannedHtml = recurringExpenses.map(plan => {
+  const plannedRowsHtml = recurringExpenses.map(plan => {
       const due = plan.nextDate <= today;
-      return `<article class="rounded-xl border ${due ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70'} p-3 flex flex-wrap items-center justify-between gap-2 tabular-nums">
-        <div class="min-w-0"><b class="text-sm text-slate-800">${esc(plan.merchant)}</b>
-          <p class="text-xs text-slate-500">${esc(plan.category)} · ${fmtMoney(plan.amount)} ฿ · ${plan.frequency === 'yearly' ? 'รายปี' : 'รายเดือน'} · ครบกำหนด ${esc(fmtDate(plan.nextDate))}</p>
-          ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
+      return `<article class="tm-swipe-row ${due ? 'is-amber' : 'is-soft'} tabular-nums">
+        <div class="tm-swipe-actions">
+          <button type="button" data-recurring-edit="${esc(plan.planId)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(plan.merchant)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-recurring-delete="${esc(plan.planId)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(plan.merchant)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
-        <div class="flex flex-wrap gap-2">
-          ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !py-1.5 !px-2.5 text-xs">ยืนยันและบันทึกรายจ่าย</button>` : ''}
-          <button type="button" data-recurring-edit="${esc(plan.planId)}" class="btn btn-soft !py-1.5 !px-2.5 text-xs">แก้ไข</button>
-          <button type="button" data-recurring-delete="${esc(plan.planId)}" class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-rose-600">ลบ</button>
+        <div class="tm-swipe-card tm-swipe-card--stack !p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0 flex-1"><b class="text-sm text-slate-800">${esc(plan.merchant)}</b>
+              <p class="text-xs text-slate-500">${esc(plan.category)} · ${fmtMoney(plan.amount)} ฿ · ${plan.frequency === 'yearly' ? 'รายปี' : 'รายเดือน'} · ครบกำหนด ${esc(fmtDate(plan.nextDate))}</p>
+              ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
+            </div>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+              ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !py-1.5 !px-2.5 text-xs">ยืนยันและบันทึกรายจ่าย</button>` : ''}
+              <div class="tm-row-actions">
+                <button type="button" data-recurring-edit="${esc(plan.planId)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(plan.merchant)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+                <button type="button" data-recurring-delete="${esc(plan.planId)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(plan.merchant)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+              </div>
+            </div>
+          </div>
         </div>
       </article>`;
   }).join('');
+  const plannedHtml = plannedRowsHtml ? `<div class="tm-swipe-list tm-swipe-list--cards">${plannedRowsHtml}</div>` : '';
 
   const detectedHtml = analyzedRecurringCandidates.length
     ? `<div class="pt-2 border-t border-slate-100 space-y-2">
@@ -1286,7 +1297,9 @@ export function renderExpense() {
       </div>`
     : (!recurringExpenses.length ? '<p class="text-xs text-slate-500">ยังไม่มีรายการประจำ (เมื่อมีรายจ่ายร้านเดิมซ้ำตั้งแต่ 2 เดือนขึ้นไป ระบบจะวิเคราะห์มาให้ที่นี่)</p>' : '');
 
-  $r('#ex-recurring-list').innerHTML = estimateBanner + plannedHtml + detectedHtml;
+  const recurringListEl = $r('#ex-recurring-list');
+  recurringListEl.innerHTML = estimateBanner + plannedHtml + detectedHtml;
+  bindSwipeRows(recurringListEl);
 
   // อัปเดตตัวเลือกหมวดหมู่ในตัวกรอง
   const filterCatSel = $r('#ex-filter-cat');
@@ -1313,31 +1326,40 @@ export function renderExpense() {
   const renderExpenseRow = x => {
     const isInc = x.type === 'income';
     const isTransfer = x.type === 'transfer';
-    return `<article class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 flex items-center justify-between gap-2 tabular-nums">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <span class="emoji-bubble emoji-sm" aria-hidden="true">${CAT_ICONS[x.category] || '💸'}</span>
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <b class="text-sm text-slate-800 truncate">${esc(x.merchant || x.category)}</b>
-            <span class="text-[11px] text-slate-500">· ${esc(x.category)}</span>
-            ${x.source === 'slip_ocr' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">สลิป</span>' : ''}
-            ${x.source === 'recurring' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">ประจำ</span>' : ''}
-          </div>
-          <p class="text-[11px] text-slate-500">${esc(fmtDate(x.date))}${x.time ? ` · ${esc(x.time)} น.` : ''}${x.note ? ` · ${esc(x.note)}` : ''}</p>
-        </div>
+    const rowTitle = x.merchant || x.category;
+    return `<article class="tm-swipe-row is-soft tabular-nums">
+      <div class="tm-swipe-actions">
+        <button type="button" data-ex-edit="${esc(x.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(rowTitle)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-ex-del="${esc(x.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(rowTitle)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
       </div>
-      <div class="text-right shrink-0 space-y-1">
-        <p class="text-sm font-bold ${isInc ? 'text-green-700' : 'text-rose-700'}">${isInc ? '+' : isTransfer ? '↔ ' : '-'}${fmtMoney(x.amount)} ฿</p>
-        <div class="flex justify-end gap-1 text-[11px]">
-          <button type="button" data-ex-edit="${esc(x.id)}" class="min-h-[32px] px-2 rounded-lg text-blue-700 hover:bg-sky-soft/70">แก้</button>
-          <button type="button" data-ex-del="${esc(x.id)}" class="min-h-[32px] px-2 rounded-lg text-rose-600 hover:bg-rose-50">ลบ</button>
+      <div class="tm-swipe-card !flex-row items-center justify-between gap-2 !px-3 !py-2.5">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <span class="emoji-bubble emoji-sm" aria-hidden="true">${CAT_ICONS[x.category] || '💸'}</span>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <b class="text-sm text-slate-800 truncate">${esc(rowTitle)}</b>
+              <span class="text-[11px] text-slate-500">· ${esc(x.category)}</span>
+              ${x.source === 'slip_ocr' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-soft text-blue-700">สลิป</span>' : ''}
+              ${x.source === 'recurring' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">ประจำ</span>' : ''}
+            </div>
+            <p class="text-[11px] text-slate-500">${esc(fmtDate(x.date))}${x.time ? ` · ${esc(x.time)} น.` : ''}${x.note ? ` · ${esc(x.note)}` : ''}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <p class="text-sm font-bold ${isInc ? 'text-green-700' : 'text-rose-700'}">${isInc ? '+' : isTransfer ? '↔ ' : '-'}${fmtMoney(x.amount)} ฿</p>
+          <div class="tm-row-actions">
+            <button type="button" data-ex-edit="${esc(x.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(rowTitle)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+            <button type="button" data-ex-del="${esc(x.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(rowTitle)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
         </div>
       </div>
     </article>`;
   };
   const recent = showAllHistory ? sorted : sorted.slice(0, 5);
   const older = showAllHistory ? [] : sorted.slice(5);
-  $r('#ex-list').innerHTML = sorted.length
-    ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${older.length})</summary><div class="mt-2 space-y-2">${older.map(renderExpenseRow).join('')}</div></details>` : ''}`
+  const listEl = $r('#ex-list');
+  listEl.innerHTML = sorted.length
+    ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${older.length})</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${older.map(renderExpenseRow).join('')}</div></details>` : ''}`
     : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
+  bindSwipeRows(listEl);
 }

@@ -9,6 +9,7 @@ import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
+import { bindSwipeRows } from './ui.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
@@ -233,7 +234,7 @@ export function mountWorkout(el) {
           </div>
         </details>
       </div>
-      <div id="w-history" class="space-y-2"></div>
+      <div id="w-history" class="tm-swipe-list tm-swipe-list--cards"></div>
     </div>
   </div>
   <div id="w-panel-templates" class="hidden md:col-span-2 space-y-6">
@@ -247,7 +248,7 @@ export function mountWorkout(el) {
           ${iconSvg('note', { size: 14 })} วางข้อความ / ตารางสร้าง Template
         </button>
       </div>
-      <div id="w-tpl-list" class="space-y-1.5"></div>
+      <div id="w-tpl-list" class="tm-swipe-list tm-swipe-list--cards"></div>
     </div>
   </div>`;
 
@@ -1394,23 +1395,37 @@ function renderWeekStrip() {
   }).join('');
 
   const dayList = byDate[selected] || [];
-  $('#w-day-plans', root).innerHTML = dayList.length ? dayList.map(w => {
+  const dayPlansEl = $('#w-day-plans', root);
+  dayPlansEl.className = 'tm-swipe-list tm-swipe-list--cards';
+  dayPlansEl.innerHTML = dayList.length ? dayList.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
-    return `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 text-xs tabular-nums">
-      <div class="min-w-0 flex-1 break-words">
-        <span class="font-semibold mr-1 ${w.status === 'planned' ? 'text-amber-700' : 'text-green-700'}">[${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}]</span>
-        <b>${esc(w.title || TYPES[w.type] || w.type)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
-        ${w.note ? `<span class="text-slate-500 ml-1">${esc(w.note)}</span>` : ''}
+    const titleLabel = w.title || TYPES[w.type] || w.type;
+    return `<div class="tm-swipe-row">
+      <div class="tm-swipe-actions">
+        <button type="button" data-edit-workout="${esc(w.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(titleLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-del="${esc(w.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'} ${esc(titleLabel)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
       </div>
-      <div class="flex flex-wrap gap-1.5 shrink-0">
-        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
-        ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">${iconSvg('check', { size: 13 })} ทำเสร็จ</button>` : ''}
-        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark">${iconSvg('edit', { size: 12 })} แก้ไข</button>
-        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'}นี้">${iconSvg('trash', { size: 12 })} ลบ</button>
+      <div class="tm-swipe-card tm-swipe-card--stack !px-3 !py-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
+          <div class="min-w-0 flex-1 break-words">
+            <span class="font-semibold mr-1 ${w.status === 'planned' ? 'text-amber-700' : 'text-green-700'}">[${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}]</span>
+            <b>${esc(titleLabel)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
+            ${w.note ? `<span class="text-slate-500 ml-1">${esc(w.note)}</span>` : ''}
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+            ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[38px]">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
+            ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700 min-h-[38px]">${iconSvg('check', { size: 13 })} ทำเสร็จ</button>` : ''}
+            <div class="tm-row-actions">
+              <button type="button" data-edit-workout="${esc(w.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(titleLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-del="${esc(w.id)}" class="tm-row-action-btn is-del" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'} ${esc(titleLabel)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>`;
   }).join('')
     : `<p class="text-[11px] text-slate-500">ยังไม่มีแผนหรือบันทึกในวันที่ ${esc(fmtDate(selected))} — เลือกท่าด้านล่างแล้วบันทึกเป็น "ทำจริงแล้ว" หรือ "วางแผนไว้" ได้เลย</p>`;
+  bindSwipeRows(dayPlansEl);
 }
 
 export function render() {
@@ -1421,17 +1436,27 @@ export function render() {
 
   const sortedTpl = state.templates.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
   $('#w-tpl', root).innerHTML = '<option value="">เลือกเทมเพลต…</option>' + sortedTpl.map(t => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(TYPES[t.type] || '')})</option>`).join('');
-  $('#w-tpl-list', root).innerHTML = sortedTpl.length
+  const tplListEl = $('#w-tpl-list', root);
+  tplListEl.innerHTML = sortedTpl.length
     ? sortedTpl.map(t => `
-      <div class="flex justify-between items-center gap-2 text-sm py-1 border-b border-slate-100 last:border-b-0">
-        <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1 min-h-[36px]">${esc(t.name)} <span class="text-xs text-slate-500">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
-        <div class="flex items-center gap-2 shrink-0 text-xs">
-          <button type="button" data-tstart="${esc(t.id)}" class="text-blue-700 font-medium hover:underline min-h-[36px] px-1">เริ่ม</button>
-          <button type="button" data-tedit="${esc(t.id)}" class="text-brand-dark hover:underline min-h-[36px] px-1">แก้ไข</button>
-          <button type="button" data-tdel="${esc(t.id)}" class="text-rose-500 hover:underline min-h-[36px] px-1">ลบ</button>
+      <div class="tm-swipe-row">
+        <div class="tm-swipe-actions">
+          <button type="button" data-tedit="${esc(t.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(t.name)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-tdel="${esc(t.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(t.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+        </div>
+        <div class="tm-swipe-card !flex-row justify-between items-center gap-2 text-sm !px-3 !py-2">
+          <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1 min-h-[44px]">${esc(t.name)} <span class="text-xs text-slate-500">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
+          <div class="flex items-center gap-2 shrink-0 text-xs">
+            <button type="button" data-tstart="${esc(t.id)}" class="chip bg-sky-soft text-blue-700 min-h-[38px]">${iconSvg('play', { size: 12 })} เริ่ม</button>
+            <div class="tm-row-actions">
+              <button type="button" data-tedit="${esc(t.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(t.name)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-tdel="${esc(t.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(t.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>
+          </div>
         </div>
       </div>`).join('')
     : '<p class="text-xs text-slate-500 py-3">ยังไม่มีเทมเพลตที่บันทึกไว้ — จัดท่าในหน้า "วางแผน & บันทึก" แล้วกด "บันทึกเป็นเทมเพลต" หรือกดวางข้อความ/ตารางด้านบนได้เลย</p>';
+  bindSwipeRows(tplListEl);
 
   renderWeekStrip();
 
@@ -1519,26 +1544,39 @@ function renderHistory() {
     const sessionEval = [feelingStr, w.sessionRpe != null ? `RPE ${w.sessionRpe}/10` : ''].filter(Boolean).join(' · ');
     const statusPrefix = isPlan ? '<span class="text-amber-700 font-semibold mr-1">[วางแผนไว้]</span>' : '';
     const titleStr = w.title ? `${esc(w.title)} <span class="text-xs font-normal text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : esc(TYPES[w.type] || w.type);
-    const actionsHtml = `
-      <div class="flex flex-wrap gap-2 ${isPlan ? 'pt-1' : 'mt-2.5'}">
+    const ariaLabel = w.title || TYPES[w.type] || w.type;
+    const quickBtnsHtml = (hasRows || isPlan || !isPlan) ? `
+      <div class="flex flex-wrap gap-2 ${isPlan ? 'pt-1.5' : 'mt-2.5'}">
         ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
         ${isPlan ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">${iconSvg('check', { size: 13 })} ทำเสร็จแล้ว</button>` : ''}
-        <button type="button" data-edit-workout="${esc(w.id)}" class="chip bg-lav-soft text-brand-dark">${iconSvg('edit', { size: 12 })} แก้ไข</button>
         ${!isPlan ? `<button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button>` : ''}
-        <button type="button" data-del="${esc(w.id)}" class="chip bg-pink-soft text-rose-600">${iconSvg('trash', { size: 12 })} ลบ</button>
-      </div>`;
+      </div>` : '';
 
-    return `<div class="rounded-xl border border-slate-200 p-2.5 space-y-2">
-      <details>
-        <summary class="cursor-pointer text-sm break-words tabular-nums">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
-        <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : actionsHtml}</div>
-      </details>
-      ${isPlan ? actionsHtml : ''}
+    return `<div class="tm-swipe-row">
+      <div class="tm-swipe-actions">
+        <button type="button" data-edit-workout="${esc(w.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(ariaLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+        <button type="button" data-del="${esc(w.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(ariaLabel)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+      </div>
+      <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
+        <div class="flex items-start justify-between gap-2">
+          <details class="min-w-0 flex-1">
+            <summary class="cursor-pointer text-sm break-words tabular-nums py-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
+            <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : quickBtnsHtml}</div>
+          </details>
+          <div class="tm-row-actions">
+            <button type="button" data-edit-workout="${esc(w.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(ariaLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+            <button type="button" data-del="${esc(w.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(ariaLabel)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
+        </div>
+        ${isPlan ? quickBtnsHtml : ''}
+      </div>
     </div>`;
   });
   const recentRows = showAllHistory ? renderedRows.join('') : renderedRows.slice(0, 5).join('');
   const olderRows = showAllHistory ? '' : renderedRows.slice(5).join('');
-  $('#w-history', root).innerHTML = rows.length
-    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 space-y-2">${olderRows}</div></details>` : ''}`
+  const histEl = $('#w-history', root);
+  histEl.innerHTML = rows.length
+    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${olderRows}</div></details>` : ''}`
     : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
+  bindSwipeRows(histEl);
 }

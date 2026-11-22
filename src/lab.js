@@ -6,7 +6,7 @@ import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageP
 import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindChartInspector } from './ui.js';
+import { bindChartInspector, bindSwipeRows } from './ui.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -471,9 +471,24 @@ export function render() {
     return `<div class="card !p-3" data-lab-card><details ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500 tabular-nums">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
       <div class="flex items-center gap-3 tabular-nums">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-500">${arrow}</span></p>${f ? `<span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
-      <div class="mt-3 divide-y divide-slate-100 text-sm tabular-nums">${displayRows.map(r => `<div class="py-1.5 flex items-center justify-between gap-2"><span>${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span><span class="flex items-center gap-2"><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}<button data-del="${esc(r.id)}" class="min-w-[36px] min-h-[36px] rounded-lg text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center" aria-label="ลบผลตรวจ ${esc(r.name)}">${iconSvg('trash', { size: 14 })}</button></span></div>`).join('')}</div></details><div class="tm-chart-readout is-empty hidden mt-2" data-lab-readout aria-live="polite"></div></div>`;
+      <div class="mt-3 tm-swipe-list text-sm tabular-nums">${displayRows.map(r => `
+        <div class="tm-swipe-row">
+          <div class="tm-swipe-actions tm-swipe-actions--single">
+            <button type="button" data-del="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบผลตรวจ ${esc(r.name)} ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
+          <div class="tm-swipe-card !flex-row items-center justify-between gap-2 !px-2 !py-1.5">
+            <span class="min-w-0">${esc(fmtDate(r.date))}${r.note ? ` <span class="text-xs text-slate-500">· ${esc(r.note)}</span>` : ''}</span>
+            <span class="flex items-center gap-2 shrink-0">
+              <span><b>${esc(r.value)}</b> ${esc(r.unit)}${labFlag(r) && labFlag(r) !== 'ok' ? ` <span class="text-xs font-medium ${labFlag(r) === 'high' ? 'text-rose-600' : 'text-sky-700'}">${FLAG[labFlag(r)][0]}</span>` : ''}</span>
+              <span class="tm-row-actions">
+                <button type="button" data-del="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบผลตรวจ ${esc(r.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+              </span>
+            </span>
+          </div>
+        </div>`).join('')}</div></details><div class="tm-chart-readout is-empty hidden mt-2" data-lab-readout aria-live="polite"></div></div>`;
   }).join('') : `<p class="text-sm text-slate-500 py-4 text-center">${mode === 'abnormal' ? 'ไม่พบค่าผลตรวจที่ผิดปกติ (สูง/ต่ำ) ตามเงื่อนไข' : hasAny ? 'ไม่พบผลตรวจที่ตรงกับคำค้นหาหรือช่วงวันที่ที่เลือก' : 'ยังไม่มีผลตรวจ — กรอกด้านซ้าย ใช้ชุดกรอกเร็ว หรือถ่ายรูปใบผลตรวจให้ AI อ่าน'}</p>`;
 
+  bindSwipeRows(listEl);
   listEl.querySelectorAll('[data-lab-card]').forEach(card => {
     bindChartInspector(card, {
       hint: 'แตะจุดบนกราฟเล็กเพื่อดูค่าแต่ละครั้ง',

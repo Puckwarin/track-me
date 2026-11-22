@@ -5,7 +5,7 @@ import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openMod
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindChartInspector } from './ui.js';
+import { bindChartInspector, bindSwipeRows } from './ui.js';
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#1F4A74' },
@@ -95,8 +95,8 @@ export function mountBody(el) {
       <div class="card space-y-3">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
         <div id="b-history-wrap">
-          <div id="b-mobile-list" class="sm:hidden space-y-2 tabular-nums"></div>
-          <div class="hidden sm:block overflow-x-auto"><table class="w-full text-left text-sm">
+          <div id="b-mobile-list" class="lg:hidden tm-swipe-list tm-swipe-list--cards tabular-nums"></div>
+          <div class="hidden lg:block overflow-x-auto"><table class="w-full text-left text-sm">
             <thead class="bg-slate-50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
             <tbody id="b-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
         </div>
@@ -134,7 +134,7 @@ export function mountBody(el) {
 
         <div class="border-t border-slate-100 pt-3 space-y-2">
           <h3 class="text-sm font-bold text-slate-700">ประวัติการนอน & ก้าวเดินล่าสุด</h3>
-          <div id="bz-list" class="space-y-2"></div>
+          <div id="bz-list" class="tm-swipe-list tm-swipe-list--cards"></div>
         </div>
       </div>
     </div>
@@ -482,26 +482,35 @@ function renderSleepStepsList(desc) {
     const timeRange = r.bedTime || r.wakeTime ? `${r.bedTime || '?'}–${r.wakeTime || '?'}` : '';
 
     return `
-      <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 flex items-start justify-between gap-2 text-xs tabular-nums">
-        <div class="min-w-0 space-y-1">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="font-bold text-slate-800">${esc(fmtDate(r.date))}</span>
-            <span class="text-[11px] text-slate-500">· ${esc(sourceBadgeLabel(r.source))}</span>
-          </div>
-          <div class="flex flex-wrap gap-2 text-slate-700">
-            ${durText ? `<span class="inline-flex items-center gap-1 font-medium text-blue-700">นอน ${esc(durText)}${timeRange ? ` <span class="text-slate-500 font-normal">(${esc(timeRange)})</span>` : ''}</span>` : ''}
-            ${typeof r.steps === 'number' ? `<span class="inline-flex items-center gap-1 font-medium text-primary-700">${r.steps.toLocaleString()} ก้าว${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}${typeof r.activeKcal === 'number' ? ` · ${r.activeKcal} kcal` : ''}</span>` : ''}
-          </div>
-          ${stageParts.length ? `<p class="text-[11px] text-slate-500">${esc(stageParts.join(' · '))}</p>` : ''}
-          ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
+      <div class="tm-swipe-row is-soft tabular-nums">
+        <div class="tm-swipe-actions">
+          <button type="button" data-ss-edit="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(fmtDate(r.date))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+          <button type="button" data-ss-del="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
-        <div class="flex items-center shrink-0">
-          <button type="button" data-ss-edit="${esc(r.id)}" class="text-slate-500 hover:text-brand p-2 min-w-[34px] min-h-[34px]" aria-label="แก้ไข">${iconSvg('edit', { size: 14 })}</button>
-          <button type="button" data-ss-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[34px] min-h-[34px]" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
+        <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
+          <div class="flex items-start justify-between gap-2 text-xs">
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="font-bold text-slate-800">${esc(fmtDate(r.date))}</span>
+                <span class="text-[11px] text-slate-500">· ${esc(sourceBadgeLabel(r.source))}</span>
+              </div>
+              <div class="flex flex-wrap gap-2 text-slate-700">
+                ${durText ? `<span class="inline-flex items-center gap-1 font-medium text-blue-700">นอน ${esc(durText)}${timeRange ? ` <span class="text-slate-500 font-normal">(${esc(timeRange)})</span>` : ''}</span>` : ''}
+                ${typeof r.steps === 'number' ? `<span class="inline-flex items-center gap-1 font-medium text-primary-700">${r.steps.toLocaleString()} ก้าว${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}${typeof r.activeKcal === 'number' ? ` · ${r.activeKcal} kcal` : ''}</span>` : ''}
+              </div>
+              ${stageParts.length ? `<p class="text-[11px] text-slate-500">${esc(stageParts.join(' · '))}</p>` : ''}
+              ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
+            </div>
+            <div class="tm-row-actions">
+              <button type="button" data-ss-edit="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(fmtDate(r.date))}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+              <button type="button" data-ss-del="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+            </div>
+          </div>
         </div>
       </div>
     `;
   }).join('');
+  bindSwipeRows(listEl);
 }
 
 export function render() {
@@ -557,18 +566,21 @@ export function render() {
         ? `<span class="text-[11px] font-semibold ${deltaVal > 0 ? 'text-rose-600' : 'text-emerald-700'}">${deltaVal > 0 ? '+' : ''}${deltaVal}</span>`
         : '';
       return `
-        <div class="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1.5 text-xs">
-          <div class="flex items-center justify-between gap-2">
+        <div class="tm-swipe-row is-soft text-xs">
+          <div class="tm-swipe-actions tm-swipe-actions--single">
+            <button type="button" data-del="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบบันทึก ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
+          <div class="tm-swipe-card tm-swipe-card--stack !p-2.5 space-y-1.5">
             <div class="flex flex-wrap items-center gap-2 min-w-0">
               <span class="font-bold text-slate-800">${esc(fmtDate(r.date))}</span>
               ${typeof r.weight === 'number' ? `<span class="inline-flex items-center gap-1 rounded-md bg-sky-soft/70 px-2 py-0.5 font-bold text-blue-700">${r.weight} กก.${deltaBadge ? ` ${deltaBadge}` : ''}</span>` : ''}
             </div>
-            <button type="button" data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-1.5 min-w-[34px] min-h-[34px] shrink-0" aria-label="ลบบันทึก">${iconSvg('trash', { size: 14 })}</button>
+            ${parts.length ? `<div class="grid grid-cols-3 gap-1.5 text-[11px] text-slate-600">${parts.map(([lbl, val]) => `<div class="rounded-lg bg-white/80 px-2 py-1 flex items-center justify-between gap-1 border border-slate-100"><span class="text-slate-500">${lbl}</span><b class="text-slate-800">${val}</b></div>`).join('')}</div>` : ''}
+            ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
           </div>
-          ${parts.length ? `<div class="grid grid-cols-3 gap-1.5 text-[11px] text-slate-600">${parts.map(([lbl, val]) => `<div class="rounded-lg bg-white/80 px-2 py-1 flex items-center justify-between gap-1 border border-slate-100"><span class="text-slate-500">${lbl}</span><b class="text-slate-800">${val}</b></div>`).join('')}</div>` : ''}
-          ${r.note ? `<p class="text-[11px] text-slate-500">${esc(r.note)}</p>` : ''}
         </div>`;
     }).join('') : '<p class="py-4 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</p>';
+    bindSwipeRows(mobileList);
   }
 
   renderSleepStepsList(desc);

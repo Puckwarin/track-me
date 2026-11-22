@@ -5,6 +5,7 @@ import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './ut
 import { selectDate } from './symptoms.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
+import { bindSwipeRows } from './ui.js';
 
 let root, activePeriodTab = 'main', cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
@@ -115,9 +116,12 @@ export function mountPeriod(el) {
 
     <div class="card space-y-3 lg:col-span-2">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-pink-500' })}<span>ประวัติประจำเดือน</span></h3>
-      <div class="overflow-x-auto"><table class="w-full text-left text-sm">
-        <thead class="bg-slate-100 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
-        <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
+      <div id="p-history-wrap">
+        <div id="p-mobile-list" class="lg:hidden tm-swipe-list tm-swipe-list--cards tabular-nums"></div>
+        <div class="hidden lg:block overflow-x-auto"><table class="w-full text-left text-sm">
+          <thead class="bg-slate-100 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
+          <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
+      </div>
     </div>
   </div>`;
   $('#p-start', root).value = localDateStr();
@@ -150,7 +154,7 @@ export function mountPeriod(el) {
   });
   cGrid.addEventListener('pointercancel', () => { calSwipe = null; });
   cGrid.addEventListener('click', e => { const d = e.target.closest('[data-d]'); if (d && d.dataset.d <= localDateStr()) { document.querySelectorAll('.cal-sel').forEach(x => x.classList.remove('cal-sel')); d.classList.add('cal-sel'); selectDate(d.dataset.d); } });
-  $('#p-body', root).addEventListener('click', e => {
+  $('#p-history-wrap', root).addEventListener('click', e => {
     const end = e.target.closest('[data-end]'), del = e.target.closest('[data-del]');
     if (end) {
       if (guardPreviewWrite('การอัปเดตวันสิ้นสุดรอบเดือน')) return;
@@ -225,6 +229,33 @@ export function render() {
       <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
       <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึกประจำเดือน">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
   }).join('') : '<tr><td colspan="6" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</td></tr>';
+
+  const mobileList = $('#p-mobile-list', root);
+  if (mobileList) {
+    mobileList.innerHTML = desc.length ? desc.map((p, i) => {
+      const older = desc[i + 1];
+      const dur = p.end ? `${daysBetween(p.start, p.end) + 1} วัน` : 'ยังไม่สิ้นสุด';
+      const cycle = older ? `รอบ ${daysBetween(older.start, p.start)} วัน` : '';
+      const meta = [p.flow ? `ปริมาณ ${p.flow}` : '', p.note].filter(Boolean).join(' · ');
+      return `
+        <div class="tm-swipe-row is-soft text-xs">
+          <div class="tm-swipe-actions tm-swipe-actions--single">
+            <button type="button" data-del="${esc(p.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบบันทึกประจำเดือน ${esc(fmtDate(p.start))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
+          </div>
+          <div class="tm-swipe-card !flex-row items-center justify-between gap-2 !p-2.5">
+            <div class="min-w-0 flex-1 space-y-0.5">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <b class="text-sm text-slate-800">${esc(fmtDate(p.start))}</b>
+                <span class="text-slate-500">– ${p.end ? esc(fmtDate(p.end)) : 'ปัจจุบัน'}</span>
+              </div>
+              <p class="text-[11px] text-slate-500">${esc([dur, cycle, meta].filter(Boolean).join(' · '))}</p>
+            </div>
+            ${!p.end ? `<button type="button" data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700 shrink-0 min-h-[38px]">หมดวันนี้</button>` : ''}
+          </div>
+        </div>`;
+    }).join('') : '<p class="py-4 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</p>';
+    bindSwipeRows(mobileList);
+  }
 
   const s = periodStats(state.period), box = $('#p-stats', root);
   if (!s) box.innerHTML = '<p class="text-xs text-slate-500">บันทึกอย่างน้อย 2 รอบเพื่อดูสถิติ</p>';

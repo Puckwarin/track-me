@@ -3,6 +3,25 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.8.0] - 2026-11-22
+
+### Weekly Planner Rescheduling & 7-Day Board, Responsive DonutChart Tooltips & Pastel Blue-Primary Theme
+- **Shared DonutChart, Collision-Detected Tooltips & Legend (`src/donutChart.js`, `src/ui.js`, `src/foodCalculations.js`, `src/home.js`, `src/food.js`, `src/home.css`, `src/style.css`)**:
+  - ใช้ `donutChart` ตัวเดียวกันทั้งหน้าหลัก (`Daily Overview`) และหน้าอาหาร (`#f-meals-pie`) ให้ความหนาของวงแหวน ตัวเลขเปอร์เซ็นต์ตรงกลาง ขอบ/ระยะห่าง และแอนิเมชันเหมือนกัน 100% พร้อมคำนวณโปรตีนรายมื้อ (`protein`) ใน `buildMealCaloriePieData()`
+  - เพิ่ม **Legend** ด้านล่าง Donut Chart (`.tm-donut-legend`) แสดงชื่อมื้ออาหาร เปอร์เซ็นต์ (%) และสีประจำส่วนกราฟ พร้อมกดแตะ/โฮเวอร์เพื่อไฮไลต์ส่วนวงแหวนร่วมกันผ่าน `[data-chart-idx]`
+  - เพิ่ม Floating Tooltip (`.tm-chart-float-tip`) และฟังก์ชัน `computeTooltipPosition()` ใน `src/ui.js` ที่มี Collision Detection ตรวจจับขอบจอ (จำกัดขอบซ้าย–ขวาให้อยู่ใน viewport margin และพลิกด้านบน/ล่างอัตโนมัติ) เพื่อป้องกัน Tooltip หลุดจอมือถือ และแสดงข้อมูลมื้ออาหาร เปอร์เซ็นต์ พลังงาน (`kcal`) โปรตีน (`g`) และสีรายการ
+- **Weekly Planner รายสัปดาห์ จันทร์–อาทิตย์ & การย้ายวันงาน (`src/planner.js`, `src/schema.js`, `src/style.css`, `src/home.css`)**:
+  - **Weekly Planning (Monday–Sunday)**: แสดงแผนงานทีละ 1 สัปดาห์ (จันทร์–อาทิตย์) พร้อมแถบสลับสัปดาห์ก่อนหน้า / สัปดาห์นี้ / สัปดาห์ถัดไป (`weekRangeLabel()`) และนับจำนวนงานที่เสร็จต่อสัปดาห์
+  - **Responsive UI**: บน Desktop (`>= 1024px`) แสดงกระดาน 7 คอลัมน์ จ–อา (`.pl-week-board`) พร้อม **HTML5 Drag & Drop** ลากงานข้ามวันและปุ่ม **ย้าย** ในการ์ด; บน Mobile (`< 1024px`) แสดงแถบ 7 วัน จ–อา (`.pl-day-strip--week`) และรายการแนวตั้งพร้อมปุ่ม **ย้ายวัน** ขนาด `>= 44px`
+  - **Reschedule Tasks (`moveRoutineOccurrence`, `skipRoutineOccurrence`)**: ย้ายงานประจำหรืองานวันเดียว (เช่น ย้ายงานวันศุกร์ไปวันเสาร์) รวมถึงแผนออกกำลังกาย (`workout_records.date`) ผ่าน Drag & Drop บน Desktop หรือ Modal ย้ายวัน (ปุ่ม จ–อา + Date Picker `<input type="date">` ข้ามสัปดาห์) โดยคงชื่องาน รายละเอียด เวลา (`time`) และสถานะเสร็จสิ้น (`doneMap` / `status`), ป้องกันงานซ้ำ, ไม่กระทบสัปดาห์อื่น, บันทึกแบบ Optimistic UI + Rollback เมื่อบันทึกไม่สำเร็จ
+  - **ความเข้ากันได้ของข้อมูล (`src/schema.js`)**: เพิ่มฟิลด์ optional `moves` (`Array<{ routineId, from, to }>`) และ `skips` (`Array<{ routineId, date }>`) ในเอกสาร `settings/planner` (รวมทั้งหมด 8 keys ภายใต้ขีดจำกัด 30 fields ของ `firestore.rules` เดิม), คงความเข้ากันได้กับ `itemsForDate()` สำหรับผู้ช่วย AI และ Daily Push, และซิงค์ข้ามอุปกรณ์แบบ Real-time
+  - **ฟอร์มเพิ่ม/แก้ไขกิจกรรมรายสัปดาห์ (`openRoutinesModal` ใน `src/planner.js`)**: นำตัวเลือกรูปแบบความถี่/ซ้ำ (`เฉพาะวันนี้`/`ทุกสัปดาห์`/`เฉพาะสัปดาห์ A`/`เฉพาะสัปดาห์ B` และ `สร้างคู่สลับ A ↔ B`) ออกจากฟอร์มเพื่อให้วางแผนทีละสัปดาห์ผ่านการเลือกวันในสัปดาห์ (จ–อา) และเวลา โดยหยุดอ่าน/บันทึกฟิลด์ `weekPattern` ในฟอร์มและคงความเข้ากันได้ย้อนหลังของ `routineAppliesToDate`, `moveRoutineOccurrence`, `skipRoutineOccurrence` และโครงสร้างข้อมูลเดิม
+  - **รายการอาหารและประวัติการวางแผนทุกหมวดหมู่ใช้รูปแบบเดียวกัน (`src/ui.js`, `src/style.css`, `src/food.js`, `src/planner.js`, `src/workout.js`, `src/expense.js`, `src/remindLog.js`, `src/body.js`, `src/period.js`, `src/care.js`, `src/lab.js`, `src/inventory.js`, `src/symptoms.js`)**: เพิ่ม `bindSwipeRows()` และ `closeAllSwipeRows()` ใน `src/ui.js` พร้อมสไตล์ `.tm-swipe-row` / `.tm-row-actions` ใน `src/style.css` โดยบนหน้าจอ `< 1024px` ซ่อนปุ่มแก้ไข/ลบในแถวเพื่อคงการปัดซ้ายเปิดเมนูคำสั่ง (และการปัดขวาโปรดในหน้าอาหาร) และบนหน้าจอ `>= 1024px` ปิดการสไลด์และแสดงปุ่มแก้ไข/ลบในแถวหรือตารางอย่างชัดเจนเหมือนกันทุกหมวดหมู่
+- **Pastel Blue-Primary Theme & Unified Logo (`src/design-tokens.css`, `src/style.css`, `src/home.css`, `src/foodCalculations.js`, `src/onboarding.js`, `public/icon.svg`, `public/icon-192.png`, `public/icon-512.png`, `index.html`)**:
+  - ปรับโทนสีทั้งแอปให้เป็น **Pastel Blue-Primary** เน้นสีฟ้าพาสเทลเป็นหลัก (`--color-app-bg: #EAF3FD`, `--color-brand: #4A90D4`, `--color-brand-strong: #377BBF`, `--color-mint: #CBE5FC`, `--color-sky-soft: #E3F1FB`, พาเลตกราฟอาหารโทนฟ้าพาสเทล) โดยคงความคมชัดของตัวอักษร `#194971` และปรับสีโลโก้ทุกจุดในแอป (`.logo-bubble`, `.nav-plus--logo`, `.db-welcome-mark`, Onboarding, `public/icon.svg`, `public/icon-192.png`, `public/icon-512.png`) ให้เหมือนโลโก้หน้าล็อกอิน (`#e1f5fe`, `#b3e5fc`, `#03a9f4`)
+- **อัปเดตเวอร์ชันเป็น v5.8.0**: ซิงค์ `package.json`, `package-lock.json`, `src/version.js` และเอกสารทั้งหมดโดยไม่เปลี่ยน `firestore.rules`
+
+---
 ## [v5.6.0] - 2026-11-21
 
 ### Food Mobile + Desktop UX/UI Unification

@@ -2,15 +2,17 @@
 import { state } from './state.js';
 import { isPreviewMode } from './preview.js';
 import { $, esc, localDateStr, parseLocal, round1, toast, daysBetween } from './util.js';
-import { getTargets } from './profile.js';
+import { getTargets, getMeals } from './profile.js';
 import { collectReminders, remindersForDate } from './reminders.js';
+import { buildMealDonutParts, DONUT_TOOLTIP_HINT } from './donutChart.js';
+import { buildMealCaloriePieData, getMealPiePalette } from './foodCalculations.js';
 import { CATEGORIES } from './categories.js';
 import { TYPES } from './workoutConstants.js';
 import { bodyLatest } from './body.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
-import { animateNumberTicker } from './ui.js';
+import { animateNumberTicker, bindChartInspector } from './ui.js';
 
 export const HOME_WIDGET_IDS = ['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders'];
 export const HOME_WIDGET_DEFS = [
@@ -129,24 +131,6 @@ function moodLine(pct, hasFood, goal) {
   return ['บันทึกครบตามมื้อวันนี้แล้ว', 'พลังงานวันนี้สูงกว่าเป้าหมายที่ตั้งไว้เล็กน้อย ใช้ดูเป็นข้อมูลภาพรวมได้'];
 }
 
-function progressRing(pct, label, sub, { hasGoal = true } = {}) {
-  const r = 52;
-  const c = 2 * Math.PI * r;
-  const shown = hasGoal ? Math.max(0, Math.min(100, pct)) : 0;
-  const offset = c - (shown / 100) * c;
-  return `
-    <div class="hx-ring" role="img" aria-label="${esc(hasGoal ? `${label} ${pct}% ${sub}` : 'ยังไม่ได้ตั้งเป้าหมายพลังงาน')}">
-      <svg viewBox="0 0 120 120" aria-hidden="true">
-        <circle class="hx-ring-track" cx="60" cy="60" r="${r}" />
-        <circle class="hx-ring-bar ${hasGoal && pct > 100 ? 'is-over' : ''}" cx="60" cy="60" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" />
-      </svg>
-      <div class="hx-ring-center">
-        <span class="hx-ring-value tabular-nums">${hasGoal ? `${pct}<small>%</small>` : '—'}</span>
-        <span class="hx-ring-label">${esc(hasGoal ? label : 'ยังไม่มีเป้า')}</span>
-      </div>
-    </div>`;
-}
-
 function latestDateNote(dateStr, today) {
   if (!dateStr) return 'ยังไม่มีข้อมูล';
   if (dateStr === today) return 'ล่าสุด · วันนี้';
@@ -162,6 +146,14 @@ function buildDailyOverviewHtml(today, foods, targets) {
   const pct = goal ? Math.round((kcal / goal) * 100) : 0;
   const left = goal - kcal;
   const [title, subtitle] = moodLine(pct, foods.length > 0, goal);
+
+  const pie = buildMealCaloriePieData(foods, getMeals(), getMealPiePalette());
+  const donut = buildMealDonutParts({
+    slices: pie.slices,
+    totalKcal: pie.totalKcal,
+    targetKcal: goal,
+    hasData: foods.length > 0 && pie.totalKcal > 0
+  });
 
   const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
   const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned');
@@ -206,7 +198,11 @@ function buildDailyOverviewHtml(today, foods, targets) {
             ? `<p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>`
             : `<button type="button" data-go="settings" class="hx-hero-left is-link">ยังไม่ได้ตั้งเป้าหมายพลังงาน · แตะเพื่อตั้งค่า</button>`}
         </div>
-        ${progressRing(pct, 'ของเป้าวันนี้', `${kcal} จาก ${goal} kcal`, { hasGoal: goal > 0 })}
+        ${donut.ringHtml}
+      </div>
+      <div class="tm-donut-meta">
+        ${donut.legendHtml}
+        ${donut.readoutHtml}
       </div>
       <div class="hx-stats" role="list">
         ${stats.map(s => `
@@ -241,7 +237,7 @@ function buildQuickAccessHtml(config) {
       </div>
       <div class="hx-cats">
         ${items.map(c => `
-          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat">
+          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat${c.cat ? ` ${esc(c.cat)}` : ''}">
             <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 24 })}</span>
             <span class="hx-cat-label">${esc(c.label)}</span>
           </button>`).join('')}
@@ -441,11 +437,13 @@ function buildRemindersHtml(today, reminders) {
         <ul class="hx-list">
           ${ordered.slice(0, 4).map(r => {
             const u = formatUrgency(r);
-            const rIcon = CATEGORIES.find(c => c.tab === r.tab)?.icon || 'notifications';
+            const catItem = CATEGORIES.find(c => c.tab === r.tab);
+            const rIcon = catItem?.icon || 'notifications';
+            const rCat = catItem?.cat || '';
             return `
               <li>
                 <button type="button" data-go="${esc(r.tab || 'notifications')}" class="hx-list-row">
-                  <span class="hx-list-icon" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
+                  <span class="hx-list-icon${rCat ? ` ${esc(rCat)}` : ''}" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
                   <span class="hx-tl-body">
                     <span class="hx-tl-title">${esc(r.label)}</span>
                     <span class="hx-tl-sub"><span class="hx-due ${u.cls} tabular-nums">${esc(u.text)}</span>${r.detail ? ` · ${esc(r.detail)}` : ''}</span>
@@ -568,6 +566,7 @@ export function renderHome() {
   }
   if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
     slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets);
+    bindChartInspector(slots['daily-overview'], { hint: DONUT_TOOLTIP_HINT });
     const tickerEl = $('#home-kcal-ticker', el);
     if (foods.length && tickerEl) {
       const totalKcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
