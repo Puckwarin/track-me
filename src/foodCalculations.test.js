@@ -1,16 +1,69 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFoodRecordUpdatesFromLibrary,
+  calculateRiceAdjustment,
   defaultFoodInputMode,
   foodLogName,
   foodLogPortion,
   foodLogQuantity,
   foodQuantityFromInput,
   hasFoodLibraryDefinitionChanged,
+  riceProfileFromName,
   unitNutritionFor
 } from './foodCalculations.js';
 
 describe('food log calculations', () => {
+  it('estimates rice already included from restaurant carbs and adds only the remaining Riceberry portion', () => {
+    const result = calculateRiceAdjustment({
+      shopNutrition: { calories: 230, protein: 20, carbs: 33, fat: 3 },
+      riceProfile: 'riceberry',
+      targetRiceGrams: 180
+    });
+
+    expect(result.estimatedRiceGrams).toBeCloseTo(143.4783, 3);
+    expect(result.additionalRiceGrams).toBeCloseTo(36.5217, 3);
+    expect(result.nutrition.calories).toBeCloseTo(270.5391, 3);
+    expect(result.nutrition.protein).toBeCloseTo(20.9496, 3);
+    expect(result.nutrition.carbs).toBeCloseTo(41.4, 3);
+    expect(result.nutrition.fat).toBeCloseTo(3.3287, 3);
+  });
+
+  it('subtracts side-dish carbs only when supplied and warns when estimated rice already exceeds target', () => {
+    const withSideCarbs = calculateRiceAdjustment({
+      shopNutrition: { calories: 200, protein: 10, carbs: 33, fat: 5 },
+      riceProfile: 'riceberry',
+      targetRiceGrams: 180,
+      sideCarbs: 10
+    });
+    expect(withSideCarbs.estimatedRiceGrams).toBeCloseTo(100);
+    expect(withSideCarbs.additionalRiceGrams).toBeCloseTo(80);
+
+    const overTarget = calculateRiceAdjustment({
+      shopNutrition: { calories: 200, protein: 10, carbs: 60, fat: 5 },
+      riceProfile: 'brown',
+      targetRiceGrams: 180
+    });
+    expect(overTarget.additionalRiceGrams).toBe(0);
+    expect(overTarget.nutrition).toEqual({ calories: 200, protein: 10, carbs: 60, fat: 5 });
+    expect(overTarget.warning).toContain('สูงกว่าเป้าหมาย');
+  });
+
+  it('keeps original nutrition when rice cannot be estimated and rejects invalid inputs safely', () => {
+    const original = { calories: 200, protein: 10, carbs: 0, fat: 5 };
+    const zeroCarbs = calculateRiceAdjustment({ shopNutrition: original, riceProfile: 'riceberry', targetRiceGrams: 180 });
+    expect(zeroCarbs).toMatchObject({ valid: true, nutrition: original, estimatedRiceGrams: null, additionalRiceGrams: 0 });
+    expect(zeroCarbs.warning).toContain('ประมาณน้ำหนักข้าวไม่ได้');
+    expect(calculateRiceAdjustment({ shopNutrition: { ...original, carbs: null }, riceProfile: 'brown', targetRiceGrams: 180 }).valid).toBe(false);
+    expect(calculateRiceAdjustment({ shopNutrition: { ...original, carbs: 10 }, riceProfile: 'brown', targetRiceGrams: 180, sideCarbs: 11 }).valid).toBe(false);
+    expect(calculateRiceAdjustment({ shopNutrition: original, riceProfile: 'toString', targetRiceGrams: 180 }).valid).toBe(false);
+  });
+
+  it('recognizes Riceberry without changing legacy brown-rice name detection', () => {
+    expect(riceProfileFromName('ข้าวไรซ์เบอร์รี่')).toBe('riceberry');
+    expect(riceProfileFromName('ข้าวกล้อง')).toBe('brown');
+    expect(riceProfileFromName('ข้าวสวย')).toBe('white');
+  });
+
   it('keeps legacy records readable when quantity is encoded in the name', () => {
     const item = { name: 'ข้าวสวย × 2.5', calories: 325, protein: 6.75 };
     expect(foodLogQuantity(item)).toBe(2.5);

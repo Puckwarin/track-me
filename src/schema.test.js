@@ -19,6 +19,27 @@ describe('schema sanitizers', () => {
     expect(SANITIZERS.food_records({ date: '2026/02/30', name: 'ข้าว' })).toBeNull();
   });
 
+  it('preserves Riceberry Hiwpinto metadata while retaining the legacy brown profile', () => {
+    const record = profile => SANITIZERS.custom_foods({
+      name: 'เมนู Hiwpinto',
+      unit: '1 กล่อง',
+      calories: 300,
+      hiwpinto: { includedRice: true, riceProfile: profile, riceGrams: 180 }
+    });
+
+    expect(record('riceberry').hiwpinto.riceProfile).toBe('riceberry');
+    expect(record('brown').hiwpinto.riceProfile).toBe('brown');
+    expect(record('riceberry').hiwpinto).not.toHaveProperty('baseRiceGrams');
+
+    const legacy = SANITIZERS.custom_foods({
+      name: 'เมนูเก่า',
+      unit: '1 กล่อง',
+      calories: 300,
+      hiwpinto: { includedRice: true, riceProfile: 'brown', baseRiceGrams: 180, originalRiceGrams: 180 }
+    });
+    expect(legacy.hiwpinto).toMatchObject({ baseRiceGrams: 180, originalRiceGrams: 180 });
+  });
+
   it('excludes push subscriptions from backups and preserves safe expense IDs', () => {
     expect(SANITIZERS.settings({ id: 'push', subscriptions: [{ endpoint: 'private' }] })).toBeNull();
     expect(docIdFor('expense_records', { id: 'expense_123' }, 'fallback')).toBe('expense_123');

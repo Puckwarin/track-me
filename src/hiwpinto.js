@@ -3,6 +3,7 @@ import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { openModal, toast, esc } from './util.js';
+import { calculateRiceAdjustment, riceProfileFromName } from './foodCalculations.js';
 
 const MONTHS = { 'ม.ค.':0,'มกราคม':0,'ก.พ.':1,'กุมภาพันธ์':1,'มี.ค.':2,'มีนาคม':2,'เม.ย.':3,'เมษายน':3,'พ.ค.':4,'พฤษภาคม':4,'มิ.ย.':5,'มิถุนายน':5,'ก.ค.':6,'กรกฎาคม':6,'ส.ค.':7,'สิงหาคม':7,'ก.ย.':8,'กันยายน':8,'ต.ค.':9,'ตุลาคม':9,'พ.ย.':10,'พฤศจิกายน':10,'ธ.ค.':11,'ธันวาคม':11 };
 export const cleanHiwpintoName = name => String(name || '').replace(/\s*\((?=[^()]*)(?:[^()]*(?:ข้าว|ขาว|ไรซ์|กล้อง|rice|brown)[^()]*)\)/gi, '').replace(/\s+/g, ' ').trim();
@@ -38,16 +39,38 @@ export function parseHiwpintoExport(data, now = new Date()) {
       const macroKcal = protein*4 + carbs*4 + fat*9;
       const delta = Math.abs(macroKcal - calories), badEnergy = delta > Math.max(60, calories*.2);
       const rice = /\((?:[^)]*(?:ข้าว|ขาว|ไรซ์|กล้อง|rice|brown)[^)]*)\)/i.test(item.name);
-      const brown = /\((?:[^)]*(?:ไรซ์|กล้อง|brown)[^)]*)\)/i.test(item.name);
+      const riceProfile = riceProfileFromName(item.name);
+      const shopNutrition = { calories, protein, carbs, fat };
+      const adjustment = calculateRiceAdjustment({
+        shopNutrition,
+        riceProfile,
+        targetRiceGrams: 180,
+        includedRice: rice
+      });
+      if (!adjustment.valid) continue;
+      const finalNutrition = adjustment.nutrition;
+      const riceWarning = !rice
+        ? ''
+        : adjustment.estimatedRiceGrams === null
+          ? adjustment.warning
+          : `${adjustment.warning ? `${adjustment.warning} · ` : ''}ประมาณข้าวเดิม ${Math.round(adjustment.estimatedRiceGrams)} g และเพิ่ม ${Math.round(adjustment.additionalRiceGrams)} g จากคาร์บรวมของร้าน ซึ่งอาจรวมซอส ผัก หรือส่วนผสมอื่น`;
       entries.push({
-        name, date, calories, protein, carbs, fat,
-        warning: [badEnergy ? `พลังงานจาก P/C/F ต่างจากค่าร้าน ${Math.round(delta)} kcal` : '', rice ? 'คาร์บส่วนที่มาจากข้าวเป็นค่าประมาณ (สมมติข้าวสุก 180 g)' : ''].filter(Boolean).join(' · '),
+        name, date, includedRice: rice, targetRiceGrams: 180, shopNutrition,
+        calories: Math.round(finalNutrition.calories),
+        protein: Math.round(finalNutrition.protein * 10) / 10,
+        carbs: Math.round(finalNutrition.carbs * 10) / 10,
+        fat: Math.round(finalNutrition.fat * 10) / 10,
+        warning: [badEnergy ? `พลังงานจาก P/C/F ต่างจากค่าร้าน ${Math.round(delta)} kcal` : '', riceWarning].filter(Boolean).join(' · '),
         record: {
           name, brand:'Hiwpinto', category:'อาหารคลีน/Hiwpinto', unit:'1 กล่อง', gramsPerUnit:null,
-          calories, protein, carbs, fat, favorite:false,
+          calories: Math.round(finalNutrition.calories),
+          protein: Math.round(finalNutrition.protein * 10) / 10,
+          carbs: Math.round(finalNutrition.carbs * 10) / 10,
+          fat: Math.round(finalNutrition.fat * 10) / 10,
+          favorite:false,
           hiwpinto: { shopCalories:calories, shopProtein:protein, shopCarbs:carbs, shopFat:fat, sideCarbs:null,
-            includedRice:rice, riceProfile:brown?'brown':'white', baseRiceGrams:180, riceGrams:180,
-            originalRiceGrams:180, kcalWarn: badEnergy ? `Sanity check: P/C/F ให้ ${Math.round(macroKcal)} kcal แต่ร้านระบุ ${calories} kcal` : '' },
+            includedRice:rice, riceProfile, riceGrams:180,
+            kcalWarn: badEnergy ? `Sanity check: P/C/F ให้ ${Math.round(macroKcal)} kcal แต่ร้านระบุ ${calories} kcal` : '' },
           createdAt:new Date()
         }
       });
@@ -78,7 +101,7 @@ export function openHiwpintoSync() {
     const existing=new Set(library.map(f=>cleanHiwpintoName(f.name).toLocaleLowerCase('th')));
     const unique=[],dups=[];
     for(const x of entries){const key=x.name.toLocaleLowerCase('th');if(existing.has(key)){dups.push(x.name);continue;}existing.add(key);unique.push(x);}
-    out.innerHTML=`<p class="font-semibold">ช่วง ${start}–${end}: พบ ${entries.length} เมนู · ใหม่ ${unique.length} · ซ้ำข้าม ${dups.length}</p><div class="max-h-64 overflow-auto space-y-2 mt-2">${unique.map(x=>`<div class="rounded-lg bg-white border border-slate-100 p-2"><b>${esc(x.name)}</b><div>${x.calories} kcal · P ${x.protein} · C ${x.carbs} · F ${x.fat}</div><div class="text-amber-700 text-xs">${esc(x.warning||'ค่าพลังงานและสารอาหารจากร้าน')}</div></div>`).join('')||'<p>ไม่มีรายการใหม่</p>'}${dups.length?`<p class="text-xs text-slate-500">ข้ามรายการชื่อซ้ำ: ${dups.map(esc).join(', ')}</p>`:''}</div><button id="hp-confirm-save" class="btn btn-primary mt-3" ${unique.length?'':'disabled'}>เพิ่ม ${unique.length} รายการเข้าคลังอาหาร</button>`;
+    out.innerHTML=`<p class="font-semibold">ช่วง ${start}–${end}: พบ ${entries.length} เมนู · ใหม่ ${unique.length} · ซ้ำข้าม ${dups.length}</p><div class="max-h-64 overflow-auto space-y-2 mt-2">${unique.map(x=>`<div class="rounded-lg bg-white border border-slate-100 p-2"><b>${esc(x.name)}</b><div>ร้าน: ${x.shopNutrition.calories} kcal · P ${x.shopNutrition.protein} · C ${x.shopNutrition.carbs} · F ${x.shopNutrition.fat}</div><div>${x.includedRice?`หลังคำนวณข้าวเป้าหมาย ${x.targetRiceGrams} g: `:'ค่าที่นำเข้า: '}${x.calories} kcal · P ${x.protein} · C ${x.carbs} · F ${x.fat}</div><div class="text-amber-700 text-xs">${esc(x.warning||'ค่าพลังงานและสารอาหารจากร้าน')}</div></div>`).join('')||'<p>ไม่มีรายการใหม่</p>'}${dups.length?`<p class="text-xs text-slate-500">ข้ามรายการชื่อซ้ำ: ${dups.map(esc).join(', ')}</p>`:''}</div><button id="hp-confirm-save" class="btn btn-primary mt-3" ${unique.length?'':'disabled'}>เพิ่ม ${unique.length} รายการเข้าคลังอาหาร</button>`;
     out.querySelector('#hp-confirm-save')?.addEventListener('click',e=>{if(guardPreviewWrite('การนำเข้า Hiwpinto '))return;e.currentTarget.disabled=true;try{const writes=unique.map(x=>addDoc(userCol(state.uid,'custom_foods'),x.record));Promise.all(writes).catch(err=>toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err'));toast(`เพิ่ม ${unique.length} เมนู Hiwpinto แล้ว`);m.close();}catch(err){toast('บันทึกเมนู Hiwpinto ไม่สำเร็จ: '+err.message,'err');}});
   };
 }

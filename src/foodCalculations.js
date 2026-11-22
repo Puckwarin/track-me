@@ -1,4 +1,4 @@
-import { gramsInUnit } from './foodConstants.js';
+import { gramsInUnit, RICE_PROFILES } from './foodConstants.js';
 
 export function foodLogQuantity(item) {
   if (Number.isFinite(item.quantity) && item.quantity > 0) return item.quantity;
@@ -61,6 +61,71 @@ export function foodQuantityFromInput(raw, base, inputMode = defaultFoodInputMod
 
 const r1 = v => Math.round(v * 10) / 10;
 const normFoodName = v => foodLogName(String(v || '').trim()).toLocaleLowerCase('th').replace(/\s+/g, ' ');
+
+export function riceProfileFromName(name) {
+  const value = String(name || '');
+  if (/(?:ไรซ์เบอร์รี่|ไรซ์เบอรี่|rice[\s-]*berry)/i.test(value)) return 'riceberry';
+  if (/(?:ข้าวกล้อง|กล้อง|ไรซ์|brown)/i.test(value)) return 'brown';
+  return 'white';
+}
+
+export function calculateRiceAdjustment({
+  shopNutrition,
+  riceProfile = 'white',
+  targetRiceGrams,
+  sideCarbs = null,
+  includedRice = true
+}) {
+  const original = {
+    calories: shopNutrition?.calories,
+    protein: shopNutrition?.protein,
+    carbs: shopNutrition?.carbs,
+    fat: shopNutrition?.fat
+  };
+  if (Object.values(original).some(value => !Number.isFinite(value) || value < 0)) {
+    return { valid: false, error: 'โภชนาการจากร้านไม่ถูกต้อง', nutrition: original };
+  }
+  const profile = Object.hasOwn(RICE_PROFILES, riceProfile) ? RICE_PROFILES[riceProfile] : null;
+  if (!profile || !Number.isFinite(targetRiceGrams) || targetRiceGrams < 0) {
+    return { valid: false, error: 'ชนิดข้าวหรือน้ำหนักเป้าหมายไม่ถูกต้อง', nutrition: original };
+  }
+  if (!includedRice) {
+    return { valid: true, nutrition: original, estimatedRiceGrams: null, additionalRiceGrams: 0, warning: '' };
+  }
+  if (sideCarbs !== null && (!Number.isFinite(sideCarbs) || sideCarbs < 0 || sideCarbs > original.carbs)) {
+    return { valid: false, error: 'คาร์บจากกับข้าวต้องอยู่ระหว่าง 0 ถึงคาร์บรวมจากร้าน', nutrition: original };
+  }
+  if (original.carbs === 0) {
+    return {
+      valid: true,
+      nutrition: original,
+      estimatedRiceGrams: null,
+      additionalRiceGrams: 0,
+      warning: 'คาร์บจากร้านเป็น 0 จึงประมาณน้ำหนักข้าวไม่ได้ และจะไม่เพิ่มข้าว'
+    };
+  }
+
+  const riceCarbs = original.carbs - (sideCarbs ?? 0);
+  const estimatedRiceGrams = riceCarbs / profile.carbs * 100;
+  const additionalRiceGrams = Math.max(0, targetRiceGrams - estimatedRiceGrams);
+  const riceScale = additionalRiceGrams / 100;
+  const warning = estimatedRiceGrams > targetRiceGrams
+    ? `ข้าวที่ประเมินได้ ${r1(estimatedRiceGrams)} g สูงกว่าเป้าหมาย ${targetRiceGrams} g จึงไม่เพิ่มข้าว`
+    : '';
+
+  return {
+    valid: true,
+    nutrition: {
+      calories: original.calories + riceScale * profile.calories,
+      protein: original.protein + riceScale * profile.protein,
+      carbs: original.carbs + riceScale * profile.carbs,
+      fat: original.fat + riceScale * profile.fat
+    },
+    estimatedRiceGrams,
+    additionalRiceGrams,
+    warning
+  };
+}
 
 export function hasFoodLibraryDefinitionChanged(prev, next) {
   if (!prev || !next) return false;

@@ -70,10 +70,11 @@ export const SANITIZERS = {
         shopCalories: num(o.hiwpinto.shopCalories), shopProtein: num(o.hiwpinto.shopProtein),
         shopCarbs: num(o.hiwpinto.shopCarbs), shopFat: num(o.hiwpinto.shopFat),
         sideCarbs: num(o.hiwpinto.sideCarbs), includedRice: o.hiwpinto.includedRice === true,
-        riceProfile: o.hiwpinto.riceProfile === 'brown' ? 'brown' : 'white',
-        baseRiceGrams: num(o.hiwpinto.baseRiceGrams) ?? 100,
+        riceProfile: ['white', 'brown', 'riceberry'].includes(o.hiwpinto.riceProfile) ? o.hiwpinto.riceProfile : 'white',
         riceGrams: o.hiwpinto.riceGrams === 140 ? 140 : 180,
-        originalRiceGrams: num(o.hiwpinto.originalRiceGrams), kcalWarn: str(o.hiwpinto.kcalWarn, 300)
+        ...(num(o.hiwpinto.baseRiceGrams) !== null && { baseRiceGrams: num(o.hiwpinto.baseRiceGrams) }),
+        ...(num(o.hiwpinto.originalRiceGrams) !== null && { originalRiceGrams: num(o.hiwpinto.originalRiceGrams) }),
+        kcalWarn: str(o.hiwpinto.kcalWarn, 300)
       }
     }),
     favorite: o.favorite === true, createdAt: ts(o.createdAt)

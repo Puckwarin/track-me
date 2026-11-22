@@ -9,6 +9,12 @@ export const MEAL_ICONS = {
   'ของว่าง/เครื่องดื่ม': 'fa-mug-hot'
 };
 
+export const RICE_PROFILES = {
+  white: { label: 'ข้าวขาว/ข้าวไรซ์', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
+  brown: { label: 'ข้าวกล้อง', calories: 123, protein: 2.7, carbs: 25.6, fat: 1 },
+  riceberry: { label: 'ข้าวไรซ์เบอร์รี่ (ค่าอ้างอิงชั่วคราว)', calories: 111, protein: 2.6, carbs: 23, fat: 0.9 }
+};
+
 export const DEFAULT_PRESETS = [
   { id: 'builtin-rice', name: 'ข้าวสวย', unit: '100 g', gramsPerUnit: 100, calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
   { id: 'builtin-egg', name: 'ไข่ต้ม', unit: '1 ฟอง', calories: 70, protein: 6, carbs: 0.6, fat: 5 },
