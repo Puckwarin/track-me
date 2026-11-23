@@ -108,9 +108,11 @@ input.input[type="month"]::-webkit-date-and-time-value { text-align: left; margi
 input.input::-webkit-datetime-edit { padding: 0; }
 .grid > *, .flex > .input, .flex > select { min-width: 0; }
 @media (max-width: 640px) {
-  .input, select.input, textarea.input { font-size: 0.875rem; padding: 0.38rem 0.62rem; }
+  /* 16px คือค่าต่ำสุดที่ iOS Safari จะไม่ซูมหน้าจอเองตอนแตะช่องกรอก (ดูกฎรวมท้ายไฟล์
+     สำหรับการบังคับขนาดนี้แบบกันคลาส text-xs/text-sm ทับ) — ที่นี่คงแค่ padding/ความสูงเดิม */
+  .input, select.input, textarea.input { font-size: 16px; padding: 0.38rem 0.62rem; }
   input.input[type="date"], input.input[type="time"], input.input[type="datetime-local"], input.input[type="month"] {
-    font-size: 0.8125rem;
+    font-size: 16px;
     padding: 0.32rem 0.55rem;
     min-height: 2.15rem;
   }
@@ -1980,3 +1982,41 @@ img, video, canvas, svg { max-width: 100%; }
 
 
 
+
+/* ============================================================
+   กันซูมอัตโนมัติบนมือถือ (iOS Safari/Chrome): ช่องกรอกข้อมูลทุกชนิด
+   ต้องมีขนาดตัวอักษรไม่ต่ำกว่า 16px ไม่งั้นเบราว์เซอร์จะซูมจอเองตอนแตะ
+   แล้วซูมกลับไม่สนิทตอนออกจากช่อง (ค้าง/กระตุก)
+
+   ใช้ !important โดยตั้งใจ: ไม่ใช่เพิ่ม specificity เฉยๆ เพราะมีช่องกรอก
+   ไดนามิกจาก JS จำนวนมาก (โมดัล/ดรอว์เออร์/เมนูย่อย) ที่ติดคลาส Tailwind
+   เช่น text-xs/text-sm มาด้วย (เช่น .input.text-xs) ซึ่งมี specificity
+   เท่ากับ .input เอง การไล่เพิ่ม specificity แบบปกติจึงไม่ครอบคลุมทุกเคส
+   และอนาคตเพิ่มฟอร์มใหม่ก็เสี่ยงหลุดกฎนี้ได้อีก !important การันตีว่า
+   "ช่องกรอกบนมือถือห้ามเล็กกว่า 16px" เป็นจริงเสมอโดยไม่ต้องไล่แก้ทีละไฟล์ ------------------------------------------------------------ */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="password"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"],
+  input:not([type]),
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+
+  /* Safari วาดค่าที่แสดงในช่องวันที่/เวลาเป็น pseudo-element แยกต่างหาก
+     ต้องบังคับขนาดตรงนี้ด้วย ไม่งั้นแตะแล้วยังซูมอยู่ดีแม้ input เองจะ 16px แล้ว */
+  input::-webkit-date-and-time-value {
+    font-size: 16px !important;
+  }
+}

@@ -93,14 +93,35 @@ export function buildDonutRing({
   </div>`;
 }
 
-/** สร้างชุด segment ของวงแหวนจากสัดส่วนพลังงานแต่ละมื้อ (ใช้ร่วมกับ buildDonutRing) */
-export function mealSlicesToSegments(slices) {
-  return slices.filter(s => s.kcal > 0).map(s => ({
-    value: s.pct,
+/**
+ * สร้างชุด segment ของวงแหวนจากสัดส่วนพลังงานแต่ละมื้อ (ใช้ร่วมกับ buildDonutRing)
+ *
+ * ถ้าระบุ targetKcal (เป้าพลังงานรวมของวัน) ความยาวส่วนโค้งของแต่ละมื้อจะอิงกับ
+ * "สัดส่วนเทียบเป้าหมายรวม" ไม่ใช่สัดส่วนเทียบกับที่กินไปทั้งหมด — กินไม่ถึงเป้า
+ * วงแหวนจะไม่เต็มวง ส่วนที่เหลือจะเป็นสี track ตามธีม ส่วนกินเกินเป้า ทุกส่วนจะถูก
+ * ย่อตามสัดส่วนเดิมให้พอดี 100% ของวงแหวน (ไม่ทะลุ/ไม่ซ้อนทับ) — ตัวเลข % และ
+ * รายละเอียดใน tooltip/legend ยังคงเป็นค่าจริง (สัดส่วนเทียบที่กินไปทั้งหมด) เหมือนเดิม
+ * ไม่ถูกย่อตาม ถ้าไม่ระบุ targetKcal จะคงพฤติกรรมเดิม (วงเต็มเสมอ) ไว้เพื่อความเข้ากันได้
+ */
+export function mealSlicesToSegments(slices, targetKcal = 0) {
+  const withData = slices.filter(s => s.kcal > 0);
+  const tipFor = s => `${s.meal}: ${s.pct}% · ${s.kcal.toLocaleString()} kcal · โปรตีน ${s.protein ?? 0} g`;
+  const subFor = s => `${s.count} รายการ`;
+
+  if (!(Number(targetKcal) > 0)) {
+    return withData.map(s => ({ value: s.pct, color: s.color, label: s.meal, tip: tipFor(s), sub: subFor(s) }));
+  }
+
+  const rawValues = withData.map(s => (s.kcal / Number(targetKcal)) * 100);
+  const rawTotal = rawValues.reduce((sum, v) => sum + v, 0);
+  const scale = rawTotal > 100 ? 100 / rawTotal : 1;   // เกินเป้า: ย่อทุกส่วนตามสัดส่วนเดิมให้รวมกันพอดี 100%
+
+  return withData.map((s, i) => ({
+    value: rawValues[i] * scale,
     color: s.color,
     label: s.meal,
-    tip: `${s.meal}: ${s.pct}% · ${s.kcal.toLocaleString()} kcal · โปรตีน ${s.protein ?? 0} g`,
-    sub: `${s.count} รายการ`
+    tip: tipFor(s),
+    sub: subFor(s)
   }));
 }
 
@@ -138,7 +159,7 @@ export function buildMealDonutParts({
 } = {}) {
   const hasGoal = Number(targetKcal) > 0;
   const pct = hasGoal ? Math.round((totalKcal / Number(targetKcal)) * 100) : 0;
-  const segments = hasData ? mealSlicesToSegments(slices) : [];
+  const segments = hasData ? mealSlicesToSegments(slices, targetKcal) : [];
   const isEmpty = !hasData || !segments.length;
 
   const ringHtml = buildDonutRing({
