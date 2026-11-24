@@ -30,10 +30,7 @@ describe('home widget customization contract', () => {
   it('exposes stable widget IDs and definitions matching all slots', () => {
     expect(HOME_WIDGET_IDS).toEqual([
       'planner',
-      'daily-overview',
-      'quick-access',
-      'daily-activity',
-      'reminders'
+      'daily-overview'
     ]);
     expect(HOME_WIDGET_DEFS.map(def => def.id)).toEqual(HOME_WIDGET_IDS);
   });
@@ -45,20 +42,17 @@ describe('home widget customization contract', () => {
     expect(cfg.pinnedShortcuts).toEqual([]);
   });
 
-  it('applies Team 2 order, hidden widgets, and pinnedShortcuts while discarding invalid IDs', () => {
+  it('applies custom order, hidden widgets, and pinnedShortcuts while discarding invalid IDs', () => {
     state.homeWidgets = {
-      order: ['reminders', 'unknown-widget', 'quick-access'],
+      order: ['daily-overview', 'unknown-widget', 'quick-access'],
       hidden: ['planner'],
       pinnedShortcuts: ['food', 'expense', '', null]
     };
 
     const cfg = getHomeWidgetConfig();
     expect(cfg.order).toEqual([
-      'reminders',
-      'quick-access',
-      'planner',
       'daily-overview',
-      'daily-activity'
+      'planner'
     ]);
     expect([...cfg.hidden]).toEqual(['planner']);
     expect(cfg.pinnedShortcuts).toEqual(['food', 'expense']);
@@ -67,14 +61,14 @@ describe('home widget customization contract', () => {
   it('reads from state.profile.homeWidgets or localStorage and survives malformed JSON', () => {
     state.profile = {
       homeWidgets: {
-        order: ['daily-activity', 'daily-overview'],
-        hidden: ['reminders'],
+        order: ['daily-overview', 'planner'],
+        hidden: ['daily-overview'],
         pinnedShortcuts: ['workout']
       }
     };
     let cfg = getHomeWidgetConfig();
-    expect(cfg.order[0]).toBe('daily-activity');
-    expect(cfg.hidden.has('reminders')).toBe(true);
+    expect(cfg.order[0]).toBe('daily-overview');
+    expect(cfg.hidden.has('daily-overview')).toBe(true);
     expect(cfg.pinnedShortcuts).toEqual(['workout']);
 
     state.profile = null;
@@ -89,13 +83,13 @@ describe('home widget customization contract', () => {
 
   it('stores widget preferences under the active account and sanitizes values', () => {
     expect(saveHomeWidgetConfig({
-      order: ['reminders', 'reminders', 'invalid'],
+      order: ['daily-overview', 'daily-overview', 'invalid'],
       hidden: ['planner', 'invalid'],
       pinnedShortcuts: ['food', 'food', 'invalid']
     })).toBe(true);
 
     expect(JSON.parse(values.get('trackme_home_widgets:v1:user-a'))).toEqual({
-      order: ['reminders', ...HOME_WIDGET_IDS.filter(id => id !== 'reminders')],
+      order: ['daily-overview', 'planner'],
       hidden: ['planner'],
       pinnedShortcuts: ['food']
     });

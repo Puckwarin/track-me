@@ -6,7 +6,7 @@ import { TYPES } from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
-import { bindSwipeRows } from './ui.js';
+import { bindSwipeRows, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 
 const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 const DEFAULT_ALT_ANCHOR = '2026-01-05'; // วันจันทร์อ้างอิงสำหรับสลับสัปดาห์ A / B
@@ -21,7 +21,7 @@ const DAY_PRESETS = [
 let root;
 let goFn = () => {};
 let selectedDate = localDateStr();
-let docClickBound = false;
+let stripScrollMode = 'center';
 let dragPayload = null;
 const boundContainers = new WeakSet();
 
@@ -46,6 +46,9 @@ export function routineAppliesToDate(r, dateStr, altAnchor) {
   }
   if (!Array.isArray(r.days)) return false;
   if (!r.days.includes(weekdayIdx(dateStr))) return false;
+  if (isDateStr(r.weekStart)) {
+    return mondayOf(dateStr) === mondayOf(r.weekStart);
+  }
   if (!r.weekPattern || r.weekPattern === 'every') return true;
   return r.weekPattern === weekCodeForDate(dateStr, altAnchor);
 }
@@ -158,6 +161,7 @@ export function matchingDayPreset(daysSet) {
 
 export function resetPlannerToToday() {
   selectedDate = localDateStr();
+  stripScrollMode = 'center';
 }
 
 function normalizePlannerState(raw = {}) {
@@ -401,16 +405,19 @@ export function itemsForDate(dateStr, rawPlanner = null) {
       time: r.time || '',
       icon: inferRoutineEmoji(r.title, r.icon),
       weekPattern: r.weekPattern || 'every',
+      weekStart: isDateStr(r.weekStart) ? r.weekStart : '',
       date: r.date || '',
       movedFrom,
       sub: movedFromLabel || (
         r.weekPattern === 'once'
           ? 'เฉพาะวันนี้'
-          : r.weekPattern === 'A'
-            ? 'สลับสัปดาห์ (รอบ A)'
-            : r.weekPattern === 'B'
-              ? 'สลับสัปดาห์ (รอบ B)'
-              : 'ประจำสัปดาห์'
+          : isDateStr(r.weekStart)
+            ? 'สัปดาห์นี้'
+            : r.weekPattern === 'A'
+              ? 'สลับสัปดาห์ (รอบ A)'
+              : r.weekPattern === 'B'
+                ? 'สลับสัปดาห์ (รอบ B)'
+                : 'ประจำสัปดาห์'
       )
     });
   }
@@ -508,6 +515,7 @@ async function rescheduleTask(kind, fromDate, id, toDate) {
     const prevDate = target.date;
     state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, date: toDate } : w);
     selectedDate = toDate;
+    stripScrollMode = 'smooth';
     renderPlanner();
     if (isPreviewMode()) {
       window.dispatchEvent(new Event('trackme:data-change'));
@@ -524,6 +532,7 @@ async function rescheduleTask(kind, fromDate, id, toDate) {
     } catch (err) {
       state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, date: prevDate } : w);
       selectedDate = prevDate;
+      stripScrollMode = 'smooth';
       renderPlanner();
       toast('ย้ายวันไม่สำเร็จ: ' + err.message, 'err');
       return false;
@@ -537,6 +546,7 @@ async function rescheduleTask(kind, fromDate, id, toDate) {
       return false;
     }
     selectedDate = toDate;
+    stripScrollMode = 'smooth';
     const saved = await savePlanner(res.planner);
     if (saved) toast(`ย้ายงานไป ${fmtDate(toDate)} แล้ว`);
     return saved;
@@ -548,34 +558,12 @@ async function rescheduleTask(kind, fromDate, id, toDate) {
 export function mountPlanner(el, navigate) {
   root = el;
   goFn = navigate || (() => {});
-
-  if (!docClickBound && typeof document !== 'undefined') {
-    docClickBound = true;
-    document.addEventListener('click', e => {
-      const menu = root?.isConnected ? $('#pl-plan-menu', root) : null;
-      if (menu?.open && !menu.contains(e.target)) {
-        menu.open = false;
-      }
-    });
-  }
+  stripScrollMode = 'center';
 
   if (!boundContainers.has(root)) {
     boundContainers.add(root);
 
     root.addEventListener('click', async e => {
-      const menu = $('#pl-plan-menu', root);
-      const closePlanMenu = () => {
-        if (menu) menu.open = false;
-      };
-
-      if (e.target.closest('[data-pl-flip-parity]')) {
-        const p = getPlanner();
-        const nextAnchor = p.altAnchor === '2026-01-05' ? '2026-01-12' : '2026-01-05';
-        await savePlanner({ ...p, altAnchor: nextAnchor });
-        toast('สลับรอบสัปดาห์ A ↔ B แล้ว');
-        return;
-      }
-
       const weekShiftBtn = e.target.closest('[data-pl-week-shift]');
       if (weekShiftBtn) {
         const delta = Number(weekShiftBtn.dataset.plWeekShift) || 0;
@@ -583,12 +571,14 @@ export function mountPlanner(el, navigate) {
         const nextMon = addDays(curMon, delta * 7);
         const offset = weekdayIdx(selectedDate);
         selectedDate = addDays(nextMon, offset);
+        stripScrollMode = 'smooth';
         renderPlanner();
         return;
       }
 
       if (e.target.closest('[data-pl-week-today]')) {
         selectedDate = localDateStr();
+        stripScrollMode = 'smooth';
         renderPlanner();
         return;
       }
@@ -596,21 +586,20 @@ export function mountPlanner(el, navigate) {
       const dayBtn = e.target.closest('[data-pl-day]');
       if (dayBtn) {
         selectedDate = dayBtn.dataset.plDay;
+        stripScrollMode = 'preserve';
         renderPlanner();
         return;
       }
 
       const quickAddBtn = e.target.closest('[data-pl-quick-add]');
       if (quickAddBtn) {
-        closePlanMenu();
         const d = quickAddBtn.dataset.plQuickAdd || selectedDate;
         selectedDate = d;
-        openRoutinesModal({ initialDate: d, initialPattern: 'once' });
+        openRoutinesModal({ initialDate: d });
         return;
       }
 
       if (e.target.closest('[data-pl-routines]')) {
-        closePlanMenu();
         openRoutinesModal({ initialDate: selectedDate });
         return;
       }
@@ -645,7 +634,6 @@ export function mountPlanner(el, navigate) {
 
       const goBtn = e.target.closest('[data-pl-go]');
       if (goBtn) {
-        closePlanMenu();
         goFn(goBtn.dataset.plGo);
         return;
       }
@@ -728,7 +716,7 @@ function renderTaskListHtml(dateStr) {
         const key = `${it.kind}:${dateStr}:${it.id}`;
         const kindBadge = it.kind === 'workout'
           ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${it.done ? 'bg-ok-soft text-slate-700' : 'bg-amber-100 text-amber-800'}">${it.done ? 'ออกกำลังกายแล้ว' : 'แผนออกกำลังกาย'}</span>`
-          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.movedFrom ? 'bg-sky-soft text-brand-dark font-semibold' : it.weekPattern === 'once' ? 'bg-sky-soft text-brand-dark font-semibold' : it.weekPattern === 'A' ? 'bg-sky-soft text-blue-800 font-semibold' : it.weekPattern === 'B' ? 'bg-amber-100 text-amber-900 font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
+          : `<span class="text-[10px] px-1.5 py-0.5 rounded ${it.movedFrom || it.weekPattern === 'once' || it.weekStart ? 'bg-sky-soft text-brand-dark font-semibold' : 'bg-lav-soft text-brand-dark'}">${esc(it.sub)}</span>`;
         const swipeActions = it.kind === 'routine'
           ? `<div class="tm-swipe-actions">
               <button type="button" data-pl-edit="${esc(key)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(it.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
@@ -798,7 +786,7 @@ function renderDesktopBoardHtml(weekDays, today) {
                           <span class="pl-board-task-title ${it.done ? 'line-through text-slate-500' : ''}">${it.icon} ${esc(it.title)}</span>
                         </div>
                         <div class="pl-board-task-foot">
-                          <span class="pl-board-task-tag">${esc(it.time ? `${it.time} · ` : '')}${esc(it.movedFrom ? 'ย้ายมา' : it.kind === 'workout' ? 'ออกกำลัง' : it.weekPattern === 'once' ? 'เฉพาะวัน' : it.weekPattern !== 'every' ? `รอบ ${it.weekPattern}` : 'ประจำ')}</span>
+                          <span class="pl-board-task-tag">${esc(it.time ? `${it.time} · ` : '')}${esc(it.movedFrom ? 'ย้ายมา' : it.kind === 'workout' ? 'ออกกำลัง' : it.weekPattern === 'once' ? 'เฉพาะวัน' : it.weekStart ? 'สัปดาห์นี้' : it.weekPattern !== 'every' ? `รอบ ${it.weekPattern}` : 'ประจำ')}</span>
                           <button type="button" data-pl-move="${esc(key)}" class="pl-board-move-btn" title="ย้ายวัน / แก้ไข / ลบ" aria-label="จัดการ ${esc(it.title)}">${iconSvg('swap', { size: 13 })}<span>ย้าย</span></button>
                         </div>
                       </div>`;
@@ -812,13 +800,14 @@ function renderDesktopBoardHtml(weekDays, today) {
 
 export function renderPlanner() {
   if (!root) return;
-  const p = getPlanner();
   const today = localDateStr();
   if (!isDateStr(selectedDate)) selectedDate = today;
 
+  const prevStrip = $('#pl-day-strip', root);
+  const prevScroll = prevStrip ? prevStrip.scrollLeft : 0;
+  const hadStrip = Boolean(prevStrip?.children.length);
+
   const weekMonday = mondayOf(selectedDate);
-  const currentWeekMonday = mondayOf(today);
-  const isCurrentWeek = weekMonday === currentWeekMonday;
 
   const weekDays = [];
   for (let i = 0; i < 7; i += 1) {
@@ -831,28 +820,24 @@ export function renderPlanner() {
 
   const weekTotal = weekDays.reduce((sum, d) => sum + d.items.length, 0);
   const weekDone = weekDays.reduce((sum, d) => sum + d.done, 0);
-  const weekCode = weekCodeForDate(selectedDate, p.altAnchor);
-  const hasAlternating = p.routines.some(r => r.weekPattern === 'A' || r.weekPattern === 'B');
-  const routinesCount = p.routines.length;
   const selectedItems = itemsForDate(selectedDate);
   const selectedDone = selectedItems.filter(x => x.done).length;
+  const stripDays = buildWeekStripRange(today, selectedDate);
 
   const mobileStripHtml = `
-    <div id="pl-day-strip" class="pl-day-strip pl-day-strip--week tabular-nums" role="listbox" aria-label="เลือกวันจันทร์ถึงอาทิตย์ในสัปดาห์นี้">
-      ${weekDays.map(m => {
+    <div id="pl-day-strip" class="tm-week-strip tabular-nums" role="listbox" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา">
+      ${stripDays.map(m => {
+        const items = itemsForDate(m.date);
+        const done = items.filter(x => x.done).length;
+        const remCount = remindersForDate(m.date).length;
         const isSel = m.date === selectedDate;
-        const isToday = m.date === today;
-        const allDone = m.items.length > 0 && m.done === m.items.length;
-        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="pl-day-pill relative flex flex-col items-center justify-center rounded-xl border py-1.5 px-0.5 min-h-[52px] text-xs transition ${
-          isSel ? 'bg-brand text-white border-brand shadow-sm'
-            : isToday ? 'bg-white border-brand/70 text-brand-dark font-semibold hover:bg-sky-soft/60'
-            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-        }">
-          ${m.remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${m.remCount} รายการ"></span>` : ''}
-          <span class="text-[10px] opacity-85">${m.wd}</span>
-          <span class="text-xs sm:text-sm font-bold leading-tight">${Number(m.date.slice(8))}</span>
-          <span class="text-[10px] ${isSel ? 'text-white/95' : allDone ? 'text-emerald-700 font-semibold' : 'text-slate-500'}">
-            ${m.items.length ? `${m.done}/${m.items.length}` : '·'}
+        const allDone = items.length > 0 && done === items.length;
+        return `<button type="button" data-pl-day="${m.date}" role="option" aria-selected="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="tm-day-pill relative ${isSel ? 'is-active' : ''} ${m.isToday ? 'is-today' : ''}">
+          ${remCount ? `<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-500'}" title="มีนัดหมาย/แจ้งเตือน ${remCount} รายการ"></span>` : ''}
+          <span class="tm-day-dow">${m.dow}</span>
+          <span class="tm-day-num">${m.dayNum}</span>
+          <span class="tm-day-meta ${isSel ? 'text-white/95' : allDone ? 'text-emerald-700 font-semibold' : 'text-slate-500'}">
+            ${items.length ? `${done}/${items.length}` : '·'}
           </span>
         </button>`;
       }).join('')}
@@ -860,35 +845,23 @@ export function renderPlanner() {
 
   root.innerHTML = `
   <section class="card pl-card space-y-3">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="min-w-0">
-        <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
-        <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-1.5">
-        <div class="pl-week-nav" role="group" aria-label="สลับสัปดาห์">
-          <button type="button" data-pl-week-shift="-1" class="pl-week-nav-btn" aria-label="สัปดาห์ก่อนหน้า" title="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
-          <button type="button" data-pl-week-today class="pl-week-nav-label ${isCurrentWeek ? 'is-current' : ''}" title="กลับสัปดาห์นี้">${isCurrentWeek ? 'สัปดาห์นี้' : 'กลับสัปดาห์นี้'}</button>
-          <button type="button" data-pl-week-shift="1" class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
+    <div class="pl-card-head">
+      <div class="pl-card-head-main">
+        <div class="min-w-0">
+          <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
+          <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
         </div>
-        ${hasAlternating ? `<span class="chip ${weekCode === 'A' ? 'bg-sky-soft text-blue-800' : 'bg-amber-100 text-amber-900'} text-xs font-bold">รอบ ${weekCode}</span>
-        <button type="button" data-pl-flip-parity class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" title="สลับให้สัปดาห์นี้เป็น A หรือ B">${iconSvg('cycle', { size: 13 })} A↔B</button>` : ''}
-        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 13 })} เพิ่มงาน</button>
-        <details id="pl-plan-menu" class="relative">
-          <summary class="chip bg-sky-soft text-brand-dark min-h-[36px] whitespace-nowrap list-none cursor-pointer font-semibold">${iconSvg('ellipsis', { size: 14 })} จัดการ</summary>
-          <div class="tm-tools-menu absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-            <button type="button" data-pl-routines class="chip justify-start bg-lav-soft text-brand-dark min-h-[44px]">${iconSvg('repeat', { size: 14 })} กิจกรรมทั้งหมด (${routinesCount})</button>
-            <button type="button" data-pl-go="workout" class="chip justify-start bg-sky-soft text-blue-700 min-h-[44px]">${iconSvg('workout', { size: 14 })} ออกกำลังกาย</button>
-            <button type="button" data-pl-go="remind" class="chip justify-start bg-amber-100 text-amber-900 min-h-[44px]">${iconSvg('pin', { size: 14 })} นัดหมาย</button>
-          </div>
-        </details>
-        <button type="button" data-pl-collapse class="chip min-h-[36px] bg-white border border-slate-200 text-slate-600 text-xs" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 14 })}</button>
+        <div class="pl-card-actions">
+          ${weekNavBarHtml({ isToday: selectedDate === today, prevAttrs: 'data-pl-week-shift="-1"', todayAttrs: 'data-pl-week-today', nextAttrs: 'data-pl-week-shift="1"' })}
+          <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[40px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
+        </div>
       </div>
+      <button type="button" data-pl-collapse class="pl-collapse-btn" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 16 })}</button>
     </div>
 
     <div class="pl-mobile-view space-y-2.5">
       ${mobileStripHtml}
-      ${!routinesCount ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
+      ${!weekTotal ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
         <span class="min-w-0">เพิ่มงานวางแผนในสัปดาห์นี้ได้ทันที</span>
         <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
       </div>` : ''}
@@ -911,6 +884,17 @@ export function renderPlanner() {
     </div>
   </section>`;
   bindSwipeRows($('.pl-task-list', root));
+  const nextStrip = $('#pl-day-strip', root);
+  if (nextStrip) {
+    if (!hadStrip || stripScrollMode === 'center') {
+      centerStripPill(nextStrip, '.is-active', { behavior: 'auto' });
+    } else if (stripScrollMode === 'smooth') {
+      centerStripPill(nextStrip, '.is-active', { behavior: 'smooth' });
+    } else {
+      nextStrip.scrollLeft = prevScroll;
+    }
+    stripScrollMode = 'preserve';
+  }
 }
 
 function openRescheduleModal(kind, fromDate, id) {
@@ -934,7 +918,7 @@ function openRescheduleModal(kind, fromDate, id) {
 
   const m = openModal(`
     <div class="flex justify-between items-center mb-3 gap-2">
-      <h3 class="font-bold text-base sm:text-lg text-slate-800 inline-flex items-center gap-2 min-w-0">${iconSvg('swap', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & ย้ายวันงาน</span></h3>
+      <h3 class="font-bold text-base sm:text-lg text-slate-800 inline-flex items-center gap-2 min-w-0">${iconSvg('swap', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & ย้ายวัน</span></h3>
       <button data-close type="button" class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
 
@@ -953,16 +937,16 @@ function openRescheduleModal(kind, fromDate, id) {
         <label class="lbl" for="pl-move-date">หรือเลือกวันที่ปลายทางเอง (ย้ายข้ามสัปดาห์ได้)</label>
         <div class="flex items-center gap-2">
           <input id="pl-move-date" type="date" class="input min-h-[44px] flex-1" value="${esc(addDays(fromDate, 1))}">
-          <button type="button" id="pl-move-confirm" class="btn btn-primary min-h-[44px] shrink-0">ย้ายไปวันนี้</button>
+          <button type="button" id="pl-move-confirm" class="btn btn-primary min-h-[44px] shrink-0">ย้ายวัน</button>
         </div>
       </div>
 
       <div class="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" id="pl-modal-toggle" class="btn btn-ghost min-h-[44px] text-xs">${item.done ? 'เปลี่ยนเป็นยังไม่ทำ' : 'ทำเครื่องหมายเสร็จแล้ว'}</button>
+        <button type="button" id="pl-modal-toggle" class="btn btn-ghost min-h-[44px] text-xs">${item.done ? 'ยังไม่ทำ' : 'ทำเสร็จ'}</button>
         <div class="flex flex-wrap gap-2">
           ${kind === 'routine'
-            ? `<button type="button" id="pl-modal-edit" class="btn btn-sky min-h-[44px] text-xs">${iconSvg('edit-square', { size: 14 })} แก้ไข</button>
-               <button type="button" id="pl-modal-skip" class="btn btn-pink min-h-[44px] text-xs">${iconSvg('trash', { size: 14 })} ${item.weekPattern === 'once' ? 'ลบงานนี้' : 'เอาออกจากวันนี้'}</button>`
+            ? `<button type="button" id="pl-modal-edit" class="tm-food-action-btn" aria-label="แก้ไข ${esc(item.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+               <button type="button" id="pl-modal-skip" class="tm-food-action-btn is-del" aria-label="ลบ ${esc(item.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>`
             : `<button type="button" id="pl-modal-workout" class="btn btn-sky min-h-[44px] text-xs">ดูแผนในหน้าออกกำลังกาย</button>`}
         </div>
       </div>
@@ -1013,33 +997,40 @@ function openRescheduleModal(kind, fromDate, id) {
 function openRoutinesModal(opts = {}) {
   let editingId = null;
   const initialDate = isDateStr(opts.initialDate) ? opts.initialDate : (selectedDate || localDateStr());
+  const weekMonday = mondayOf(initialDate);
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekMonday, i));
+  const weekDateSet = new Set(weekDates);
+
   let pickedDays = new Set([weekdayIdx(initialDate)]);
   let pickedIcon = '✨';
 
+  const isScopedToThisWeek = r =>
+    !!r && (
+      (isDateStr(r.weekStart) && mondayOf(r.weekStart) === weekMonday) ||
+      (r.weekPattern === 'once' && isDateStr(r.date) && mondayOf(r.date) === weekMonday)
+    );
+
+  const activeWeekdaysInWeek = (planner, r) =>
+    weekDates.map((d, idx) => (isRoutineActiveOnDate(planner, r, d) ? idx : -1)).filter(idx => idx >= 0);
+
   const frequentRoutines = getFrequentRecentRoutines(getPlanner(), 10);
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3">
-      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 18, className: 'text-brand' })}<span>จัดการงาน & กิจกรรม</span></h3>
-      <button data-close class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+    <div class="flex justify-between items-center mb-2 gap-2">
+      <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5 min-w-0">${iconSvg('planner', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & แก้ไข</span></h3>
+      <button data-close type="button" class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">วางแผนงานทีละสัปดาห์โดยเลือกวันในสัปดาห์ที่ต้องการ (จันทร์–อาทิตย์)</p>
+    <p class="text-xs text-slate-500 mb-3">ผูกเฉพาะสัปดาห์ <b class="text-slate-700">${esc(weekRangeLabel(weekMonday))}</b> (จันทร์–อาทิตย์) ไม่กระทบสัปดาห์อื่น</p>
 
     <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-3 mb-4">
       ${frequentRoutines.length ? `
       <div class="flex flex-wrap gap-1.5">
         ${frequentRoutines.map(item => `<button type="button" data-rt-preset="${esc(item.icon + '|' + item.title)}" class="chip bg-sky-soft/70 border border-sky-200 text-slate-700 text-xs hover:bg-sky-soft">${item.icon} ${esc(item.title)}</button>`).join('')}
       </div>` : ''}
-      <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5">
-        <div>
-          <label class="lbl" for="rt-title">ชื่องาน / กิจกรรม *</label>
-          <div class="flex items-center gap-2">
-            <span id="rt-icon-badge" class="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจกรรม">✨</span>
-            <input id="rt-title" class="input flex-1 min-h-[44px]" placeholder="เช่น ล้างจาน, ส่งงาน, ออกกำลังกาย">
-          </div>
-        </div>
-        <div>
-          <label class="lbl" for="rt-time">เวลา (ไม่บังคับ)</label>
-          <input id="rt-time" type="time" class="input min-h-[44px] sm:w-32">
+      <div>
+        <label class="lbl" for="rt-title">ชื่องาน / กิจกรรม *</label>
+        <div class="flex items-center gap-2">
+          <span id="rt-icon-badge" class="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg" title="อิโมจิของกิจกรรม">✨</span>
+          <input id="rt-title" class="input flex-1 min-h-[44px]" placeholder="เช่น ล้างจาน, ส่งงาน, ออกกำลังกาย">
         </div>
       </div>
       <div id="rt-days-wrap" class="space-y-2">
@@ -1052,12 +1043,18 @@ function openRoutinesModal(opts = {}) {
         <div id="rt-days" class="grid grid-cols-7 gap-1"></div>
       </div>
       <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
-        <button type="button" id="rt-cancel-edit" class="btn btn-ghost hidden text-xs">ยกเลิกแก้ไข</button>
-        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
+        <button type="button" id="rt-cancel-edit" class="btn btn-ghost text-xs">ยกเลิก</button>
+        <button type="button" id="rt-save" class="btn btn-primary text-xs">${iconSvg('save', { size: 14 })} บันทึก</button>
       </div>
     </div>
 
-    <div id="rt-list" class="tm-swipe-list tm-swipe-list--cards max-h-64 overflow-y-auto pr-1"></div>
+    <div class="space-y-2">
+      <div class="flex items-center justify-between gap-2 px-0.5">
+        <span class="text-xs font-semibold text-slate-700" id="rt-list-title">รายการในสัปดาห์นี้</span>
+        <span class="text-[11px] text-slate-500 tabular-nums">${esc(weekRangeLabel(weekMonday))}</span>
+      </div>
+      <div id="rt-list" class="tm-swipe-list tm-swipe-list--cards max-h-72 overflow-y-auto overscroll-contain"></div>
+    </div>
   `, { wide: true });
 
   const renderDays = () => {
@@ -1078,35 +1075,41 @@ function openRoutinesModal(opts = {}) {
   };
 
   const renderList = () => {
-    const list = getPlanner().routines;
+    const planner = getPlanner();
+    const entries = planner.routines
+      .map(r => ({ routine: r, daysInWeek: activeWeekdaysInWeek(planner, r) }))
+      .filter(({ routine, daysInWeek }) => daysInWeek.length > 0 || isScopedToThisWeek(routine));
+
+    const titleEl = $('#rt-list-title', m.el);
+    if (titleEl) titleEl.textContent = `รายการในสัปดาห์นี้ (${entries.length})`;
+
     const listEl = $('#rt-list', m.el);
-    listEl.innerHTML = list.length ? list.map(r => {
+    listEl.innerHTML = entries.length ? entries.map(({ routine: r, daysInWeek }) => {
       const icon = inferRoutineEmoji(r.title, r.icon);
-      const daysList = Array.isArray(r.days) && r.days.length
-        ? r.days
-        : (isDateStr(r.date) ? [weekdayIdx(r.date)] : []);
-      const schedDesc = daysList.length === 7
-        ? 'ทุกวัน'
-        : daysList.map(d => WEEKDAYS[d]).join(', ') || (isDateStr(r.date) ? fmtDate(r.date) : '-');
+      const schedDesc = daysInWeek.length === 7
+        ? 'ทุกวันในสัปดาห์นี้'
+        : daysInWeek.length
+          ? `วัน${daysInWeek.map(d => WEEKDAYS[d]).join(', ')}`
+          : 'ไม่ได้เลือกวันในสัปดาห์นี้';
       return `
       <div class="tm-swipe-row">
         <div class="tm-swipe-actions">
           <button type="button" data-rt-edit="${esc(r.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(r.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
           <button type="button" data-rt-del="${esc(r.id)}" class="tm-swipe-action-btn is-del" aria-label="ลบ ${esc(r.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
-        <div class="tm-swipe-card !flex-row items-center justify-between gap-2 text-sm">
-          <div class="min-w-0 flex-1">
-            <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)} ${r.time ? `<span class="text-xs font-normal text-blue-700 bg-sky-soft px-1.5 py-0.5 rounded tabular-nums">${esc(r.time)}</span>` : ''}</p>
-            <p class="text-[11px] text-slate-500">${esc(schedDesc)}</p>
+        <div class="tm-swipe-card !flex !flex-row items-center justify-between gap-3 !px-3.5 !py-2.5 min-h-[56px] text-sm">
+          <div class="min-w-0 flex-1 space-y-0.5">
+            <p class="font-semibold text-slate-800 truncate">${icon} ${esc(r.title)}</p>
+            <p class="text-[11px] text-slate-500 truncate">${esc(schedDesc)}</p>
           </div>
-          <div class="tm-row-actions">
+          <div class="tm-row-actions shrink-0">
             <button type="button" data-rt-edit="${esc(r.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(r.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
             <button type="button" data-rt-del="${esc(r.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(r.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
           </div>
         </div>
       </div>`;
     }).join('')
-      : '<p class="text-xs text-slate-500 text-center py-4">ยังไม่มีกิจกรรมที่ตั้งไว้</p>';
+      : '<p class="text-xs text-slate-500 text-center py-5 rounded-xl bg-slate-50 border border-dashed border-slate-200">ยังไม่มีงานในสัปดาห์นี้</p>';
     bindSwipeRows(listEl);
   };
 
@@ -1116,17 +1119,19 @@ function openRoutinesModal(opts = {}) {
   };
 
   const startEditById = targetId => {
-    const r = getPlanner().routines.find(x => x.id === targetId);
+    const p = getPlanner();
+    const r = p.routines.find(x => x.id === targetId);
     if (!r) return;
     editingId = r.id;
     pickedIcon = inferRoutineEmoji(r.title, r.icon);
-    const fallbackDays = isDateStr(r.date) ? [weekdayIdx(r.date)] : [weekdayIdx(initialDate)];
-    pickedDays = new Set(Array.isArray(r.days) && r.days.length ? r.days : fallbackDays);
+    const activeDays = activeWeekdaysInWeek(p, r);
+    const fallbackDays = Array.isArray(r.days) && r.days.length
+      ? r.days
+      : (isDateStr(r.date) ? [weekdayIdx(r.date)] : [weekdayIdx(initialDate)]);
+    pickedDays = new Set(activeDays.length ? activeDays : fallbackDays);
     $('#rt-title', m.el).value = r.title;
-    $('#rt-time', m.el).value = r.time || '';
     syncIconBadge(r.title);
-    $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึกการแก้ไข`;
-    $('#rt-cancel-edit', m.el).classList.remove('hidden');
+    $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึก`;
     renderDays();
   };
 
@@ -1135,9 +1140,7 @@ function openRoutinesModal(opts = {}) {
     pickedIcon = '✨';
     pickedDays = new Set([weekdayIdx(initialDate)]);
     $('#rt-title', m.el).value = '';
-    $('#rt-time', m.el).value = '';
-    $('#rt-save', m.el).innerHTML = `${iconSvg('plus', { size: 14 })} เพิ่มงาน`;
-    $('#rt-cancel-edit', m.el).classList.add('hidden');
+    $('#rt-save', m.el).innerHTML = `${iconSvg('save', { size: 14 })} บันทึก`;
     syncIconBadge('');
     renderDays();
   };
@@ -1162,8 +1165,10 @@ function openRoutinesModal(opts = {}) {
     if (dayPreset) {
       const v = dayPreset.dataset.rtDays;
       const found = DAY_PRESETS.find(p => p.key === v);
-      if (found) pickedDays = new Set(found.days);
-      renderDays();
+      if (found) {
+        pickedDays = matchingDayPreset(pickedDays) === v ? new Set() : new Set(found.days);
+        renderDays();
+      }
       return;
     }
 
@@ -1186,20 +1191,46 @@ function openRoutinesModal(opts = {}) {
     if (delBtn) {
       const targetId = delBtn.dataset.rtDel;
       const p = getPlanner();
-      const routines = p.routines.filter(x => x.id !== targetId);
-      const moves = p.moves.filter(x => x.routineId !== targetId);
-      const skips = p.skips.filter(x => x.routineId !== targetId);
+      const orig = p.routines.find(x => x.id === targetId);
+      let routines = p.routines;
+      let moves = p.moves.filter(mv => !(mv.routineId === targetId && (weekDateSet.has(mv.from) || weekDateSet.has(mv.to))));
+      let skips = [...p.skips];
+      const doneMap = { ...p.doneMap };
+
+      for (const wd of weekDates) {
+        if (doneMap[wd]) {
+          const rest = doneMap[wd].filter(id => id !== targetId);
+          if (rest.length) doneMap[wd] = rest;
+          else delete doneMap[wd];
+        }
+      }
+
+      if (!orig || isScopedToThisWeek(orig)) {
+        routines = p.routines.filter(x => x.id !== targetId);
+        moves = moves.filter(mv => mv.routineId !== targetId);
+        skips = skips.filter(sk => sk.routineId !== targetId);
+      } else {
+        for (const wd of weekDates) {
+          if (routineAppliesToDate(orig, wd, p.altAnchor) && !skips.some(sk => sk.routineId === targetId && sk.date === wd)) {
+            skips.push({ routineId: targetId, date: wd });
+          }
+        }
+      }
+
       if (editingId === targetId) resetEdit();
-      await savePlanner({ ...p, routines, moves, skips });
+      const saved = await savePlanner({ ...p, routines, moves, skips, doneMap });
+      if (saved) toast(!orig || isScopedToThisWeek(orig) ? 'ลบงานในสัปดาห์นี้แล้ว' : 'นำงานออกจากสัปดาห์นี้แล้ว (สัปดาห์อื่นคงเดิม)');
       renderList();
     }
   });
 
-  $('#rt-cancel-edit', m.el).addEventListener('click', resetEdit);
+  $('#rt-cancel-edit', m.el).addEventListener('click', () => {
+    if (editingId) resetEdit();
+    else m.close();
+  });
 
   $('#rt-save', m.el).addEventListener('click', async () => {
     const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    const timeVal = ($('#rt-time', m.el)?.value || '').trim();
     if (!title) return toast('กรอกชื่องานก่อนค่ะ', 'err');
 
     const days = [...pickedDays].sort((a, b) => a - b);
@@ -1207,19 +1238,50 @@ function openRoutinesModal(opts = {}) {
 
     const p = getPlanner();
     const icon = inferRoutineEmoji(title, pickedIcon);
-    const rec = {
-      id: editingId || ('r' + Date.now().toString(36)),
-      title,
-      days,
-      icon,
-      ...(timeVal && { time: timeVal })
-    };
-    const routines = editingId
-      ? p.routines.map(x => (x.id === editingId ? rec : x))
-      : [...p.routines, rec];
+    let routines = p.routines;
+    let moves = p.moves;
+    let skips = p.skips;
+    const doneMap = { ...p.doneMap };
 
-    await savePlanner({ ...p, routines });
-    toast(editingId ? 'แก้ไขงานแล้ว' : 'เพิ่มกิจกรรมแล้ว');
+    if (editingId) {
+      const orig = p.routines.find(x => x.id === editingId);
+      if (!orig || isScopedToThisWeek(orig)) {
+        const rec = { id: editingId, title, days, icon, weekStart: weekMonday };
+        routines = p.routines.map(x => (x.id === editingId ? rec : x));
+        moves = p.moves.filter(mv => !(mv.routineId === editingId && (weekDateSet.has(mv.from) || weekDateSet.has(mv.to))));
+        skips = p.skips.filter(sk => !(sk.routineId === editingId && weekDateSet.has(sk.date)));
+      } else {
+        // งานเดิมเป็นแบบต่อเนื่อง: แยกบันทึกเฉพาะสัปดาห์นี้เพื่อไม่กระทบสัปดาห์อื่น
+        const newId = 'r' + Date.now().toString(36);
+        const rec = { id: newId, title, days, icon, weekStart: weekMonday };
+        moves = p.moves.filter(mv => !(mv.routineId === orig.id && (weekDateSet.has(mv.from) || weekDateSet.has(mv.to))));
+        skips = [...p.skips];
+        for (const wd of weekDates) {
+          if (routineAppliesToDate(orig, wd, p.altAnchor) && !skips.some(sk => sk.routineId === orig.id && sk.date === wd)) {
+            skips.push({ routineId: orig.id, date: wd });
+          }
+          if (doneMap[wd]?.includes(orig.id)) {
+            const rest = doneMap[wd].filter(id => id !== orig.id);
+            if (days.includes(weekdayIdx(wd))) rest.push(newId);
+            if (rest.length) doneMap[wd] = [...new Set(rest)];
+            else delete doneMap[wd];
+          }
+        }
+        routines = [...p.routines, rec];
+      }
+    } else {
+      const rec = {
+        id: 'r' + Date.now().toString(36),
+        title,
+        days,
+        icon,
+        weekStart: weekMonday
+      };
+      routines = [...p.routines, rec];
+    }
+
+    await savePlanner({ ...p, routines, moves, skips, doneMap });
+    toast(editingId ? 'แก้ไขงานเฉพาะสัปดาห์นี้แล้ว' : 'เพิ่มงานในสัปดาห์นี้แล้ว');
     resetEdit();
     renderList();
   });

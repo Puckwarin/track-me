@@ -9,13 +9,12 @@ import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindSwipeRows } from './ui.js';
+import { bindSwipeRows, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 
 import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
 
 export { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
-const WEEKDAYS = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 // ค่า MET (Compendium of Physical Activities, ปัดเป็นช่วงโดยประมาณ) ตามประเภทและความหนัก
 const MET = { walk: [2.8, 3.5, 5.0], upper: [3.0, 3.5, 6.0], lower: [3.0, 3.5, 6.0], full: [3.5, 4.3, 6.0], pilates: [2.5, 3.0, 4.0], stretch: [2.0, 2.3, 3.0], other: [3.0, 4.0, 6.0] };
 export const INTENSITY = [['light', 'เบา'], ['moderate', 'ปานกลาง'], ['vigorous', 'หนัก']];
@@ -29,6 +28,7 @@ export function estimateBurn(type, intensity, minutes, weightKg) {
 let root, draft = emptyDraft();
 let activeWorkoutTab = 'plan';
 let weekStart = '';
+let stripScrollMode = 'center';
 let editingId = null;
 let editingTemplateId = null;
 let lastParsedImport = null;
@@ -47,6 +47,9 @@ function setWorkoutTab(tab) {
   $('#w-panel-plan', root)?.classList.toggle('hidden', activeWorkoutTab !== 'plan');
   $('#w-panel-history', root)?.classList.toggle('hidden', activeWorkoutTab !== 'history');
   $('#w-panel-templates', root)?.classList.toggle('hidden', activeWorkoutTab !== 'templates');
+  if (activeWorkoutTab === 'plan') {
+    centerStripPill($('#w-week-strip', root), '.is-active', { behavior: 'auto' });
+  }
 }
 
 const SAMPLE_IMPORT_TEXT = `Day A — Lower Body
@@ -117,6 +120,7 @@ export function mountWorkout(el) {
   activeWorkoutTab = 'plan';
   const today = localDateStr();
   weekStart = mondayOf(today);
+  stripScrollMode = 'center';
   root.innerHTML = `
   <div class="md:col-span-2">
     <div class="tm-seg tm-seg--3 max-w-lg" role="tablist" aria-label="หมวดการออกกำลังกาย">
@@ -134,14 +138,12 @@ export function mountWorkout(el) {
 
       <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('weekly', { size: 15, className: 'text-brand' })}<span>วางแผนรายสัปดาห์ (จ–อา)</span></span>
-          <div class="flex items-center gap-1">
-            <button type="button" id="w-wk-prev" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์ก่อน">${iconSvg('chevron-left', { size: 15 })}</button>
-            <button type="button" id="w-wk-now" class="chip bg-lav-soft text-brand-dark min-h-[38px] whitespace-nowrap">สัปดาห์นี้</button>
-            <button type="button" id="w-wk-next" class="chip bg-white border border-slate-200 text-slate-700 min-w-[38px] min-h-[38px] justify-center" aria-label="สัปดาห์หน้า">${iconSvg('chevron-right', { size: 15 })}</button>
+          <span class="text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('weekly', { size: 15, className: 'text-brand' })}<span>วางแผนรายสัปดาห์</span></span>
+          <div class="ml-auto shrink-0">
+            ${weekNavBarHtml({ isToday: true, prevAttrs: 'id="w-wk-prev"', todayAttrs: 'id="w-wk-now"', nextAttrs: 'id="w-wk-next"' })}
           </div>
         </div>
-        <div id="w-week-strip" class="grid grid-cols-7 gap-1.5"></div>
+        <div id="w-week-strip" class="tm-week-strip tabular-nums" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
         <div id="w-day-plans" class="space-y-1.5"></div>
       </div>
 
@@ -373,12 +375,25 @@ export function mountWorkout(el) {
     if (e.target.closest('#w-import-copy')) copyFormattedImport();
   });
 
-  $('#w-wk-prev', root).addEventListener('click', () => { weekStart = addDays(weekStart, -7); renderWeekStrip(); });
-  $('#w-wk-next', root).addEventListener('click', () => { weekStart = addDays(weekStart, 7); renderWeekStrip(); });
-  $('#w-wk-now', root).addEventListener('click', () => { const t = localDateStr(); weekStart = mondayOf(t); selectPlanDate(t); });
+  const shiftWorkoutWeek = delta => {
+    const cur = $('#w-date', root).value || localDateStr();
+    const next = addDays(cur, delta * 7);
+    weekStart = mondayOf(next);
+    selectPlanDate(next, { scrollMode: 'smooth' });
+  };
+  $('#w-wk-prev', root).addEventListener('click', () => shiftWorkoutWeek(-1));
+  $('#w-wk-next', root).addEventListener('click', () => shiftWorkoutWeek(1));
+  $('#w-wk-now', root).addEventListener('click', () => {
+    const t = localDateStr();
+    weekStart = mondayOf(t);
+    selectPlanDate(t, { scrollMode: 'smooth' });
+  });
   $('#w-week-strip', root).addEventListener('click', e => {
     const b = e.target.closest('[data-wday]');
-    if (b) selectPlanDate(b.dataset.wday);
+    if (b) {
+      weekStart = mondayOf(b.dataset.wday);
+      selectPlanDate(b.dataset.wday, { scrollMode: 'preserve' });
+    }
   });
   $('#w-day-plans', root).addEventListener('click', handleRecordAction);
   $('#w-history', root).addEventListener('click', handleRecordAction);
@@ -403,6 +418,7 @@ export function mountWorkout(el) {
   $('#w-date', root).addEventListener('change', () => {
     const d = $('#w-date', root).value || localDateStr();
     weekStart = mondayOf(d);
+    stripScrollMode = 'smooth';
     if (!editingId) $('#w-status', root).value = d > localDateStr() ? 'planned' : 'done';
     renderWeekStrip();
   });
@@ -477,7 +493,8 @@ function loadTemplate(t, silent = false) {
   burnPreview();
 }
 
-function selectPlanDate(d) {
+function selectPlanDate(d, { scrollMode = 'preserve' } = {}) {
+  stripScrollMode = scrollMode;
   $('#w-date', root).value = d;
   if (!editingId) $('#w-status', root).value = d > localDateStr() ? 'planned' : 'done';
   renderWeekStrip();
@@ -564,6 +581,7 @@ function startRecordEdit(id) {
   editingId = r.id;
   $('#w-date', root).value = r.date || localDateStr();
   weekStart = mondayOf($('#w-date', root).value);
+  stripScrollMode = 'smooth';
   $('#w-status', root).value = r.status === 'planned' ? 'planned' : 'done';
   $('#w-type', root).value = TYPES[r.type] ? r.type : 'other';
   $('#w-title', root).value = r.title || '';
@@ -585,6 +603,7 @@ export function resetToToday() {
   if (!root || editingId || editingTemplateId) return;
   const today = localDateStr();
   weekStart = mondayOf(today);
+  stripScrollMode = 'center';
   $('#w-date', root).value = today;
   $('#w-status', root).value = 'done';
   renderWeekStrip();
@@ -620,6 +639,7 @@ function clearForm() {
   $('#w-note', root).value = '';
   $('#w-dur', root).value = '';
   weekStart = mondayOf(today);
+  stripScrollMode = 'center';
   clearImportBox({ keepOpen: false });
   updateRecordEditUi();
   renderSections();
@@ -1365,6 +1385,8 @@ function renderWeekStrip() {
   const selected = $('#w-date', root).value || localDateStr();
   const today = localDateStr();
   if (!weekStart) weekStart = mondayOf(selected);
+  const wkNowBtn = $('#w-wk-now', root);
+  if (wkNowBtn) wkNowBtn.classList.toggle('is-current', selected === today);
 
   const byDate = {};
   state.workouts.forEach(w => {
@@ -1372,27 +1394,34 @@ function renderWeekStrip() {
     (byDate[w.date] ||= []).push(w);
   });
 
-  $('#w-week-strip', root).innerHTML = WEEKDAYS.map((wd, idx) => {
-    const d = addDays(weekStart, idx);
-    const list = byDate[d] || [];
-    const hasDone = list.some(x => x.status !== 'planned');
-    const hasPlanned = list.some(x => x.status === 'planned');
-    const isSel = d === selected;
-    const isToday = d === today;
-    const dayNum = Number(d.slice(8));
-    return `<button type="button" data-wday="${d}" class="flex flex-col items-center justify-center rounded-xl border py-1.5 px-1 text-xs transition ${
-      isSel ? 'bg-brand text-white border-brand shadow-sm'
-        : isToday ? 'bg-white border-brand/50 text-brand-dark font-semibold hover:bg-lav-soft/60'
-        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-    }">
-      <span class="text-[11px] opacity-80">${wd}</span>
-      <span class="text-sm font-bold leading-tight tabular-nums">${dayNum}</span>
-      <span class="flex items-center gap-0.5 h-2 mt-0.5">
-        ${hasDone ? `<span class="w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-emerald-500'}" title="ทำแล้ว"></span>` : ''}
-        ${hasPlanned ? `<span class="w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-400'}" title="วางแผนไว้"></span>` : ''}
-      </span>
-    </button>`;
-  }).join('');
+  const stripEl = $('#w-week-strip', root);
+  if (stripEl) {
+    const prevScroll = stripEl.scrollLeft;
+    const hadPills = stripEl.children.length > 0;
+    const stripDays = buildWeekStripRange(today, selected);
+    stripEl.innerHTML = stripDays.map(m => {
+      const list = byDate[m.date] || [];
+      const hasDone = list.some(x => x.status !== 'planned');
+      const hasPlanned = list.some(x => x.status === 'planned');
+      const isSel = m.date === selected;
+      return `<button type="button" data-wday="${m.date}" aria-pressed="${isSel}" aria-label="${esc(fmtDate(m.date))}" class="tm-day-pill ${isSel ? 'is-active' : ''} ${m.isToday ? 'is-today' : ''}">
+        <span class="tm-day-dow">${m.dow}</span>
+        <span class="tm-day-num">${m.dayNum}</span>
+        <span class="tm-day-meta flex items-center gap-0.5 h-2">
+          ${hasDone ? `<span class="w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-emerald-500'}" title="ทำแล้ว"></span>` : ''}
+          ${hasPlanned ? `<span class="w-1.5 h-1.5 rounded-full ${isSel ? 'bg-amber-200' : 'bg-amber-400'}" title="วางแผนไว้"></span>` : ''}
+        </span>
+      </button>`;
+    }).join('');
+    if (!hadPills || stripScrollMode === 'center') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'auto' });
+    } else if (stripScrollMode === 'smooth') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'smooth' });
+    } else {
+      stripEl.scrollLeft = prevScroll;
+    }
+    stripScrollMode = 'preserve';
+  }
 
   const dayList = byDate[selected] || [];
   const dayPlansEl = $('#w-day-plans', root);

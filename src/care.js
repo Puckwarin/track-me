@@ -70,7 +70,7 @@ export function mountCare(el) {
       <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ข้อมูลน้องและบันทึกน้ำหนัก</summary>
       <div class="mt-3 space-y-3">
         <div class="grid sm:grid-cols-2 gap-3"><input id="pet-name" class="input" placeholder="ชื่อน้อง"><input id="pet-kind" class="input" placeholder="พันธุ์/ชนิด"><label class="text-sm">วันเกิด<input id="pet-birth" type="date" class="input"></label><input id="pet-weight" type="number" min="0.1" step="0.1" class="input" placeholder="น้ำหนัก (kg)"><select id="pet-life" class="input sm:col-span-2"><option value="neutered">โตเต็มวัย ทำหมัน</option><option value="intact">โตเต็มวัย ยังไม่ทำหมัน</option><option value="inactive">กิจกรรมน้อย/น้ำหนักขึ้นง่าย</option><option value="puppy-young">ลูกสุนัขอายุต่ำกว่า 4 เดือน</option><option value="puppy-old">ลูกสุนัข 4 เดือนขึ้นไป</option></select></div>
-        <button id="pet-save" class="btn btn-primary">บันทึกข้อมูลน้อง/น้ำหนัก</button>
+        <button id="pet-save" class="btn btn-primary">บันทึก</button>
       </div>
     </details>
     <section id="pet-daily-care" class="rounded-2xl border border-amber-200 bg-amber-50/50 p-3 space-y-3" aria-labelledby="pet-daily-care-title">
@@ -93,7 +93,7 @@ export function mountCare(el) {
       <div id="pet-food-presets" class="hidden space-y-1"></div>
       <div class="grid sm:grid-cols-3 gap-2"><input id="pet-food-name" class="input" placeholder="อาหาร/ขนม"><input id="pet-food-grams" type="number" min="0" step="1" class="input" placeholder="ปริมาณ (g)"><input id="pet-food-kcal" type="number" min="0" step="1" class="input" placeholder="kcal ต่อ 100g"></div>
       <div class="grid sm:grid-cols-2 gap-2"><select id="pet-food-allergy" class="input"><option value="unknown">สถานะการแพ้: ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select><input id="pet-food-notes" class="input" placeholder="อาการ/รายละเอียด เช่น คราบน้ำตา, โปรตีน 28%"></div>
-      <button id="pet-food-save" class="btn btn-soft">บันทึกอาหาร</button>
+      <button id="pet-food-save" class="btn btn-soft">บันทึก</button>
       <div id="pet-food-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
     </div>
     <p class="text-xs text-slate-500">ค่าพลังงานเป็นเพียงจุดเริ่มต้นโดยประมาณ ควรปรับตามสภาพร่างกายและคำแนะนำสัตวแพทย์</p>
@@ -114,8 +114,8 @@ export function mountCare(el) {
       <div id="pet-sx-grid" class="grid sm:grid-cols-2 gap-2.5"></div>
       <div><label class="lbl">รายละเอียดเพิ่มเติม</label><input id="pet-sx-note" class="input" placeholder="เช่น ถ่ายเหลว 2 รอบ, กินยาแล้วดีขึ้น, คันบริเวณหู"></div>
       <div class="flex flex-wrap justify-end gap-2">
-        <button type="button" id="pet-sx-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
-        <button type="button" id="pet-sx-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกอาการน้องหมา</button>
+        <button type="button" id="pet-sx-cancel" class="btn btn-ghost hidden">ยกเลิก</button>
+        <button type="button" id="pet-sx-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกอาการ</button>
       </div>
       <div class="border-t pt-3 space-y-2">
         <h4 class="font-semibold text-sm text-slate-700">ประวัติอาการล่าสุด</h4>
@@ -131,7 +131,7 @@ export function mountCare(el) {
           <h3 class="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('stethoscope', { size: 18, className: 'text-brand shrink-0' })}<span>บันทึกผลตรวจ / ผลเลือด</span></h3>
           <p id="care-lab-summary" class="text-xs text-slate-500">กดเพื่อโหลดฟอร์มบันทึก เทมเพลตผลเลือด และตัวสแกนใบผลตรวจ</p>
         </div>
-        <button type="button" id="care-lab-open" class="btn btn-soft text-xs">${iconSvg('folder', { size: 14 })} เปิดผลตรวจ / ผลเลือด</button>
+        <button type="button" id="care-lab-open" class="btn btn-soft text-xs">${iconSvg('folder', { size: 14 })} เปิดผลตรวจ</button>
       </section>
     </div>
   </div>`;
@@ -210,7 +210,7 @@ export function ensureLabMounted() {
         labMountPromise = null;
         if (openBtn?.isConnected) {
           openBtn.disabled = false;
-          openBtn.innerHTML = `${iconSvg('folder', { size: 14 })} เปิดผลตรวจ / ผลเลือด`;
+          openBtn.innerHTML = `${iconSvg('folder', { size: 14 })} เปิดผลตรวจ`;
         }
         reportRuntimeError(error, { category: 'chunk', source: 'feature-load' });
         toast('เปิดบันทึกผลตรวจไม่สำเร็จ: ' + (error?.message || 'โหลดโมดูลไม่ได้'), 'err');
@@ -277,7 +277,7 @@ function openPetFoodScanModal(results, errors) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
       <h3 class="font-bold text-lg text-slate-800">🐾 ตรวจสอบผลสแกนซองอาหาร (${prepared.length} รูป)</h3>
-      <button data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ✓ ประมวลผลครบ ${prepared.length} รูป${errors.length ? ` · ไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บรูปภาพลงระบบ)
@@ -303,8 +303,8 @@ function openPetFoodScanModal(results, errors) {
     </div>
     <div class="flex flex-wrap justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="pfs-fill" class="btn btn-soft text-xs">นำรายการแรกใส่ฟอร์ม</button>
-      <button type="button" id="pfs-save" class="btn btn-primary text-xs">${iconSvg('check', { size: 14 })} ยืนยันบันทึกรายการที่เลือก</button>
+      <button type="button" id="pfs-fill" class="btn btn-soft text-xs">ใส่ฟอร์ม</button>
+      <button type="button" id="pfs-save" class="btn btn-primary text-xs">${iconSvg('check', { size: 14 })} บันทึกที่เลือก</button>
     </div>`, { wide: true });
 
   $('#pfs-fill', m.el).addEventListener('click', () => {
@@ -364,7 +364,7 @@ function openPetFoodScanModal(results, errors) {
       toast(`บันทึกอาหารน้อง ${itemsToSave.length} รายการแล้ว 🐾`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = `${iconSvg('check', { size: 14 })} ยืนยันบันทึกรายการที่เลือก`;
+      btn.innerHTML = `${iconSvg('check', { size: 14 })} บันทึกที่เลือก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });
@@ -544,7 +544,7 @@ function resetPetSymptomForm() {
   $r('#pet-sx-date').value = localDateStr();
   $r('#pet-sx-temp').value = '';
   $r('#pet-sx-note').value = '';
-  $r('#pet-sx-save').innerHTML = `${iconSvg('plus', { size: 15 })} บันทึกอาการน้องหมา`;
+  $r('#pet-sx-save').innerHTML = `${iconSvg('plus', { size: 15 })} บันทึกอาการ`;
   $r('#pet-sx-cancel').classList.add('hidden');
   renderPetSymptomGrid();
 }
@@ -604,7 +604,7 @@ function onPetSymptomListClick(e) {
     $r('#pet-sx-date').value = rec.date || localDateStr();
     $r('#pet-sx-temp').value = rec.value != null ? String(rec.value) : '';
     $r('#pet-sx-note').value = rec.note || '';
-    $r('#pet-sx-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกการแก้ไข`;
+    $r('#pet-sx-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึก`;
     $r('#pet-sx-cancel').classList.remove('hidden');
     renderPetSymptomGrid();
     $r('#pet-sx-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

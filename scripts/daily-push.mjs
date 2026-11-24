@@ -51,7 +51,12 @@ function weekCodeForDate(ymd, altAnchor = DEFAULT_ALT_ANCHOR) {
 }
 
 function routineAppliesToDate(r, ymd, wd, altAnchor) {
-  if (!r || !Array.isArray(r.days) || !r.days.includes(wd)) return false;
+  if (!r) return false;
+  if (r.weekPattern === 'once') return typeof r.date === 'string' && r.date === ymd;
+  if (!Array.isArray(r.days) || !r.days.includes(wd)) return false;
+  if (typeof r.weekStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.weekStart)) {
+    return mondayOfUtc(ymd) === mondayOfUtc(r.weekStart);
+  }
   if (!r.weekPattern || r.weekPattern === 'every') return true;
   return r.weekPattern === weekCodeForDate(ymd, altAnchor);
 }

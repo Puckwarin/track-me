@@ -21,7 +21,7 @@ import { APP_VERSION_LABEL } from './version.js';
 import { watch, stopAll, renderSyncStatus } from './sync.js';
 import { initAuth, exitPreviewMode } from './auth.js';
 import { isPreviewMode, getPreviewCollection, getPreviewFoodByDate } from './preview.js';
-import { CATEGORIES, GROUPS, groupOf } from './categories.js';
+import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
@@ -127,7 +127,13 @@ function syncNavActiveState(name) {
   const group = groupOf(name);
   const activeSub = name === 'weekly' || name === 'report' ? 'overview' : name;
   document.querySelectorAll('[data-nav]').forEach(b => {
-    const on_ = b.dataset.tab ? b.dataset.tab === activeSub : b.dataset.nav === group;
+    let on_;
+    if (b.closest('#bottom-nav')) {
+      const bottomGroup = group === 'expense' ? 'care' : group;
+      on_ = b.dataset.tab ? b.dataset.tab === activeSub : b.dataset.nav === bottomGroup;
+    } else {
+      on_ = b.dataset.tab ? b.dataset.tab === activeSub : b.dataset.nav === group;
+    }
     b.classList.toggle('is-active', on_);
     if (on_) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -141,14 +147,19 @@ function syncNavActiveState(name) {
 function renderSubnav(group, name) {
   const nav = $('#subnav');
   const preferences = readNavigationPreferences(state.uid);
-  const tabs = getSubnavTabs(group, preferences, name);
+  const effectiveGroup = group === 'expense' ? 'care' : group;
+  let tabs = getSubnavTabs(effectiveGroup, preferences, name);
+  if (effectiveGroup === 'care' && (!preferences?.hiddenTabs?.includes('expense') || name === 'expense')) {
+    const expTab = { tab: 'expense', ...SUBTABS.expense };
+    if (!tabs.some(item => item.tab === 'expense')) tabs = [...tabs, expTab];
+  }
   const show = tabs.length >= 2;
-  const useTiles = show && (group === 'health' || group === 'care');
+  const useTiles = show && (effectiveGroup === 'health' || effectiveGroup === 'care');
   nav.classList.toggle('hidden', !show);
   nav.classList.toggle('subnav--tiles', useTiles);
   if (!show) { nav.innerHTML = ''; return; }
   if (useTiles) {
-    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 24 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
+    nav.innerHTML = `<div class="subnav-tiles" role="list" aria-label="หมวดหมู่ย่อย">${tabs.map(item => `<button type="button" role="listitem" data-sub="${esc(item.tab)}" class="hx-cat sub-tile ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}><span class="hx-cat-icon" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 18 })}</span><span class="hx-cat-label">${esc(item.label)}</span></button>`).join('')}</div>`;
   } else {
     nav.innerHTML = `<div class="subnav-row">${tabs.map(item => `<button type="button" data-sub="${esc(item.tab)}" class="sub-chip ${item.tab === name ? 'is-active' : ''}" ${item.tab === name ? 'aria-current="page"' : ''}>${iconSvg(item.icon || item.tab, { size: 15 })}${esc(item.label)}</button>`).join('')}</div>`;
   }

@@ -1,7 +1,7 @@
 import { writeBatch, doc } from 'firebase/firestore';
 import { db, userCol } from './firebase.js';
 import { state } from './state.js';
-import { $, addDays, esc, fmtDate, localDateStr, openModal, round1, toast } from './util.js';
+import { $, addDays, esc, fmtDate, localDateStr, mondayOf, openModal, round1, toast } from './util.js';
 import { getFoodRecordsInRange } from './foodService.js';
 import { iconSvg } from './icons.js';
 import { MEAL_ICONS, MEAL_ORDER } from './foodConstants.js';
@@ -12,6 +12,8 @@ import { guardPreviewWrite } from './preview.js';
 export function openFoodHistorySearch() {
   const today = localDateStr();
   const targetDate = () => document.getElementById('f-date')?.value || today;
+  let activeDate = targetDate();
+  let rangeDays = 30;
 
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-3">
@@ -21,22 +23,24 @@ export function openFoodHistorySearch() {
       </div>
       <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2.5 items-end mb-3">
-      <div>
-        <label class="lbl" for="fh-q">ค้นหาชื่อเมนูหรือมื้ออาหาร</label>
-        <input id="fh-q" class="input min-h-[44px]" placeholder="เช่น อกไก่, ข้าวสวย, มื้อเช้า">
+    <div class="space-y-2.5 mb-3">
+      <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2.5 items-end">
+        <div>
+          <label class="lbl" for="fh-q">ค้นหาชื่อเมนูหรือมื้ออาหาร</label>
+          <input id="fh-q" class="input min-h-[44px]" placeholder="เช่น อกไก่, ข้าวสวย, มื้อเช้า">
+        </div>
+        <div>
+          <label class="lbl" for="fh-range">ช่วงข้อมูล</label>
+          <select id="fh-range" class="input min-h-[44px]">
+            <option value="0">เฉพาะวันที่เลือก</option>
+            <option value="7">7 วันล่าสุด</option>
+            <option value="30" selected>30 วันล่าสุด</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label class="lbl" for="fh-from">ตั้งแต่วันที่</label>
-        <input id="fh-from" type="date" class="input min-h-[44px]" value="${addDays(today, -30)}">
-      </div>
-      <div>
-        <label class="lbl" for="fh-to">ถึงวันที่</label>
-        <input id="fh-to" type="date" class="input min-h-[44px]" value="${today}">
-      </div>
-      <button id="fh-go" type="button" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('search', { size: 15 })} ค้นหา</button>
+      <div id="fh-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
     </div>
-    <div id="fh-res" class="space-y-3 max-h-[60vh] overflow-y-auto pr-0.5 text-sm text-slate-500">กดปุ่ม "ค้นหา" เพื่อดูรายการในช่วงวันที่เลือก</div>
+    <div id="fh-res" class="space-y-3 max-h-[58vh] overflow-y-auto pr-0.5 text-sm text-slate-500">กำลังโหลดประวัติอาหาร...</div>
   `, { size: 'xl' });
 
   let mealGroups = [];
@@ -152,11 +156,35 @@ export function openFoodHistorySearch() {
     out.innerHTML = html.join('');
   };
 
+  const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+  const renderStrip = (centerIfInitial = false) => {
+    const stripEl = $('#fh-week-strip', m.el);
+    if (!stripEl) return;
+    const prevScroll = stripEl.scrollLeft;
+    const hadPills = stripEl.children.length > 0;
+    const baseMon = mondayOf(today);
+    const rangeStart = addDays(baseMon, -28);
+    const rangeEnd = addDays(baseMon, 13);
+    const finalStart = activeDate < rangeStart ? mondayOf(activeDate) : rangeStart;
+    const finalEnd = activeDate > rangeEnd ? addDays(mondayOf(activeDate), 6) : rangeEnd;
+    const pills = [];
+    for (let ds = finalStart; ds <= finalEnd; ds = addDays(ds, 1)) {
+      const [yy, mm, dd] = ds.split('-').map(Number);
+      const dow = DOW[new Date(yy, mm - 1, dd).getDay()];
+      const active = ds === activeDate;
+      const isToday = ds === today;
+      pills.push(`<button type="button" data-fh-day="${ds}" aria-pressed="${active}" aria-label="${esc(ds)}" class="tm-day-pill ${active ? 'is-active' : ''} ${isToday ? 'is-today' : ''}"><span class="tm-day-dow">${dow}</span><span class="tm-day-num">${dd}</span></button>`);
+    }
+    stripEl.innerHTML = pills.join('');
+    if (!centerIfInitial && hadPills && prevScroll > 0) stripEl.scrollLeft = prevScroll;
+    else requestAnimationFrame(() => stripEl.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+  };
+
+  let searchTimer = null;
   const search = async () => {
     const q = $('#fh-q', m.el).value.trim().toLowerCase();
-    const from = $('#fh-from', m.el).value;
-    const to = $('#fh-to', m.el).value;
-    if (!from || !to || from > to) return toast('ช่วงวันที่ไม่ถูกต้อง', 'err');
+    const to = activeDate;
+    const from = rangeDays === 0 ? activeDate : addDays(activeDate, -rangeDays);
     const out = $('#fh-res', m.el);
     out.textContent = 'กำลังค้นหา...';
     try {
@@ -196,7 +224,26 @@ export function openFoodHistorySearch() {
       }
     }
   });
-  $('#fh-go', m.el).addEventListener('click', search);
-  $('#fh-q', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  $('#fh-week-strip', m.el).addEventListener('click', e => {
+    const b = e.target.closest('[data-fh-day]');
+    if (!b) return;
+    activeDate = b.dataset.fhDay;
+    if (rangeDays !== 0) {
+      rangeDays = 0;
+      $('#fh-range', m.el).value = '0';
+    }
+    renderStrip(false);
+    search();
+  });
+  $('#fh-range', m.el).addEventListener('change', e => {
+    rangeDays = Number(e.target.value);
+    search();
+  });
+  $('#fh-q', m.el).addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(search, 220);
+  });
+  $('#fh-q', m.el).addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(searchTimer); search(); } });
+  renderStrip(true);
   search();
 }

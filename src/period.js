@@ -227,7 +227,7 @@ export function render() {
     return `<tr class="hover:bg-pink-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600 whitespace-nowrap">${endCell}</td>
       <td class="p-3 text-right text-slate-600">${p.end ? daysBetween(p.start, p.end) + 1 : '—'}</td><td class="p-3 text-right text-slate-600">${older ? daysBetween(older.start, p.start) : '—'}</td>
       <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
-      <td class="p-3 text-center"><button data-del="${esc(p.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึกประจำเดือน">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
+      <td class="p-3 text-center"><button type="button" data-del="${esc(p.id)}" class="tm-row-action-btn is-del !mx-auto" aria-label="ลบบันทึกประจำเดือน ${esc(fmtDate(p.start))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button></td></tr>`;
   }).join('') : '<tr><td colspan="6" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</td></tr>';
 
   const mobileList = $('#p-mobile-list', root);

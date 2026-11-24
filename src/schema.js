@@ -157,6 +157,7 @@ export const SANITIZERS = {
           id: /^[\w-]{1,40}$/.test(r.id || '') ? r.id : 'r' + Math.random().toString(36).slice(2, 9),
           title: str(r.title, 80),
           days: (Array.isArray(r.days) ? r.days : []).filter(d => Number.isInteger(d) && d >= 0 && d <= 6),
+          ...(isDateStr(r.weekStart) && { weekStart: r.weekStart }),
           ...(['every', 'A', 'B', 'once'].includes(r.weekPattern) && r.weekPattern !== 'every' && { weekPattern: r.weekPattern }),
           ...(r.weekPattern === 'once' && isDateStr(r.date) && { date: r.date }),
           ...(str(r.time, 10) && { time: str(r.time, 10) }),

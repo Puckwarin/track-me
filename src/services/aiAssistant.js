@@ -263,7 +263,7 @@ const TOOL_DEFS = [
         mealType: { type: 'STRING', description: 'มื้ออาหาร เช่น มื้อเช้า, มื้อกลางวัน, มื้อเย็น, ของว่าง' },
         calories: { type: 'NUMBER', description: 'แคลอรี่รวม (kcal) — ถ้าผู้ใช้ไม่บอก ให้ประมาณค่ามาตรฐานมาให้เลยหรือเว้นว่างเพื่อให้ระบบค้นในคลัง' },
         protein: { type: 'NUMBER', description: 'โปรตีน (กรัม)' },
-        carbs: { type: 'NUMBER', description: 'คาร์โบไฮเดรต (กรัม)' },
+        carbs: { type: 'NUMBER', description: 'คาร์บ (กรัม)' },
         fat: { type: 'NUMBER', description: 'ไขมัน (กรัม)' }
       },
       required: ['foodName']

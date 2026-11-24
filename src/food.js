@@ -1,11 +1,11 @@
 import { addDoc, updateDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, $$, esc, localDateStr, addDays, mondayOf, numField, round1, toast, openModal, toNum } from './util.js';
+import { $, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
 import { iconSvg } from './icons.js';
-import { animateNumberTicker, bindChartInspector } from './ui.js';
-import { buildMealDonutParts, DONUT_TOOLTIP_HINT } from './donutChart.js';
-import { analyzeFoodImage, isLocalNutritionSufficient, readNutritionLabelLocally, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
+import { animateNumberTicker, bindChartInspector, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
+import { buildMealDonutParts } from './donutChart.js';
+import { readNutritionLabel, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { openFoodSearch, detectBarcode, barcodeOff } from './foodsearch.js';
 import { openHiwpintoSync } from './hiwpinto.js';
 import { getMeals, getTargets } from './profile.js';
@@ -25,12 +25,12 @@ import {
   fmtAmount,
   getMealPiePalette,
   hasFoodLibraryDefinitionChanged,
-  isGramUnitLabel,
+  inferFoodInputMode,
   riceProfileFromName,
   unitNutritionFor
 } from './foodCalculations.js';
 import { validateFoodLog } from './foodValidation.js';
-import { addCustomFood, addFoodRecord, deleteCustomFood, deleteFoodRecord, getFoodRecordsInRange, updateCustomFood, updateFoodRecord, watchFoodRecords } from './foodService.js';
+import { addCustomFood, addFoodRecord, deleteCustomFood, deleteFoodRecord, updateCustomFood, updateFoodRecord, watchFoodRecords } from './foodService.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { openFoodEditor } from './foodEditor.js';
 import { openFoodHistorySearch } from './foodHistory.js';
@@ -41,6 +41,7 @@ export { getPresets } from './foodConstants.js';
 let root, items = [], base = null;   // base = ค่าต่อ 1 หน่วยของเมนูที่เลือกจากคลัง
 let lastCustomFoodsSnapshot = new Map();
 let lastTrackedUid = null;
+let stripScrollMode = 'center';
 const selectedFoodIds = new Set();
 const num = v => (typeof v === 'number' ? v : 0);
 
@@ -48,46 +49,38 @@ export function mountFood(el) {
   root = el;
   root.innerHTML = `
   <div class="md:col-span-2 space-y-4">
-    <section class="card space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-xs font-semibold text-slate-600">วันที่บันทึก</span>
-        <input type="date" id="f-date" class="input !w-auto ml-auto min-h-[44px]" aria-label="เลือกวันที่">
-      </div>
-      <div id="f-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
-      <div class="bg-white border border-slate-200 rounded-2xl p-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-4 lg:gap-6 items-center">
-        <div class="min-w-0 space-y-3">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0 flex-1 space-y-0.5">
-              <span id="f-daylabel" class="block text-xs text-slate-500 font-medium">แคลอรี่รวมวันนี้</span>
-              <div id="f-total" class="text-xl font-bold text-slate-800 tabular-nums">กำลังโหลด...</div>
-              <div id="f-remain" class="text-xs text-slate-600 tabular-nums"></div>
-            </div>
-            <span id="f-ring-pct" class="shrink-0 inline-flex items-center px-2.5 py-1 rounded-full bg-slate-50 text-xs font-bold text-slate-700 tabular-nums border border-slate-200">0%</span>
+    <section class="space-y-3">
+      <div class="card !p-3.5 sm:!p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-semibold text-slate-600 whitespace-nowrap">วันที่บันทึก</span>
+            <input type="date" id="f-date" class="input !w-auto min-h-[44px]" aria-label="เลือกวันที่">
           </div>
-          <div class="tm-progress-track" aria-hidden="true"><div id="f-cal-bar" class="tm-progress-fill" style="width:0%"></div></div>
-          <div id="f-macro-strip" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+          <div id="f-week-nav-slot" class="ml-auto shrink-0">${weekNavBarHtml({ isToday: true, prevAttrs: 'id="f-wk-prev"', todayAttrs: 'id="f-wk-now"', nextAttrs: 'id="f-wk-next"' })}</div>
         </div>
-        <div id="f-pie-wrap" class="space-y-2.5 lg:border-l lg:border-slate-200 lg:pl-5">
-          <div id="f-meals-pie" class="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-            <div id="f-meals-pie-svg" class="tm-donut-col shrink-0"></div>
-            <div id="f-meals" class="w-full space-y-1 min-w-0"></div>
-          </div>
-          <div id="f-pie-readout-slot"></div>
-        </div>
+        <div id="f-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
       </div>
+
+      <section id="f-summary-hero" class="hx-hero" aria-label="สรุปโภชนาการประจำวัน">
+        <div class="hx-hero-grid">
+          <div class="hx-hero-copy">
+            <span id="f-daylabel" class="hx-hero-sub font-semibold">แคลอรี่รวมวันนี้</span>
+            <div id="f-total" class="hx-hero-kcal tabular-nums"><span>กำลังโหลด...</span></div>
+            <p id="f-remain" class="hx-hero-left tabular-nums"></p>
+            <p id="f-burn" class="hidden text-xs text-slate-500 mt-1 tabular-nums"></p>
+          </div>
+          <div id="f-meals-pie-ring" class="hx-hero-ring"></div>
+          <div id="f-macro-strip" class="hx-macros"></div>
+        </div>
+        <div id="f-pie-wrap" class="mt-4 pt-3.5 border-t border-[var(--hx-line)]">
+          <div id="f-advice" class="p-3 sm:p-3.5 rounded-xl text-xs leading-relaxed" aria-label="คำแนะนำโภชนาการ"></div>
+        </div>
+      </section>
     </section>
 
-    <fieldset class="tm-seg tm-seg--2">
-      <legend class="sr-only">เลือกมุมมองอาหาร</legend>
-      <input id="f-view-log" type="radio" name="food-view" value="log" class="sr-only" checked>
-      <label for="f-view-log" class="tm-seg-btn min-h-[44px]">บันทึกอาหาร</label>
-      <input id="f-view-summary" type="radio" name="food-view" value="summary" class="sr-only">
-      <label for="f-view-summary" class="tm-seg-btn min-h-[44px]">สรุปโภชนาการ</label>
-    </fieldset>
-
-    <section id="f-log-panel" aria-labelledby="f-view-log">
+    <section id="f-log-panel" aria-label="บันทึกมื้ออาหารและรายการของวัน">
       <div class="tm-food-log-grid">
-        <div class="card space-y-4">
+        <div class="card space-y-4 min-w-0">
           <div class="flex flex-wrap justify-between items-center gap-2">
             <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('circle-plus', { size: 19, className: 'text-brand' })}<span>บันทึกมื้ออาหาร</span></h2>
             <details id="f-tools-menu" class="relative">
@@ -101,66 +94,56 @@ export function mountFood(el) {
             </details>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="border border-dashed border-slate-300 bg-slate-50 hover:bg-white rounded-xl p-3.5 text-center cursor-pointer block transition min-h-[44px]">
-              <input type="file" id="f-scan" accept="image/*" multiple class="hidden">
-              <span class="inline-flex text-brand">${iconSvg('camera', { size: 22 })}</span>
-              <span class="block text-sm font-semibold text-slate-800 mt-1">สแกนอาหาร ฉลาก หรือบาร์โค้ด (เลือกได้หลายรูป)</span>
-              <span class="block text-xs text-slate-500 mt-0.5">อ่านบาร์โค้ดและฉลากในเครื่องก่อน ใช้ AI เฉพาะจานอาหารหรือรูปที่อ่านไม่ชัด</span>
-            </label>
-            <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
-          </div>
-          <div id="f-photo-lib-bar" class="hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span id="f-photo-lib-text" class="text-slate-700 font-medium"></span>
-            <button id="f-photo-lib-btn" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs">${iconSvg('bookmark', { size: 14 })} บันทึกลงคลังอาหาร</button>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="lbl" for="f-meal">มื้อ</label>
-              <select id="f-meal" class="input min-h-[44px]"></select>
+          <div class="space-y-3 min-w-0">
+            <div id="f-fav-wrap" class="hidden space-y-1.5 min-w-0">
+              <span class="block text-xs font-semibold text-slate-600">รายการโปรด</span>
+              <div id="f-fav-strip" class="tm-fav-strip" aria-label="เลือกรายการโปรดอย่างรวดเร็ว"></div>
             </div>
-            <div class="sm:col-span-2">
-              <label class="lbl" for="f-name">ชื่อเมนู (พิมพ์ค้นหาจากคลังได้)</label>
+
+            <div class="min-w-0">
+              <label class="lbl" for="f-name">ชื่อเมนู (เลือกจากรายการแนะนำหรือคลังอาหาร)</label>
               <div class="tm-combobox">
-                <input id="f-name" class="input min-h-[44px]" placeholder="เช่น อกไก่ต้ม" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-name-listbox" autocomplete="off">
+                <input id="f-name" class="input min-h-[44px]" placeholder="เช่น อกไก่ต้ม, ข้าวสวย" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-name-listbox" autocomplete="off">
                 <div id="f-name-listbox" role="listbox" class="tm-combobox-list hidden" aria-label="เมนูอาหารแนะนำ"></div>
               </div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button id="f-copy-meal" type="button" class="btn btn-ghost min-h-[44px] px-3.5 py-2 text-xs">${iconSvg('copy', { size: 14 })} คัดลอกจากมื้อเดิม</button>
-          </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div id="f-qty-wrap" class="col-span-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="lbl" for="f-meal">มื้อ</label>
+              <select id="f-meal" class="input min-h-[44px]"></select>
+            </div>
+            <div id="f-qty-wrap">
               <label id="f-qty-label" class="lbl" for="f-qty">จำนวน (หน่วย)</label>
-              <div class="flex items-center gap-2">
-                <input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input min-w-0 flex-1 min-h-[44px]">
-                <select id="f-qty-mode" class="input !w-auto shrink-0 hidden min-h-[44px]" aria-label="หน่วยที่กรอก">
-                  <option value="unit">หน่วย</option>
-                  <option value="grams">กรัม (g)</option>
-                </select>
-              </div>
-              <p id="f-preview" class="mt-1 text-xs text-slate-500" aria-live="polite"></p>
+              <input id="f-qty" type="number" step="0.01" min="0" value="1" inputmode="decimal" class="input min-h-[44px]">
             </div>
-            <div id="f-gross-wrap" class="hidden col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label class="lbl" for="f-gross">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input min-h-[44px]" placeholder="เช่น 180"></div>
-              <div><label class="lbl" for="f-edible">สัดส่วนที่กินได้ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]"></div>
-              <p id="f-edible-note" class="sm:col-span-2 text-xs text-slate-500"></p>
-            </div>
-            <div><label class="lbl" for="f-cal">แคลอรี่ (kcal)</label><input id="f-cal" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
-            <div><label class="lbl" for="f-pro">โปรตีน (g)</label><input id="f-pro" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
-            <div><label class="lbl" for="f-carb">คาร์บ (g)</label><input id="f-carb" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
-            <div><label class="lbl" for="f-fat">ไขมัน (g)</label><input id="f-fat" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
-            <div id="f-sugar-wrap" class="hidden"><label class="lbl" for="f-sugar">น้ำตาล (g)</label><input id="f-sugar" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
-            <div id="f-sodium-wrap" class="hidden"><label class="lbl" for="f-sodium">โซเดียม (mg)</label><input id="f-sodium" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
           </div>
 
-          <div class="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-end gap-2 pt-1">
-            <button id="f-clear" type="button" class="btn btn-ghost min-h-[44px] justify-center">เคลียร์ค่า</button>
-            <button id="f-save-lib" type="button" class="btn btn-soft min-h-[44px] justify-center">${iconSvg('bookmark', { size: 15 })} ลงคลัง</button>
-            <button id="f-save" type="button" class="btn btn-primary col-span-2 min-h-[44px] justify-center">${iconSvg('plus', { size: 15 })} บันทึกรายการ</button>
+          <div id="f-gross-wrap" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="lbl" for="f-gross">น้ำหนักที่ชั่งรวม (g)</label><input id="f-gross" type="number" min="0" step="1" inputmode="decimal" class="input min-h-[44px]" placeholder="เช่น 180"></div>
+            <div><label class="lbl" for="f-edible">สัดส่วนที่กินได้ (%)</label><input id="f-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]"></div>
+            <p id="f-edible-note" class="sm:col-span-2 text-xs text-slate-500"></p>
+          </div>
+
+          <p id="f-preview" class="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-xs text-slate-600 tabular-nums" aria-live="polite"></p>
+
+          <div class="space-y-1.5">
+            <div class="grid grid-cols-2 gap-2">
+              <label class="btn btn-soft min-h-[44px] justify-center cursor-pointer text-xs">
+                <input type="file" id="f-scan-barcode" accept="image/*" multiple class="hidden">
+                ${iconSvg('scan', { size: 16 })}<span>อ่านบาร์โค้ด</span>
+              </label>
+              <label class="btn btn-soft min-h-[44px] justify-center cursor-pointer text-xs">
+                <input type="file" id="f-scan-label" accept="image/*" multiple class="hidden">
+                ${iconSvg('file-heart', { size: 16 })}<span>อ่านฉลาก</span>
+              </label>
+            </div>
+            <p id="f-scan-status" class="hidden text-xs font-medium px-1" aria-live="polite"></p>
+          </div>
+
+          <div class="pt-1">
+            <button id="f-save" type="button" class="btn btn-primary w-full min-h-[44px] justify-center">${iconSvg('plus', { size: 15 })} บันทึก</button>
           </div>
         </div>
 
@@ -181,37 +164,57 @@ export function mountFood(el) {
         </div>
       </div>
     </section>
-
-    <section id="f-summary-panel" aria-labelledby="f-view-summary" class="space-y-4">
-      <div class="card space-y-3">
-        <header class="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 class="text-lg font-bold text-slate-800">ภาพรวมสารอาหาร</h2><p class="text-xs text-slate-500">เทียบปริมาณที่บันทึกกับเป้าหมายในวันที่เลือก</p></div>
-          <p id="f-burn" class="hidden text-xs text-slate-600 tabular-nums"></p>
-        </header>
-        <div id="f-stats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
-      </div>
-      <div class="card space-y-3">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lightbulb', { size: 17, className: 'text-brand' })}<span>คำแนะนำจากเกณฑ์ที่ตั้งไว้</span></h3>
-        <div id="f-advice" class="p-3.5 rounded-xl text-xs leading-relaxed"></div>
-      </div>
-    </section>
   </div>`;
 
   $('#f-date', root).value = localDateStr();
   fillMealSelect();
-  $('#f-date', root).addEventListener('change', watchDay);
+  stripScrollMode = 'center';
+  $('#f-date', root).addEventListener('change', () => {
+    stripScrollMode = 'smooth';
+    watchDay();
+  });
   setupFoodCombobox();
+  $('#f-wk-prev', root)?.addEventListener('click', () => {
+    const dateEl = $('#f-date', root);
+    if (!dateEl) return;
+    dateEl.value = addDays(dateEl.value || localDateStr(), -7);
+    stripScrollMode = 'smooth';
+    watchDay();
+  });
+  $('#f-wk-next', root)?.addEventListener('click', () => {
+    const dateEl = $('#f-date', root);
+    if (!dateEl) return;
+    dateEl.value = addDays(dateEl.value || localDateStr(), 7);
+    stripScrollMode = 'smooth';
+    watchDay();
+  });
+  $('#f-wk-now', root)?.addEventListener('click', () => {
+    const dateEl = $('#f-date', root);
+    const t = localDateStr();
+    stripScrollMode = 'smooth';
+    if (dateEl && dateEl.value !== t) {
+      dateEl.value = t;
+      watchDay();
+    } else {
+      renderDay();
+    }
+  });
   $('#f-week-strip', root).addEventListener('click', e => {
     const b = e.target.closest('[data-strip-day]');
     if (!b) return;
+    stripScrollMode = 'preserve';
     $('#f-date', root).value = b.dataset.stripDay;
     watchDay();
   });
+  $('#f-fav-strip', root).addEventListener('click', e => {
+    const btn = e.target.closest('[data-fav-idx]');
+    if (!btn) return;
+    const favs = getPresets().filter(p => p.favorite).slice(0, 10);
+    const picked = favs[Number(btn.dataset.favIdx)];
+    if (picked) applyPreset(picked, true);
+  });
   $('#f-qty', root).addEventListener('input', updateFoodPreview);
-  $('#f-qty-mode', root).addEventListener('change', () => { syncFoodWeightForm(); updateFoodPreview(); });
   const focusMealLogForm = mealName => {
-    const logRadio = $('#f-view-log', root);
-    if (logRadio) logRadio.checked = true;
     const mealSel = $('#f-meal', root);
     if (mealSel && mealName) {
       const opt = [...mealSel.options].find(o => o.value === mealName || o.textContent === mealName);
@@ -223,13 +226,6 @@ export function mountFood(el) {
       nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
-  $('#f-meals', root).addEventListener('click', e => {
-    const b = e.target.closest('[data-meal]');
-    if (b) focusMealLogForm(b.dataset.meal);
-  });
-  ['f-cal','f-pro','f-carb','f-fat','f-sugar','f-sodium'].forEach(id => $('#'+id,root).addEventListener('input', updateFoodPreview));
-  $('#f-clear', root).addEventListener('click', clearFoodForm);
-  $('#f-copy-meal', root).addEventListener('click', copyRecentMeal);
   $('#f-edible', root).addEventListener('input', updateEdibleEstimate);
   $('#f-gross', root).addEventListener('input', updateEdibleEstimate);
   $('#f-save', root).addEventListener('click', saveFood);
@@ -247,10 +243,9 @@ export function mountFood(el) {
   $('#f-online', root).addEventListener('click', () => openFoodSearchModal());
   $('#f-library', root).addEventListener('click', () => openLibrary(p => applyPreset(p)));
   $('#f-hist-search', root).addEventListener('click', openFoodHistorySearch);
-  $('#f-save-lib', root).addEventListener('click', saveCurrentToLibrary);
-  $('#f-photo-lib-btn', root).addEventListener('click', saveCurrentToLibrary);
   $('#f-hiwpinto-sync', root).addEventListener('click', () => openHiwpintoSync());
-  $('#f-scan', root).addEventListener('change', onUnifiedScan);
+  $('#f-scan-barcode', root).addEventListener('change', e => onScanFiles(e, 'barcode'));
+  $('#f-scan-label', root).addEventListener('change', e => onScanFiles(e, 'label'));
   $('#f-sel-all', root).addEventListener('change', e => {
     items.forEach(i => { if (e.target.checked) selectedFoodIds.add(i.id); else selectedFoodIds.delete(i.id); });
     renderDay();
@@ -321,7 +316,7 @@ function openHiwpintoCalculator(saved = null) {
   const missingOriginalNutrition = Boolean(saved) && ['shopCalories', 'shopProtein', 'shopCarbs', 'shopFat']
     .some(key => !Number.isFinite(meta[key]));
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คำนวณเมนู Hiwpinto / อาหารคลีน</h3><button data-close class="text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คำนวณเมนู Hiwpinto / อาหารคลีน</h3><button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 mb-3">คำนวณข้าวที่ต้องเพิ่มจากคาร์บของร้านและโปรไฟล์ข้าวที่เลือก ค่าประมาณอาจรวมคาร์บจากซอส ผัก หรือการหมักด้วย</p>
     ${missingOriginalNutrition ? '<p class="text-sm text-amber-900 bg-amber-50 rounded-lg p-2 mb-3">รายการเก่านี้ไม่มีโภชนาการจากร้านแยกครบ กรุณาตรวจสอบและกรอกค่าต้นฉบับจากร้านก่อนบันทึก เพื่อป้องกันการคำนวณซ้ำ</p>' : ''}
     ${!saved ? `<label class="lbl">ลองเติมตัวอย่างที่ให้มา</label><select id="hp-sample" class="input mb-3"><option value="">กรอกข้อมูลเอง</option>${HIWPINTO_SAMPLES.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('')}</select>` : ''}
@@ -337,7 +332,7 @@ function openHiwpintoCalculator(saved = null) {
       </div>
       <div id="hp-side-wrap"><label class="lbl" for="hp-side-carb">คาร์บจากกับข้าวที่ทราบ (ไม่บังคับ, g)</label><input id="hp-side-carb" type="number" min="0" step="0.5" class="input" value="${meta.sideCarbs ?? ''}" placeholder="ถ้าระบุ ระบบจะหักจากคาร์บที่ใช้ประมาณข้าว"><p class="text-xs text-slate-500 mt-1">ถ้าไม่ระบุ จะใช้คาร์บรวมจากร้านประมาณน้ำหนักข้าว และผลอาจคลาดเคลื่อนเพราะคาร์บอาจมาจากซอส ผัก หรือการหมักด้วย</p></div>
       <div id="hp-result" class="rounded-xl bg-slate-50 p-3 text-sm" aria-live="polite"></div>
-      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="hp-save" class="btn btn-primary" disabled>${saved ? 'บันทึกการปรับปรุง' : 'บันทึกเมนูไว้ใช้ซ้ำ'}</button></div>
+      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="hp-save" class="btn btn-primary" disabled>${saved ? 'บันทึก' : 'บันทึกเมนู'}</button></div>
     </div>`, { wide: true });
 
   const $m = s => $(s, m.el);
@@ -441,9 +436,12 @@ export function resetFoodToToday() {
   if (!root) return;
   const dateEl = $('#f-date', root);
   const today = localDateStr();
+  stripScrollMode = 'center';
   if (dateEl && dateEl.value !== today) {
     dateEl.value = today;
     watchDay();
+  } else {
+    renderDay();
   }
 }
 
@@ -617,8 +615,27 @@ function handleCustomFoodsUpdate() {
     .catch(err => toast('อัปเดตรายการที่เลือกไม่สำเร็จ: ' + err.message, 'err'));
 }
 
+function renderFavoriteStrip() {
+  if (!root) return;
+  const wrap = $('#f-fav-wrap', root);
+  const strip = $('#f-fav-strip', root);
+  if (!wrap || !strip) return;
+  const favs = getPresets().filter(p => p.favorite).slice(0, 10);
+  wrap.classList.toggle('hidden', !favs.length);
+  if (!favs.length) {
+    strip.innerHTML = '';
+    return;
+  }
+  strip.innerHTML = favs.map((p, idx) => `
+    <button type="button" data-fav-idx="${idx}" class="tm-fav-chip" title="${esc(label(p))}">
+      <span class="text-amber-500 shrink-0" aria-hidden="true">${iconSvg('star', { size: 13 })}</span>
+      <span class="tm-fav-chip-label">${esc(p.name)}</span>
+    </button>`).join('');
+}
+
 function refreshDatalist() {
   if (!root) return;
+  renderFavoriteStrip();
   const list = $('#f-name-listbox', root);
   if (list && !list.classList.contains('hidden')) {
     renderFoodCombobox($('#f-name', root)?.value || '');
@@ -633,9 +650,7 @@ function pickByLabel(v) {
 function applyPreset(p, setName = true, preserveEnteredAmount = false) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  const modeEl = $('#f-qty-mode', root);
-  const initialMode = preserveEnteredAmount && canWeigh(p) && modeEl?.value ? modeEl.value : defaultFoodInputMode(p);
-  if (modeEl) modeEl.value = initialMode;
+  const initialMode = defaultFoodInputMode(p);
   if (!preserveEnteredAmount || !$('#f-qty', root).value) {
     $('#f-qty', root).value = p.defaultQuantity ?? (canWeigh(p) && initialMode === 'grams' ? p.gramsPerUnit : 1);
   }
@@ -645,77 +660,65 @@ function applyPreset(p, setName = true, preserveEnteredAmount = false) {
     }
     $('#f-edible', root).value = Math.round(p.edibleFraction * 100);
   }
-  const set = (id, v) => { $('#' + id, root).value = typeof v === 'number' ? v : ''; };
-  set('f-cal', p.calories); set('f-pro', p.protein); set('f-carb', p.carbs); set('f-fat', p.fat);
-  set('f-sugar', p.sugar); set('f-sodium', p.sodium);
-  $('#f-sugar-wrap', root).classList.toggle('hidden', p.sugar == null);
-  $('#f-sodium-wrap', root).classList.toggle('hidden', p.sodium == null);
   syncFoodWeightForm();
   updateFoodPreview();
 }
 
 function updateFoodPreview() {
   if (!root) return;
+  const previewEl = $('#f-preview', root);
+  if (!previewEl) return;
+  if (!base || base.calories == null) {
+    const typed = $('#f-name', root)?.value?.trim();
+    previewEl.textContent = typed
+      ? 'ยังไม่พบเมนูนี้ในคลัง — เลือกจากรายการแนะนำ, รายการโปรด, ค้นหาโภชนาการ หรือเพิ่มในคลังอาหาร'
+      : 'เลือกเมนูจากช่องด้านบน รายการโปรด หรือคลังอาหาร เพื่อคำนวณแคลอรี่และสารอาหาร';
+    return;
+  }
+  const rawQty = numField(root, 'f-qty');
   const qty = formQty() || 0;
-  const calories = (toNum($('#f-cal', root).value) || 0) * qty;
-  const protein = (toNum($('#f-pro', root).value) || 0) * qty;
-  const carbs = (toNum($('#f-carb', root).value) || 0) * qty;
-  const fat = (toNum($('#f-fat', root).value) || 0) * qty;
-  const hasSugar = !$('#f-sugar-wrap', root).classList.contains('hidden');
-  const hasSodium = !$('#f-sodium-wrap', root).classList.contains('hidden');
-  const sugar = hasSugar ? (toNum($('#f-sugar', root).value) || 0) * qty : null;
-  const sodium = hasSodium ? (toNum($('#f-sodium', root).value) || 0) * qty : null;
-  const perGram = base?.unit === 'g' && base?.gramsPerUnit === 1;
+  const calories = (Number(base.calories) || 0) * qty;
+  const protein = (Number(base.protein) || 0) * qty;
+  const carbs = (Number(base.carbs) || 0) * qty;
+  const fat = (Number(base.fat) || 0) * qty;
+  const sugar = base.sugar != null ? Number(base.sugar) * qty : null;
+  const sodium = base.sodium != null ? Number(base.sodium) * qty : null;
+  const perGram = base.unit === 'g' && base.gramsPerUnit === 1;
+  const inferred = inferFoodInputMode(rawQty, base);
   const amountText = perGram ? `${fmtAmount(qty)} g`
-    : base?.gramsPerUnit > 0
-      ? (isGramUnitLabel(base.unit) ? `${fmtAmount(qty * base.gramsPerUnit)} g` : `${fmtAmount(qty)} หน่วย ≈ ${fmtAmount(qty * base.gramsPerUnit)} g`)
-    : base?.unit && base.unit !== 'หน่วย' && !/^\d/.test(base.unit) ? `${fmtAmount(qty)} ${base.unit}`
+    : base.gramsPerUnit > 0
+      ? (inferred === 'grams' ? `${fmtAmount(qty * base.gramsPerUnit)} g` : `${fmtAmount(qty)} หน่วย ≈ ${fmtAmount(qty * base.gramsPerUnit)} g`)
+    : base.unit && base.unit !== 'หน่วย' && !/^\d/.test(base.unit) ? `${fmtAmount(qty)} ${base.unit}`
     : `${fmtAmount(qty)} หน่วย`;
-  $('#f-preview', root).textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}`
+  previewEl.textContent = `${Math.round(calories)} kcal · P ${round1(protein)} · C ${round1(carbs)} · F ${round1(fat)}`
     + `${sugar !== null ? ` · น้ำตาล ${round1(sugar)}` : ''}${sodium !== null ? ` · Na ${Math.round(sodium)} mg` : ''} · ${amountText}`;
 }
 
 function clearFoodForm() {
   if (!root) return;
-  ['f-name','f-cal','f-pro','f-carb','f-fat','f-gross','f-edible'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
-  ['f-sugar','f-sodium'].forEach(id => { const el=$('#'+id,root); if(el) el.value=''; });
-  $('#f-sugar-wrap',root).classList.add('hidden'); $('#f-sodium-wrap',root).classList.add('hidden');
-  $('#f-photo-lib-bar', root)?.classList.add('hidden');
+  ['f-name', 'f-gross', 'f-edible'].forEach(id => { const el = $('#' + id, root); if (el) el.value = ''; });
   setFoodScanStatus('', '');
-  $('#f-qty',root).value=1;
-  base=null;
+  $('#f-qty', root).value = 1;
+  base = null;
   syncFoodWeightForm();
   updateFoodPreview();
 }
 
-const selectedQtyMode = () => {
-  if (!canWeigh(base)) return defaultFoodInputMode(base);
-  const val = $('#f-qty-mode', root)?.value;
-  return val === 'grams' || val === 'unit' ? val : defaultFoodInputMode(base);
-};
-
-// จำนวนหน่วยจริงที่จะบันทึก: แปลงจากกรัมเป็นหน่วยเฉพาะเมื่อผู้ใช้เลือกโหมดกรอกเป็นกรัม
-const formQty = () => foodQuantityFromInput(numField(root, 'f-qty'), base, selectedQtyMode());
+const formQty = () => foodQuantityFromInput(numField(root, 'f-qty'), base);
 
 function syncFoodWeightForm() {
   if (!root) return;
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const gramMode = base?.unit === 'g' && base?.gramsPerUnit === 1;
   const weighable = canWeigh(base);
+  const defaultGrams = gramMode || (weighable && defaultFoodInputMode(base) === 'grams');
   $('#f-qty-wrap', root).classList.toggle('hidden', grossMode);
-  const modeEl = $('#f-qty-mode', root);
-  if (modeEl) {
-    modeEl.classList.toggle('hidden', !weighable);
-    const unitOpt = modeEl.querySelector('option[value="unit"]');
-    if (unitOpt) unitOpt.textContent = base?.unit ? `หน่วย (${base.unit})` : 'หน่วย';
-    if (!weighable) modeEl.value = defaultFoodInputMode(base);
-  }
-  const mode = selectedQtyMode();
-  const isGramsInput = gramMode || (weighable && mode === 'grams');
-  $('#f-qty-label', root).textContent = isGramsInput
+  $('#f-qty-label', root).textContent = defaultGrams
     ? 'น้ำหนักที่กิน (กรัม)'
-    : base?.unit ? `จำนวน (${base.unit})` : 'จำนวน (หน่วย)';
-  $('#f-qty', root).step = isGramsInput ? '1' : '0.01';
+    : weighable
+      ? `จำนวน (${base.unit} หรือกรัม)`
+      : base?.unit ? `จำนวน (${base.unit})` : 'จำนวน (หน่วย)';
+  $('#f-qty', root).step = defaultGrams ? '1' : '0.01';
   $('#f-gross-wrap', root).classList.toggle('hidden', !grossMode);
   if (grossMode) updateEdibleEstimate();
   else updateFoodPreview();
@@ -732,18 +735,24 @@ function updateEdibleEstimate() {
 
 function saveFood() {
   const name = $('#f-name', root).value.trim();
-  const cal = numField(root, 'f-cal');
+  if (!base || base.calories == null) {
+    return toast('กรุณาเลือกเมนูจากรายการแนะนำ รายการโปรด ค้นหาโภชนาการ หรือคลังอาหารก่อนบันทึก', 'err');
+  }
+  const cal = Number(base.calories);
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
   const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
   const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (formQty() ?? 1);
   const validationError = validateFoodLog({ name, calories: cal, grossMode, weighedGrams, ediblePercent, quantity: qty });
   if (validationError) return toast(validationError, 'err');
-  const m = v => (v === null ? 0 : round1(v * qty));
+  const m = v => (v == null ? 0 : round1(Number(v) * qty));
   const unitNutrition = {
-    calories: cal, protein: numField(root, 'f-pro') ?? 0, carbs: numField(root, 'f-carb') ?? 0,
-    fat: numField(root, 'f-fat') ?? 0,
-    sugar: numField(root, 'f-sugar'), sodium: numField(root, 'f-sodium')
+    calories: cal,
+    protein: Number(base.protein) || 0,
+    carbs: Number(base.carbs) || 0,
+    fat: Number(base.fat) || 0,
+    sugar: base.sugar ?? null,
+    sodium: base.sodium ?? null
   };
   const rec = {
     date: $('#f-date', root).value,
@@ -771,49 +780,6 @@ function saveFood() {
   // ไม่ await: ตอนออฟไลน์ promise จะไม่จบจนกว่าจะซิงค์ แต่ข้อมูลถูกเก็บในเครื่องและแสดงทันที
   addFoodRecord(state.uid, rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   clearFoodForm();
-}
-
-async function copyRecentMeal() {
-  const date = $('#f-date', root).value, mealId = $('#f-meal', root).value;
-  const mealName=$('#f-meal',root).selectedOptions[0]?.textContent||'';
-  if (!date || !mealId || !state.uid) return;
-  const button = $('#f-copy-meal', root);
-  button.disabled = true;
-  button.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 14 })} กำลังหา…`;
-  try {
-    let sourceDate = null, sourceItems = [];
-    for (let days = 1; days <= 30 && !sourceItems.length; days++) {
-      const candidate = addDays(date, -days);
-      const result = await getFoodRecordsInRange(state.uid, candidate, candidate);
-      sourceItems = result.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item.mealId===mealId || item.meal===mealName);
-      if (sourceItems.length) sourceDate = candidate;
-    }
-    if (!sourceItems.length) return toast(`ไม่พบ${mealName}ใน 30 วันก่อนหน้า`, 'err');
-    const modal = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800">คัดลอก${esc(mealName)}</h3><button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
-      <p class="text-sm text-slate-600 mb-3">พบมื้อวันที่ <b>${esc(sourceDate)}</b> · ${sourceItems.length} รายการ</p>
-      <label class="flex items-center gap-2 text-sm min-h-[44px] mb-2 cursor-pointer"><input id="copy-meal-all" type="checkbox" class="w-4 h-4 accent-violet-500" checked> เลือกทั้งหมด</label>
-      <div class="space-y-2 mb-4">${sourceItems.map((item,i) => `<label class="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-sm flex gap-2.5 items-start cursor-pointer"><input class="copy-meal-item mt-1 w-4 h-4 shrink-0 accent-violet-500" type="checkbox" data-index="${i}" checked><span><b>${esc(item.name)}</b><span class="block text-xs text-slate-500 tabular-nums">${esc(item.calories)} kcal · P ${esc(item.protein)} · C ${esc(item.carbs)} · F ${esc(item.fat)}</span></span></label>`).join('')}</div>
-      <p class="text-xs text-slate-500 mb-3">จะเพิ่มรายการใหม่ในวันที่ ${esc(date)} โดยไม่แก้ไขมื้อเดิม</p>
-      <div class="flex justify-end gap-2"><button data-close type="button" class="btn btn-ghost min-h-[44px]">ยกเลิก</button><button id="copy-meal-confirm" type="button" class="btn btn-primary min-h-[44px]">คัดลอกรายการที่เลือก</button></div>`, { wide: true });
-    const choices = () => [...$$('.copy-meal-item', modal.el)];
-    $('#copy-meal-all', modal.el).addEventListener('change', e => { choices().forEach(c => { c.checked=e.target.checked; }); });
-    choices().forEach(c => c.addEventListener('change', () => { $('#copy-meal-all',modal.el).checked=choices().every(x=>x.checked); }));
-    $('#copy-meal-confirm', modal.el).addEventListener('click', async () => {
-      if (guardPreviewWrite('การคัดลอกมื้ออาหาร')) return;
-      const selected = choices().filter(c=>c.checked).map(c=>sourceItems[Number(c.dataset.index)]);
-      if (!selected.length) return toast('เลือกรายการอาหารอย่างน้อย 1 รายการ', 'err');
-      const batch = writeBatch(db), collectionRef = userCol(state.uid, 'food_records');
-      const targetMealId=$('#f-meal',root).value, targetMealName=$('#f-meal',root).selectedOptions[0]?.textContent||mealName;
-      selected.forEach(({ id, ...item }) => batch.set(doc(collectionRef), { ...item, date, meal:targetMealName, mealId:targetMealId, createdAt: new Date(), copiedFrom: sourceDate }));
-      try {
-        batch.commit().catch(error => toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'));
-        modal.close();
-        toast(`คัดลอก ${selected.length} รายการแล้ว`);
-      }
-      catch (error) { toast('คัดลอกไม่สำเร็จ: ' + error.message, 'err'); }
-    });
-  } catch (error) { toast('ค้นหามื้อก่อนหน้าไม่สำเร็จ: ' + error.message, 'err'); }
-  finally { button.disabled = false; button.innerHTML = `${iconSvg('copy', { size: 13 })} คัดลอกจากมื้อเดิม`; }
 }
 
 const normFoodKey = v => foodLogName(String(v || '').trim()).toLocaleLowerCase('th').replace(/\s+/g, ' ');
@@ -1199,13 +1165,13 @@ function renderDay() {
     return `
       <section class="tm-meal-group" data-meal-drop="${esc(meal)}">
         <header class="tm-meal-group-head">
-          <div class="flex items-center gap-2 min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
             <label class="inline-flex items-center gap-2 cursor-pointer font-semibold text-sm text-slate-800 min-w-0">
               <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-violet-500 w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
               <span class="inline-flex items-center gap-1.5 text-brand shrink-0">${iconSvg(mealIcon, { size: 16 })}</span>
               <span class="truncate">${esc(meal)}</span>
             </label>
-            <span class="text-xs text-slate-500 tabular-nums shrink-0">${rows.length} รายการ · <b class="text-slate-700">${Math.round(mealCalories)} kcal</b><span class="hidden sm:inline"> · P${round1(mealProtein)} · C${round1(mealCarbs)} · F${round1(mealFat)}</span></span>
+            <span class="text-xs text-slate-500 tabular-nums shrink-0">${rows.length} รายการ · <b class="text-slate-700">${Math.round(mealCalories)} kcal</b> · <span class="font-semibold text-slate-700">P ${round1(mealProtein)}g</span><span class="hidden sm:inline"> · C ${round1(mealCarbs)}g · F ${round1(mealFat)}g</span></span>
           </div>
           <button type="button" data-add-meal="${esc(meal)}" class="tm-meal-add-btn shrink-0" aria-label="เพิ่มอาหารใน${esc(meal)}">${iconSvg('plus', { size: 13 })}<span>เพิ่ม</span></button>
         </header>
@@ -1277,69 +1243,79 @@ function renderDay() {
   const t = { cal: sum('calories'), p: sum('protein'), c: sum('carbs'), f: sum('fat'), sugar: sum('sugar'), na: sum('sodium') };
   const hasItems = items.length > 0;
   const totalEl = $('#f-total', root);
-  if (hasItems) {
-    totalEl.innerHTML = `<span id="f-total-num">${Math.round(t.cal).toLocaleString('th-TH')}</span> / ${targets.kcal.toLocaleString()} kcal`;
-    animateNumberTicker($('#f-total-num', root), Math.round(t.cal));
-  } else {
-    totalEl.textContent = 'ยังไม่ได้บันทึก';
-  }
-  const calBarEl = $('#f-cal-bar', root);
-  if (calBarEl) {
-    const calWidth = hasItems && targets.kcal > 0 ? Math.min((t.cal / targets.kcal) * 100, 100) : 0;
-    calBarEl.style.width = `${calWidth}%`;
+  if (totalEl) {
+    if (hasItems) {
+      totalEl.innerHTML = `<b id="f-total-num">${Math.round(t.cal).toLocaleString()}</b><span> / ${targets.kcal.toLocaleString()} kcal</span>`;
+      animateNumberTicker($('#f-total-num', root), Math.round(t.cal));
+    } else {
+      totalEl.innerHTML = `<b>0</b><span> / ${targets.kcal.toLocaleString()} kcal</span>`;
+    }
   }
   const macroStripEl = $('#f-macro-strip', root);
   if (macroStripEl) {
-    const stripCard = (labelText, val, goal) => `
-      <div class="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2 space-y-1">
-        <div class="flex items-center justify-between gap-1 text-[11px] font-semibold text-slate-600"><span>${labelText}</span></div>
-        <p class="text-xs font-bold text-slate-800 tabular-nums">${hasItems ? `${round1(val)}` : '—'} <span class="font-normal text-slate-500">/ ${goal}g</span></p>
-        <div class="tm-progress-track"><div class="tm-progress-fill" style="width:${hasItems && goal > 0 ? Math.min((val / goal) * 100, 100) : 0}%"></div></div>
-      </div>`;
+    const macroTile = (tone, labelText, val, goal, unit = 'g', warnOver = false) => {
+      const p = goal > 0 ? Math.min(100, Math.round((val / goal) * 100)) : 0;
+      const isOver = warnOver && goal > 0 && val > goal;
+      const formattedVal = unit === 'mg' ? Math.round(val).toLocaleString() : round1(val);
+      const formattedGoal = unit === 'mg' ? goal.toLocaleString() : goal;
+      return `
+        <div class="hx-macro ${tone}${isOver ? ' is-over' : ''}">
+          <div class="hx-macro-head">
+            <span class="hx-macro-label">${labelText}</span>
+            <span class="hx-macro-value tabular-nums">${hasItems ? formattedVal : '—'}<small>${goal ? ` / ${formattedGoal} ${unit}` : ''}</small></span>
+          </div>
+          <span class="hx-macro-bar" aria-hidden="true"><span style="width:${hasItems ? p : 0}%"></span></span>
+        </div>`;
+    };
+    const sugarSodiumOver = hasItems && (t.sugar > 36 || t.na > 2300);
     macroStripEl.innerHTML =
-      stripCard('โปรตีน', t.p, targets.protein) +
-      stripCard('คาร์บ', t.c, targets.carbs) +
-      stripCard('ไขมัน', t.f, targets.fat) +
-      `<div class="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2 space-y-1">
-        <span class="block text-[11px] font-semibold text-slate-600">น้ำตาล · โซเดียม</span>
-        <p class="text-xs font-bold text-slate-800 tabular-nums">${hasItems ? `${round1(t.sugar)}g · ${Math.round(t.na)}mg` : '—'}</p>
-        <p class="text-[10px] text-slate-500 truncate">เฉพาะรายการที่ระบุ</p>
+      macroTile('is-protein', 'โปรตีน', t.p, targets.protein) +
+      macroTile('is-carb', 'คาร์บ', t.c, targets.carbs) +
+      macroTile('is-fat', 'ไขมัน', t.f, targets.fat) +
+      `<div class="hx-macro is-sugar-sodium${sugarSodiumOver ? ' is-over' : ''}" title="เกณฑ์แนะนำ: น้ำตาล ≤ 36g · โซเดียม ≤ 2,300mg">
+        <div class="hx-macro-head">
+          <span class="hx-macro-label">น้ำตาล · โซเดียม</span>
+          <span class="hx-macro-value tabular-nums">${hasItems ? `${round1(t.sugar)}g · ${Math.round(t.na).toLocaleString()}mg` : '—'}</span>
+        </div>
+        <span class="hx-macro-note">เฉพาะรายการที่ระบุ</span>
       </div>`;
   }
   const today = localDateStr(), date = $('#f-date', root).value, future = date > today;
-  const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+  const wkNowBtn = $('#f-wk-now', root);
+  if (wkNowBtn) wkNowBtn.classList.toggle('is-current', date === today);
   const stripEl = $('#f-week-strip', root);
   if (stripEl) {
     const prevScroll = stripEl.scrollLeft;
     const hadPills = stripEl.children.length > 0;
-    const baseMon = mondayOf(today);
-    const rangeStart = addDays(baseMon, -21);
-    const rangeEnd = addDays(baseMon, 20);
-    const finalStart = date < rangeStart ? mondayOf(date) : rangeStart;
-    const finalEnd = date > rangeEnd ? addDays(mondayOf(date), 6) : rangeEnd;
-    const pills = [];
-    for (let ds = finalStart; ds <= finalEnd; ds = addDays(ds, 1)) {
-      const [yy, mm, dd] = ds.split('-').map(Number);
-      const dow = DOW[new Date(yy, mm - 1, dd).getDay()];
-      const active = ds === date;
-      const isToday = ds === today;
-      pills.push(`<button type="button" data-strip-day="${ds}" aria-pressed="${active}" aria-label="${esc(ds)}" class="tm-day-pill ${active ? 'is-active' : ''} ${isToday ? 'is-today' : ''}"><span class="tm-day-dow">${dow}</span><span class="tm-day-num">${dd}</span></button>`);
+    const stripDays = buildWeekStripRange(today, date);
+    stripEl.innerHTML = stripDays.map(m => {
+      const active = m.date === date;
+      return `<button type="button" data-strip-day="${m.date}" aria-pressed="${active}" aria-label="${esc(m.date)}" class="tm-day-pill ${active ? 'is-active' : ''} ${m.isToday ? 'is-today' : ''}"><span class="tm-day-dow">${m.dow}</span><span class="tm-day-num">${m.dayNum}</span></button>`;
+    }).join('');
+    if (!hadPills || stripScrollMode === 'center') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'auto' });
+    } else if (stripScrollMode === 'smooth') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'smooth' });
+    } else {
+      stripEl.scrollLeft = prevScroll;
     }
-    stripEl.innerHTML = pills.join('');
-    if (hadPills && prevScroll > 0) stripEl.scrollLeft = prevScroll;
-    else requestAnimationFrame(() => stripEl.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+    stripScrollMode = 'preserve';
   }
-  const pct = targets.kcal > 0 ? Math.round((t.cal / targets.kcal) * 100) : 0;
-  const ringPctEl = $('#f-ring-pct', root);
-  if (ringPctEl) ringPctEl.textContent = hasItems ? `${pct}% ของเป้า` : '0%';
 
   $('#f-daylabel', root).textContent = future ? 'แคลอรี่ที่วางแผนไว้' : date === today ? 'แคลอรี่รวมวันนี้' : 'แคลอรี่รวมของวันที่เลือก';
   const left = targets.kcal - t.cal;
-  $('#f-remain', root).innerHTML = !hasItems
-    ? `เป้าหมาย <b>${targets.kcal.toLocaleString()}</b> kcal`
+  const remainEl = $('#f-remain', root);
+  remainEl.className = `hx-hero-left tabular-nums${hasItems && left < 0 ? ' is-over' : ''}`;
+  remainEl.innerHTML = !hasItems
+    ? `เป้าหมาย ${targets.kcal.toLocaleString()} kcal · ยังไม่มีรายการ`
     : left >= 0
-      ? `เหลืออีก <b>${Math.round(left).toLocaleString()}</b> kcal`
-      : `<span class="text-amber-800">เกินเป้า <b>${Math.round(-left).toLocaleString()}</b> kcal</span>`;
+      ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal`
+      : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`;
+
+  const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
+  const burnEl = $('#f-burn', root);
+  burnEl.classList.toggle('hidden', !burned);
+  if (burned) burnEl.textContent = `ออกกำลังกายเผาผลาญเพิ่ม ~${burned.toLocaleString()} kcal`;
 
   const mealList = getMeals();
   const pie = buildMealCaloriePieData(items, mealList, getMealPiePalette());
@@ -1349,49 +1325,9 @@ function renderDay() {
     targetKcal: targets.kcal,
     hasData: hasItems && pie.totalKcal > 0
   });
-  const pieSvgEl = $('#f-meals-pie-svg', root);
-  if (pieSvgEl) pieSvgEl.innerHTML = `${donut.ringHtml}${donut.legendHtml}`;
-  const readoutSlot = $('#f-pie-readout-slot', root);
-  if (readoutSlot) readoutSlot.innerHTML = donut.readoutHtml;
-  $('#f-meals', root).innerHTML = pie.slices.map(s => `
-    <div class="flex items-center justify-between gap-2 text-xs min-h-[44px]">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${s.color}"></span>
-        <span class="font-semibold text-slate-700 truncate">${esc(s.meal)}</span>
-      </div>
-      <div class="flex items-center gap-2 shrink-0 tabular-nums">
-        <span class="${s.count ? 'text-slate-800 font-semibold' : 'text-slate-400'}">${s.count ? `${s.kcal.toLocaleString()} kcal (${s.pct}%)` : '—'}</span>
-        <button data-meal="${esc(s.meal)}" type="button" class="text-brand font-semibold px-2.5 min-h-[44px] inline-flex items-center rounded-lg hover:bg-slate-50">+ เพิ่ม</button>
-      </div>
-    </div>`).join('');
-  bindChartInspector($('#f-pie-wrap', root), { hint: DONUT_TOOLTIP_HINT });
-
-  const burned = state.workouts.filter(w => w.date === date).reduce((a, w) => a + (w.estKcal || 0), 0);
-  const burnEl = $('#f-burn', root);
-  burnEl.classList.toggle('hidden', !burned);
-  if (burned) burnEl.textContent = `ออกกำลังกายวันนี้เผาผลาญเพิ่มประมาณ ${burned} kcal (ค่าประมาณ — ยังไม่ได้บวกเข้าเป้าอัตโนมัติ)`;
-  const macroCard = (name, v, goal, unit = 'g') => {
-    const pctVal = hasItems && goal > 0 ? Math.min((v / goal) * 100, 100) : 0;
-    return `
-    <div class="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2">
-      <div class="flex justify-between items-center text-xs font-semibold text-slate-600">
-        <span>${name}</span>
-        <span class="text-[11px] font-medium text-slate-400 tabular-nums">${hasItems && goal > 0 ? `${Math.round((v / goal) * 100)}%` : '0%'}</span>
-      </div>
-      <p class="text-base font-bold text-slate-800 tabular-nums">${hasItems ? (unit === 'kcal' ? Math.round(v).toLocaleString() : round1(v)) : '—'} <span class="text-xs font-normal text-slate-500">/ ${goal.toLocaleString()} ${unit}</span></p>
-      <div class="tm-progress-track"><div class="tm-progress-fill" style="width:${pctVal}%"></div></div>
-    </div>`;
-  };
-  $('#f-stats', root).innerHTML =
-    macroCard('พลังงาน', t.cal, targets.kcal, 'kcal') +
-    macroCard('โปรตีน', t.p, targets.protein, 'g') +
-    macroCard('คาร์บ', t.c, targets.carbs, 'g') +
-    macroCard('ไขมัน', t.f, targets.fat, 'g') +
-    `<div class="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2">
-      <div class="flex justify-between text-xs font-semibold text-slate-600"><span>น้ำตาล · โซเดียม</span></div>
-      <p class="text-sm font-bold text-slate-800 tabular-nums">${hasItems ? `${round1(t.sugar)} g · ${Math.round(t.na)} mg` : '—'}</p>
-      <p class="text-[11px] text-slate-500">เฉพาะรายการที่กรอกค่านี้</p>
-    </div>`;
+  const pieRingEl = $('#f-meals-pie-ring', root);
+  if (pieRingEl) pieRingEl.innerHTML = donut.ringHtml;
+  bindChartInspector($('#f-summary-hero', root), { showReadout: false });
 
   const advice = buildFoodAdvice(
     { kcal: t.cal, protein: t.p, carbs: t.c, fat: t.f, sugar: t.sugar, sodium: t.na },
@@ -1400,39 +1336,16 @@ function renderDay() {
   );
   const adviceEl = $('#f-advice', root);
   if (adviceEl) {
-    adviceEl.className = `p-3.5 rounded-xl text-xs leading-relaxed space-y-1 ${
+    const bulletItems = advice.points?.length ? advice.points : [advice.headline].filter(Boolean);
+    adviceEl.className = `p-3 sm:p-3.5 rounded-xl text-xs leading-relaxed ${
       advice.status === 'warn'
         ? 'bg-amber-50 border border-amber-200/80 text-amber-900'
         : advice.status === 'ok'
           ? 'bg-ok-soft/70 text-green-900'
           : 'bg-slate-50 border border-slate-200 text-slate-600'
     }`;
-    adviceEl.innerHTML = `<p class="font-semibold">${esc(advice.headline)}</p><ul class="list-disc pl-4 space-y-0.5">${advice.points.map(pt => `<li>${esc(pt)}</li>`).join('')}</ul>`;
+    adviceEl.innerHTML = `<ul class="list-disc pl-4 space-y-0.5">${bulletItems.map(pt => `<li>${esc(pt)}</li>`).join('')}</ul>`;
   }
-}
-
-// ---------- Gemini: photo / online search ----------
-function saveCurrentToLibrary() {
-  const name = foodLogName($('#f-name', root).value.trim());
-  const calories = numField(root, 'f-cal');
-  if (!name || calories === null) return toast('กรอกชื่อเมนูและแคลอรี่ก่อนบันทึกลงคลัง', 'err');
-  openFoodEditor({
-    prefill: {
-      name,
-      unit: base?.unit || '1 จาน',
-      gramsPerUnit: base?.gramsPerUnit ?? null,
-      calories,
-      protein: numField(root, 'f-pro'),
-      carbs: numField(root, 'f-carb'),
-      fat: numField(root, 'f-fat'),
-      sugar: numField(root, 'f-sugar'),
-      sodium: numField(root, 'f-sodium')
-    },
-    onSaved: food => {
-      $('#f-photo-lib-bar', root)?.classList.add('hidden');
-      applyPreset(food);
-    }
-  });
 }
 
 function openFoodSearchModal(initialQuery = '') {
@@ -1440,13 +1353,20 @@ function openFoodSearchModal(initialQuery = '') {
     localFoods: getPresets(),
     initialQuery,
     onUse: food => {
-      base = null;
-      const fields = { 'f-name': food.name, 'f-cal': food.calories, 'f-pro': food.protein, 'f-carb': food.carbs, 'f-fat': food.fat, 'f-sugar': food.sugar, 'f-sodium': food.sodium };
-      Object.entries(fields).forEach(([id, v]) => { const el = $('#' + id, root); if (el) el.value = v ?? ''; });
-      const qty = $('#f-qty', root); if (qty) qty.value = 1;
-      $('#f-sugar-wrap', root)?.classList.toggle('hidden', food.sugar == null);
-      $('#f-sodium-wrap', root)?.classList.toggle('hidden', food.sodium == null);
-      syncFoodWeightForm();
+      applyPreset({
+        name: food.name,
+        unit: 'หน่วย',
+        gramsPerUnit: null,
+        defaultQuantity: 1,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        sugar: food.sugar ?? null,
+        sodium: food.sodium ?? null
+      }, false);
+      const nameInput = $('#f-name', root);
+      if (nameInput) nameInput.value = food.name || '';
       updateFoodPreview();
     },
     onSaveLibrary: food => addCustomFood(state.uid, {
@@ -1501,72 +1421,49 @@ function setFoodScanStatus(text, tone = 'busy') {
   else el.classList.add('text-slate-500');
 }
 
-// ---------- Unified multi-image scan (Barcode -> Label / Dish) ----------
-async function scanSingleFoodFile(file, { signal } = {}) {
-  if ('BarcodeDetector' in window) {
-    let code = null;
-    try { code = await detectBarcode(file); } catch { code = null; }
-    if (code) {
-      try {
-        const hits = await barcodeOff(code);
-        if (hits.length) {
-          const hit = hits[0];
-          const grams = hit.servingGrams || 100;
-          const k = grams / 100;
-          const p = hit.per100 || {};
-          return {
-            sourceType: 'barcode',
-            barcode: code,
-            name: `${hit.name}${hit.brand ? ' · ' + hit.brand : ''}`,
-            unit: `${grams}g`,
-            gramsPerUnit: grams,
-            calories: Math.round((p.calories || 0) * k),
-            protein: p.protein != null ? round1(p.protein * k) : '',
-            carbs: p.carbs != null ? round1(p.carbs * k) : '',
-            fat: p.fat != null ? round1(p.fat * k) : '',
-            sugar: p.sugar != null ? round1(p.sugar * k) : '',
-            sodium: p.sodium != null ? Math.round(p.sodium * k) : '',
-            notes: `บาร์โค้ด ${code}`
-          };
-        }
-      } catch {
-        // Fallback to AI label/dish analysis if barcode lookup fails or is unavailable offline
-      }
-    }
+// ---------- Barcode & Label Scan (No AI Dish Scan) ----------
+async function scanBarcodeFile(file) {
+  if (!('BarcodeDetector' in window)) {
+    throw new Error('เบราว์เซอร์นี้ไม่รองรับการสแกนบาร์โค้ดจากรูป');
   }
-
-  const localLabel = await readNutritionLabelLocally(file);
-  if (isLocalNutritionSufficient(localLabel)) {
-    const per100 = localLabel.basis === 'per_100g';
-    return {
-      sourceType: 'label',
-      basis: localLabel.basis || 'unknown',
-      name: 'สินค้าจากฉลาก',
-      unit: per100 ? '100 กรัม' : 'หน่วย',
-      gramsPerUnit: per100 ? 100 : null,
-      calories: localLabel.calories != null ? Math.round(localLabel.calories) : '',
-      protein: localLabel.protein != null ? round1(localLabel.protein) : '',
-      carbs: localLabel.carbs != null ? round1(localLabel.carbs) : '',
-      fat: localLabel.fat != null ? round1(localLabel.fat) : '',
-      sugar: localLabel.sugar != null ? round1(localLabel.sugar) : '',
-      sodium: localLabel.sodium != null ? Math.round(localLabel.sodium) : '',
-      notes: 'อ่านด้วย OCR ในเครื่อง (0 โทเค็น)'
-    };
-  }
-
-  const r = await analyzeFoodImage(file, { signal, precheckedLocalLabel: localLabel });
-  const isLabel = r.kind === 'label';
-  const per100 = r.basis === 'per_100g';
-  const unit = isLabel
-    ? (per100 ? '100 กรัม' : (r.basis === 'per_serving' ? (r.servingSizeText || 'หน่วยบริโภค') : 'หน่วย'))
-    : 'จาน/ที่';
-  const gramsPerUnit = isLabel
-    ? (per100 ? 100 : (r.basis === 'per_serving' && Number.isFinite(r.servingGrams) ? r.servingGrams : null))
-    : null;
+  let code = null;
+  try { code = await detectBarcode(file); } catch { code = null; }
+  if (!code) throw new Error('ไม่พบบาร์โค้ดในรูปภาพ');
+  const hits = await barcodeOff(code);
+  if (!hits.length) throw new Error(`ไม่พบข้อมูลสินค้าสำหรับบาร์โค้ด ${code}`);
+  const hit = hits[0];
+  const grams = hit.servingGrams || 100;
+  const k = grams / 100;
+  const p = hit.per100 || {};
   return {
-    sourceType: isLabel ? 'label' : 'dish',
+    sourceType: 'barcode',
+    barcode: code,
+    name: `${hit.name}${hit.brand ? ' · ' + hit.brand : ''}`,
+    unit: `${grams}g`,
+    gramsPerUnit: grams,
+    calories: Math.round((p.calories || 0) * k),
+    protein: p.protein != null ? round1(p.protein * k) : '',
+    carbs: p.carbs != null ? round1(p.carbs * k) : '',
+    fat: p.fat != null ? round1(p.fat * k) : '',
+    sugar: p.sugar != null ? round1(p.sugar * k) : '',
+    sodium: p.sodium != null ? Math.round(p.sodium * k) : '',
+    notes: `บาร์โค้ด ${code}`
+  };
+}
+
+async function scanLabelFile(file, { signal } = {}) {
+  const r = await readNutritionLabel(file, { signal });
+  const per100 = r.basis === 'per_100g';
+  const unit = per100
+    ? '100 กรัม'
+    : (r.basis === 'per_serving' ? (r.servingSizeText || 'หน่วยบริโภค') : 'หน่วย');
+  const gramsPerUnit = per100
+    ? 100
+    : (r.basis === 'per_serving' && Number.isFinite(r.servingGrams) ? r.servingGrams : null);
+  return {
+    sourceType: 'label',
     basis: r.basis || 'unknown',
-    name: (r.name || '').trim() || (isLabel ? 'สินค้าจากฉลาก' : 'เมนูอาหารจากภาพ'),
+    name: (r.name || '').trim() || 'สินค้าจากฉลาก',
     unit,
     gramsPerUnit,
     calories: r.calories != null ? Math.round(r.calories) : '',
@@ -1585,13 +1482,12 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
   const currentMealId = $('#f-meal', root)?.value || meals[0]?.id || '';
   const sourceLabels = {
     barcode: 'บาร์โค้ด',
-    label: 'ฉลากโภชนาการ',
-    dish: 'จานอาหาร'
+    label: 'ฉลากโภชนาการ'
   };
 
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-2">
-      <h3 class="font-bold text-lg text-slate-800">ตรวจสอบผลสแกนอาหาร (${results.length} รูป)</h3>
+      <h3 class="font-bold text-lg text-slate-800">ตรวจสอบผลสแกน (${results.length} รูป)</h3>
       <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
@@ -1605,7 +1501,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
     <div class="space-y-3 max-h-[58vh] overflow-y-auto pr-1">
       ${results.map((r, i) => {
         const d = r.data || {};
-        const badgeText = sourceLabels[d.sourceType] || sourceLabels.dish;
+        const badgeText = sourceLabels[d.sourceType] || sourceLabels.label;
         return `<div class="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3" data-bfs-row="${i}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
             <label class="inline-flex items-center gap-2 min-h-[44px] text-xs font-semibold text-slate-800 cursor-pointer min-w-0">
@@ -1643,7 +1539,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
     <label class="inline-flex items-center gap-2 min-h-[44px] text-xs text-slate-600 mt-3 cursor-pointer"><input id="bfs-save-lib" type="checkbox" class="w-4 h-4 accent-violet-500"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
     <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-3">
       <button type="button" data-close class="btn btn-ghost min-h-[44px] justify-center">ยกเลิก</button>
-      <button type="button" id="bfs-save" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('check', { size: 15 })} ยืนยันบันทึกเข้ามื้ออาหาร</button>
+      <button type="button" id="bfs-save" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('check', { size: 15 })} บันทึก</button>
     </div>`, { size: 'xl', onClose: onCleanup });
 
   $('#bfs-save', m.el).addEventListener('click', async () => {
@@ -1756,13 +1652,13 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
       toast(`บันทึก ${itemsToSave.length} รายการลง${meal}แล้ว${addedToLib ? ` · เพิ่มเข้าคลัง ${addedToLib} เมนู` : ''}`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = `${iconSvg('check', { size: 15 })} ยืนยันบันทึกเข้ามื้ออาหาร`;
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });
 }
 
-async function onUnifiedScan(e) {
+async function onScanFiles(e, mode) {
   const files = [...(e.target.files || [])];
   e.target.value = '';
   if (!files.length) return;
@@ -1778,12 +1674,13 @@ async function onUnifiedScan(e) {
     });
   };
 
-  setFoodScanStatus(formatImageProgress('กำลังวิเคราะห์', { total: files.length, activeIndex: 1, completed: 0, percent: 0 }), 'busy');
+  const busyLabel = mode === 'barcode' ? 'กำลังอ่านบาร์โค้ด' : 'กำลังอ่านฉลาก';
+  setFoodScanStatus(formatImageProgress(busyLabel, { total: files.length, activeIndex: 1, completed: 0, percent: 0 }), 'busy');
   try {
     const { results, errors } = await runImageBatch(
       files,
-      (file, _idx, opts) => scanSingleFoodFile(file, opts),
-      info => setFoodScanStatus(formatImageProgress('กำลังวิเคราะห์', info), 'busy'),
+      (file, _idx, opts) => (mode === 'barcode' ? scanBarcodeFile(file) : scanLabelFile(file, opts)),
+      info => setFoodScanStatus(formatImageProgress(busyLabel, info), 'busy'),
       { concurrency: 2 }
     );
     if (!results.length && errors.length) {
@@ -1792,7 +1689,7 @@ async function onUnifiedScan(e) {
       return toast(errors[0].message, 'err');
     }
     results.forEach(r => { r.previewUrl = previewUrls[r.index] || ''; });
-    setFoodScanStatus(`✓ ประมวลผลครบ ${files.length}/${files.length} รูป (สำเร็จ ${results.length}) — ตรวจสอบและยืนยัน`, 'ok');
+    setFoodScanStatus(`✓ ประมวลผลครบ ${files.length}/${files.length} รูป (สำเร็จ ${results.length}) — ตรวจสอบและบันทึก`, 'ok');
     openBatchFoodScanModal(results, errors, revokeAllPreviews);
   } catch (err) {
     revokeAllPreviews();
@@ -1812,31 +1709,24 @@ export function openLibrary(onPick) {
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('book', { size: 18, className: 'text-brand' })}<span>คลังอาหารของฉัน</span></h3>
       <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
-    <div class="flex flex-col sm:flex-row gap-2 mb-2.5">
+    <div class="flex flex-col sm:flex-row gap-2 mb-3">
       <input id="lib-q" class="input min-h-[44px] flex-1" placeholder="ค้นหาชื่อเมนูหรือยี่ห้อ...">
       <select id="lib-category" class="input min-h-[44px] sm:max-w-52"><option value="">ทุกหมวดหมู่</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
       <button id="lib-add" type="button" class="btn btn-primary min-h-[44px] justify-center whitespace-nowrap">${iconSvg('plus', { size: 15 })} เพิ่มเมนู</button>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
-      <span class="text-slate-500">วันที่เพิ่มเมนู:</span>
-      <input id="lib-from" type="date" class="input !w-auto min-h-[44px] text-xs" aria-label="ตั้งแต่วันที่">
-      <span class="text-slate-400">–</span>
-      <input id="lib-to" type="date" class="input !w-auto min-h-[44px] text-xs" aria-label="ถึงวันที่">
-      <button id="lib-date-clear" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs hidden">ล้างวันที่</button>
     </div>
     <div id="lib-bulk" class="space-y-2 mb-3 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
       <div class="flex flex-wrap items-center gap-2">
         <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer font-medium text-slate-700"><input id="lib-select-visible" type="checkbox" class="w-4 h-4 accent-violet-500"> เลือกทั้งหมดที่แสดง (<span id="lib-visible-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="lib-selected-count">0</b></span>
         <div class="flex flex-wrap items-center gap-1.5 ml-auto">
-          <select id="lib-add-meal" class="input !w-auto min-h-[44px] !py-1.5 !px-2.5 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-          <button id="lib-add-to-meal" type="button" class="btn btn-primary min-h-[44px] px-3 py-1.5 text-xs font-semibold" disabled>${iconSvg('plus', { size: 13 })} เพิ่มที่เลือกลงมื้อ</button>
+          <select id="lib-add-meal" class="input !w-auto min-w-[8rem] min-h-[44px] !py-1.5 !pl-3 !pr-8 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+          <button id="lib-add-to-meal" type="button" class="btn btn-primary min-h-[44px] px-3 py-1.5 text-xs font-semibold" disabled>${iconSvg('plus', { size: 13 })} เพิ่มลงมื้อ</button>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
-        <select id="lib-bulk-category" class="input !w-auto min-w-36 min-h-[44px] !py-1.5 text-xs"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+        <select id="lib-bulk-category" class="input !w-auto min-w-36 min-h-[44px] !py-1.5 !pr-8 text-xs"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <button id="lib-change-category" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs" disabled>แก้หมวดหมู่</button>
-        <button id="lib-delete-selected" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs text-rose-700" disabled>ลบเมนูที่เลือก</button>
+        <button id="lib-delete-selected" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs text-rose-700" disabled>ลบที่เลือก</button>
       </div>
     </div>
     <div class="hidden md:grid md:grid-cols-[auto_minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,1.25fr)_auto] gap-3 px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-t-xl">
@@ -1844,40 +1734,24 @@ export function openLibrary(onPick) {
     </div>
     <div id="lib-list" class="space-y-2 md:space-y-0 md:border-x md:border-b md:border-slate-200 md:rounded-b-xl md:divide-y md:divide-slate-100 max-h-[50vh] overflow-y-auto"></div>`, { size: 'xl' });
   const selected = new Set();
-  const itemDateStr = p => {
-    const raw = p.createdAt || p.updatedAt;
-    if (!raw) return '';
-    const d = typeof raw.toDate === 'function' ? raw.toDate() : new Date(raw);
-    return Number.isNaN(d.getTime()) ? '' : localDateStr(d);
-  };
   const matches = p => {
-    const from = $('#lib-from', m.el).value;
-    const to = $('#lib-to', m.el).value;
     if (!label(p).toLowerCase().includes($('#lib-q', m.el).value.toLowerCase())) return false;
     if ($('#lib-category', m.el).value && (p.category || guessFoodCategory(p.name)) !== $('#lib-category', m.el).value) return false;
-    if (from || to) {
-      const ds = itemDateStr(p);
-      if (!ds) return false;
-      if (from && ds < from) return false;
-      if (to && ds > to) return false;
-    }
     return true;
   };
   const visibleItems = () => getPresets().filter(matches);
   const render = () => {
-    const from = $('#lib-from', m.el).value;
-    const to = $('#lib-to', m.el).value;
-    $('#lib-date-clear', m.el).classList.toggle('hidden', !from && !to);
     const presets = visibleItems();
     const customSelectedCount = state.customFoods.filter(f => selected.has(f.id)).length;
+    const bulkCategoryVal = Boolean($('#lib-bulk-category', m.el).value);
     const allVisibleSelected = presets.length > 0 && presets.every(p => selected.has(p.id));
     $('#lib-select-visible', m.el).checked = allVisibleSelected;
     $('#lib-select-visible', m.el).disabled = presets.length === 0;
     $('#lib-visible-count', m.el).textContent = presets.length;
     $('#lib-selected-count', m.el).textContent = selected.size;
     $('#lib-add-to-meal', m.el).disabled = selected.size === 0;
-    $('#lib-delete-selected', m.el).disabled = customSelectedCount === 0;
-    $('#lib-change-category', m.el).disabled = customSelectedCount === 0 || !$('#lib-bulk-category', m.el).value;
+    $('#lib-delete-selected', m.el).disabled = customSelectedCount === 0 || bulkCategoryVal;
+    $('#lib-change-category', m.el).disabled = customSelectedCount === 0 || !bulkCategoryVal;
     $('#lib-list', m.el).innerHTML = presets.map((p, i) => {
       const catText = p.category || guessFoodCategory(p.name);
       const brandAndCat = [p.brand, catText].filter(Boolean).join(' · ');
@@ -1906,9 +1780,6 @@ export function openLibrary(onPick) {
   };
   $('#lib-q', m.el).addEventListener('input', render);
   $('#lib-category', m.el).addEventListener('change', render);
-  $('#lib-from', m.el).addEventListener('change', render);
-  $('#lib-to', m.el).addEventListener('change', render);
-  $('#lib-date-clear', m.el).addEventListener('click', () => { $('#lib-from', m.el).value = ''; $('#lib-to', m.el).value = ''; render(); });
   $('#lib-add', m.el).addEventListener('click', () => openFoodEditor({}));
   $('#lib-select-visible', m.el).addEventListener('change', e => {
     visibleItems().forEach(p => e.target.checked ? selected.add(p.id) : selected.delete(p.id));

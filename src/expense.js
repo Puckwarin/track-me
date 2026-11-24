@@ -226,7 +226,7 @@ export function mountExpense(el) {
   const today = localDateStr();
   root.innerHTML = `
   <div class="lg:col-span-3 flex flex-wrap items-center justify-between gap-2.5">
-    <div class="tm-seg tm-seg--3 flex-1 min-w-[260px] max-w-xl" role="tablist" aria-label="หมวดรายรับ-รายจ่าย">
+    <div class="tm-seg tm-seg--3 w-full sm:w-auto sm:flex-1 max-w-xl" role="tablist" aria-label="หมวดรายรับ-รายจ่าย">
       <button type="button" role="tab" data-ex-tab="log" aria-selected="true" class="tm-seg-btn is-active">บันทึก & นำเข้า</button>
       <button type="button" role="tab" data-ex-tab="summary" aria-selected="false" class="tm-seg-btn">สรุป & งบ & ประจำ</button>
       <button type="button" role="tab" data-ex-tab="history" aria-selected="false" class="tm-seg-btn">ประวัติ</button>
@@ -266,7 +266,7 @@ export function mountExpense(el) {
         <div class="mt-2.5 space-y-2">
           <p class="text-xs text-slate-500">คัดลอกข้อความหลายบรรทัดจาก PDF Statement แล้ววางที่นี่ ข้อมูลยอดคงเหลือและเลขบัญชีจะไม่ถูกนำไปบันทึก</p>
           <textarea id="ex-statement-text" rows="5" class="input w-full text-xs" placeholder="วางข้อความ Statement ที่นี่..."></textarea>
-          <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">ประมวลผลข้อความ Statement</button></div>
+          <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !py-2 !px-3 text-xs">อ่าน Statement</button></div>
         </div>
       </details>
       <div class="tm-seg tm-seg--2" role="tablist" aria-label="ประเภทรายการ">
@@ -293,8 +293,8 @@ export function mountExpense(el) {
       </div>
 
       <div class="flex flex-wrap justify-end gap-2">
-        <button type="button" id="ex-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
-        <button type="button" id="ex-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการ</button>
+        <button type="button" id="ex-cancel" class="btn btn-ghost hidden">ยกเลิก</button>
+        <button type="button" id="ex-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button>
       </div>
     </section>
 
@@ -302,8 +302,8 @@ export function mountExpense(el) {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800">กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างกล่องรอตรวจ</button>
-          <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">ยืนยันนำเข้าที่เลือกทั้งหมด</button>
+          <button type="button" id="ex-pending-clear" class="btn btn-ghost !py-2 !px-3 text-xs text-rose-600">ล้างรายการ</button>
+          <button type="button" id="ex-pending-import" class="btn btn-primary !py-2 text-xs">นำเข้าที่เลือก</button>
         </div>
       </div>
       <div id="ex-pending-list" class="space-y-2"></div>
@@ -1268,7 +1268,7 @@ export function renderExpense() {
               ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
             </div>
             <div class="flex flex-wrap items-center gap-2 shrink-0">
-              ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !py-1.5 !px-2.5 text-xs">ยืนยันและบันทึกรายจ่าย</button>` : ''}
+              ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !py-1.5 !px-2.5 text-xs">บันทึกรายจ่าย</button>` : ''}
               <div class="tm-row-actions">
                 <button type="button" data-recurring-edit="${esc(plan.planId)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(plan.merchant)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
                 <button type="button" data-recurring-delete="${esc(plan.planId)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(plan.merchant)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>

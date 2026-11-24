@@ -123,11 +123,11 @@ export function mountBody(el) {
 
         <div class="flex flex-wrap items-center gap-2">
           <label class="btn btn-soft text-xs cursor-pointer">
-            ${iconSvg('csv', { size: 15, className: 'text-emerald-600' })} นำเข้า Zepp CSV (ฟรี · ไม่ใช้ AI)
+            ${iconSvg('csv', { size: 15, className: 'text-emerald-600' })} นำเข้า Zepp CSV
             <input type="file" id="bz-csv" accept=".csv,text/csv" multiple class="hidden">
           </label>
           <button type="button" id="bz-open-manual" class="btn btn-primary text-xs">
-            ${iconSvg('plus', { size: 15 })} กรอกเอง (นอน / ก้าวเดิน)
+            ${iconSvg('plus', { size: 15 })} กรอกเอง
           </button>
         </div>
         <p class="text-[11px] text-slate-500 leading-relaxed">รองรับ Zepp CSV 3 แบบ: ระยะการนอนรายนาที (stage/hr/respiratory_rate), สรุปการนอน (SLEEP) และกิจกรรม (ACTIVITY)</p>
@@ -548,7 +548,7 @@ export function render() {
       : '';
     return `<tr class="hover:bg-sky-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(r.date))}${r.note ? `<div class="text-xs text-slate-500 font-normal">${esc(r.note)}</div>` : ''}</td>
       <td class="p-3 text-right">${cell(r.weight)}${delta}</td><td class="p-3 text-right text-slate-600">${cell(r.bust)}</td><td class="p-3 text-right text-slate-600">${cell(r.waist)}</td><td class="p-3 text-right text-slate-600">${cell(r.hip)}</td><td class="p-3 text-right text-slate-600">${cell(r.arm)}</td><td class="p-3 text-right text-slate-600">${cell(r.thigh)}</td>
-      <td class="p-3 text-center"><button data-del="${esc(r.id)}" class="text-rose-500 hover:text-rose-700 p-2 min-w-[36px] min-h-[36px]" aria-label="ลบบันทึก">${iconSvg('trash', { size: 14 })}</button></td></tr>`;
+      <td class="p-3 text-center"><button type="button" data-del="${esc(r.id)}" class="tm-row-action-btn is-del !mx-auto" aria-label="ลบบันทึก ${esc(fmtDate(r.date))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button></td></tr>`;
   }).join('') : '<tr><td colspan="8" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</td></tr>';
 
   const mobileList = $('#b-mobile-list', root);
@@ -635,7 +635,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
     <div id="zepp-preview-box">
       <div class="flex justify-between items-center mb-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('upload', { size: 17, className: 'text-brand' })}<span>ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</span></h3>
-        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+        <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
       <div class="space-y-2 max-h-72 overflow-y-auto pr-0.5">
@@ -754,7 +754,7 @@ function openSleepStepsModal(prefill = null) {
     <div id="bz-manual-box" class="space-y-4">
       <div class="flex items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('sleep', { size: 18, className: 'text-brand' })}<span>บันทึกการนอน & ก้าวเดิน</span></h3>
-        <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+        <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div class="col-span-2 sm:col-span-1"><label class="lbl" for="bz-date">วันที่</label><input type="date" id="bz-date" class="input" value="${esc(initDate)}"></div>
@@ -775,7 +775,7 @@ function openSleepStepsModal(prefill = null) {
       </div>
       <div class="flex justify-end gap-2 pt-1">
         <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
-        <button type="button" id="bz-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 15 })} บันทึกนอน / ก้าวเดิน</button>
+        <button type="button" id="bz-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 15 })} บันทึก</button>
       </div>
     </div>
   `);

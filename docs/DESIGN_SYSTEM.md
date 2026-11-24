@@ -14,7 +14,7 @@ The design tokens CSS is auto-loaded via `src/app.js` — no additional import n
 
 ## Design Tokens
 
-### Pastel Blue-Primary Palette (v5.8.0)
+### Pastel Blue-Primary Palette (v5.10.0)
 
 | Token | Hex | Role |
 |---|---|---|
@@ -28,7 +28,16 @@ The design tokens CSS is auto-loaded via `src/app.js` — no additional import n
 
 Use semantic tokens for shared UI colors. The app uses one fixed Pastel Blue-Primary palette, and all brand logo marks (login, header, mobile bottom navigation `.nav-plus--logo`, onboarding, dashboard welcome mark, and PWA app icons) share the login logo sky-blue palette (`#e1f5fe` bubble, `#b3e5fc` border/shadow, `#03a9f4` icon); users cannot switch themes or category colors.
 
-Shared chart components (`src/donutChart.js` + `bindChartInspector` in `src/ui.js`) provide responsive Donut Charts with center `%` labels, interactive Legend items underneath (`.tm-donut-legend`), and collision-aware floating tooltips (`.tm-chart-float-tip` via `computeTooltipPosition()`) that clamp horizontally and flip vertically inside mobile viewports.
+Shared chart, control, and layout patterns:
+- Donut Chart (`src/donutChart.js` + `bindChartInspector` in `src/ui.js`) scales meal arcs relative to `targetKcal` (`mealSlicesToSegments`), shows center `%` labels, and triggers collision-aware floating tooltips (`.tm-chart-float-tip` via `computeTooltipPosition()`). Home (`src/home.js`) and Food (`src/food.js`) both attach `bindChartInspector(..., { showReadout: false })` without below-ring legend pills or hint bars, paired identically with 4 macro tiles: Protein, Carbs (`"คาร์บ"`), Fat, and combined Sugar · Sodium (`"น้ำตาล · โซเดียม"`, showing `Xg · Ymg` and `"เฉพาะรายการที่ระบุ"`).
+- Form controls (`.input`, `select`, text/number/date/time `input`, `textarea`) standardize font size (`0.75rem`) and compact sizing (`min-height: 2.5rem`) to match button typography across desktop and mobile (`index.html` sets `maximum-scale=1` to prevent mobile browser auto-zoom without inflating input font sizes).
+- Quick favorite chip strip (`.tm-fav-strip`, `.tm-fav-chip`) caps visible quick items to 5 on `< 1024px` and 10 on desktop.
+- Collapsible section toggle `.pl-collapse-btn` is reused in Weekly Planner (`src/home.js`) and Settings (`src/settings.js`).
+- Desktop (`>= 1024px`) list/table actions use `.tm-row-action-btn` while mobile (`< 1024px`) preserves `bindSwipeRows()` swipe gestures.
+- Mobile submenus (`#subnav` `.hx-cat`/`.sub-tile` with icon-only `.hx-cat-icon` frame and no outer card border around the label, plus `.sub-chip`), dashboard controls (`.db-range`, `.db-refresh`), workout tabs (`.wa-sec-tab`), and segmented controls (`.tm-seg` / `.tm-seg-btn`) use compact mobile sizing (`<= 767px`), and `.tm-seg--3`/`.tm-seg--4` switch to non-wrapping horizontal scroll at `< 640px` to prevent narrow-screen overflow.
+- Mobile bottom navigation (`#bottom-nav`, `< 768px`) keeps 5 slots (`หน้าหลัก`, `อาหาร`, brand quick-add sheet, `ออกกำลัง`, `ดูแล`) while surfacing `รายรับ-รายจ่าย` (`expense`) inside the `ดูแล` `#subnav` tiles and via clickable Home summary KPI cards (`[data-page-go]`), keeping `การเงิน` top-level on Desktop (`>= 768px`).
+- Horizontal multi-week scrollable date strip (`.tm-week-strip`, `.tm-day-pill`, `.tm-day-meta`) and unified week navigator bar (`.pl-week-nav` via `buildWeekStripRange()`, `centerStripPill()`, and `weekNavBarHtml()` in `src/ui.js`) share identical appearance, right-aligned header placement above the strip, `"วันนี้"` (`aria-label="กลับไปวันนี้"`) reset behavior, and automatic center-today positioning on entry across Home Weekly Planner (`src/planner.js`), Food (`src/food.js`), and Workout (`src/workout.js`).
+- Modal close controls across all feature modals meet `min-w-[44px] min-h-[44px]` (`!w-11 !h-11`).
 
 ### State Colors
 
@@ -103,7 +112,7 @@ button({ label, icon, variant, size, full, id, type, disabled, ariaLabel })
 | Prop | Type | Default | Options |
 |---|---|---|---|
 | `label` | string | `''` | Button text |
-| `icon` | string | `''` | Phosphor Duotone icon key in `src/icons.js` (e.g. `'plus'`, `'save'`) |
+| `icon` | string | `''` | Phosphor Regular icon key in `src/icons.js` (e.g. `'plus'`, `'save'`) |
 | `variant` | string | `'primary'` | `primary`, `secondary`, `accent`, `success`, `danger`, `soft`, `ghost` |
 | `size` | string | `''` | `''` (default), `'sm'`, `'lg'` |
 | `full` | boolean | `false` | Full width |
@@ -111,7 +120,7 @@ button({ label, icon, variant, size, full, id, type, disabled, ariaLabel })
 
 ```js
 button({ label: 'บันทึก', icon: 'save', variant: 'primary', full: true })
-// Output renders inline Phosphor Duotone SVG via iconSvg('save', { size: 16 })
+// Output renders inline Phosphor Regular SVG via iconSvg('save', { size: 16 })
 ```
 
 ### Icon Button
@@ -126,7 +135,7 @@ iconButton({ icon, id, variant, size, ariaLabel, active })
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `icon` | string | `''` | Phosphor Duotone icon key in `src/icons.js` |
+| `icon` | string | `''` | Phosphor Regular icon key in `src/icons.js` |
 | `size` | string | `''` | `''` or `'sm'` (2.25rem) |
 | `active` | boolean | `false` | Active/selected state |
 
@@ -437,8 +446,8 @@ Key responsive behaviors:
 
 ## Icons (Offline 100%)
 
-- **Phosphor Duotone (`src/icons.js`)**: ใช้สำหรับไอคอนทุกส่วนทั้งแอป เมนูหลัก, การ์ดหมวดหมู่, แท็บย่อย, แผ่นบันทึกด่วน (`+`) และหน้าตั้งค่า (`@phosphor-icons/core/assets/duotone/*-duotone.svg?raw`) แบบ tree-shaken รองรับ `currentColor` และ alias `fa-*`
-  - แกลเลอรีหลัก (เลือกน้ำหนัก **Duotone**): <https://phosphoricons.com/> หรือ <https://icon-sets.iconify.design/ph/>
+- **Phosphor Regular (`src/icons.js`)**: ใช้สำหรับไอคอนทุกส่วนทั้งแอป เมนูหลัก, การ์ดหมวดหมู่, แท็บย่อย, แผ่นบันทึกด่วน และหน้าตั้งค่า (`@phosphor-icons/core/assets/regular/*.svg?raw`) แบบ tree-shaken รองรับ `currentColor` และ alias `fa-*`
+  - แกลเลอรีหลัก (เลือกน้ำหนัก **Regular**): <https://phosphoricons.com/> หรือ <https://icon-sets.iconify.design/ph/>
 
 ---
 
@@ -446,9 +455,9 @@ Key responsive behaviors:
 
 | File | Purpose |
 |---|---|
-| `src/design-tokens.css` | Warm Wellness semantic tokens (colors, spacing, radius, shadows) + component utility classes |
-| `src/ui.js` | Shared UI component factory functions (JS → HTML string) and `animateNumberTicker` |
-| `src/icons.js` | Central Phosphor Duotone inline SVG registry (`iconSvg`, `iconBubble`, `hydrateStaticIcons`) |
+| `src/design-tokens.css` | Pastel Blue-Primary semantic tokens (colors, spacing, radius, shadows) + component utility classes |
+| `src/ui.js` | Shared UI component factory functions (JS → HTML string), `bindChartInspector`, `bindSwipeRows`, and `animateNumberTicker` |
+| `src/icons.js` | Central Phosphor Regular inline SVG registry (`iconSvg`, `iconBubble`, `hydrateStaticIcons`) |
 | `docs/DESIGN_SYSTEM.md` | This document |
 
 ## Integration Notes
@@ -457,7 +466,7 @@ Key responsive behaviors:
 2. **Import components**: `import { ... } from './ui.js'` and `import { iconSvg } from './icons.js'` in any feature module.
 3. **Backward compatibility**: Existing `.card`, `.btn`, `.input`, `.chip`, `.modal-backdrop` classes in `style.css` are preserved. New `tm-` prefixed classes are additive — no existing markup breaks.
 4. **Brand colors**: There is no theme switcher. Use the fixed semantic tokens in `design-tokens.css`; reserve Success, Warning, Error, and Info tokens for their state meanings.
-5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken **Phosphor Duotone** inline SVGs (`@phosphor-icons/core` via `src/icons.js`); UI markup works 100% offline with zero external CDN webfonts.
+5. **Icons & Styling**: Uses Tailwind CSS v4 (`@tailwindcss/vite`) and tree-shaken **Phosphor Regular** inline SVGs (`@phosphor-icons/core` via `src/icons.js`); UI markup works 100% offline with zero external CDN webfonts.
 
 ## Known Limitations
 

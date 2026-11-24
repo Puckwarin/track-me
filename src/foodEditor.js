@@ -6,7 +6,7 @@ import { guessFoodCategory } from './foodParser.js';
 import { validateFoodPreset } from './foodValidation.js';
 import { iconSvg } from './icons.js';
 
-const EDIT_FIELDS = [['calories', 'แคลอรี่ (kcal)'], ['protein', 'โปรตีน (g)'], ['carbs', 'คาร์โบไฮเดรต (g)'], ['fat', 'ไขมัน (g)'], ['sugar', 'น้ำตาล (g)'], ['sodium', 'โซเดียม (mg)']];
+const EDIT_FIELDS = [['calories', 'แคลอรี่ (kcal)'], ['protein', 'โปรตีน (g)'], ['carbs', 'คาร์บ (g)'], ['fat', 'ไขมัน (g)'], ['sugar', 'น้ำตาล (g)'], ['sodium', 'โซเดียม (mg)']];
 
 export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   const v = prefill;
@@ -60,14 +60,10 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
           </div>
         </div>
         <div>
-          <label class="lbl" for="e-edible">สัดส่วนที่กินได้ (%) (ไม่บังคับ)</label>
-          <input id="e-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]" value="${Number.isFinite(v.edibleFraction) ? Math.round(v.edibleFraction * 100) : ''}" placeholder="เช่น 54 สำหรับผลไม้ชั่งรวมเปลือก/ซัง">
-          <p class="mt-1 text-[11px] text-slate-500 leading-snug">ใช้กรณีชั่งน้ำหนักรวมเปลือกหรือแกน ระบบจะคำนวณเฉพาะส่วนที่กินได้ให้อัตโนมัติ</p>
+          <button id="e-fav" type="button" class="tm-food-action-btn is-fav ${v.favorite ? 'is-active' : ''}" aria-pressed="${Boolean(v.favorite)}" aria-label="บันทึกเป็นเมนูโปรด">
+            ${iconSvg('star', { size: 16 })}<span>${v.favorite ? 'เมนูโปรด' : 'บันทึกเป็นเมนูโปรด'}</span>
+          </button>
         </div>
-        <label class="inline-flex items-center gap-2 min-h-[44px] px-1 text-sm text-slate-700 cursor-pointer">
-          <input id="e-fav" type="checkbox" class="w-4 h-4 accent-violet-500" ${v.favorite ? 'checked' : ''}>
-          <span>บันทึกเป็นเมนูโปรด</span>
-        </label>
       </section>
 
       <section class="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3">
@@ -98,6 +94,17 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   let categoryTouched = !!v.category;
   g('category').addEventListener('change', () => { categoryTouched = true; });
   g('name').addEventListener('input', () => { if (!categoryTouched) g('category').value = guessFoodCategory(g('name').value); });
+  const favBtn = g('fav');
+  let isFav = Boolean(v.favorite);
+  if (favBtn) {
+    favBtn.addEventListener('click', () => {
+      isFav = !isFav;
+      favBtn.classList.toggle('is-active', isFav);
+      favBtn.setAttribute('aria-pressed', String(isFav));
+      const labelSpan = favBtn.querySelector('span');
+      if (labelSpan) labelSpan.textContent = isFav ? 'เมนูโปรด' : 'บันทึกเป็นเมนูโปรด';
+    });
+  }
   const conv = $('#e-convert', m.el);
   if (conv) conv.addEventListener('click', () => {
     const k = scan.servingGrams / 100;
@@ -107,16 +114,16 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   });
   $('#e-save', m.el).addEventListener('click', () => {
     const name = g('name').value.trim(), unit = g('unit').value.trim(), cal = toNum(g('calories').value);
-    const ediblePercent = toNum(g('edible').value), gramsPerUnit = toNum(g('grams').value);
+    const gramsPerUnit = toNum(g('grams').value);
     const validationError = validateFoodPreset({
-      name, unit, calories: cal, ediblePercent, gramsPerUnit,
+      name, unit, calories: cal, ediblePercent: null, gramsPerUnit,
       confirmed: !scan || $('#e-confirm', m.el).checked
     });
     if (validationError) return toast(validationError, 'err');
     const key = value => String(value).trim().toLocaleLowerCase('th').replace(/\s+/g, ' ');
     const duplicate = [...state.customFoods.filter(f => f.id !== id), ...DEFAULT_PRESETS].find(f => key(f.name) === key(name));
     if (duplicate) return toast(`มีเมนู “${duplicate.name}” อยู่ในคลังแล้ว`, 'err');
-    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, category: g('category').value, ...(v.defaultQuantity ? { defaultQuantity: v.defaultQuantity } : {}), edibleFraction: ediblePercent === null ? null : ediblePercent / 100, favorite: g('fav').checked };
+    const rec = { name, brand: g('brand').value.trim(), unit, gramsPerUnit, category: g('category').value, ...(v.defaultQuantity ? { defaultQuantity: v.defaultQuantity } : {}), edibleFraction: Number.isFinite(v.edibleFraction) ? v.edibleFraction : null, favorite: isFav };
     EDIT_FIELDS.forEach(([k]) => { rec[k] = toNum(g(k).value); });
     const done = ref => { toast('บันทึกเมนูแล้ว'); if (onSaved) onSaved({ ...rec, id: ref?.id || id }); };
     if (id) { updateCustomFood(state.uid, id, { ...rec, updatedAt: new Date() }).catch(e => toast(e.message, 'err')); done(); }

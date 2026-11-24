@@ -8,8 +8,6 @@ import {
 import { getUsdaKey, setUsdaKey, testUsdaConnection } from './foodsearch.js';
 import { mountProfile } from './profile.js';
 import { mountBackup } from './backup.js';
-import { mountMigrate } from './migrate.js';
-import { checkReminder, REMIND_OPTIONS, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
 import { signOutUser, lockCurrentApp, exitPreviewMode } from './auth.js';
 import { state } from './state.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
@@ -27,7 +25,6 @@ import {
   setPushHideDetails,
   enablePushNotifications,
   disablePushForThisDevice,
-  syncPeriodRemindToPush,
   sendTestLocalNotification
 } from './push.js';
 
@@ -55,16 +52,27 @@ export function mountSettings(el) {
     </div>
 
     <section class="card space-y-4 lg:col-span-2" id="st-nav-customize" aria-labelledby="st-nav-title">
-      <header><h3 id="st-nav-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('compass', { size: 18, className: 'text-brand' })}<span>เมนูและทางลัด</span></h3><p class="text-xs text-slate-500 mt-1">จัดทางลัดหน้าแรก ลำดับเมนูย่อย และหน้าที่เปิดเมื่อเริ่มใช้งาน การตั้งค่านี้เก็บในอุปกรณ์นี้</p></header>
-      <div><label class="lbl" for="st-nav-landing">หน้าเริ่มต้น</label><select id="st-nav-landing" class="input"></select></div>
-      <div><h4 class="text-sm font-semibold text-slate-700 mb-2">ทางลัดบนหน้าหลัก</h4><p class="text-xs text-slate-500 mb-2">เลือกได้สูงสุด 8 รายการ และใช้ปุ่มลูกศรจัดลำดับได้</p><div id="st-nav-favorites" class="nav-pref-list"></div></div>
-      <div><h4 class="text-sm font-semibold text-slate-700 mb-2">เมนูย่อย</h4><p class="text-xs text-slate-500 mb-2">จัดลำดับหรือซ่อนรายการเสริมได้ ตั้งค่าและแจ้งเตือนยังคงเข้าถึงได้เสมอ</p><div id="st-nav-submenus" class="space-y-4"></div></div>
-      <button type="button" id="st-nav-reset" class="btn btn-ghost text-sm">รีเซ็ตเมนูเป็นค่าเริ่มต้น</button>
-      <p class="text-xs text-slate-500" id="st-nav-storage-note">การปรับแต่งเมนูจะไม่เปลี่ยนข้อมูลสุขภาพหรือบัญชี</p>
+      <header class="flex items-start justify-between gap-3">
+        <div>
+          <h3 id="st-nav-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('compass', { size: 18, className: 'text-brand' })}<span>เมนูและทางลัด</span></h3>
+          <p class="text-xs text-slate-500 mt-1">จัดทางลัดหน้าแรก ลำดับเมนูย่อย และหน้าที่เปิดเมื่อเริ่มใช้งาน การตั้งค่านี้เก็บในอุปกรณ์นี้</p>
+        </div>
+        <button type="button" class="pl-collapse-btn" data-st-collapse="nav" aria-expanded="true" aria-controls="st-nav-body" aria-label="หุบเมนูและทางลัด" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
+      </header>
+      <div id="st-nav-body" class="space-y-4">
+        <div><label class="lbl" for="st-nav-landing">หน้าเริ่มต้น</label><select id="st-nav-landing" class="input"></select></div>
+        <div><h4 class="text-sm font-semibold text-slate-700 mb-2">ทางลัดบนหน้าหลัก</h4><p class="text-xs text-slate-500 mb-2">เลือกได้สูงสุด 8 รายการ และใช้ปุ่มลูกศรจัดลำดับได้</p><div id="st-nav-favorites" class="nav-pref-list"></div></div>
+        <div><h4 class="text-sm font-semibold text-slate-700 mb-2">เมนูย่อย</h4><p class="text-xs text-slate-500 mb-2">จัดลำดับหรือซ่อนรายการเสริมได้ ตั้งค่าและแจ้งเตือนยังคงเข้าถึงได้เสมอ</p><div id="st-nav-submenus" class="space-y-4"></div></div>
+        <button type="button" id="st-nav-reset" class="btn btn-ghost text-sm">รีเซ็ตเมนูเป็นค่าเริ่มต้น</button>
+        <p class="text-xs text-slate-500" id="st-nav-storage-note">การปรับแต่งเมนูจะไม่เปลี่ยนข้อมูลสุขภาพหรือบัญชี</p>
+      </div>
     </section>
 
     <section class="card space-y-4 lg:col-span-2" id="st-home-widget-settings" aria-labelledby="st-home-widget-title">
-      <header><h3 id="st-home-widget-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('more', { size: 18, className: 'text-brand' })}<span>ปรับแต่งหน้าแรก</span></h3></header>
+      <header class="flex items-start justify-between gap-3">
+        <h3 id="st-home-widget-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('more', { size: 18, className: 'text-brand' })}<span>ปรับแต่งหน้าแรก</span></h3>
+        <button type="button" class="pl-collapse-btn" data-st-collapse="home-widgets" aria-expanded="true" aria-controls="st-home-widget-controls" aria-label="หุบปรับแต่งหน้าแรก" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
+      </header>
       <div id="st-home-widget-controls"></div>
     </section>
 
@@ -76,15 +84,20 @@ export function mountSettings(el) {
       <p id="st-pin-state" class="text-xs text-slate-500"></p>
     </div>
 
-    <div class="card space-y-3 lg:col-span-2" id="st-profile"></div>
+    <section class="card space-y-3 lg:col-span-2" aria-labelledby="st-profile-title">
+      <header class="flex items-start justify-between gap-3">
+        <div>
+          <h3 id="st-profile-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('target', { size: 18, className: 'text-brand' })}<span>เป้าหมายพลังงาน &amp; มื้ออาหาร</span></h3>
+          <p class="text-xs text-slate-500 mt-0.5">คำนวณ BMI / BMR / TDEE และกำหนดมื้ออาหารของฉัน</p>
+        </div>
+        <button type="button" class="pl-collapse-btn" data-st-collapse="profile" aria-expanded="true" aria-controls="st-profile" aria-label="หุบเป้าหมายพลังงานและมื้ออาหาร" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
+      </header>
+      <div class="space-y-3" id="st-profile"></div>
+    </section>
 
     <div id="st-push-card" class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('notifications', { size: 18, className: 'text-pink-500' })}<span>การแจ้งเตือนอัตโนมัติ (12:15 น.) & รอบเดือน</span></h3>
-      <p class="text-xs text-slate-500">รับ Web Push แจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกวันเวลา 12:15 น. แม้ไม่ได้เปิดแอปค้างไว้ (ส่งผ่าน GitHub Actions ฟรี)</p>
-      <div>
-        <label class="lbl">แจ้งเตือนรอบเดือนล่วงหน้า</label>
-        <select id="st-remind" class="input">${REMIND_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
-      </div>
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('notifications', { size: 18, className: 'text-brand' })}<span>การแจ้งเตือน</span></h3>
+      <p class="text-xs text-slate-500">รับการแจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกวันเวลา 12:15 น. แม้ไม่ได้เปิดแอปค้างไว้</p>
       <label class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-slate-700 cursor-pointer">
         <input type="checkbox" id="st-push-hide-details" class="mt-0.5">
         <span><b>ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)</b><br><span class="text-[11px] text-slate-500">แสดงเฉพาะจำนวนรายการรวมบนแจ้งเตือน เพื่อไม่ให้ข้อมูลรอบเดือน สุขภาพ หรือนัดหมายแสดงบนหน้าจอล็อก</span></span>
@@ -118,7 +131,6 @@ export function mountSettings(el) {
         <button type="button" id="st-open-feedback" class="btn btn-primary text-xs">${iconSvg('chat', { size: 14 })} ส่ง Feedback แอป</button>
       </div>
     </div>
-    <div class="card space-y-3 lg:col-span-2" id="st-migrate"></div>
     <div class="card space-y-3 lg:col-span-2" id="st-api-keys">
       <header class="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -249,15 +261,18 @@ export function mountSettings(el) {
     if (confirm('ปิด PIN บนอุปกรณ์นี้?')) { removeDevicePin(state.uid); updatePinState(); toast('ปิด PIN แล้ว'); }
   });
   updatePinState();
-  const sel = $('#st-remind', el);
-  sel.value = String(getPeriodRemindDays());
-  sel.addEventListener('change', () => {
-    setPeriodRemindDays(sel.value);
-    checkReminder();
-    syncPeriodRemindToPush();
-    window.dispatchEvent(new Event('trackme:data-change'));
+  el.querySelectorAll('[data-st-collapse]').forEach(btn => {
+    const targetId = btn.getAttribute('aria-controls');
+    const targetEl = targetId ? $('#' + targetId, el) : null;
+    if (!targetEl) return;
+    btn.addEventListener('click', () => {
+      const nextCollapsed = !targetEl.classList.contains('hidden');
+      targetEl.classList.toggle('hidden', nextCollapsed);
+      btn.setAttribute('aria-expanded', String(!nextCollapsed));
+      btn.title = nextCollapsed ? 'กาง' : 'หุบ';
+      btn.innerHTML = iconSvg(nextCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 });
+    });
   });
-  window.addEventListener('trackme:reminders', () => { if (sel.isConnected) sel.value = String(getPeriodRemindDays()); });
 
   const ns = $('#st-notif-state', el);
   const enableBtn = $('#st-push-enable', el);
@@ -393,7 +408,6 @@ export function mountSettings(el) {
   updateNfSummary();
 
   mountBackup($('#st-backup', el));
-  mountMigrate($('#st-migrate', el));
   refreshAccount();
 }
 

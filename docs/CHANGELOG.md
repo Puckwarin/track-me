@@ -3,22 +3,79 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v5.10.0] - 2026-11-23
+
+### 4-Tile Macro Cards (`น้ำตาล · โซเดียม`), Target-Relative Donut Scale, Streamlined Food Summary, Planner Modal Upgrades & Button-Matched Input Typography
+- **หน้า Home & สรุปภาพรวม (`src/home.js`, `src/home.css`, `src/donutChart.js`, `src/donutChart.test.js`)**:
+  - รวมกล่อง **น้ำตาล** และ **โซเดียม** เป็น 1 กล่อง (`.hx-macro.is-sugar-sodium`) ในรูปแบบเดียวกับตัวอย่าง: หัวข้อ `"น้ำตาล · โซเดียม"`, ค่า `${น้ำตาล}g · ${โซเดียม}mg` (หรือ `—` เมื่อยังไม่มีข้อมูล) และหมายเหตุ `"เฉพาะรายการที่ระบุ"` พร้อมเปลี่ยนสีเตือน `.is-over` เมื่อเกินเกณฑ์ (`36g` / `2,300mg`) รวมเป็น 4 กล่องมาโคร (2x2 บนมือถือ `< 640px`, 4 ช่องเรียงแถวเดียวบน `640px–1023px`, เรียงแนวตั้งข้างวงแหวนบน Desktop `>= 1024px`)
+  - `src/donutChart.js` (`mealSlicesToSegments(slices, targetKcal)`) คำนวณสัดส่วนมุมวงแหวนเทียบเป้าหมายแคลอรี่ (`targetKcal`) และย่อทุกส่วนตามสัดส่วนเมื่อกินเกินเป้าหมาย พร้อม Unit Tests เพิ่มเติมใน `src/donutChart.test.js`
+- **หน้าอาหาร (`src/food.js`, `src/home.css`)**:
+  - ปรับกล่องมาโครบนการ์ด `#f-summary-hero` ให้ใช้ 4 กล่องชุดเดียวกับหน้า Home (`โปรตีน`, `คาร์บ`, `ไขมัน`, และ `น้ำตาล · โซเดียม`)
+  - ตัดส่วนรายการสัดส่วน % รายมื้อ (`#f-meals`), แถบ Legend รายมื้อ (`#f-meals-pie-legend`) และข้อความคำแนะนำใต้กราฟ (`#f-pie-readout-slot` โดยส่ง `{ showReadout: false }` ให้ `bindChartInspector`) ออกจากส่วนบนของหน้าอาหาร (คง Floating Tooltip เมื่อชี้หรือแตะส่วนของวงแหวนไว้เหมือนหน้าหลัก)
+  - ย้ายกรอบ **คำแนะนำโภชนาการ (`#f-advice`)** เข้ามาไว้ใต้เส้นขีดของการ์ดแคลอรี่รวมวันนี้ แสดงเฉพาะรายการข้อแนะนำแบบจุดภายในกรอบโดยไม่มีหัวข้อด้านบน
+  - ย้ายช่องกรอกชื่อเมนู (`#f-name`) ลงมาไว้ด้านล่าง **รายการโปรดด่วน (`#f-fav-strip`)**
+  - กู้คืนการแสดง **โปรตีนรวมของแต่ละมื้อ (`P ...g`)** บนส่วนหัวกลุ่มมื้ออาหารในรายการอาหารของวันบนทุกขนาดหน้าจอ
+- **Weekly Planner Modals (`src/planner.js`)**:
+  - ป๊อปอัพเพิ่ม/แก้ไขกิจกรรม (`openRoutinesModal`): เปลี่ยนหัวข้อเป็น `"จัดการ & แก้ไข"`, ปุ่มเลือกชุดวันทุกปุ่ม (`จ พ ศ อา`, `อ พฤ ส`, `ทุกวัน`, `จ–ศ`, `ส–อา`) กดซ้ำเพื่อล้างวันที่เลือกได้ทั้งหมด, และเปลี่ยนปุ่มด้านล่างฟอร์มเป็น `"ยกเลิก"` และ `"บันทึก"`
+  - ป๊อปอัพย้ายวัน (`openRescheduleModal`): เปลี่ยนหัวข้อเป็น `"จัดการ & ย้ายวัน"`, ปุ่มยืนยันเป็น `"ย้ายวัน"`, ปุ่มสลับสถานะเป็น `"ทำเสร็จ"` / `"ยังไม่ทำ"`, และปุ่ม `"แก้ไข"` / `"ลบ"` ใช้สไตล์ `.tm-food-action-btn` / `.tm-food-action-btn.is-del` เดียวกับคลังอาหาร
+- **ขนาดตัวหนังสือและความสูงช่องกรอก/Dropdown เท่าปุ่ม (`src/style.css`, `index.html`)**:
+  - `index.html` เพิ่ม `maximum-scale=1` ใน viewport meta เพื่อกันเบราว์เซอร์มือถือซูมอัตโนมัติ
+  - `src/style.css` ปรับตัวหนังสือของ `.input`, `<select>`, `<input>`, `<textarea>` และ `::-webkit-date-and-time-value` เป็น `0.75rem` พร้อมความสูงขั้นต่ำ `2.5rem` (`:where(...)` specificity = 0 เพื่อไม่ทับคลาส Tailwind) และยกเลิกกฎบังคับ `16px` บนมือถือเพื่อให้ขนาดตัวอักษรและช่องกรอกสม่ำเสมอกับปุ่มทั้งแอป
+- **เมนูย่อยบนมือถือ & การเข้าถึงหน้าการเงิน (`src/app.js`, `src/style.css`, `src/expense.js`, `src/summary.js`, `src/home.css`)**:
+  - กู้คืนสไตล์ `.hx-cat`, `.hx-cat-icon`, `.hx-cat-label` และ `.sub-tile` ใน `#subnav` โดยนำกรอบนอกที่ครอบรวมไอคอนกับชื่อเมนูออก เหลือเฉพาะกรอบครอบไอคอน (`.hx-cat-icon` ขนาด `2.35rem × 2.35rem`, ไอคอน `18px`, ป้าย `.68rem`) พร้อมย่อ `.sub-chip`, `.tm-seg`/`.tm-seg-btn`, `.db-range`, `.db-refresh` และ `.wa-sec-tab` บนหน้าจอมือถือ (`<= 767px`)
+  - ปรับ `.tm-seg--3` และ `.tm-seg--4` ที่ความกว้าง `< 640px` เป็นแถว Flex เลื่อนแนวนอนไม่ห่อบรรทัด (`overflow-x: auto`) และเปลี่ยนคอนเทนเนอร์แท็บใน `src/expense.js` จาก `min-w-[260px]` เป็น `w-full sm:w-auto sm:flex-1` เพื่อกันล้นขอบหน้าจอมือถือ
+  - คืนทางเข้าหน้า **การเงิน (`expense`)** บนมือถือโดยแสดงเมนู **`รายรับ-รายจ่าย`** ใน `#subnav` ใต้หมวด **`ดูแล`** (พร้อมไฮไลต์ปุ่ม **`ดูแล`** บน `#bottom-nav` เมื่ออยู่ที่หน้า `expense` โดยไม่กระทบแถบเมนูด้านข้างของ Desktop) และปรับการ์ดสรุปใน `#summary-grid` (`src/summary.js`, `src/home.css`) รวมถึงการ์ด **การเงินเดือนนี้** ให้กดเปิดไปหน้านั้นได้ทันที (`data-page-go`)
+- **แถบปฏิทินรายสัปดาห์แบบเลื่อนซ้าย-ขวา & ปุ่ม `"วันนี้"` เหมือนกันทั้ง 3 หน้า (`src/ui.js`, `src/planner.js`, `src/food.js`, `src/workout.js`, `src/style.css`, `src/uiWeekStrip.test.js`)**:
+  - สกัด Helper กลาง `buildWeekStripRange()`, `centerStripPill()` และ `weekNavBarHtml()` ใน `src/ui.js` เพื่อรวมแถบวันที่แบบเลื่อนซ้าย-ขวาต่อเนื่องหลายสัปดาห์ (`.tm-week-strip` / `.tm-day-pill`) และปุ่มนำทางสัปดาห์ `.pl-week-nav` ให้เป็นชุดเดียวกันทั้งหน้าหลัก (`Home` Weekly Planner), หน้าอาหาร (`Food`) และหน้าออกกำลังกาย (`Workout`) โดยไม่กระทบข้อมูล/แผนของวันหรือสัปดาห์อื่น และคงกระดาน 7 วันบน Desktop ของหน้าหลักไว้ตามเดิม
+  - ตั้งค่าเริ่มต้นให้วันที่ปัจจุบันอยู่ตรงกลางแถบปฏิทินเสมอเมื่อเข้าหน้าหลัก อาหาร หรือออกกำลังกาย และจัดกึ่งกลางแนวนอนอย่างปลอดภัยโดยไม่ดึง scroll แนวตั้งของหน้า
+  - เปลี่ยนป้ายปุ่ม `"สัปดาห์นี้"` / `"กลับสัปดาห์นี้"` เป็น **`"วันนี้"`** (`aria-label="กลับไปวันนี้"`, `title="กลับไปวันนี้"`) ในรูปแบบ ตำแหน่งมุมขวาบนเหนือแถบวันที่ และพฤติกรรมเลื่อนกลับมาจัดกึ่งกลางวันที่ปัจจุบันเหมือนกันทั้ง 3 หน้า
+- **อัปเดตเวอร์ชันเป็น v5.10.0**: ซิงค์ `package.json`, `package-lock.json`, `src/version.js` และเอกสารโดยไม่เปลี่ยน `firestore.rules`
+
+---
+## [v5.9.0] - 2026-11-23
+
+### Unified 5-Macro Home/Food Summary, Streamlined Food Entry, Home Widget Drag & Drop, Meal Rename Sync & App-wide UI Consistency
+- **หน้า Home & สรุปภาพรวม (`src/home.js`, `src/home.css`, `src/summary.js`, `src/style.css`)**:
+  - การ์ด **สรุปภาพรวมวันนี้** เพิ่มกล่อง **น้ำตาล (`is-sugar`)** และ **โซเดียม (`is-sodium`)** เป็น 5 กล่องมาโคร ให้โครงสร้างและตัวชี้วัดตรงกับหน้าอาหาร พร้อมสถานะ `.is-over` เมื่อเกินเกณฑ์
+  - ลบกรอบสีไฮไลท์ออกจากป้าย `"สัปดาห์นี้"` บน Weekly Planner (`.pl-week-nav-label.is-current` โปร่งใส) และเปลี่ยนปุ่ม `"กางดู"` (`#home-planner-open`) ให้ใช้สไตล์ `.pl-collapse-btn` เดียวกับปุ่มหุบ/ยุบ
+  - ใน `#summary-section` (`src/summary.js`) การ์ด **การเงินเดือนนี้** เปลี่ยนคำว่า `"สุทธิ"` เป็น `"ยอดรวม"` และขึ้นบรรทัดใหม่อย่างชัดเจน (รวมถึงข้อความคัดลอกสรุป)
+- **หน้าอาหาร, ตัวแก้ไขเมนู, ประวัติ และคลังอาหาร (`src/food.js`, `src/foodCalculations.js`, `src/foodEditor.js`, `src/foodHistory.js`, `src/style.css`)**:
+  - ยกเลิกแท็บแยก `"สรุปโภชนาการ"` (`#f-view-*`) และจัดวางการ์ด `.hx-hero` ด้านบนคู่กับกล่อง **คำแนะนำจากเกณฑ์ที่ตั้งไว้ (`#f-advice`)** แบบ 2 คอลัมน์บน Desktop (`lg`) และเรียงแนวตั้งบน Mobile
+  - เพิ่มแถบ **รายการโปรดด่วน (`.tm-fav-strip` / `#f-fav-strip`)** แสดงสูงสุด 5 รายการบนหน้าจอ `< 1024px` และสูงสุด 10 รายการบน Desktop เพื่อคลิกเลือกเมนูได้ทันที
+  - อนุมานโหมดหน่วย/กรัมอัตโนมัติใน `inferFoodInputMode()` และ `foodQuantityFromInput()` (`src/foodCalculations.js`) แทนตัวเลือก `#f-qty-mode` พร้อมอัปเดต Unit Tests (`src/foodCalculations.test.js`)
+  - กระชับฟอร์มบันทึกอาหาร: นำช่องกรอกสารอาหารด้วยตนเอง (`#f-cal`..`#f-sodium`), ปุ่มล้างฟอร์ม (`#f-clear`), ปุ่มบันทึกลงคลังจากฟอร์ม (`#f-save-lib`), ปุ่มคัดลอกมื้อ (`#f-copy-meal`) และการสแกนรูปจานอาหารออก คงไว้เฉพาะปุ่ม **บาร์โค้ด** และ **ฉลากโภชนาการ** แยกชัดเจน
+  - `foodEditor.js`: ตัดช่อง `% ที่กินได้` (`#e-edible`) ออกจาก UI (ยังคงรักษาค่า `edibleFraction` เดิมในข้อมูลเมื่อไม่ถูกแก้ไข), เปลี่ยนตัวเลือกเมนูโปรดเป็นปุ่มดาว, และปรับป้ายเป็น `"คาร์บ (g)"`
+  - `foodHistory.js`: เปลี่ยนตัวกรองเป็น `#fh-range` + แถบ 7 วันเลื่อนได้ `#fh-week-strip` พร้อมค้นหาอัตโนมัติ (debounce) แทน `#fh-from`/`#fh-to`/`#fh-go`
+  - `openLibrary` (`src/food.js`): ตัดตัวกรองวันที่ออก, เพิ่มระยะห่างด้านขวาให้ `#lib-add-meal`, และปิดปุ่ม `#lib-delete-selected` เมื่อเลือกหมวดหมู่สำหรับลบแบบกลุ่ม
+- **ตั้งค่า, โปรไฟล์ & ความสม่ำเสมอทั้งแอป (`src/homeWidgetSettings.js`, `src/profile.js`, `src/settings.js`, `src/period.js`, `src/body.js`, `src/inventory.js`, `src/care.js`, `src/expense.js`, `src/lab.js`, `src/services/aiAssistant.js`)**:
+  - `homeWidgetSettings.js`: เพิ่มการจัดลำดับวิดเจ็ตด้วย **Drag & Drop** (HTML5 Drag & Drop + Pointer/Touch Fallback `.tm-drag-ghost`) คู่กับปุ่มลูกศรขึ้น/ลงเดิม
+  - `profile.js`: เมื่อผู้ใช้เปลี่ยนชื่อมื้ออาหารและกดบันทึก ระบบจะซิงค์ชื่อมื้อใหม่ไปยัง `state.todayFood` ทันทีและอัปเดต `food_records` ใน Firestore ที่ตรงกับ `mealId` หรือชื่อมื้อเดิมเป็นชุด (`writeBatch` ชุดละ 450 เอกสาร)
+  - `settings.js`: ปรับหัวข้อและคำอธิบายการ์ด **การแจ้งเตือน** (`#st-push-card`), นำส่วนเตือนรอบเดือน `#st-remind` และส่วนย้ายข้อมูล Room Code `#st-migrate` ออกจาก UI หน้าตั้งค่า (โดยไม่ลบไฟล์ `src/migrate.js` เพื่อความปลอดภัยย้อนหลัง), และเพิ่มปุ่มพับ `.pl-collapse-btn` ในส่วน **เมนูและทางลัด**, **ปรับแต่งหน้าแรก** และ **เป้าหมายพลังงาน & มื้ออาหาร**
+  - มาตรฐานทั้งแอป: ปรับคำว่า `"คาร์โบไฮเดรต"` ใน UI และ AI Assistant เป็น `"คาร์บ"` (คง regex OCR ฉลากใน `src/nutrition.js` ไว้), ปรับปุ่มปิด Modal ทุกหน้าเป็นพื้นที่กดขั้นต่ำ `44px`, ปรับข้อความปุ่ม CTA ให้สั้นกระชับ (เช่น `"บันทึก"`, `"ยกเลิก"`, `"บันทึกที่เลือก"`), และใช้ `.tm-row-action-btn` สำหรับปุ่มจัดการในตาราง Desktop
+- **อัปเดตเวอร์ชันเป็น v5.9.0**: ซิงค์ `package.json`, `package-lock.json`, `src/version.js` และเอกสารโดยไม่เปลี่ยน `firestore.rules`
+
+---
+## [v5.7.0] - หมายเหตุประวัติเวอร์ชัน
+- ไม่พบ tag หรือ release `v5.7.0` แยกใน repository; การเปลี่ยนแปลงช่วงดังกล่าวถูกควบรวมเป็นฐานของ **v5.8.0** ด้านล่าง
+
+---
 ## [v5.8.0] - 2026-11-22
 
-### Weekly Planner Rescheduling & 7-Day Board, Responsive DonutChart Tooltips & Pastel Blue-Primary Theme
-- **Shared DonutChart, Collision-Detected Tooltips & Legend (`src/donutChart.js`, `src/ui.js`, `src/foodCalculations.js`, `src/home.js`, `src/food.js`, `src/home.css`, `src/style.css`)**:
+### Weekly Planner Rescheduling & 7-Day Board, Streamlined Home/Summary, Regular Icons & Pastel Blue-Primary Theme
+- **Shared DonutChart & Collision-Detected Tooltips (`src/donutChart.js`, `src/ui.js`, `src/foodCalculations.js`, `src/home.js`, `src/food.js`, `src/home.css`, `src/style.css`)**:
   - ใช้ `donutChart` ตัวเดียวกันทั้งหน้าหลัก (`Daily Overview`) และหน้าอาหาร (`#f-meals-pie`) ให้ความหนาของวงแหวน ตัวเลขเปอร์เซ็นต์ตรงกลาง ขอบ/ระยะห่าง และแอนิเมชันเหมือนกัน 100% พร้อมคำนวณโปรตีนรายมื้อ (`protein`) ใน `buildMealCaloriePieData()`
-  - เพิ่ม **Legend** ด้านล่าง Donut Chart (`.tm-donut-legend`) แสดงชื่อมื้ออาหาร เปอร์เซ็นต์ (%) และสีประจำส่วนกราฟ พร้อมกดแตะ/โฮเวอร์เพื่อไฮไลต์ส่วนวงแหวนร่วมกันผ่าน `[data-chart-idx]`
-  - เพิ่ม Floating Tooltip (`.tm-chart-float-tip`) และฟังก์ชัน `computeTooltipPosition()` ใน `src/ui.js` ที่มี Collision Detection ตรวจจับขอบจอ (จำกัดขอบซ้าย–ขวาให้อยู่ใน viewport margin และพลิกด้านบน/ล่างอัตโนมัติ) เพื่อป้องกัน Tooltip หลุดจอมือถือ และแสดงข้อมูลมื้ออาหาร เปอร์เซ็นต์ พลังงาน (`kcal`) โปรตีน (`g`) และสีรายการ
-- **Weekly Planner รายสัปดาห์ จันทร์–อาทิตย์ & การย้ายวันงาน (`src/planner.js`, `src/schema.js`, `src/style.css`, `src/home.css`)**:
-  - **Weekly Planning (Monday–Sunday)**: แสดงแผนงานทีละ 1 สัปดาห์ (จันทร์–อาทิตย์) พร้อมแถบสลับสัปดาห์ก่อนหน้า / สัปดาห์นี้ / สัปดาห์ถัดไป (`weekRangeLabel()`) และนับจำนวนงานที่เสร็จต่อสัปดาห์
-  - **Responsive UI**: บน Desktop (`>= 1024px`) แสดงกระดาน 7 คอลัมน์ จ–อา (`.pl-week-board`) พร้อม **HTML5 Drag & Drop** ลากงานข้ามวันและปุ่ม **ย้าย** ในการ์ด; บน Mobile (`< 1024px`) แสดงแถบ 7 วัน จ–อา (`.pl-day-strip--week`) และรายการแนวตั้งพร้อมปุ่ม **ย้ายวัน** ขนาด `>= 44px`
-  - **Reschedule Tasks (`moveRoutineOccurrence`, `skipRoutineOccurrence`)**: ย้ายงานประจำหรืองานวันเดียว (เช่น ย้ายงานวันศุกร์ไปวันเสาร์) รวมถึงแผนออกกำลังกาย (`workout_records.date`) ผ่าน Drag & Drop บน Desktop หรือ Modal ย้ายวัน (ปุ่ม จ–อา + Date Picker `<input type="date">` ข้ามสัปดาห์) โดยคงชื่องาน รายละเอียด เวลา (`time`) และสถานะเสร็จสิ้น (`doneMap` / `status`), ป้องกันงานซ้ำ, ไม่กระทบสัปดาห์อื่น, บันทึกแบบ Optimistic UI + Rollback เมื่อบันทึกไม่สำเร็จ
-  - **ความเข้ากันได้ของข้อมูล (`src/schema.js`)**: เพิ่มฟิลด์ optional `moves` (`Array<{ routineId, from, to }>`) และ `skips` (`Array<{ routineId, date }>`) ในเอกสาร `settings/planner` (รวมทั้งหมด 8 keys ภายใต้ขีดจำกัด 30 fields ของ `firestore.rules` เดิม), คงความเข้ากันได้กับ `itemsForDate()` สำหรับผู้ช่วย AI และ Daily Push, และซิงค์ข้ามอุปกรณ์แบบ Real-time
-  - **ฟอร์มเพิ่ม/แก้ไขกิจกรรมรายสัปดาห์ (`openRoutinesModal` ใน `src/planner.js`)**: นำตัวเลือกรูปแบบความถี่/ซ้ำ (`เฉพาะวันนี้`/`ทุกสัปดาห์`/`เฉพาะสัปดาห์ A`/`เฉพาะสัปดาห์ B` และ `สร้างคู่สลับ A ↔ B`) ออกจากฟอร์มเพื่อให้วางแผนทีละสัปดาห์ผ่านการเลือกวันในสัปดาห์ (จ–อา) และเวลา โดยหยุดอ่าน/บันทึกฟิลด์ `weekPattern` ในฟอร์มและคงความเข้ากันได้ย้อนหลังของ `routineAppliesToDate`, `moveRoutineOccurrence`, `skipRoutineOccurrence` และโครงสร้างข้อมูลเดิม
-  - **รายการอาหารและประวัติการวางแผนทุกหมวดหมู่ใช้รูปแบบเดียวกัน (`src/ui.js`, `src/style.css`, `src/food.js`, `src/planner.js`, `src/workout.js`, `src/expense.js`, `src/remindLog.js`, `src/body.js`, `src/period.js`, `src/care.js`, `src/lab.js`, `src/inventory.js`, `src/symptoms.js`)**: เพิ่ม `bindSwipeRows()` และ `closeAllSwipeRows()` ใน `src/ui.js` พร้อมสไตล์ `.tm-swipe-row` / `.tm-row-actions` ใน `src/style.css` โดยบนหน้าจอ `< 1024px` ซ่อนปุ่มแก้ไข/ลบในแถวเพื่อคงการปัดซ้ายเปิดเมนูคำสั่ง (และการปัดขวาโปรดในหน้าอาหาร) และบนหน้าจอ `>= 1024px` ปิดการสไลด์และแสดงปุ่มแก้ไข/ลบในแถวหรือตารางอย่างชัดเจนเหมือนกันทุกหมวดหมู่
-- **Pastel Blue-Primary Theme & Unified Logo (`src/design-tokens.css`, `src/style.css`, `src/home.css`, `src/foodCalculations.js`, `src/onboarding.js`, `public/icon.svg`, `public/icon-192.png`, `public/icon-512.png`, `index.html`)**:
-  - ปรับโทนสีทั้งแอปให้เป็น **Pastel Blue-Primary** เน้นสีฟ้าพาสเทลเป็นหลัก (`--color-app-bg: #EAF3FD`, `--color-brand: #4A90D4`, `--color-brand-strong: #377BBF`, `--color-mint: #CBE5FC`, `--color-sky-soft: #E3F1FB`, พาเลตกราฟอาหารโทนฟ้าพาสเทล) โดยคงความคมชัดของตัวอักษร `#194971` และปรับสีโลโก้ทุกจุดในแอป (`.logo-bubble`, `.nav-plus--logo`, `.db-welcome-mark`, Onboarding, `public/icon.svg`, `public/icon-192.png`, `public/icon-512.png`) ให้เหมือนโลโก้หน้าล็อกอิน (`#e1f5fe`, `#b3e5fc`, `#03a9f4`)
+  - เพิ่ม Floating Tooltip (`.tm-chart-float-tip`) และ `computeTooltipPosition()` ใน `src/ui.js` ที่มี Collision Detection ตรวจจับขอบจอ (Clamp ซ้าย–ขวา และ Flip บน/ล่างอัตโนมัติ) พร้อมรองรับตัวเลือก `{ showReadout: false }` เพื่อซ่อนกล่องคำแนะนำใต้กราฟบนหน้าหลักโดยยังคง Tooltip แบบ Hover/Tap/Focus ได้ครบถ้วน (หน้าอาหารยังคงแสดง Legend และ Readout ด้านล่าง)
+- **หน้า Home, Daily Overview & Horizontal Summary (`index.html`, `src/home.js`, `src/home.css`, `src/homeWidgetSettings.js`, `src/summary.js`)**:
+  - การ์ด **สรุปภาพรวมวันนี้** ใช้ฟังก์ชัน `dailyEncouragementForDate(today)` แสดงข้อความให้กำลังใจรายวันแบบคงที่ตลอดวัน, ตัดปุ่ม `%` รายมื้อ กล่องคำแนะนำใต้กราฟ และกล่องสถานะ 4 ช่องออก, และย้ายกล่อง **โปรตีน / คาร์บ / ไขมัน** มาวางแทนที่ (เรียงแนวตั้งข้าง Donut บน Desktop `>= 1024px` และเรียงแนวนอน 3 คอลัมน์ใต้วงแหวนบนหน้าจอ `< 1024px`)
+  - ตัดส่วนที่ซ้ำซ้อนออกจากหน้า Home (`หมวดหมู่`, `วันนี้`, `ใกล้ถึงกำหนด`, `การเงินเดือนนี้`) เหลือเฉพาะ `Weekly Planner` และ `Daily Overview` พร้อมปรับ `HOME_WIDGET_IDS` และหน้าตั้งค่าวิดเจ็ตหน้าแรก (`src/homeWidgetSettings.js`)
+  - ย้าย `#summary-section` มาวางแนวนอนเต็มความกว้างใต้ `#home-today` (4 คอลัมน์บน `>= 768px`, 2 คอลัมน์บนมือถือ) แยก **สัดส่วน**, **การนอน** และ **ก้าวเดิน** เป็น 3 การ์ดอิสระ และตัดการ์ด **โภชนาการวันนี้** กับ **สต๊อก & แจ้งเตือน** ออก
+- **Weekly Planner รายสัปดาห์ จันทร์–อาทิตย์ & การผูกวันเฉพาะสัปดาห์ (`src/planner.js`, `src/schema.js`, `scripts/daily-push.mjs`, `src/style.css`, `src/home.css`)**:
+  - **ส่วนหัวการ์ด Weekly Planner**: ตัดปุ่ม `รอบ A/B`, `A↔B` และ `จัดการ` (`#pl-plan-menu`) ออก และย้ายปุ่มหุบ/ยุบ (`.pl-collapse-btn`, `[data-pl-collapse]`) ไปที่มุมขวาบนของการ์ดทั้ง Mobile และ Desktop
+  - **Reschedule Tasks (`moveRoutineOccurrence`, `skipRoutineOccurrence`)**: ย้ายงานประจำหรืองานวันเดียว รวมถึงแผนออกกำลังกาย ผ่าน Drag & Drop บน Desktop หรือ Modal ย้ายวัน โดยคงชื่องานและสถานะเสร็จสิ้น (`doneMap`/`status`) ไม่กระทบสัปดาห์อื่น
+  - **หน้าต่างจัดการงาน & กิจกรรม (`openRoutinesModal`)**: ตัดช่อง `เวลา (ไม่บังคับ)` ออก, ปุ่ม `ทุกวัน` กดซ้ำเมื่อเลือกครบ 7 วันจะล้างวันที่เลือกทั้งหมดทันที, ผูกการเพิ่ม/แก้ไข/ลบวันในสัปดาห์เฉพาะสัปดาห์ที่เลือกผ่านฟิลด์ `weekStart` (และจัดการข้อมูลต่อเนื่องเดิมในสัปดาห์นั้นผ่าน `skips`/`doneMap` เพื่อไม่กระทบสัปดาห์อื่น), และเพิ่ม `flex: 0 0 auto` บน `.tm-swipe-list--cards > .tm-swipe-row` เพื่อแก้การ์ดงานด้านล่างบีบซ้อนหรือถูกตัด
+- **รายการอาหารและประวัติการวางแผนทุกหมวดหมู่ (`src/ui.js`, `src/style.css` ฯลฯ)**: ซ่อนปุ่มแก้ไข/ลบในแถวบนหน้าจอ `< 1024px` เพื่อคงการปัดซ้าย/ขวา (`bindSwipeRows`) และแสดงปุ่มแก้ไข/ลบในแถว/ตารางบนหน้าจอ `>= 1024px`
+- **Phosphor Regular Icons, Pastel Blue-Primary Theme & Unified Logo (`src/icons.js`, `src/design-tokens.css`, `public/icon*.png`, `public/icon.svg`, `index.html`)**:
+  - ปรับไอคอนทั้งหมดใน `src/icons.js` เป็น **Phosphor Regular** (`regular` SVG / `.ph-regular`), ใช้ชุดสี **Pastel Blue-Primary** (`#EAF3FD`, `#CBE5FC`, `#4A90D4`) และปรับสีโลโก้ทุกจุดให้เหมือนโลโก้หน้าล็อกอิน (`#e1f5fe`, `#b3e5fc`, `#03a9f4`)
 - **อัปเดตเวอร์ชันเป็น v5.8.0**: ซิงค์ `package.json`, `package-lock.json`, `src/version.js` และเอกสารทั้งหมดโดยไม่เปลี่ยน `firestore.rules`
 
 ---

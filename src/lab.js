@@ -179,7 +179,7 @@ async function onScanLabPhoto(e) {
     const defaultDate = detectedDate || ($('#lb-date', root).value || localDateStr());
     const labName = labNames.join(', ');
     const m = openModal(`
-      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+      <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">ตรวจค่าที่ AI อ่านได้ (${items.length} รายการ จาก ${results.length}/${files.length} รูป)</h3><button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
       <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3">โปรดเทียบตัวเลขและค่าอ้างอิงกับใบผลตรวจจริงก่อนกดบันทึก</p>
       ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 mb-3">
@@ -204,7 +204,7 @@ async function onScanLabPhoto(e) {
       </div>
       <div class="flex justify-end gap-2 mt-4">
         <button data-close class="btn btn-ghost">ยกเลิก</button>
-        <button id="lbs-save" class="btn btn-primary">บันทึกรายการที่เลือก</button>
+        <button id="lbs-save" class="btn btn-primary">บันทึกที่เลือก</button>
       </div>`, { wide: true });
 
     $('#lbs-save', m.el).addEventListener('click', async () => {
@@ -250,7 +250,7 @@ async function onScanLabPhoto(e) {
         m.close();
         toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
       } catch (err) {
-        btn.disabled = false; btn.textContent = 'บันทึกรายการที่เลือก';
+        btn.disabled = false; btn.textContent = 'บันทึกที่เลือก';
         toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
       }
     });
@@ -265,7 +265,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
   const defaultDate = $('#lb-date', root)?.value || localDateStr();
   const defaultNote = $('#lb-note', root)?.value?.trim() || '';
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-3">กรอกเฉพาะรายการที่มีผลตรวจ (รายการที่เว้นว่างจะไม่ถูกบันทึก) — ค่าอ้างอิงดึงจากใบล่าสุดหรือค่าทั่วไป</p>
     <div class="grid grid-cols-2 gap-2 mb-3">
       <div><label class="lbl">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
@@ -288,7 +288,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
     </div>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="lbb-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการที่กรอก</button>
+      <button type="button" id="lbb-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button>
     </div>`, { wide: true });
 
   $('#lbb-save', m.el).addEventListener('click', () => {
@@ -333,7 +333,7 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
       toast(`บันทึกผลตรวจ ${rowsToSave.length} รายการแล้ว`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการที่กรอก`;
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });
@@ -348,7 +348,7 @@ function openLabPasteModal() {
   ].join('\n');
 
   const m = openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 mb-2">วางผลแล็บ 1 บรรทัดต่อ 1 รายการ (รองรับ copy จาก Excel/Google Sheets, แยกด้วยวรรค/Tab/: และช่วงอ้างอิงท้ายบรรทัด)</p>
     <div class="flex items-center justify-between mb-1">
       <label class="lbl !mb-0">ข้อความผลแล็บ</label>

@@ -92,8 +92,20 @@ describe('food log calculations', () => {
     const piece = { unit: '1 ชิ้น', gramsPerUnit: 50 };
     expect(defaultFoodInputMode(piece)).toBe('unit');
     expect(foodQuantityFromInput(1, piece)).toBe(1);
+    expect(foodQuantityFromInput(100, piece)).toBe(2);
     expect(foodQuantityFromInput(100, piece, 'unit')).toBe(100);
     expect(foodQuantityFromInput(100, piece, 'grams')).toBe(2);
+
+    const riceLadle = { name: 'ข้าวสวย', unit: '1 ทัพพี', gramsPerUnit: 100, defaultQuantity: 1 };
+    expect(defaultFoodInputMode(riceLadle)).toBe('unit');
+    expect(foodQuantityFromInput(1, riceLadle)).toBe(1);
+    expect(foodQuantityFromInput(1.5, riceLadle)).toBe(1.5);
+    expect(foodQuantityFromInput(150, riceLadle)).toBe(1.5);
+
+    const banana = { name: 'กล้วย', unit: '70 g', gramsPerUnit: 70, defaultQuantity: 70 };
+    expect(defaultFoodInputMode(banana)).toBe('grams');
+    expect(foodQuantityFromInput(70, banana)).toBe(1);
+    expect(foodQuantityFromInput(35, banana)).toBe(0.5);
 
     const egg = { name: 'ไข่ต้ม', unit: '1 ฟอง' };
     expect(defaultFoodInputMode(egg)).toBe('unit');

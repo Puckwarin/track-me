@@ -1,6 +1,6 @@
-import { setDoc } from 'firebase/firestore';
-import { userDoc } from './firebase.js';
-import { state } from './state.js';
+import { setDoc, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { db, userCol, userDoc } from './firebase.js';
+import { state, emit } from './state.js';
 import { $, esc, toNum, round1, toast } from './util.js';
 import { bodyLatest } from './body.js';
 import { iconSvg } from './icons.js';
@@ -49,7 +49,7 @@ export function getTargets(p = state.profile) {
   return { kcal, protein, carbs, fat, source: 'profile' };
 }
 
-let root, dirty = false, meals = [];
+let root, dirty = false, meals = [], originalMeals = [];
 
 export function mountProfile(el) {
   root = el;
@@ -102,6 +102,7 @@ function fill() {
   set('pf-act', p.activity || 'light'); set('pf-adj', p.adjust ?? -300); set('pf-kcal', p.kcalOverride); set('pf-prot', p.proteinPerKg ?? defaultProtein(p.adjust ?? -300)); set('pf-fat', p.fatPct ?? 25);
   $('#pf-goal', root).value = GOAL_PRESETS.some(g => g[0] === String(p.adjust ?? -300)) ? String(p.adjust ?? -300) : 'custom';
   meals = getMeals().map(m => ({ ...m }));
+  originalMeals = meals.map(m => ({ ...m }));
   renderMeals();
 }
 
@@ -111,8 +112,8 @@ export function refreshProfile() { if (root && !dirty) fill(); else preview(); }
 function renderMeals() {
   $('#pf-meals', root).innerHTML = meals.map((m, i) => `
     <div class="flex items-center gap-2">
-      <input data-k="name" data-i="${i}" class="input" value="${esc(m.name)}" maxlength="30" aria-label="ชื่อมื้อ">
-      <button data-rm="${i}" class="text-rose-400 hover:text-rose-600 p-2 inline-flex items-center justify-center" aria-label="ลบมื้อ">${iconSvg('trash', { size: 14 })}</button>
+      <input data-k="name" data-i="${i}" class="input min-h-[44px]" value="${esc(m.name)}" maxlength="30" aria-label="ชื่อมื้อ">
+      <button type="button" data-rm="${i}" class="text-rose-500 hover:text-rose-700 min-w-[44px] min-h-[44px] rounded-xl hover:bg-rose-50 inline-flex items-center justify-center shrink-0" aria-label="ลบมื้อ">${iconSvg('trash', { size: 15 })}</button>
     </div>`).join('');
   preview();
 }
@@ -161,15 +162,68 @@ function preview() {
     <p class="font-semibold text-brand-dark">เป้าหมายต่อวัน: ${t.kcal.toLocaleString()} kcal · โปรตีน ${t.protein} g · คาร์บ ${t.carbs} g · ไขมัน ${t.fat} g</p>${warn}`;
 }
 
+async function syncRenamedMealsToFoodRecords(uid, renamedPairs) {
+  if (!uid || !renamedPairs.length) return;
+  try {
+    const snap = await getDocs(userCol(uid, 'food_records'));
+    const now = new Date();
+    const targets = [];
+    snap.forEach(dSnap => {
+      const d = dSnap.data();
+      const match = renamedPairs.find(pair => (d.mealId && d.mealId === pair.id) || (d.meal && d.meal === pair.prevName));
+      if (match && (d.meal !== match.nextName || d.mealId !== match.id)) {
+        targets.push({ id: dSnap.id, meal: match.nextName, mealId: match.id });
+      }
+    });
+    for (let i = 0; i < targets.length; i += 450) {
+      const batch = writeBatch(db);
+      targets.slice(i, i + 450).forEach(item => {
+        batch.update(doc(userCol(uid, 'food_records'), item.id), {
+          meal: item.meal,
+          mealId: item.mealId,
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    toast('อัปเดตชื่อมื้อในประวัติอาหารไม่ครบ: ' + (err?.message || 'เกิดข้อผิดพลาด'), 'err');
+  }
+}
+
 function save() {
   if (guardPreviewWrite('การบันทึกเป้าหมายและมื้ออาหาร')) return;
   readMeals();
   if (!enforceMinimums(true)) return;
   const p = draft();
   if (!meals.every(m => String(m.name).trim())) return toast('ตั้งชื่อมื้อให้ครบ', 'err');
-  const rec = { ...p, meals: meals.map(m => ({ id: m.id, name: String(m.name).trim() })), updatedAt: new Date() };
+  const nextMeals = meals.map(m => ({ id: m.id, name: String(m.name).trim() }));
+  const renamedPairs = nextMeals
+    .map(next => {
+      const prev = originalMeals.find(o => o.id === next.id);
+      if (!prev || prev.name === next.name) return null;
+      return { id: next.id, prevName: prev.name, nextName: next.name };
+    })
+    .filter(Boolean);
+
+  const rec = { ...p, meals: nextMeals, updatedAt: new Date() };
   for (const k of Object.keys(rec)) if (rec[k] === null || rec[k] === undefined) delete rec[k];
   setDoc(userDoc(state.uid, 'settings', 'profile'), rec).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
+
+  state.profile = { ...(state.profile || {}), ...rec };
+  if (renamedPairs.length && Array.isArray(state.todayFood)) {
+    state.todayFood = state.todayFood.map(r => {
+      const match = renamedPairs.find(pair => (r.mealId && r.mealId === pair.id) || (r.meal && r.meal === pair.prevName));
+      return match ? { ...r, meal: match.nextName, mealId: match.id } : r;
+    });
+    emit('todayFood');
+  }
+  emit('profile');
+  window.dispatchEvent(new Event('trackme:data-change'));
+
+  originalMeals = nextMeals.map(m => ({ ...m }));
+  if (renamedPairs.length) void syncRenamedMealsToFoodRecords(state.uid, renamedPairs);
+
   dirty = false;
   toast('บันทึกแล้ว');
 }

@@ -89,11 +89,11 @@ export function mountInventory(el) {
         <p class="text-xs text-slate-500 mt-1">ย่อภาพในเครื่องแล้วส่งวิเคราะห์ชั่วคราว (ไม่บันทึกรูปลงระบบ) · หลังประมวลผลเสร็จจะมีหน้าต่างให้ตรวจสอบและยืนยันก่อนบันทึก</p>
         <p id="inv-photo-status" class="hidden text-xs mt-1.5" aria-live="polite"></p>
       </div>
-      <div class="flex gap-2 justify-end"><button id="inv-cancel" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button><button id="inv-save" class="btn btn-primary">บันทึกสต๊อก</button></div>
+      <div class="flex gap-2 justify-end"><button id="inv-cancel" class="btn btn-ghost hidden">ยกเลิก</button><button id="inv-save" class="btn btn-primary">บันทึก</button></div>
     </div>
 
     <div id="inv-panel-blacklist" class="hidden space-y-2">
-      <div class="rounded-xl bg-rose-50 p-3 space-y-2"><label class="lbl">Ingredient Blacklist · ส่วนผสมที่ต้องการหลีกเลี่ยง</label><textarea id="inv-blacklist" class="input" placeholder="เช่น fragrance, alcohol (คั่นด้วยจุลภาค)"></textarea><button id="inv-blacklist-save" class="btn btn-soft">บันทึกรายการ</button></div>
+      <div class="rounded-xl bg-rose-50 p-3 space-y-2"><label class="lbl">Ingredient Blacklist · ส่วนผสมที่ต้องการหลีกเลี่ยง</label><textarea id="inv-blacklist" class="input" placeholder="เช่น fragrance, alcohol (คั่นด้วยจุลภาค)"></textarea><button id="inv-blacklist-save" class="btn btn-soft">บันทึก</button></div>
     </div>
   </section>`;
   root.addEventListener('click', e => {
@@ -145,7 +145,7 @@ function render(){if(!root?.isConnected)return;const q=($r('#inv-search')?.value
       <div class="tm-swipe-card tm-swipe-card--stack !p-3.5 space-y-2">
         ${cardBody}
         <div class="tm-row-actions pt-1">
-          <button type="button" data-edit-product="${esc(p.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(p.name)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไขรายละเอียด</span></button>
+          <button type="button" data-edit-product="${esc(p.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(p.name)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
           <button type="button" data-delete-product="${esc(p.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(p.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
         </div>
       </div>
@@ -167,8 +167,8 @@ function renderInventorySummary() {
   summary.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white px-2.5 py-2 tabular-nums"><p class="text-[10px] text-slate-500">รายการทั้งหมด</p><b class="text-sm text-slate-800">${products.length}</b></div><div class="rounded-xl border ${lowCount ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'} px-2.5 py-2 tabular-nums"><p class="text-[10px] ${lowCount ? 'text-rose-700' : 'text-emerald-700'}">สต๊อกต่ำ</p><b class="text-sm ${lowCount ? 'text-rose-800' : 'text-emerald-800'}">${lowCount}</b></div><div class="rounded-xl border ${expiringCount ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'} px-2.5 py-2 tabular-nums"><p class="text-[10px] ${expiringCount ? 'text-amber-800' : 'text-slate-500'}">ใกล้หมดอายุ</p><b class="text-sm ${expiringCount ? 'text-amber-900' : 'text-slate-800'}">${expiringCount}</b></div>`;
 }
 function renderShoppingList(){const box=$r('#shopping-list');if(!box)return;const low=listProducts().filter(p=>p.quantity!=null&&p.lowAt!=null&&p.quantity<=p.lowAt);box.classList.toggle('hidden',low.length===0);if(!low.length){box.innerHTML='';return;}box.innerHTML=`<div class="flex flex-wrap justify-between items-center gap-2"><div><h3 class="font-semibold">🛒 รายการซื้อของ · ${low.length} รายการ</h3><p class="text-xs">สร้างให้อัตโนมัติจากของที่ถึงเกณฑ์เตือน</p></div><button data-copy-shopping class="btn btn-soft !px-3 !py-2 text-xs">คัดลอกรายการ</button></div><ul class="space-y-1">${low.map(p=>`<li class="flex justify-between items-center gap-2 rounded-lg bg-white/70 px-2 py-1 text-sm tabular-nums"><span>□ <b>${esc(p.name)}</b> · เหลือ ${esc(p.quantity)} ${esc(p.unit||'หน่วย')}</span><button data-shopping-edit="${esc(p.id)}" class="chip min-h-[36px] bg-sky-soft text-blue-700">เติมสต๊อก</button></li>`).join('')}</ul>`;}
-function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';const more=$r('#inv-more-fields');if(more)more.open=false;$r('#inv-save').textContent='บันทึกสต๊อก';$r('#inv-cancel').classList.add('hidden');const st=$r('#inv-photo-status');if(st){st.textContent='';st.classList.add('hidden');}}
-function editProduct(p){setInvTab('form');editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);const more=$r('#inv-more-fields');if(more)more.open=Boolean(p.expiryDate||p.openedDate||p.paoMonths||p.ingredients||p.pros||p.cons||(p.remindDays!=null&&Number(p.remindDays)!==30));$r('#inv-save').textContent='บันทึกการแก้ไข';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
+function resetForm(){editingId=null;['name','qty','unit','low','expiry','open','pao','ingredients','pros','cons'].forEach(k=>$r('#inv-'+k).value='');$r('#inv-category').value=categories[0];$r('#inv-remind').value='30';const more=$r('#inv-more-fields');if(more)more.open=false;$r('#inv-save').textContent='บันทึก';$r('#inv-cancel').classList.add('hidden');const st=$r('#inv-photo-status');if(st){st.textContent='';st.classList.add('hidden');}}
+function editProduct(p){setInvTab('form');editingId=p.id;for(const [key,value] of Object.entries({name:p.name,category:p.category,qty:p.quantity,unit:p.unit,low:p.lowAt,expiry:p.expiryDate,open:p.openedDate,pao:p.paoMonths,ingredients:p.ingredients,pros:p.pros,cons:p.cons}))$r('#inv-'+key).value=value??'';$r('#inv-remind').value=String(p.remindDays!==undefined&&p.remindDays!==null?p.remindDays:30);const more=$r('#inv-more-fields');if(more)more.open=Boolean(p.expiryDate||p.openedDate||p.paoMonths||p.ingredients||p.pros||p.cons||(p.remindDays!=null&&Number(p.remindDays)!==30));$r('#inv-save').textContent='บันทึก';$r('#inv-cancel').classList.remove('hidden');root.scrollIntoView({behavior:'smooth',block:'start'});}
 function saveProduct(){if(guardPreviewWrite('การบันทึกสต๊อก'))return;const name=$r('#inv-name').value.trim(),qty=Number($r('#inv-qty').value),category=$r('#inv-category').value;if(!name)return toast('กรอกชื่อของก่อนค่ะ','err');if($r('#inv-qty').value===''||qty<0)return toast('กรอกจำนวนคงเหลือให้ถูกต้องก่อนบันทึก','err');const duplicate=(state.trackedProducts||[]).find(x=>x.id!==editingId&&x.name.trim().toLocaleLowerCase('th')===name.toLocaleLowerCase('th')&&x.category===category);if(duplicate)return toast(`มี “${duplicate.name}” ในหมวดนี้แล้ว ใช้แก้ไข/เติมสต๊อกที่รายการเดิมได้ค่ะ`,'err');const openedDate=$r('#inv-open').value||null,paoMonths=$r('#inv-pao').value?Number($r('#inv-pao').value):null;const expiryDate=$r('#inv-expiry').value||null;const remindDays=Number($r('#inv-remind').value);const p={name,category,quantity:qty,unit:$r('#inv-unit').value.trim(),lowAt:$r('#inv-low').value===''?null:Number($r('#inv-low').value),expiryDate,openedDate,paoMonths,...(openedDate&&paoMonths?{paoExpiry:addMonthsLocal(openedDate,paoMonths)}:{}),remindDays,dismissedFor:null,lowDismissed:false,ingredients:$r('#inv-ingredients').value.trim(),pros:$r('#inv-pros').value.trim(),cons:$r('#inv-cons').value.trim(),updatedAt:new Date()};try{const wasEditing=Boolean(editingId);const write=wasEditing?updateDoc(userDoc(state.uid,'tracked_products',editingId),p):addDoc(userCol(state.uid,'tracked_products'),{...p,createdAt:new Date()});write.catch(e=>toast('บันทึกไม่สำเร็จ: '+e.message,'err'));toast(wasEditing?'อัปเดตสต๊อกแล้ว':'บันทึกสต๊อกแล้ว');resetForm();if(wasEditing)setInvTab('stock');}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,'err');}}
 async function onInventoryClick(e){
   const b=e.target.closest('button');if(!b)return;
@@ -207,7 +207,7 @@ function openBatchInventoryModal(results, errors) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
       <h3 class="font-bold text-lg text-slate-800">📦 ตรวจสอบผลสแกนสต๊อก (${results.length} รูป)</h3>
-      <button data-close class="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ✓ ประมวลผลภาพเสร็จสิ้น ${results.length} รายการ${errors.length ? ` · อ่านไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บไฟล์รูปภาพในระบบ)
@@ -242,7 +242,7 @@ function openBatchInventoryModal(results, errors) {
     </div>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="bi-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกรายการที่เลือก</button>
+      <button type="button" id="bi-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกที่เลือก</button>
     </div>`, { wide: true });
 
   $('#bi-save', m.el).addEventListener('click', async () => {
@@ -297,7 +297,7 @@ function openBatchInventoryModal(results, errors) {
       toast(`บันทึกสต๊อกแล้ว (เพิ่มใหม่ ${added}${updated ? `, อัปเดตเดิม ${updated}` : ''})`);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึกรายการที่เลือก`;
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึกที่เลือก`;
       toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
     }
   });

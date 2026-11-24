@@ -66,4 +66,18 @@ describe('planner routine emoji and frequent-recent helpers', () => {
     expect(matchingDayPreset(new Set([1, 3, 5]))).toBe('tts');
     expect(matchingDayPreset(new Set([0, 3]))).toBe('custom');
   });
+
+  it('matches weekStart-scoped routines only within their selected week', () => {
+    const weekScoped = {
+      id: 'wk-1',
+      title: 'ซักผ้า',
+      days: [0, 3], // จันทร์, พฤหัสบดี
+      weekStart: '2026-11-16'
+    };
+    expect(routineAppliesToDate(weekScoped, '2026-11-16')).toBe(true); // จันทร์สัปดาห์นั้น
+    expect(routineAppliesToDate(weekScoped, '2026-11-19')).toBe(true); // พฤหัสบดีสัปดาห์นั้น
+    expect(routineAppliesToDate(weekScoped, '2026-11-17')).toBe(false); // อังคารสัปดาห์นั้น
+    expect(routineAppliesToDate(weekScoped, '2026-11-23')).toBe(false); // จันทร์สัปดาห์ถัดไป
+    expect(routineAppliesToDate(weekScoped, '2026-11-09')).toBe(false); // จันทร์สัปดาห์ก่อนหน้า
+  });
 });

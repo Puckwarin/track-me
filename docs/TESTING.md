@@ -22,6 +22,22 @@ Install dependencies with `npm ci`, then run:
 
 Coverage thresholds are 10% statements, 8% branches, 7% functions, and 12% lines. They are regression floors, not a claim that the UI is comprehensively covered. Deterministic logic tests cover local date helpers (`localDateStr`, `localMonthStr`, `addDays` in `src/util.test.js`), parsers (food, workout, reminder, statement, slip OCR, Zepp CSV), schema sanitizers, backup/restore planning & batched commits (`src/backup.test.js`), Firestore snapshot listener lifecycle & offline/pending sync indicators (`src/sync.test.js`), expense rules/budgets/recurrence, monthly overview dashboard aggregation & `localStorage` caching (`src/overviewLogic.test.js`), TDEE calculations, cycle statistics, food validation, nutrition/USDA/OFF/exercise image persistent caches (`src/nutrition.test.js`, `src/foodsearch.test.js`, `src/exerciseMedia.test.js`), local OCR sufficiency threshold, AI per-model & provider fallback/cooldown/model routing, 0-token local assistant & fuzzy food matching (`src/services/localAssistant.test.js`), AI assistant roles/tools/notes/feedback/markdown sanitization/write rollback, runtime monitoring, and onboarding state. Tests do not call paid or live external APIs. `src/services/aiService.test.js` has 15 active tests, `src/services/aiAssistant.test.js` has 13 active tests, `src/services/localAssistant.test.js` has 7 active tests, `src/util.test.js` has 6 active tests, `src/zeppParser.test.js` has 9 active tests, `src/nutrition.test.js` has 5 active tests, `src/backup.test.js` has 5 active tests, `src/overviewLogic.test.js` has 4 active tests, `src/sync.test.js` has 2 active tests, `src/foodsearch.test.js` has 2 active tests, `src/exerciseMedia.test.js` has 1 active test, and `src/schema.test.js` has 7 active tests with no skipped tests; on a machine without the Emulator, the 5 Firestore Rules tests are skipped by the regular unit-test run.
 
+ผลตรวจสอบ v5.10.0 (2026-11-23):
+
+- `npm run lock:check`: ผ่าน (`1,234` entries, `0 missing optionalDependencies`; ซิงค์เวอร์ชัน `5.10.0` ใน `package.json` และ `package-lock.json`)
+- `npm run lint` (`eslint src`): ผ่าน ไม่มี errors หรือ warnings
+- `npm test` (`vitest run`): ผ่าน **166 tests จาก 35 test files** (`src/uiWeekStrip.test.js` 4 tests, `src/donutChart.test.js` 10 tests, `src/foodCalculations.test.js` 8 tests, `src/planner.test.js` 5 tests, `src/homeWidgetContract.test.js` 6 tests, `src/schema.test.js` 8 tests, `src/icons.test.js` 2 tests และชุดทดสอบเดิมทั้งหมด); ข้าม **5 Firestore Rules tests** (`src/firestoreRules.test.js`) เนื่องจากไม่ได้เปิด Firestore Emulator ในสภาพแวดล้อมนี้
+- `npm run build` / Applet compile: ผ่าน (ตรวจสอบซ้ำหลังปรับแถบปฏิทินรายสัปดาห์และปุ่ม `"วันนี้"` ทั้ง 3 หน้า)
+- การทดสอบบนเบราว์เซอร์จริง (รวมถึงการตรวจเลย์เอาต์บนมือถือจริง), บัญชี Firebase Production และ Firestore Rules Emulator (`npm run test:rules`): ยังไม่ได้รันในเครื่องนี้
+
+ผลตรวจสอบ v5.9.0 (2026-11-23):
+
+- `npm run lock:check`: ผ่าน (`1,234` entries, `0 missing optionalDependencies`; ซิงค์เวอร์ชัน `5.9.0` ใน `package.json` และ `package-lock.json`)
+- `npm run lint` (`eslint src`): ผ่าน ไม่มี errors หรือ warnings
+- `npm test` (`vitest run`): ผ่าน **158 tests จาก 34 test files** (รวม `src/foodCalculations.test.js` 8 tests, `src/donutChart.test.js` 6 tests, `src/planner.test.js` 5 tests, `src/homeWidgetContract.test.js` 6 tests, `src/schema.test.js` 8 tests และ `src/icons.test.js` 2 tests ที่ปรับให้ตรงกับ Phosphor Regular); ข้าม **5 Firestore Rules tests** (`src/firestoreRules.test.js`) เนื่องจากไม่ได้เปิด Firestore Emulator ในสภาพแวดล้อมนี้
+- `npm run build` / Applet compile: ผ่าน
+- การทดสอบบนเบราว์เซอร์จริง/บัญชี Firebase Production และ Firestore Rules Emulator (`npm run test:rules`): ยังไม่ได้รันในเครื่องนี้
+
 ผลตรวจสอบ v5.8.0 (2026-11-22):
 
 - `npm run lock:check`: ผ่าน (`1,234` entries, `0 missing optionalDependencies`; ซิงค์เวอร์ชัน `5.8.0` ใน `package.json` และ `package-lock.json`)

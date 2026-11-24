@@ -50,13 +50,25 @@ export const isGramUnitLabel = unit => /^\s*(?:\d+(?:\.\d+)?\s*)?(?:g|gram|grams
 export function defaultFoodInputMode(base) {
   if (!base) return 'unit';
   if (base.unit === 'g' && base.gramsPerUnit === 1) return 'grams';
-  if (canWeigh(base) && isGramUnitLabel(base.unit)) return 'grams';
+  if (canWeigh(base) && (isGramUnitLabel(base.unit) || (Number.isFinite(base.defaultQuantity) && base.defaultQuantity >= 10))) return 'grams';
   return 'unit';
 }
 
-export function foodQuantityFromInput(raw, base, inputMode = defaultFoodInputMode(base)) {
-  if (raw === null || !Number.isFinite(raw) || !canWeigh(base)) return raw;
-  return inputMode === 'grams' || inputMode === 'g' ? raw / base.gramsPerUnit : raw;
+export function inferFoodInputMode(raw, base, inputMode = 'auto') {
+  if (inputMode === 'grams' || inputMode === 'g') return 'grams';
+  if (inputMode === 'unit') return 'unit';
+  const def = defaultFoodInputMode(base);
+  if (def === 'grams') return 'grams';
+  if (raw !== null && Number.isFinite(raw) && raw > 0 && canWeigh(base) && raw >= Math.min(20, Math.max(12, base.gramsPerUnit * 0.25))) {
+    return 'grams';
+  }
+  return 'unit';
+}
+
+export function foodQuantityFromInput(raw, base, inputMode = 'auto') {
+  if (raw === null || !Number.isFinite(raw) || raw <= 0 || !canWeigh(base)) return raw;
+  const resolved = inferFoodInputMode(raw, base, inputMode);
+  return resolved === 'grams' ? raw / base.gramsPerUnit : raw;
 }
 
 const r1 = v => Math.round(v * 10) / 10;
@@ -270,7 +282,7 @@ export function buildFoodAdvice(totals = {}, targets = {}, { hasItems = true } =
   }
 
   if (carbs > tCarbs * 1.2) {
-    warnings.push(`คาร์โบไฮเดรตเกินเป้า (${Math.round(carbs)}/${Math.round(tCarbs)} g)`);
+    warnings.push(`คาร์บเกินเป้า (${Math.round(carbs)}/${Math.round(tCarbs)} g)`);
   }
   if (fat > tFat * 1.2) {
     warnings.push(`ไขมันเกินเป้า (${Math.round(fat)}/${Math.round(tFat)} g)`);

@@ -1,29 +1,40 @@
-// หน้า Home: Daily Overview, Quick Access, Planner, Daily Activity และ Reminders
+// หน้า Home: Weekly Planner และ Daily Overview
 import { state } from './state.js';
 import { isPreviewMode } from './preview.js';
-import { $, esc, localDateStr, parseLocal, round1, toast, daysBetween } from './util.js';
+import { $, esc, localDateStr, toast } from './util.js';
 import { getTargets, getMeals } from './profile.js';
-import { collectReminders, remindersForDate } from './reminders.js';
-import { buildMealDonutParts, DONUT_TOOLTIP_HINT } from './donutChart.js';
+import { buildMealDonutParts } from './donutChart.js';
 import { buildMealCaloriePieData, getMealPiePalette } from './foodCalculations.js';
 import { CATEGORIES } from './categories.js';
-import { TYPES } from './workoutConstants.js';
-import { bodyLatest } from './body.js';
 import { getPushStatus, enablePushNotifications } from './push.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindChartInspector } from './ui.js';
 
-export const HOME_WIDGET_IDS = ['planner', 'daily-overview', 'quick-access', 'daily-activity', 'reminders'];
+export const HOME_WIDGET_IDS = ['planner', 'daily-overview'];
 export const HOME_WIDGET_DEFS = [
   { id: 'planner', label: 'Weekly Planner' },
-  { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
-  { id: 'quick-access', label: 'ทางลัดบันทึกด่วน' },
-  { id: 'daily-activity', label: 'กิจกรรม & บันทึกล่าสุด' },
-  { id: 'reminders', label: 'แจ้งเตือนที่ต้องดูแล' }
+  { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' }
 ];
 
 const WIDGET_STORAGE_KEY = 'trackme_home_widgets:v1:';
+
+const DAILY_ENCOURAGEMENTS = [
+  'วันนี้ดูแลตัวเองได้ดีนะ',
+  'ค่อย ๆ ไปตามจังหวะของตัวเองก็พอ',
+  'ใส่ใจตัวเองวันละนิดก็เก่งมากแล้ว',
+  'ทุกก้าวเล็ก ๆ วันนี้มีความหมายเสมอ',
+  'ขอบคุณตัวเองที่คอยดูแลสุขภาพนะ',
+  'เริ่มต้นวันอย่างสบายใจ ไม่ต้องรีบร้อน',
+  'แค่ได้สังเกตตัวเองวันนี้ก็ดีมากแล้ว',
+  'ดูแลใจและกายให้พอดีกับวันนี้',
+  'จังหวะที่สม่ำเสมอดีกว่าความสมบูรณ์แบบ',
+  'ให้กำลังใจตัวเองในทุกเรื่องเล็ก ๆ วันนี้',
+  'พักเมื่อเหนื่อย แล้วค่อยเดินต่อนะ',
+  'สุขภาพที่ดีเริ่มจากความใส่ใจในวันนี้',
+  'ทำเท่าที่ไหว วันนี้คุณทำดีแล้ว',
+  'บันทึกเล็ก ๆ วันนี้คือของขวัญให้ตัวเองในวันหน้า'
+];
 
 let go = () => {};
 let plannerFeature = null;
@@ -112,7 +123,6 @@ export function ensureHomePlannerLoaded() {
 
 const num = v => (Number.isFinite(+v) ? +v : 0);
 const hasNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(+v);
-const baht = (v, digits = 0) => `฿${num(v).toLocaleString('th-TH', { maximumFractionDigits: digits })}`;
 
 function greeting() {
   const h = new Date().getHours();
@@ -123,19 +133,21 @@ function greeting() {
   return 'ราตรีสวัสดิ์';
 }
 
-function moodLine(pct, hasFood, goal) {
-  if (!hasFood) return ['เริ่มวันใหม่แบบสบาย ๆ', 'จดมื้อแรกของวัน แล้วค่อย ๆ ดูแลตัวเองไปด้วยกัน'];
-  if (!goal) return ['บันทึกมื้อวันนี้แล้ว', 'ตั้งเป้าหมายพลังงานเพิ่มได้ในหน้าตั้งค่า เพื่อให้สรุปตรงกับคุณมากขึ้น'];
-  if (pct < 40) return ['เริ่มต้นได้ดีแล้ว', 'ค่อย ๆ จดมื้ออาหารให้ครบตามจังหวะของวันนะ'];
-  if (pct <= 100) return ['วันนี้ดูแลตัวเองได้ดี', 'พลังงานอยู่ในช่วงเป้าหมายที่ตั้งไว้'];
-  return ['บันทึกครบตามมื้อวันนี้แล้ว', 'พลังงานวันนี้สูงกว่าเป้าหมายที่ตั้งไว้เล็กน้อย ใช้ดูเป็นข้อมูลภาพรวมได้'];
+function dailyEncouragementForDate(dateStr) {
+  let hash = 0;
+  const s = String(dateStr || '');
+  for (let i = 0; i < s.length; i += 1) {
+    hash = ((hash * 31) + s.charCodeAt(i)) >>> 0;
+  }
+  return DAILY_ENCOURAGEMENTS[hash % DAILY_ENCOURAGEMENTS.length];
 }
 
-function latestDateNote(dateStr, today) {
-  if (!dateStr) return 'ยังไม่มีข้อมูล';
-  if (dateStr === today) return 'ล่าสุด · วันนี้';
-  if (daysBetween(dateStr, today) === 1) return 'ล่าสุด · เมื่อวาน';
-  return 'ล่าสุด · ' + parseLocal(dateStr).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+function dailyOverviewSubtitle(pct, hasFood, goal) {
+  if (!hasFood) return 'จดมื้อแรกของวัน แล้วค่อย ๆ ดูแลตัวเองไปด้วยกัน';
+  if (!goal) return 'ตั้งเป้าหมายพลังงานเพิ่มได้ในหน้าตั้งค่า เพื่อให้สรุปตรงกับคุณมากขึ้น';
+  if (pct < 40) return 'ค่อย ๆ จดมื้ออาหารให้ครบตามจังหวะของวันนะ';
+  if (pct <= 100) return 'พลังงานอยู่ในช่วงเป้าหมายที่ตั้งไว้';
+  return 'พลังงานวันนี้สูงกว่าเป้าหมายที่ตั้งไว้เล็กน้อย ใช้ดูเป็นข้อมูลภาพรวมได้';
 }
 
 function buildDailyOverviewHtml(today, foods, targets) {
@@ -145,7 +157,8 @@ function buildDailyOverviewHtml(today, foods, targets) {
   const goal = num(targets.kcal) || 0;
   const pct = goal ? Math.round((kcal / goal) * 100) : 0;
   const left = goal - kcal;
-  const [title, subtitle] = moodLine(pct, foods.length > 0, goal);
+  const title = dailyEncouragementForDate(today);
+  const subtitle = dailyOverviewSubtitle(pct, foods.length > 0, goal);
 
   const pie = buildMealCaloriePieData(foods, getMeals(), getMealPiePalette());
   const donut = buildMealDonutParts({
@@ -155,37 +168,30 @@ function buildDailyOverviewHtml(today, foods, targets) {
     hasData: foods.length > 0 && pie.totalKcal > 0
   });
 
-  const todayWorkouts = (state.workouts || []).filter(w => w.date === today);
-  const doneWorkouts = todayWorkouts.filter(w => w.status !== 'planned');
-  const moveMin = doneWorkouts.reduce((a, w) => a + num(w.durationMin), 0);
-  const body = bodyLatest(state.body || []);
-
-  const sleepVal = hasNum(body?.sleepHours?.v) ? `${round1(body.sleepHours.v)}` : '—';
-  const sleepSub = hasNum(body?.sleepHours?.v) ? 'ชม.' : '';
-  const weightVal = hasNum(body?.weight?.v) ? `${body.weight.v}` : '—';
-  const weightSub = hasNum(body?.weight?.v) ? 'กก.' : '';
-
-  const stats = [
-    { tone: 'is-food', tab: 'food', icon: 'food', label: 'อาหาร', value: foods.length ? `${kcal.toLocaleString()}` : '—', sub: foods.length ? 'kcal' : '', meta: foods.length ? 'วันนี้' : 'ยังไม่มีรายการ' },
-    { tone: 'is-workout', tab: 'workout', icon: 'steps', label: 'ขยับ', value: doneWorkouts.length ? `${moveMin || doneWorkouts.length}` : todayWorkouts.length ? `0/${todayWorkouts.length}` : '—', sub: doneWorkouts.length ? (moveMin ? 'นาที' : 'ครั้ง') : todayWorkouts.length ? 'แผน' : '', meta: todayWorkouts.length ? 'วันนี้' : 'ยังไม่มีรายการ' },
-    { tone: 'is-sleep', tab: 'body', icon: 'moon', label: 'นอนล่าสุด', value: sleepVal, sub: sleepSub, meta: latestDateNote(body?.sleepHours?.d, today) },
-    { tone: 'is-weight', tab: 'body', icon: 'body', label: 'น้ำหนักล่าสุด', value: weightVal, sub: weightSub, meta: latestDateNote(body?.weight?.d, today) }
-  ];
-
-  const macroTile = (tone, label, v, g) => {
+  const macroTile = (tone, label, v, g, unit = 'g', warnOver = false) => {
     const hasGoal = hasNum(g) && num(g) > 0;
-    const p = hasGoal ? Math.min(100, Math.round((v / num(g)) * 100)) : 0;
+    const goalNum = num(g);
+    const p = hasGoal ? Math.min(100, Math.round((v / goalNum) * 100)) : 0;
+    const isOver = warnOver && hasGoal && v > goalNum;
+    const formattedVal = unit === 'mg' ? Math.round(v).toLocaleString() : Number(v.toFixed(1));
+    const formattedGoal = unit === 'mg' ? goalNum.toLocaleString() : goalNum;
     return `
-      <div class="hx-macro ${tone}">
-        <span class="hx-macro-label">${label}</span>
-        <span class="hx-macro-value tabular-nums">${foods.length ? Math.round(v) : '—'}<small>${hasGoal ? ` / ${num(g)} g` : ''}</small></span>
+      <div class="hx-macro ${tone}${isOver ? ' is-over' : ''}">
+        <div class="hx-macro-head">
+          <span class="hx-macro-label">${label}</span>
+          <span class="hx-macro-value tabular-nums">${foods.length ? formattedVal : '—'}<small>${hasGoal ? ` / ${formattedGoal} ${unit}` : ''}</small></span>
+        </div>
         <span class="hx-macro-bar" aria-hidden="true"><span style="width:${p}%"></span></span>
       </div>`;
   };
 
+  const sugarVal = Number(sum('sugar').toFixed(1));
+  const sodiumVal = Math.round(sum('sodium')).toLocaleString();
+  const sugarSodiumOver = foods.length > 0 && (sum('sugar') > 36 || sum('sodium') > 2300);
+
   return `
     <section class="hx-hero" aria-label="สรุปประจำวัน">
-      <div class="hx-hero-top">
+      <div class="hx-hero-grid">
         <div class="hx-hero-copy">
           <h2 class="hx-hero-title">${esc(title)}</h2>
           <p class="hx-hero-sub">${esc(subtitle)}</p>
@@ -198,173 +204,23 @@ function buildDailyOverviewHtml(today, foods, targets) {
             ? `<p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>`
             : `<button type="button" data-go="settings" class="hx-hero-left is-link">ยังไม่ได้ตั้งเป้าหมายพลังงาน · แตะเพื่อตั้งค่า</button>`}
         </div>
-        ${donut.ringHtml}
-      </div>
-      <div class="tm-donut-meta">
-        ${donut.legendHtml}
-        ${donut.readoutHtml}
-      </div>
-      <div class="hx-stats" role="list">
-        ${stats.map(s => `
-          <button type="button" role="listitem" data-go="${s.tab}" class="hx-stat ${s.tone}" aria-label="${esc(s.label)} ${esc(s.value)} ${esc(s.sub)} (${esc(s.meta)})">
-            ${iconSvg(s.icon, { size: 17 })}
-            <span class="hx-stat-label">${esc(s.label)}</span>
-            <span class="hx-stat-value tabular-nums">${esc(s.value)}${s.sub ? `<small> ${esc(s.sub)}</small>` : ''}</span>
-            <span class="hx-stat-meta">${esc(s.meta)}</span>
-          </button>`).join('')}
-      </div>
-      <div class="hx-macros">
-        ${macroTile('is-protein', 'โปรตีน', sum('protein'), targets.protein)}
-        ${macroTile('is-carb', 'คาร์บ', sum('carbs'), targets.carbs)}
-        ${macroTile('is-fat', 'ไขมัน', sum('fat'), targets.fat)}
+        <div class="hx-hero-ring">
+          ${donut.ringHtml}
+        </div>
+        <div class="hx-macros">
+          ${macroTile('is-protein', 'โปรตีน', sum('protein'), targets.protein)}
+          ${macroTile('is-carb', 'คาร์บ', sum('carbs'), targets.carbs)}
+          ${macroTile('is-fat', 'ไขมัน', sum('fat'), targets.fat)}
+          <div class="hx-macro is-sugar-sodium${sugarSodiumOver ? ' is-over' : ''}" title="เกณฑ์แนะนำ: น้ำตาล ≤ 36g · โซเดียม ≤ 2,300mg">
+            <div class="hx-macro-head">
+              <span class="hx-macro-label">น้ำตาล · โซเดียม</span>
+              <span class="hx-macro-value tabular-nums">${foods.length ? `${sugarVal}g · ${sodiumVal}mg` : '—'}</span>
+            </div>
+            <span class="hx-macro-note">เฉพาะรายการที่ระบุ</span>
+          </div>
+        </div>
       </div>
     </section>`;
-}
-
-function buildQuickAccessHtml(config) {
-  let items = CATEGORIES;
-  if (config.pinnedShortcuts.length) {
-    const matched = config.pinnedShortcuts
-      .map(key => CATEGORIES.find(c => c.key === key || c.tab === key))
-      .filter(Boolean);
-    if (matched.length) items = matched;
-  }
-  return `
-    <section class="hx-section" aria-labelledby="hx-cat-title">
-      <div class="hx-section-head">
-        <h2 id="hx-cat-title" class="hx-section-title">หมวดหมู่</h2>
-        <button type="button" data-go="settings" data-focus="st-home-widget-settings" class="hx-link">ปรับแต่ง</button>
-      </div>
-      <div class="hx-cats">
-        ${items.map(c => `
-          <button type="button" data-go="${c.tab}" ${c.focus ? `data-focus="${c.focus}"` : ''} class="hx-cat${c.cat ? ` ${esc(c.cat)}` : ''}">
-            <span class="hx-cat-icon" aria-hidden="true">${iconSvg(c.icon || c.key, { size: 24 })}</span>
-            <span class="hx-cat-label">${esc(c.label)}</span>
-          </button>`).join('')}
-      </div>
-    </section>`;
-}
-
-const MEAL_SLOTS = [
-  { id: 'breakfast', label: 'มื้อเช้า', time: '08:00' },
-  { id: 'lunch', label: 'มื้อกลางวัน', time: '12:30' },
-  { id: 'snack', label: 'ของว่าง', time: '15:30' },
-  { id: 'dinner', label: 'มื้อเย็น', time: '18:30' }
-];
-
-function mealSlotOf(food) {
-  if (food.mealId && MEAL_SLOTS.some(s => s.id === food.mealId)) return food.mealId;
-  const m = String(food.meal || '');
-  if (m.includes('เช้า')) return 'breakfast';
-  if (m.includes('กลางวัน')) return 'lunch';
-  if (m.includes('เย็น') || m.includes('ค่ำ')) return 'dinner';
-  return 'snack';
-}
-
-function resolveActivityState(itemTime, isDone, nowHhMm) {
-  if (isDone) return { key: 'done', badge: 'ทำแล้ว' };
-  if (itemTime && /^\d{2}:\d{2}$/.test(itemTime) && itemTime > nowHhMm) {
-    return { key: 'upcoming', badge: 'กำลังจะถึง' };
-  }
-  return { key: 'pending', badge: 'รอทำ' };
-}
-
-function buildDailyActivityHtml(today, foods, monthExps, todayExps) {
-  const now = new Date();
-  const nowHhMm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const rows = [];
-
-  MEAL_SLOTS.forEach(slot => {
-    const items = foods.filter(f => mealSlotOf(f) === slot.id);
-    if (!items.length && slot.id === 'snack') return;
-    const kcal = Math.round(items.reduce((a, f) => a + num(f.calories), 0));
-    const st = resolveActivityState(slot.time, items.length > 0, nowHhMm);
-    rows.push({
-      time: slot.time,
-      trackable: true,
-      done: st.key === 'done',
-      stateKey: st.key,
-      stateBadge: st.badge,
-      title: slot.label,
-      sub: items.length ? `${items.map(f => f.name).join(' · ')} · ${kcal.toLocaleString()} kcal` : 'ยังไม่ได้บันทึก · แตะเพื่อจด',
-      tab: 'food',
-      focus: items.length ? null : 'f-name'
-    });
-  });
-
-  (state.workouts || []).filter(w => w.date === today).forEach(w => {
-    const t = w.time || '17:00';
-    const st = resolveActivityState(t, w.status !== 'planned', nowHhMm);
-    rows.push({
-      time: t,
-      trackable: true,
-      done: st.key === 'done',
-      stateKey: st.key,
-      stateBadge: st.badge,
-      title: w.title || TYPES[w.type] || 'ออกกำลังกาย',
-      sub: `${w.durationMin ? `${w.durationMin} นาที` : 'ออกกำลังกาย'}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}`,
-      tab: 'workout'
-    });
-  });
-
-  remindersForDate(today).slice(0, 3).forEach(r => {
-    const t = r.dueTime || '—';
-    const st = resolveActivityState(t, false, nowHhMm);
-    rows.push({
-      time: t,
-      trackable: false,
-      done: false,
-      stateKey: st.key,
-      stateBadge: st.badge,
-      title: r.label,
-      sub: r.detail || 'แจ้งเตือนวันนี้',
-      tab: r.tab || 'notifications'
-    });
-  });
-
-  rows.sort((a, b) => String(a.time).localeCompare(String(b.time)));
-  const trackableRows = rows.filter(r => r.trackable);
-  const doneCount = trackableRows.filter(r => r.done).length;
-  const totalCount = trackableRows.length;
-  const reminderCount = rows.length - totalCount;
-
-  const spentMonth = monthExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-  const incomeMonth = monthExps.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
-  const spentToday = todayExps.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-
-  return `
-    <section class="hx-section" aria-labelledby="hx-today-title">
-      <div class="hx-section-head">
-        <h2 id="hx-today-title" class="hx-section-title">วันนี้</h2>
-        <span class="hx-muted tabular-nums">ทำแล้ว ${doneCount}/${totalCount}${reminderCount ? ` · เตือน ${reminderCount}` : ''}</span>
-      </div>
-      <ol class="hx-timeline">
-        ${rows.map(r => `
-          <li>
-            <button type="button" data-go="${esc(r.tab)}" ${r.focus ? `data-focus="${r.focus}"` : ''} class="hx-tl-row is-${r.stateKey}">
-              <span class="hx-tl-time tabular-nums">${esc(r.time)}</span>
-              <span class="hx-tl-dot" aria-hidden="true">${r.done ? iconSvg('check', { size: 12, strokeWidth: 2.6 }) : ''}</span>
-              <span class="hx-tl-body">
-                <span class="hx-tl-title-wrap">
-                  <span class="hx-tl-title">${esc(r.title)}</span>
-                  <span class="hx-tl-status is-${r.stateKey}">${esc(r.stateBadge)}</span>
-                </span>
-                <span class="hx-tl-sub">${esc(r.sub)}</span>
-              </span>
-              ${iconSvg('chevron-right', { size: 14, className: 'hx-tl-chev' })}
-            </button>
-          </li>`).join('')}
-      </ol>
-    </section>
-    <button type="button" data-go="expense" class="hx-money">
-      <span class="hx-money-icon" aria-hidden="true">${iconSvg('expense', { size: 20 })}</span>
-      <span class="hx-money-body">
-        <span class="hx-money-label">การเงินเดือนนี้</span>
-        <span class="hx-money-value tabular-nums">${monthExps.length ? `จ่าย ${baht(spentMonth)}` : 'ยังไม่มีรายการ'}${incomeMonth > 0 ? `<small class="is-income"> · รับ ${baht(incomeMonth)}</small>` : ''}</span>
-        <span class="hx-money-sub tabular-nums">${todayExps.length ? `วันนี้จ่าย ${baht(spentToday, 2)}` : monthExps.length ? 'วันนี้ยังไม่มีรายจ่าย' : 'แตะเพื่อจดหรือสแกนสลิป'}</span>
-      </span>
-      ${iconSvg('chevron-right', { size: 14, className: 'hx-tl-chev' })}
-    </button>`;
 }
 
 function renderPlannerLoading(host) {
@@ -400,60 +256,9 @@ function renderPlannerTeaser(host, today) {
           <p class="hx-plan-compact-sub">${esc(desc)}</p>
         </div>
       </div>
-      <button type="button" id="home-planner-open" class="hx-plan-compact-btn">
-        กางดู ${iconSvg('chevron-down', { size: 14 })}
+      <button type="button" id="home-planner-open" class="pl-collapse-btn" aria-label="กาง Weekly Planner" title="กางดู">
+        ${iconSvg('chevron-down', { size: 16 })}
       </button>
-    </section>`;
-}
-
-function urgencyRank(r, today) {
-  if (r.date && r.date < today) return 0;
-  if (r.date === today) return 1;
-  return 2;
-}
-
-function buildRemindersHtml(today, reminders) {
-  const formatUrgency = r => {
-    if (!r.date) return { text: 'กำหนดการ', cls: '' };
-    if (r.date < today) return { text: `เลยกำหนด ${daysBetween(r.date, today)} วัน`, cls: 'is-late' };
-    if (r.date === today) return { text: r.dueTime ? `วันนี้ ${r.dueTime} น.` : 'วันนี้', cls: 'is-today' };
-    const diff = daysBetween(today, r.date);
-    return { text: diff === 1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`, cls: '' };
-  };
-
-  const ordered = [...reminders].sort((a, b) => {
-    const rankDiff = urgencyRank(a, today) - urgencyRank(b, today);
-    if (rankDiff !== 0) return rankDiff;
-    return String(a.date || '9999-99-99').localeCompare(String(b.date || '9999-99-99'));
-  });
-
-  return `
-    <section class="hx-section" aria-labelledby="hx-rem-title">
-      <div class="hx-section-head">
-        <h2 id="hx-rem-title" class="hx-section-title">ใกล้ถึงกำหนด</h2>
-        <button type="button" data-go="notifications" class="hx-link">ดูทั้งหมด</button>
-      </div>
-      ${ordered.length ? `
-        <ul class="hx-list">
-          ${ordered.slice(0, 4).map(r => {
-            const u = formatUrgency(r);
-            const catItem = CATEGORIES.find(c => c.tab === r.tab);
-            const rIcon = catItem?.icon || 'notifications';
-            const rCat = catItem?.cat || '';
-            return `
-              <li>
-                <button type="button" data-go="${esc(r.tab || 'notifications')}" class="hx-list-row">
-                  <span class="hx-list-icon${rCat ? ` ${esc(rCat)}` : ''}" aria-hidden="true">${iconSvg(rIcon, { size: 18 })}</span>
-                  <span class="hx-tl-body">
-                    <span class="hx-tl-title">${esc(r.label)}</span>
-                    <span class="hx-tl-sub"><span class="hx-due ${u.cls} tabular-nums">${esc(u.text)}</span>${r.detail ? ` · ${esc(r.detail)}` : ''}</span>
-                  </span>
-                  ${iconSvg('chevron-right', { size: 14, className: 'hx-tl-chev' })}
-                </button>
-              </li>`;
-          }).join('')}
-        </ul>`
-        : '<p class="hx-empty">ไม่มีรายการเร่งด่วน พักผ่อนได้ตามสบาย</p>'}
     </section>`;
 }
 
@@ -465,9 +270,6 @@ export function mountHome(navigate) {
     <div id="home-widgets" class="hx-widgets">
       <div id="home-planner"></div>
       <div id="home-slot-daily-overview"></div>
-      <div id="home-slot-quick-access"></div>
-      <div id="home-slot-daily-activity" class="hx-stack"></div>
-      <div id="home-slot-reminders"></div>
     </div>`;
 
   el.addEventListener('click', async e => {
@@ -525,17 +327,10 @@ export function renderHome() {
   const config = getHomeWidgetConfig();
   const foods = state.todayFood || [];
   const targets = getTargets();
-  const reminders = collectReminders();
-  const thisMonth = today.slice(0, 7);
-  const monthExps = (state.expenses || []).filter(x => (x.date || '').slice(0, 7) === thisMonth);
-  const todayExps = monthExps.filter(x => x.date === today);
 
   const slots = {
-    'planner': $('#home-planner', el),
-    'daily-overview': $('#home-slot-daily-overview', el),
-    'quick-access': $('#home-slot-quick-access', el),
-    'daily-activity': $('#home-slot-daily-activity', el),
-    'reminders': $('#home-slot-reminders', el)
+    planner: $('#home-planner', el),
+    'daily-overview': $('#home-slot-daily-overview', el)
   };
 
   const widgetsWrap = $('#home-widgets', el);
@@ -548,39 +343,30 @@ export function renderHome() {
     });
   }
 
-  if (slots['planner'] && !config.hidden.has('planner')) {
+  if (slots.planner && !config.hidden.has('planner')) {
     if (plannerExpanded && plannerFeature) {
-      if (slots['planner'].dataset.plMounted !== '1') {
-        plannerFeature.mountPlanner(slots['planner'], go);
-        slots['planner'].dataset.plMounted = '1';
+      if (slots.planner.dataset.plMounted !== '1') {
+        plannerFeature.mountPlanner(slots.planner, go);
+        slots.planner.dataset.plMounted = '1';
       } else {
         plannerFeature.renderPlanner();
       }
     } else if (plannerExpanded) {
-      if (!slots['planner'].hasChildNodes()) renderPlannerLoading(slots['planner']);
+      if (!slots.planner.hasChildNodes()) renderPlannerLoading(slots.planner);
       void ensureHomePlannerLoaded();
     } else {
-      delete slots['planner'].dataset.plMounted;
-      renderPlannerTeaser(slots['planner'], today);
+      delete slots.planner.dataset.plMounted;
+      renderPlannerTeaser(slots.planner, today);
     }
   }
   if (slots['daily-overview'] && !config.hidden.has('daily-overview')) {
     slots['daily-overview'].innerHTML = buildDailyOverviewHtml(today, foods, targets);
-    bindChartInspector(slots['daily-overview'], { hint: DONUT_TOOLTIP_HINT });
+    bindChartInspector(slots['daily-overview'], { showReadout: false });
     const tickerEl = $('#home-kcal-ticker', el);
     if (foods.length && tickerEl) {
       const totalKcal = Math.round(foods.reduce((a, i) => a + num(i.calories), 0));
       animateNumberTicker(tickerEl, totalKcal);
     }
-  }
-  if (slots['quick-access'] && !config.hidden.has('quick-access')) {
-    slots['quick-access'].innerHTML = buildQuickAccessHtml(config);
-  }
-  if (slots['daily-activity'] && !config.hidden.has('daily-activity')) {
-    slots['daily-activity'].innerHTML = buildDailyActivityHtml(today, foods, monthExps, todayExps);
-  }
-  if (slots['reminders'] && !config.hidden.has('reminders')) {
-    slots['reminders'].innerHTML = buildRemindersHtml(today, reminders);
   }
 }
 

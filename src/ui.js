@@ -3,7 +3,7 @@
    Team 1: Design System & Shared UI Components
    ============================================================ */
 
-import { esc, trapFocus } from './util.js';
+import { esc, trapFocus, addDays, isDateStr, localDateStr, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
 
 function renderIcon(icon, size = 16) {
@@ -382,6 +382,7 @@ function showFloatingTip(container, target, pointerPos = null) {
 export function bindChartInspector(container, {
   hint = 'แตะจุดหรือแท่งกราฟเพื่อดูข้อมูลละเอียด',
   readoutEl = null,
+  showReadout = true,
   stopSummaryToggle = false,
   onSelect = null
 } = {}) {
@@ -393,14 +394,19 @@ export function bindChartInspector(container, {
     if (floatingTipContainer === container) hideFloatingTip();
     return;
   }
-  if (!out) {
-    out = document.createElement('div');
-    out.className = 'tm-chart-readout is-empty';
-    out.setAttribute('data-chart-readout', '');
-    out.setAttribute('aria-live', 'polite');
-    container.appendChild(out);
+  if (!showReadout) {
+    if (out) out.classList.add('hidden');
+    out = null;
+  } else {
+    if (!out) {
+      out = document.createElement('div');
+      out.className = 'tm-chart-readout is-empty';
+      out.setAttribute('data-chart-readout', '');
+      out.setAttribute('aria-live', 'polite');
+      container.appendChild(out);
+    }
+    out.classList.remove('hidden');
   }
-  out.classList.remove('hidden');
 
   const clearSelection = () => {
     container.querySelectorAll('[data-chart-tip].is-selected').forEach(el => el.classList.remove('is-selected'));
@@ -408,8 +414,10 @@ export function bindChartInspector(container, {
   const showHint = () => {
     clearSelection();
     if (floatingTipContainer === container) hideFloatingTip();
-    out.className = 'tm-chart-readout is-empty';
-    out.innerHTML = `<span>${esc(hint)}</span>`;
+    if (out) {
+      out.className = 'tm-chart-readout is-empty';
+      out.innerHTML = `<span>${esc(hint)}</span>`;
+    }
   };
   const showTarget = (target, pointerPos = null) => {
     clearSelection();
@@ -422,8 +430,10 @@ export function bindChartInspector(container, {
     const title = target.dataset.chartTip || '';
     const sub = target.dataset.chartSub || '';
     const color = target.dataset.chartColor || '';
-    out.className = 'tm-chart-readout';
-    out.innerHTML = `<span class="inline-flex items-start gap-1.5 font-semibold min-w-0 flex-1">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${esc(color)}"></span>` : ''}<span class="tm-chart-readout-text">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
+    if (out) {
+      out.className = 'tm-chart-readout';
+      out.innerHTML = `<span class="inline-flex items-start gap-1.5 font-semibold min-w-0 flex-1">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${esc(color)}"></span>` : ''}<span class="tm-chart-readout-text">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
+    }
     if (target.closest('.hx-ring, .tm-donut-legend')) {
       showFloatingTip(container, target, pointerPos);
     }
@@ -619,4 +629,62 @@ export function bindSwipeRows(container, { selector = '.tm-swipe-row', onSwipeRi
       aborted: false
     };
   });
+}
+
+/* ---- Shared Multi-Week Strip & "วันนี้" Navigator (Home / Food / Workout) ---- */
+const STRIP_DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+
+export function buildWeekStripRange(today = localDateStr(), focusDate = today) {
+  const safeToday = isDateStr(today) ? today : localDateStr();
+  const safeFocus = isDateStr(focusDate) ? focusDate : safeToday;
+  const baseMon = mondayOf(safeToday);
+  const rangeStart = addDays(baseMon, -21);
+  const rangeEnd = addDays(baseMon, 20);
+  const finalStart = safeFocus < rangeStart ? mondayOf(safeFocus) : rangeStart;
+  const finalEnd = safeFocus > rangeEnd ? addDays(mondayOf(safeFocus), 6) : rangeEnd;
+  const days = [];
+  for (let ds = finalStart; ds <= finalEnd; ds = addDays(ds, 1)) {
+    const [yy, mm, dd] = ds.split('-').map(Number);
+    const dow = STRIP_DOW[new Date(yy, mm - 1, dd).getDay()];
+    days.push({ date: ds, dow, dayNum: dd, isToday: ds === safeToday });
+  }
+  return days;
+}
+
+export function centerStripPill(stripEl, selector = '.is-active', { behavior = 'auto' } = {}) {
+  if (!stripEl || typeof requestAnimationFrame !== 'function') return;
+  requestAnimationFrame(() => {
+    if (!stripEl.isConnected) return;
+    const target = stripEl.querySelector(selector);
+    if (!target) return;
+    const stripRect = stripEl.getBoundingClientRect?.();
+    const btnRect = target.getBoundingClientRect?.();
+    if (stripRect && btnRect && stripRect.width > 0 && btnRect.width > 0) {
+      const nextLeft = Math.max(
+        0,
+        stripEl.scrollLeft + (btnRect.left - stripRect.left) - (stripRect.width - btnRect.width) / 2
+      );
+      if (behavior === 'smooth' && typeof stripEl.scrollTo === 'function') {
+        stripEl.scrollTo({ left: nextLeft, behavior: 'smooth' });
+      } else {
+        stripEl.scrollLeft = nextLeft;
+      }
+      return;
+    }
+    target.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  });
+}
+
+export function weekNavBarHtml({
+  isToday = false,
+  prevAttrs = '',
+  todayAttrs = '',
+  nextAttrs = '',
+  ariaLabel = 'เลื่อนดูสัปดาห์'
+} = {}) {
+  return `<div class="pl-week-nav" role="group" aria-label="${esc(ariaLabel)}">
+    <button type="button" ${prevAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ก่อนหน้า" title="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
+    <button type="button" ${todayAttrs} class="pl-week-nav-label ${isToday ? 'is-current' : ''}" aria-label="กลับไปวันนี้" title="กลับไปวันนี้">วันนี้</button>
+    <button type="button" ${nextAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
+  </div>`;
 }

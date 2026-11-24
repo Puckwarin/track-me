@@ -70,10 +70,10 @@ button { touch-action: manipulation; }
   .summary-kpi-empty { display: none; }
   .summary-all-empty { display: block; }
 }
-.input { width: 100%; border: 1px solid var(--color-border-strong); border-radius: 0.85rem; padding: 0.42rem 0.7rem; font-size: 0.8125rem; background: #FFFFFF; color: var(--color-ink); outline: none; transition: border-color .15s, box-shadow .15s; }
+.input { width: 100%; border: 1px solid var(--color-border-strong); border-radius: 0.85rem; padding: 0.38rem 0.65rem; font-size: 0.75rem; line-height: 1.3; background: #FFFFFF; color: var(--color-ink); outline: none; transition: border-color .15s, box-shadow .15s; }
 .input::placeholder { color: var(--color-ink-subtle); }
-select.input { appearance: none; -webkit-appearance: none; padding-right: 2.25rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%234A90D4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .75rem center; background-size: 0.95rem; }
-textarea.input { padding: 0.55rem 0.72rem; }
+select.input { appearance: none; -webkit-appearance: none; padding-right: 2rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%234A90D4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .65rem center; background-size: 0.85rem; }
+textarea.input { padding: 0.45rem 0.65rem; line-height: 1.4; }
 .input:focus { border-color: #4A90D4; box-shadow: 0 0 0 3px rgb(168 208 239 / .65); }
 .lbl { display: block; font-size: 0.72rem; font-weight: 600; color: var(--color-ink-muted); margin-bottom: 0.25rem; }
 .btn { display: inline-flex; align-items: center; gap: 0.45rem; border-radius: 9999px; padding: 0.65rem 1.2rem; font-size: 0.875rem; font-weight: 500; transition: background .15s, transform .1s, border-color .15s; cursor: pointer; min-height: 2.75rem; }
@@ -94,29 +94,19 @@ th { font-weight: 600; }
 table { border-radius: 1rem; }
 .card h2, .card h3 { color: var(--color-ink); }
 
-/* มือถือ: ช่องวันที่/เวลา กะทัดรัด ไม่ล้นทับช่องข้าง ๆ */
+/* ช่องวันที่/เวลา กะทัดรัด ไม่ล้นทับช่องข้าง ๆ */
 input.input[type="date"], input.input[type="time"], input.input[type="datetime-local"], input.input[type="month"] {
   -webkit-appearance: none; appearance: none;
   display: block; min-width: 0; max-width: 100%;
-  min-height: 2.25rem; line-height: 1.25; text-align: left;
-  padding: 0.35rem 0.6rem;
+  min-height: 2.25rem; line-height: 1.3; text-align: left;
+  padding: 0.36rem 0.6rem;
 }
 input.input[type="date"]::-webkit-date-and-time-value,
 input.input[type="time"]::-webkit-date-and-time-value,
 input.input[type="datetime-local"]::-webkit-date-and-time-value,
-input.input[type="month"]::-webkit-date-and-time-value { text-align: left; margin: 0; min-height: 1.2em; }
+input.input[type="month"]::-webkit-date-and-time-value { text-align: left; margin: 0; font-size: inherit; line-height: 1.3; min-height: 1.2em; }
 input.input::-webkit-datetime-edit { padding: 0; }
 .grid > *, .flex > .input, .flex > select { min-width: 0; }
-@media (max-width: 640px) {
-  /* 16px คือค่าต่ำสุดที่ iOS Safari จะไม่ซูมหน้าจอเองตอนแตะช่องกรอก (ดูกฎรวมท้ายไฟล์
-     สำหรับการบังคับขนาดนี้แบบกันคลาส text-xs/text-sm ทับ) — ที่นี่คงแค่ padding/ความสูงเดิม */
-  .input, select.input, textarea.input { font-size: 16px; padding: 0.38rem 0.62rem; }
-  input.input[type="date"], input.input[type="time"], input.input[type="datetime-local"], input.input[type="month"] {
-    font-size: 16px;
-    padding: 0.32rem 0.55rem;
-    min-height: 2.15rem;
-  }
-}
 
 /* ---------- Popup: กลางจอบนคอม · แผ่นเลื่อนขึ้นจากด้านล่างบนมือถือ ---------- */
 .modal-backdrop { background: rgb(25 73 113 / .34); backdrop-filter: blur(2px); padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, var(--safe-b)); }
@@ -159,23 +149,56 @@ input.input::-webkit-datetime-edit { padding: 0; }
 .sub-chip { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; padding: .55rem .95rem; border-radius: 9999px; font-size: .82rem; font-weight: 500; background: #fff; color: var(--color-ink-secondary); border: 1px solid var(--color-border); scroll-snap-align: center; transition: background .15s, color .15s; cursor: pointer; }
 .sub-chip.is-active { background: var(--color-mint-soft); color: var(--color-ink); border-color: var(--color-mint); font-weight: 600; }
 
-/* เมนูย่อยแบบการ์ดไอคอนเหมือน "หมวดหมู่" หน้าหลัก (สุขภาพ & ดูแล) */
-.subnav.subnav--tiles { position: relative; top: auto; z-index: 1; margin-top: .75rem; padding-block: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
-.subnav-tiles { display: flex; gap: .65rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding: .2rem .2rem .45rem; }
+/* เมนูย่อยแบบการ์ดไอคอน (สุขภาพ & ดูแล) */
+.subnav.subnav--tiles { position: relative; top: auto; z-index: 1; margin-top: .45rem; padding-block: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.subnav-tiles { display: flex; align-items: stretch; gap: .45rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding: .15rem .15rem .35rem; -webkit-overflow-scrolling: touch; }
 .subnav-tiles::-webkit-scrollbar { display: none; }
 @media (max-width: 639px) {
-  .subnav.subnav--tiles::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1.75rem; pointer-events: none; background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-app-bg) 96%, transparent) 88%); }
+  .subnav.subnav--tiles::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1.5rem; pointer-events: none; background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-app-bg) 96%, transparent) 88%); }
 }
 @media (min-width: 640px) {
   .subnav-tiles { flex-wrap: wrap; overflow: visible; padding-inline: 0; }
 }
-.sub-tile { width: auto; min-width: 4.85rem; max-width: 5.75rem; flex: none; cursor: pointer; }
+.hx-cat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .3rem;
+  padding: .15rem .2rem;
+  background: transparent;
+  border: 0;
+  color: var(--color-ink-secondary);
+  text-align: center;
+  transition: color .15s, transform .12s;
+}
+.hx-cat-icon {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: .85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  color: #2C5C8A;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .12s;
+}
+.hx-cat-label {
+  font-size: .68rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--color-ink-secondary);
+}
+.sub-tile { width: auto; min-width: 3.9rem; max-width: 4.85rem; flex: none; cursor: pointer; scroll-snap-align: start; }
 .sub-tile .hx-cat-label { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
-.sub-tile:hover .hx-cat-icon { transform: translateY(-1px); }
+.sub-tile:hover .hx-cat-icon { background: #F4F9FE; border-color: #A8D0EF; transform: translateY(-1px); }
 .sub-tile.is-active .hx-cat-icon {
-  background: var(--color-mint-soft);
+  background: var(--color-mint);
+  border-color: #99C3E4;
   color: var(--color-ink);
-  box-shadow: 0 0 0 2px var(--color-mint), 0 8px 18px -8px color-mix(in srgb, var(--color-mint) 42%, transparent);
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--color-mint) 55%, transparent);
   transform: translateY(-1px);
 }
 .sub-tile.is-active .hx-cat-label { color: var(--color-brand-dark); font-weight: 700; }
@@ -232,7 +255,9 @@ input.input::-webkit-datetime-edit { padding: 0; }
 .nav-shortcut:focus-visible, .nav-pref-move:focus-visible { outline: 2px solid var(--color-mint-strong); outline-offset: 2px; }
 .nav-pref-list { display: flex; flex-direction: column; gap: .4rem; }
 .nav-pref-group { display: flex; flex-direction: column; gap: .4rem; }
-.nav-pref-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 44px; padding: .4rem .65rem; border: 1px solid var(--color-slate-200); border-radius: 1rem; background: var(--color-app-bg); }
+.nav-pref-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 44px; padding: .4rem .65rem; border: 1px solid var(--color-slate-200); border-radius: 1rem; background: var(--color-app-bg); transition: border-color .15s, background-color .15s, box-shadow .15s, opacity .15s; }
+.nav-pref-row.is-dragging { opacity: .45; }
+.nav-pref-row.is-drop-target { border-color: #4A90D4; background: #DCEFFD; box-shadow: 0 0 0 2px rgb(74 144 212 / .24); }
 .nav-pref-label { display: flex; align-items: center; gap: .55rem; min-width: 0; font-size: .82rem; color: var(--color-ink); }
 .nav-pref-label > span:last-of-type { overflow-wrap: anywhere; }
 .nav-pref-label input { width: 1rem; height: 1rem; accent-color: var(--color-mint-strong); flex: none; }
@@ -888,11 +913,11 @@ img, video, canvas, svg { max-width: 100%; }
   .home-hello { padding: .125rem .125rem 0; }
   #home-today, #summary-section { gap: .75rem; }
   .tile, .card.food-today { padding: .875rem; }
-  .btn, .icon-btn, .sub-chip { min-height: 44px; }
+  .btn, .icon-btn { min-height: 44px; }
   .icon-btn { width: 44px; height: 44px; }
   .chip { min-height: 36px; }
   .subnav-row { gap: .375rem; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-  .sub-chip { gap: .3rem; padding-inline: .75rem; font-size: .8rem; }
+  .sub-chip { min-height: 2.35rem; gap: .3rem; padding: .35rem .7rem; font-size: .75rem; }
   .scroll-fabs { right: .85rem; bottom: calc(var(--nav-h) + var(--safe-b) + .85rem); }
   .fab-scroll-btn { width: 44px; height: 44px; }
 }
@@ -929,9 +954,11 @@ img, video, canvas, svg { max-width: 100%; }
 
 #tab-food .input,
 #tab-food select.input,
-#tab-food .btn,
-#tab-food .chip,
 #tab-food input.input[type="date"] {
+  min-height: 2.5rem;
+}
+#tab-food .btn,
+#tab-food .chip {
   min-height: 2.75rem;
 }
 
@@ -990,7 +1017,7 @@ img, video, canvas, svg { max-width: 100%; }
   align-items: center;
   justify-content: center;
   gap: .1rem;
-  min-height: 3.05rem;
+  min-height: 3.3rem;
   padding: .35rem .2rem;
   border-radius: .95rem;
   border: 1px solid var(--color-border);
@@ -1004,6 +1031,7 @@ img, video, canvas, svg { max-width: 100%; }
 .tm-day-pill:hover { background: #D7EBF6; border-color: #A8D0EF; color: #194971; }
 .tm-day-pill .tm-day-dow { font-size: .68rem; font-weight: 500; opacity: .82; }
 .tm-day-pill .tm-day-num { font-size: .88rem; font-weight: 700; line-height: 1.15; }
+.tm-day-pill .tm-day-meta { font-size: .625rem; line-height: 1.1; }
 .tm-day-pill.is-today { border-color: #4A90D4; color: #194971; }
 .tm-day-pill.is-active {
   background: #4A90D4;
@@ -1158,23 +1186,83 @@ img, video, canvas, svg { max-width: 100%; }
   border: 1px solid #4A90D4;
 }
 
-/* ---------- หน้าอาหาร: สลับแท็บ บันทึก / สรุปโภชนาการ ---------- */
-#tab-food:has(#f-view-log:checked) #f-log-panel,
-#tab-food:has(#f-view-summary:checked) #f-summary-panel { display: block; }
-#tab-food:has(#f-view-log:checked) #f-summary-panel,
-#tab-food:has(#f-view-summary:checked) #f-log-panel { display: none; }
-#tab-food fieldset.tm-seg { background: #E3ECF7; border-color: var(--color-border); }
-#tab-food .tm-seg-btn { color: var(--color-ink-muted); }
-#tab-food:has(#f-view-log:checked) label[for="f-view-log"],
-#tab-food:has(#f-view-summary:checked) label[for="f-view-summary"] {
-  background: #CBE5FC;
-  color: #194971;
-  box-shadow: none;
+/* ---------- หน้าอาหาร: แถบรายการโปรดแบบตัดคำไม่ล้นขอบ ---------- */
+.tm-fav-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  min-width: 0;
+  max-width: 100%;
 }
-#tab-food fieldset:has(#f-view-log:focus-visible) label[for="f-view-log"],
-#tab-food fieldset:has(#f-view-summary:focus-visible) label[for="f-view-summary"] { outline: 2px solid #4A90D4; outline-offset: 2px; }
+.tm-fav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  min-height: 44px;
+  max-width: 100%;
+  min-width: 0;
+  padding: .35rem .75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background: #F4F9FE;
+  color: #194971;
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.tm-fav-chip:hover { background: #DCEFFD; border-color: #99C3E4; }
+.tm-fav-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 1023px) {
+  .tm-fav-chip:nth-child(n+6) { display: none; }
+}
 
 /* Weekly Planner: สัปดาห์ Mon–Sun (Mobile แนวตั้ง + ปุ่ม 44px, Desktop กระดาน 7 วัน + ลากวาง) */
+.pl-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .6rem;
+}
+.pl-card-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem .85rem;
+}
+.pl-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+}
+.pl-collapse-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: .85rem;
+  border: 1px solid var(--color-border);
+  background: #FFFFFF;
+  color: #4E6E8E;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.pl-collapse-btn:hover {
+  background: #EAF3FD;
+  border-color: #A8D0EF;
+  color: #194971;
+}
 .pl-week-nav {
   display: inline-flex;
   align-items: center;
@@ -1199,15 +1287,21 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .pl-week-nav-btn:hover { background: #DCEFFD; border-color: #A8D0EF; }
 .pl-week-nav-label {
-  padding: .25rem .65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: .2rem .65rem;
   border-radius: 9999px;
   font-size: .74rem;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   color: #2C6BA8;
   cursor: pointer;
   transition: background .15s, color .15s;
 }
-.pl-week-nav-label.is-current { background: #CBE5FC; color: #194971; }
+.pl-week-nav-label.is-current { background: transparent; color: #194971; font-weight: 700; }
 .pl-week-nav-label:not(.is-current):hover { background: #DCEFFD; }
 
 .pl-day-strip {
@@ -1534,7 +1628,39 @@ img, video, canvas, svg { max-width: 100%; }
   box-shadow: 0 1px 3px rgb(25 73 113 / .10);
 }
 @media (max-width: 767px) {
-  .tm-seg-btn { min-height: 44px; font-size: .78rem; padding-inline: .5rem; }
+  .tm-seg { padding: .2rem; gap: .22rem; border-radius: .85rem; max-width: 100%; }
+  .tm-seg-btn { min-height: 2.35rem; font-size: .72rem; line-height: 1.2; padding: .3rem .45rem; border-radius: .65rem; }
+}
+@media (max-width: 639px) {
+  .tm-seg--3,
+  .tm-seg--4 {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .tm-seg--3::-webkit-scrollbar,
+  .tm-seg--4::-webkit-scrollbar { display: none; }
+  .tm-seg--3 .tm-seg-btn,
+  .tm-seg--4 .tm-seg-btn {
+    flex: 1 0 auto;
+    white-space: nowrap;
+    font-size: .7rem;
+    padding: .3rem .5rem;
+  }
+  .tm-seg--2 .tm-seg-btn {
+    font-size: .7rem;
+    padding: .3rem .4rem;
+  }
+  .db-controls { gap: .45rem; }
+  .db-controls > * { max-width: 100%; min-width: 0; }
+  .db-range { padding: .2rem; gap: .15rem; }
+  .db-range button { min-height: 2.25rem; padding: .28rem .5rem; font-size: .7rem; }
+  .db-refresh { min-height: 2.35rem; padding: .35rem .7rem; font-size: .72rem; }
+  .wa-sec-tab { min-height: 2.2rem; padding: .3rem .6rem; font-size: .72rem; }
 }
 
 /* ---------- แถบความคืบหน้าโภชนาการมาตรฐาน (Unified Progress Bar) ---------- */
@@ -1642,6 +1768,9 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .tm-swipe-list--cards > .tm-swipe-row + .tm-swipe-row {
   border-top: none;
+}
+.tm-swipe-list--cards > .tm-swipe-row {
+  flex: 0 0 auto;
 }
 .tm-swipe-list--cards > .tm-swipe-row,
 .tm-swipe-list--grid > .tm-swipe-row {
@@ -1984,39 +2113,65 @@ img, video, canvas, svg { max-width: 100%; }
 
 
 /* ============================================================
-   กันซูมอัตโนมัติบนมือถือ (iOS Safari/Chrome): ช่องกรอกข้อมูลทุกชนิด
-   ต้องมีขนาดตัวอักษรไม่ต่ำกว่า 16px ไม่งั้นเบราว์เซอร์จะซูมจอเองตอนแตะ
-   แล้วซูมกลับไม่สนิทตอนออกจากช่อง (ค้าง/กระตุก)
-
-   ใช้ !important โดยตั้งใจ: ไม่ใช่เพิ่ม specificity เฉยๆ เพราะมีช่องกรอก
-   ไดนามิกจาก JS จำนวนมาก (โมดัล/ดรอว์เออร์/เมนูย่อย) ที่ติดคลาส Tailwind
-   เช่น text-xs/text-sm มาด้วย (เช่น .input.text-xs) ซึ่งมี specificity
-   เท่ากับ .input เอง การไล่เพิ่ม specificity แบบปกติจึงไม่ครอบคลุมทุกเคส
-   และอนาคตเพิ่มฟอร์มใหม่ก็เสี่ยงหลุดกฎนี้ได้อีก !important การันตีว่า
-   "ช่องกรอกบนมือถือห้ามเล็กกว่า 16px" เป็นจริงเสมอโดยไม่ต้องไล่แก้ทีละไฟล์ ------------------------------------------------------------ */
+   มาตรฐานขนาดตัวหนังสือและความสูงของช่องกรอก/Dropdown ให้เท่ากับปุ่ม (0.75rem)
+   (index.html กำหนด maximum-scale=1 เพื่อป้องกันเบราว์เซอร์มือถือซูมอัตโนมัติแล้ว)
+   ใช้ :where(...) เพื่อรักษา specificity = 0 ให้คลาส Tailwind (เช่น text-xs/min-h-*) ทำงานได้ปกติ
+   ============================================================ */
 @media (max-width: 767px) {
-  input[type="text"],
-  input[type="number"],
-  input[type="search"],
-  input[type="email"],
-  input[type="tel"],
-  input[type="url"],
-  input[type="password"],
-  input[type="date"],
-  input[type="time"],
-  input[type="datetime-local"],
-  input[type="month"],
-  input[type="week"],
-  input:not([type]),
-  select,
-  textarea,
-  [contenteditable="true"] {
-    font-size: 16px !important;
+  :where(
+    input[type="text"],
+    input[type="number"],
+    input[type="search"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="password"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="week"],
+    input:not([type]),
+    select,
+    textarea,
+    [contenteditable="true"]
+  ) {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    box-sizing: border-box;
   }
 
-  /* Safari วาดค่าที่แสดงในช่องวันที่/เวลาเป็น pseudo-element แยกต่างหาก
-     ต้องบังคับขนาดตรงนี้ด้วย ไม่งั้นแตะแล้วยังซูมอยู่ดีแม้ input เองจะ 16px แล้ว */
+  :where(
+    input[type="text"],
+    input[type="number"],
+    input[type="search"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="password"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="week"],
+    input:not([type]),
+    select
+  ) {
+    min-height: 2.5rem;
+    padding-top: 0.36rem;
+    padding-bottom: 0.36rem;
+  }
+
+  :where(textarea, [contenteditable="true"]) {
+    min-height: 2.5rem;
+    padding-top: 0.42rem;
+    padding-bottom: 0.42rem;
+    line-height: 1.4;
+  }
+
   input::-webkit-date-and-time-value {
-    font-size: 16px !important;
+    font-size: inherit;
+    line-height: 1.3;
+    min-height: 1.2em;
   }
 }

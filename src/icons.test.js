@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { CATEGORIES, SUBTABS } from './categories.js';
 import { iconSvg, iconBubble } from './icons.js';
 
-describe('Phosphor Duotone icon registry', () => {
-  it('provides Phosphor Duotone SVGs for all categories and subtabs', () => {
+describe('Phosphor Regular icon registry', () => {
+  it('provides Phosphor Regular SVGs for all categories and subtabs', () => {
     for (const c of CATEGORIES) {
       const svg = iconSvg(c.icon || c.key, { size: 24 });
-      expect(svg).toContain('class="tm-svg-icon ph-duotone"');
+      expect(svg).toContain('class="tm-svg-icon ph-regular"');
       expect(svg).toContain('viewBox="0 0 256 256"');
       expect(svg).toContain('<path');
       const bubble = iconBubble(c.icon || c.key);
@@ -21,7 +21,7 @@ describe('Phosphor Duotone icon registry', () => {
     }
   });
 
-  it('renders Phosphor Duotone SVGs for semantic keys and backward-compatible FontAwesome aliases', () => {
+  it('renders Phosphor Regular SVGs for semantic keys and backward-compatible FontAwesome aliases', () => {
     const keys = [
       'brand', 'home', 'food', 'health', 'overview', 'weekly', 'workout', 'period',
       'symptoms', 'remind', 'expense', 'body', 'care', 'inventory', 'report',
@@ -31,7 +31,7 @@ describe('Phosphor Duotone icon registry', () => {
     ];
     for (const key of keys) {
       const svg = iconSvg(key, { size: 18 });
-      expect(svg).toContain('class="tm-svg-icon ph-duotone');
+      expect(svg).toContain('class="tm-svg-icon ph-regular');
       expect(svg).toContain('viewBox="0 0 256 256"');
       expect(svg).toContain('<path');
     }
