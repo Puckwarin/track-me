@@ -447,10 +447,19 @@ function formatReadSummary(toolName, payload, intent = {}) {
       const tpls = d.savedTemplates || [];
       const lines = [
         `🏋️ **สรุปการออกกำลังกาย (30 วันล่าสุด)**`,
-        `- ทำแล้ว **${d.completedCount || 0} ครั้ง** · รวม ${d.totalDurationMin || 0} นาที · เผาผลาญ ~${d.totalEstKcal || 0} kcal${d.totalVolumeKg ? ` · เวทรวม ${d.totalVolumeKg.toLocaleString('th-TH')} kg` : ''}`
+        `- ทำแล้ว **${d.completedCount || 0} ครั้ง** · **${d.totalDurationMin || 0} นาที รวม** · เผาผลาญ ~${d.totalEstKcal || 0} kcal${d.intensitySummary ? ` · ความหนัก: ${d.intensitySummary}` : ''}${d.avgSessionRpe != null ? ` · RPE เฉลี่ย ${d.avgSessionRpe}/10` : ''}`
       ];
       recent.slice(0, 4).forEach(w => {
-        lines.push(`- ${fmtDate(w.date)}: **${w.title}** (${w.status === 'planned' ? 'วางแผนไว้' : `${w.durationMin || 0} นาที`}${w.sessionRpe != null ? ` · RPE ${w.sessionRpe}/10` : ''})`);
+        const parts = [
+          w.status === 'planned' ? 'วางแผนไว้' : `${w.durationMin || 0} นาที รวม`,
+          w.intensityLabel ? `ความหนัก: ${w.intensityLabel}` : '',
+          w.completionStatusLabel || '',
+          w.effortLabel ? `ความเหนื่อย: ${w.effortLabel}` : (w.feelingLabel || w.feeling || ''),
+          w.sessionRpe != null ? `RPE ${w.sessionRpe}/10` : '',
+          w.postSymptomLabel ? `อาการ: ${w.postSymptomLabel}` : '',
+          w.nextDayRecoveryLabel ? `ฟื้นตัววันถัดไป: ${w.nextDayRecoveryLabel}` : ''
+        ].filter(Boolean).join(' · ');
+        lines.push(`- ${fmtDate(w.date)}: **${w.title}** (${parts})`);
       });
       if (tpls.length) {
         lines.push(`- เทมเพลตที่บันทึกไว้: ${tpls.slice(0, 4).map(t => t.name).join(', ')}`);

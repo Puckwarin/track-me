@@ -71,7 +71,7 @@ export function mountSymptoms(el) {
   root = el;
   activeSymptomsTab = 'symptoms';
   root.innerHTML = `
-    <div class="card space-y-3 lg:col-span-2">
+    <div class="card space-y-3 lg:col-span-3">
       <div>
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 18, className: 'text-pink-500' })}<span>บันทึกอาการรายวัน & ผิว</span></h3>
         <p class="text-xs text-slate-500 mt-0.5">บันทึกได้ทุกวัน — เลือกวันเดียวกันเพื่อจดทั้งอาการทั่วไปและอาการผิว</p>
@@ -89,7 +89,7 @@ export function mountSymptoms(el) {
       </div>
     </div>
 
-    <div id="sx-panel-symptoms" class="card space-y-4 lg:col-span-2">
+    <div id="sx-panel-symptoms" class="card space-y-4 lg:col-span-3">
       <div class="rounded-2xl border border-slate-200 bg-white px-3 divide-y divide-slate-100">
         ${SYMPTOMS.map(([k, t]) => sliderRow(t, 's-' + k, SEVERITY)).join('')}
         ${sliderRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['', '1', '2', '3', '4', '5'])}
@@ -106,7 +106,7 @@ export function mountSymptoms(el) {
       <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div></div>
     </div>
 
-    <section id="sx-panel-skin" class="card space-y-4 lg:col-span-2 hidden">
+    <section id="sx-panel-skin" class="card space-y-4 lg:col-span-3 hidden">
       <header>
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
         <p class="text-xs text-slate-500">ติดตามอาการระคายเคืองและผลลัพธ์ต่อผิวตามวันที่เลือกด้านบน</p>

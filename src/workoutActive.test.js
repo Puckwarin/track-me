@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildExerciseFeedbackSummary,
+  buildSessionReflectPayload,
+  COMPLETION_STATUSES,
   countTotalSets,
+  EFFORT_LEVELS,
   formatExercisePrescription,
   formatFeelingLabel,
+  getMainExerciseIndices,
   suggestNextProgression,
-  summarizeSessionNextStep
+  summarizeSessionNextStep,
+  WORKOUT_SYMPTOMS
 } from './workoutActive.js';
 
 describe('workoutActive helpers', () => {
@@ -79,21 +84,57 @@ describe('workoutActive helpers', () => {
     expect(suggestNextProgression({ rpe: 8, rir: 2, completedSets: 3, plannedSets: 3 })?.action).toBe('maintain');
   });
 
-  it('builds exercise feedback summary and summarizes session next step', () => {
+  it('builds exercise feedback summary only for main exercises and summarizes session next step', () => {
     const rows = [
+      { name: 'March in Place', section: 'warmup', sets: 1 },
       { name: 'Goblet Squat', section: 'main', sets: 3 },
       { name: 'Dumbbell Row', section: 'main', sets: 3 },
-      { name: 'Plank', section: 'main', sets: 2 }
+      { name: 'Hamstring Stretch', section: 'cooldown', sets: 1 }
     ];
+    expect(getMainExerciseIndices(rows)).toEqual([1, 2]);
+    expect(getMainExerciseIndices([
+      { name: 'March', section: 'warmup', sets: 1 },
+      { name: 'Stretch', section: 'cooldown', sets: 1 }
+    ])).toEqual([]);
+
     const summary = buildExerciseFeedbackSummary(
       rows,
-      { 0: { rpe: 6, rir: 3 }, 1: { rpe: 8, rir: 2 } },
-      { 0: 3, 1: 3 }
+      {
+        0: { rpe: 5, rir: 4 },
+        1: { rpe: 6, rir: 3 },
+        2: { rpe: 8, rir: 2 },
+        3: { rpe: 5, rir: 4 }
+      },
+      { 0: 1, 1: 3, 2: 3, 3: 1 }
     );
     expect(summary).toHaveLength(2);
-    expect(summary[0]).toMatchObject({ name: 'Goblet Squat', rpe: 6, rir: 3, nextAction: 'increase' });
-    expect(summary[1]).toMatchObject({ name: 'Dumbbell Row', rpe: 8, rir: 2, nextAction: 'maintain' });
+    expect(summary[0]).toMatchObject({ name: 'Goblet Squat', section: 'main', rpe: 6, rir: 3, nextAction: 'increase' });
+    expect(summary[1]).toMatchObject({ name: 'Dumbbell Row', section: 'main', rpe: 8, rir: 2, nextAction: 'maintain' });
     expect(summarizeSessionNextStep(summary)).toContain('1 ท่า');
     expect(formatFeelingLabel('good')).toContain('กำลังดี');
+  });
+
+  it('exports updated session reflection choices and builds reflect payload with effort-to-RPE mapping', () => {
+    expect(COMPLETION_STATUSES.map(c => c.id)).toEqual(['complete', 'partial']);
+    expect(EFFORT_LEVELS.map(e => e.id)).toEqual(['easy', 'moderate', 'hard', 'very_hard']);
+    expect(WORKOUT_SYMPTOMS.map(s => s.id)).toEqual(['normal', 'neck_shoulder_tight', 'limb_fatigue', 'pain_abnormal']);
+
+    expect(buildSessionReflectPayload({})).toBeNull();
+
+    const payload = buildSessionReflectPayload({
+      completionStatus: 'complete',
+      effortLevel: 'hard',
+      postSymptom: 'normal',
+      reflectionNote: '  คุมจังหวะได้ดีมาก  ',
+      exerciseFeedback: [{ name: 'Goblet Squat', section: 'main', rpe: 7, rir: 3 }]
+    });
+    expect(payload).toEqual({
+      completionStatus: 'complete',
+      effortLevel: 'hard',
+      sessionRpe: 7,
+      postSymptom: 'normal',
+      reflectionNote: 'คุมจังหวะได้ดีมาก',
+      exerciseFeedback: [{ name: 'Goblet Squat', section: 'main', rpe: 7, rir: 3 }]
+    });
   });
 });

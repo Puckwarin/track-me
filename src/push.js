@@ -2,7 +2,7 @@ import { setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { isPreviewMode } from './preview.js';
-import { getPeriodRemindDays } from './period.js';
+import { getPeriodRemindDays } from './periodStats.js';
 import { toast } from './util.js';
 
 const VAPID_STORAGE_KEY = 'trackme-vapid-public';

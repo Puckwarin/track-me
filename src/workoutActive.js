@@ -1,9 +1,39 @@
 import { openModal, confirmDialog, esc } from './util.js';
 import { safeHttpUrl } from './workoutParser.js';
-import { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
+import {
+  WORKOUT_FEELINGS,
+  COMPLETION_STATUSES,
+  EFFORT_LEVELS,
+  WORKOUT_SYMPTOMS,
+  effortLevelToSessionRpe,
+  formatFeelingLabel,
+  formatCompletionStatusLabel,
+  formatEffortLabel,
+  formatWorkoutSymptomLabel,
+  isMainWorkoutSection,
+  summarizeSessionNextStep
+} from './workoutConstants.js';
 import { iconSvg } from './icons.js';
 
-export { WORKOUT_FEELINGS, formatFeelingLabel, summarizeSessionNextStep };
+export {
+  WORKOUT_FEELINGS,
+  COMPLETION_STATUSES,
+  EFFORT_LEVELS,
+  WORKOUT_SYMPTOMS,
+  formatFeelingLabel,
+  formatCompletionStatusLabel,
+  formatEffortLabel,
+  formatWorkoutSymptomLabel,
+  summarizeSessionNextStep
+};
+
+export function getMainExerciseIndices(rows = []) {
+  const indices = [];
+  (rows || []).forEach((r, ri) => {
+    if (isMainWorkoutSection(r?.section)) indices.push(ri);
+  });
+  return indices;
+}
 
 const SECTION_ORDER = ['warmup', 'main', 'cooldown'];
 const SECTION_TITLES = {
@@ -57,6 +87,7 @@ export function suggestNextProgression({ rpe = null, rir = null, completedSets =
 export function buildExerciseFeedbackSummary(rows = [], feedbackMap = {}, checkedCounts = {}) {
   const out = [];
   rows.forEach((r, ri) => {
+    if (!isMainWorkoutSection(r?.section)) return;
     const entry = feedbackMap[ri];
     if (!entry) return;
     const rpe = Number.isInteger(entry.rpe) ? entry.rpe : null;
@@ -70,7 +101,7 @@ export function buildExerciseFeedbackSummary(rows = [], feedbackMap = {}, checke
     });
     out.push({
       name: r.name,
-      section: SECTION_ORDER.includes(r.section) ? r.section : 'main',
+      section: 'main',
       ...(rpe !== null && { rpe }),
       ...(rir !== null && { rir }),
       ...(next && { nextAction: next.action, nextLabel: next.label })
@@ -89,6 +120,28 @@ export function formatExercisePrescription(r = {}) {
     ? repsText
     : `${count} × ${repsText}`;
   return { count, weightText, setRepText };
+}
+
+export function buildSessionReflectPayload({
+  completionStatus = '',
+  effortLevel = '',
+  postSymptom = '',
+  reflectionNote = '',
+  exerciseFeedback = []
+} = {}) {
+  const noteText = String(reflectionNote || '').trim();
+  const sessionRpe = effortLevelToSessionRpe(effortLevel);
+  const fb = Array.isArray(exerciseFeedback) ? exerciseFeedback : [];
+  const hasAny = Boolean(completionStatus || effortLevel || postSymptom || noteText || fb.length > 0);
+  if (!hasAny) return null;
+  return {
+    ...(completionStatus && { completionStatus }),
+    ...(effortLevel && { effortLevel }),
+    ...(sessionRpe !== null && { sessionRpe }),
+    ...(postSymptom && { postSymptom }),
+    ...(noteText && { reflectionNote: noteText }),
+    ...(fb.length && { exerciseFeedback: fb })
+  };
 }
 
 export function countTotalSets(rows = []) {
@@ -131,15 +184,16 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   let restSeconds = 0;
   let activeRestPreset = 0;
   let activeSection = 'all';
+  let showCompletedCards = false;
   let step = 'play'; // 'play' | 'reflect'
   let snapshotDone = [];
   let snapshotMinutes = 1;
   let snapshotCheckedCounts = {};
-  let showAllExercisesInReflect = false;
 
   const reflectState = {
-    feeling: '',
-    sessionRpe: null,
+    completionStatus: '',
+    effortLevel: '',
+    postSymptom: '',
     reflectionNote: '',
     exerciseFeedback: {} // [ri]: { rpe: number|null, rir: number|null }
   };
@@ -154,33 +208,33 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       const checks = Array.from({ length: count }, (_, si) => `
         <label class="wa-set-btn" data-set-label="${ri}:${si}">
           <input type="checkbox" data-done data-ri="${ri}" data-si="${si}" class="sr-only">
-          <span class="inline-flex shrink-0 opacity-60" data-set-icon aria-hidden="true">${iconSvg('circle', { size: 14 })}</span>
+          <span class="inline-flex shrink-0 opacity-60" data-set-icon aria-hidden="true">${iconSvg('circle', { size: 15 })}</span>
           <span class="whitespace-nowrap">เซต ${si + 1}</span>
         </label>`).join('');
 
       return `
-        <article class="wa-card p-4 sm:p-5 flex flex-col gap-3 min-w-0" data-ex-card="${ri}" data-ex-sets="${count}">
-          <div class="flex items-start gap-3.5 sm:gap-4 min-w-0">
-            <div class="w-20 h-20 sm:w-24 sm:h-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">${imageMarkup(r)}</div>
+        <article class="wa-card p-4 sm:p-5 lg:p-6 flex flex-col gap-3.5 min-w-0" data-ex-card="${ri}" data-ex-sec="${section}" data-ex-sets="${count}">
+          <div class="flex items-start gap-3.5 sm:gap-4 lg:gap-5 min-w-0">
+            <div class="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">${imageMarkup(r)}</div>
             <div class="min-w-0 flex-1 space-y-1.5">
               <div class="flex items-start justify-between gap-2 min-w-0">
-                <h4 class="text-base sm:text-lg font-bold text-slate-800 leading-snug break-words [overflow-wrap:anywhere] min-w-0">
+                <h4 class="text-base sm:text-lg lg:text-xl font-bold text-slate-800 leading-snug break-words [overflow-wrap:anywhere] min-w-0">
                   <span class="text-brand tabular-nums mr-1">${idx + 1}.</span>${esc(r.name)}
                 </h4>
-                <span class="hidden text-xs font-semibold text-green-700 shrink-0 whitespace-nowrap" data-card-done-badge>✓ ครบ</span>
+                <span class="hidden text-xs lg:text-sm font-semibold text-green-700 shrink-0 whitespace-nowrap" data-card-done-badge>✓ ครบ</span>
               </div>
-              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums text-sm sm:text-base">
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums text-sm sm:text-base lg:text-[1.05rem] leading-snug">
                 ${weightText ? `<span class="font-semibold text-brand-dark">${esc(weightText)}</span><span class="text-slate-300" aria-hidden="true">·</span>` : ''}
                 <strong class="font-bold text-slate-800">${esc(setRepText)}</strong>
+                ${r.note ? `<span class="text-slate-300" aria-hidden="true">·</span><span class="font-normal text-slate-600 text-xs sm:text-sm lg:text-[0.95rem] break-words [overflow-wrap:anywhere]">${esc(r.note)}</span>` : ''}
               </div>
               ${refMarkup(r)}
             </div>
           </div>
-          ${r.note ? `<p class="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">${esc(r.note)}</p>` : ''}
           <div class="space-y-2 pt-0.5">
-            <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+            <div class="flex items-center justify-between gap-2 text-xs lg:text-sm text-slate-500">
               <span class="tabular-nums" data-card-progress="${ri}">0 / ${count} เซต</span>
-              ${count > 1 ? `<button type="button" data-toggle-all="${ri}" class="text-xs font-semibold text-brand-dark hover:underline py-1 px-1.5 whitespace-nowrap">เลือกครบทุกเซต</button>` : ''}
+              ${count > 1 ? `<button type="button" data-toggle-all="${ri}" class="text-xs lg:text-sm font-semibold text-brand-dark hover:underline py-1 px-1.5 whitespace-nowrap">เลือกครบทุกเซต</button>` : ''}
             </div>
             <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">${checks}</div>
           </div>
@@ -190,10 +244,11 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     return `
       <section class="space-y-3" data-wa-section="${section}">
         <div class="flex flex-wrap items-baseline justify-between gap-2 pb-1.5 border-b border-slate-200">
-          <h3 class="text-sm sm:text-base font-bold text-slate-800">${esc(SECTION_TITLES[section])}</h3>
-          <span class="text-xs text-slate-500 tabular-nums">${members.length} ท่า</span>
+          <h3 class="text-sm sm:text-base lg:text-lg font-bold text-slate-800">${esc(SECTION_TITLES[section])}</h3>
+          <span data-wa-sec-count="${section}" class="text-xs lg:text-sm text-slate-500 tabular-nums">${members.length} ท่า</span>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">${cards}</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 lg:gap-5">${cards}</div>
+        <p data-wa-sec-done-msg="${section}" class="hidden rounded-xl bg-white/80 border border-slate-200 px-3.5 py-2.5 text-xs sm:text-sm text-emerald-700 font-medium">✓ ทำครบทุกท่าในช่วงนี้แล้ว</p>
       </section>`;
   }).join('');
 
@@ -214,16 +269,16 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     : '';
 
   const m = openModal(
-    `<header class="wa-header shrink-0 px-4 sm:px-6 pt-3 sm:pt-5 pb-3.5 space-y-3">
+    `<header class="wa-header shrink-0 px-4 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-3.5 space-y-3">
       <div class="flex items-start justify-between gap-3 min-w-0">
         <div class="min-w-0 flex-1 space-y-0.5">
-          <h3 id="wa-modal-title" class="font-bold text-lg sm:text-xl text-slate-800 leading-snug break-words [overflow-wrap:anywhere]">${esc(meta.title || 'กำลังออกกำลังกาย')}</h3>
-          <p id="wa-modal-sub" class="text-xs sm:text-sm text-slate-500 break-words">${esc(subtitleParts.join(' · '))}</p>
+          <h3 id="wa-modal-title" class="font-bold text-lg sm:text-xl lg:text-2xl text-slate-800 leading-snug break-words [overflow-wrap:anywhere]">${esc(meta.title || 'กำลังออกกำลังกาย')}</h3>
+          <p id="wa-modal-sub" class="text-xs sm:text-sm lg:text-base text-slate-500 break-words">${esc(subtitleParts.join(' · '))}</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <div class="text-right">
-            <span class="block text-[11px] text-slate-500 leading-none">เวลาฝึก</span>
-            <b id="active-time" class="text-xl sm:text-2xl font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
+            <span class="block text-[11px] lg:text-xs text-slate-500 leading-none">เวลาฝึก</span>
+            <b id="active-time" class="text-xl sm:text-2xl lg:text-[1.75rem] font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
           </div>
           <button type="button" data-wa-close class="icon-btn min-w-[44px] min-h-[44px]" aria-label="ปิดหน้าต่างฝึก">${iconSvg('close', { size: 18 })}</button>
         </div>
@@ -231,7 +286,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
 
       <div id="wa-play-controls" class="space-y-3">
         <div class="space-y-1.5">
-          <div class="flex items-center justify-between gap-2 text-xs text-slate-600 tabular-nums">
+          <div class="flex items-center justify-between gap-2 text-xs lg:text-sm text-slate-600 tabular-nums">
             <span id="active-progress-text">ความคืบหน้า: 0 / ${totalSetsAll} เซต (0%)</span>
             <span>แตะที่เซตเมื่อทำเสร็จ</span>
           </div>
@@ -240,39 +295,48 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
 
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-xs font-semibold text-slate-600 mr-0.5 whitespace-nowrap">จับเวลาพัก:</span>
+            <span class="text-xs lg:text-sm font-semibold text-slate-600 mr-0.5 whitespace-nowrap">จับเวลาพัก:</span>
             <button type="button" data-rest-sec="30" class="wa-rest-btn">30 วิ</button>
             <button type="button" data-rest-sec="60" id="active-rest" class="wa-rest-btn">60 วิ</button>
             <button type="button" data-rest-sec="90" class="wa-rest-btn">90 วิ</button>
             <button type="button" id="active-rest-stop" class="wa-rest-btn hidden">หยุด</button>
           </div>
-          <span id="active-rest-time" class="text-sm font-bold tabular-nums text-brand-dark whitespace-nowrap"></span>
+          <div class="flex items-center gap-2.5 ml-auto">
+            <button type="button" id="wa-toggle-done-cards" class="hidden chip bg-slate-100 text-slate-700 hover:bg-slate-200 !min-h-[36px] text-xs lg:text-sm"></button>
+            <span id="active-rest-time" class="wa-rest-time text-sm lg:text-base font-bold tabular-nums whitespace-nowrap"></span>
+          </div>
         </div>
 
         ${sectionTabsHtml}
       </div>
     </header>
 
-    <div class="wa-body flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-5">
-      <div id="wa-play-view" class="space-y-6">${groups}</div>
+    <div class="wa-body flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+      <div id="wa-play-view" class="space-y-6">
+        <div id="wa-all-done-banner" class="hidden rounded-2xl bg-white border border-emerald-200 p-5 text-center space-y-2">
+          <p class="text-base sm:text-lg font-bold text-emerald-700">🎉 ทำครบทุกท่าในแผนนี้แล้ว</p>
+          <p class="text-xs sm:text-sm text-slate-600">กด "จบและประเมินผล" ด้านล่าง หรือกด "แสดงท่าที่เสร็จแล้ว" ด้านบนหากต้องการแก้ไขเซต</p>
+        </div>
+        ${groups}
+      </div>
       <div id="wa-reflect-view" class="hidden space-y-5"></div>
     </div>
 
-    <footer id="wa-play-footer" class="wa-footer shrink-0 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-      <span id="active-summary" class="text-xs sm:text-sm font-medium text-slate-600 tabular-nums">ทำแล้ว 0 / ${totalSetsAll} เซต</span>
+    <footer id="wa-play-footer" class="wa-footer shrink-0 px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+      <span id="active-summary" class="text-xs sm:text-sm lg:text-base font-medium text-slate-600 tabular-nums">ทำแล้ว 0 / ${totalSetsAll} เซต</span>
       <div class="flex items-center gap-2 ml-auto">
         <button type="button" data-wa-close class="btn btn-ghost min-h-[44px]">ปิด</button>
         <button type="button" id="active-finish" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} จบและประเมินผล</button>
       </div>
     </footer>
-    <footer id="wa-reflect-footer" class="wa-footer hidden shrink-0 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+    <footer id="wa-reflect-footer" class="wa-footer hidden shrink-0 px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-2">
       <button type="button" id="wa-back-play" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">← กลับไปแก้ไขเซต</button>
       <div class="flex items-center gap-2 ml-auto">
         <button type="button" id="wa-skip-save" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">ข้ามและบันทึกเลย</button>
         <button type="button" id="wa-save-all" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} บันทึกผลทั้งหมด</button>
       </div>
     </footer>`,
-    { size: 'xl', flush: true, staticBackdrop: true }
+    { size: 'xl', flush: true, staticBackdrop: true, boxClass: 'wa-modal-box' }
   );
 
   const titleEl = m.el.querySelector('#wa-modal-title');
@@ -292,6 +356,8 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   const saveAllBtn = m.el.querySelector('#wa-save-all');
   const skipSaveBtn = m.el.querySelector('#wa-skip-save');
   const backPlayBtn = m.el.querySelector('#wa-back-play');
+  const toggleDoneCardsBtn = m.el.querySelector('#wa-toggle-done-cards');
+  const allDoneBanner = m.el.querySelector('#wa-all-done-banner');
 
   const clock = setInterval(() => {
     if (step !== 'play') return;
@@ -299,11 +365,12 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     timeEl.textContent = String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
   }, 1000);
 
-  const stopRestTimer = (label = '') => {
+  const stopRestTimer = (label = '', { expired = false } = {}) => {
     clearInterval(restTimer);
     restTimer = null;
     activeRestPreset = 0;
     restEl.textContent = label;
+    restEl.classList.toggle('is-expired', !!expired);
     restStopBtn?.classList.add('hidden');
     m.el.querySelectorAll('[data-rest-sec]').forEach(b => b.classList.remove('is-active'));
   };
@@ -347,12 +414,22 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     progressBar.style.width = `${pct}%`;
     summaryEl.textContent = `ทำแล้ว ${checked} / ${totalSetsAll} เซต`;
 
+    let completedCardsCount = 0;
+    const secStats = {};
+
     m.el.querySelectorAll('[data-ex-card]').forEach(card => {
       const ri = card.dataset.exCard;
+      const sec = card.dataset.exSec || 'main';
       const totalCardSets = Number(card.dataset.exSets) || 1;
       const doneInCard = card.querySelectorAll('[data-done]:checked').length;
       const isComplete = doneInCard === totalCardSets;
+      if (isComplete) completedCardsCount++;
+      const s = (secStats[sec] ||= { total: 0, done: 0 });
+      s.total++;
+      if (isComplete) s.done++;
+
       card.classList.toggle('is-complete', isComplete);
+      card.classList.toggle('hidden', isComplete && !showCompletedCards);
       card.querySelector('[data-card-done-badge]')?.classList.toggle('hidden', !isComplete);
       const cardProg = card.querySelector(`[data-card-progress="${ri}"]`);
       if (cardProg) cardProg.textContent = `${doneInCard} / ${totalCardSets} เซต`;
@@ -366,27 +443,43 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         lbl.classList.toggle('is-done', done);
         if (icon) {
           icon.className = done ? 'inline-flex shrink-0' : 'inline-flex shrink-0 opacity-60';
-          icon.innerHTML = iconSvg(done ? 'check-circle' : 'circle', { size: 14 });
+          icon.innerHTML = iconSvg(done ? 'check-circle' : 'circle', { size: 15 });
         }
       });
     });
+
+    for (const sec of activeSections) {
+      const st = secStats[sec] || { total: 0, done: 0 };
+      const remaining = Math.max(0, st.total - st.done);
+      const countEl = m.el.querySelector(`[data-wa-sec-count="${sec}"]`);
+      if (countEl) {
+        countEl.textContent = st.done > 0 && !showCompletedCards
+          ? `เหลือ ${remaining} / ${st.total} ท่า`
+          : `${st.total} ท่า`;
+      }
+      const doneMsgEl = m.el.querySelector(`[data-wa-sec-done-msg="${sec}"]`);
+      if (doneMsgEl) {
+        doneMsgEl.classList.toggle('hidden', !(remaining === 0 && st.total > 0 && !showCompletedCards));
+      }
+    }
+
+    if (toggleDoneCardsBtn) {
+      toggleDoneCardsBtn.classList.toggle('hidden', completedCardsCount === 0);
+      if (completedCardsCount > 0) {
+        toggleDoneCardsBtn.textContent = showCompletedCards
+          ? `ซ่อนท่าที่เสร็จแล้ว (${completedCardsCount})`
+          : `แสดงท่าที่เสร็จแล้ว (${completedCardsCount})`;
+      }
+    }
+    if (allDoneBanner) {
+      allDoneBanner.classList.toggle('hidden', !(completedCardsCount === rows.length && rows.length > 0 && !showCompletedCards));
+    }
   };
 
   function renderReflectStep() {
-    const primaryIndices = [];
-    const extraIndices = [];
-    rows.forEach((r, ri) => {
-      if (r.section === 'main' || (snapshotCheckedCounts[ri] || 0) > 0) {
-        primaryIndices.push(ri);
-      } else {
-        extraIndices.push(ri);
-      }
-    });
-    const visibleIndices = showAllExercisesInReflect || !primaryIndices.length
-      ? rows.map((_, i) => i)
-      : primaryIndices;
+    const mainIndices = getMainExerciseIndices(rows);
 
-    const exCardsHtml = visibleIndices.map(ri => {
+    const exCardsHtml = mainIndices.map(ri => {
       const r = rows[ri];
       const { count, weightText, setRepText } = formatExercisePrescription(r);
       const doneSets = snapshotCheckedCounts[ri] || 0;
@@ -404,70 +497,83 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
           : 'bg-sky-50 border-sky-200 text-sky-800';
 
       return `
-        <div class="wa-card p-3.5 sm:p-4 space-y-3 min-w-0">
+        <div class="wa-card p-3.5 sm:p-4 lg:p-5 space-y-3 min-w-0">
           <div class="flex flex-wrap items-baseline justify-between gap-2 min-w-0">
             <div class="min-w-0">
-              <h5 class="font-bold text-sm sm:text-base text-slate-800 break-words">${esc(r.name)}</h5>
-              <p class="text-xs text-slate-500 tabular-nums">${weightText ? `${esc(weightText)} · ` : ''}${esc(setRepText)} (ทำแล้ว ${doneSets}/${count} เซต)</p>
+              <h5 class="font-bold text-sm sm:text-base lg:text-lg text-slate-800 break-words">${esc(r.name)}</h5>
+              <p class="text-xs lg:text-sm text-slate-500 tabular-nums">${weightText ? `${esc(weightText)} · ` : ''}${esc(setRepText)} (ทำแล้ว ${doneSets}/${count} เซต)</p>
             </div>
           </div>
 
           <div class="space-y-1.5">
-            <p class="text-xs font-semibold text-slate-600">ความเหนื่อยของท่านี้ (RPE)</p>
+            <p class="text-xs lg:text-sm font-semibold text-slate-600">ความเหนื่อยของท่านี้ (RPE)</p>
             <div class="flex flex-wrap gap-1.5">
               ${RPE_CHOICES.map(c => `<button type="button" data-ex-rpe="${ri}:${c.val}" class="wa-eval-btn ${cur.rpe === c.val ? 'is-active' : ''}">${esc(c.label)}</button>`).join('')}
             </div>
           </div>
 
           <div class="space-y-1.5">
-            <p class="text-xs font-semibold text-slate-600">คาดว่าทำต่อได้อีกกี่ครั้งก่อนหมดแรง (RIR)</p>
+            <p class="text-xs lg:text-sm font-semibold text-slate-600">คาดว่าทำต่อได้อีกกี่ครั้งก่อนหมดแรง (RIR)</p>
             <div class="flex flex-wrap gap-1.5">
               ${RIR_CHOICES.map(c => `<button type="button" data-ex-rir="${ri}:${c.val}" class="wa-eval-btn ${cur.rir === c.val ? 'is-active' : ''}">${esc(c.label)}</button>`).join('')}
             </div>
           </div>
 
-          ${suggestion ? `<div class="rounded-xl border px-3 py-2 text-xs font-medium ${badgeTone}">💡 แนะนำรอบหน้า: ${esc(suggestion.label)}</div>` : ''}
+          ${suggestion ? `<div class="rounded-xl border px-3 py-2 text-xs lg:text-sm font-medium ${badgeTone}">💡 แนะนำรอบหน้า: ${esc(suggestion.label)}</div>` : ''}
         </div>`;
     }).join('');
 
     reflectView.innerHTML = `
-      <section class="wa-card p-4 space-y-3">
+      <section class="wa-card p-4 sm:p-5 space-y-4">
         <div>
-          <h4 class="font-bold text-sm sm:text-base text-slate-800">ความรู้สึกหลังออกกำลังกาย</h4>
-          <p class="text-xs text-slate-500">เลือกเพื่อบันทึกแนวโน้มและให้ผู้ช่วย AI แนะนำการปรับโหลดรอบหน้า</p>
-        </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          ${WORKOUT_FEELINGS.map(f => `
-            <button type="button" data-wa-feeling="${f.id}" class="wa-eval-btn justify-center !py-2.5 ${reflectState.feeling === f.id ? 'is-active' : ''}">
-              <span>${f.icon}</span><span>${esc(f.label)}</span>
-            </button>`).join('')}
+          <h4 class="font-bold text-sm sm:text-base lg:text-lg text-slate-800">ประเมินผลหลังออกกำลังกาย</h4>
+          <p class="text-xs lg:text-sm text-slate-500">เลือกเพื่อบันทึกแนวโน้มและให้ผู้ช่วย AI แนะนำการปรับโหลดรอบหน้า</p>
         </div>
 
-        <div class="space-y-1.5 pt-1">
-          <p class="text-xs font-semibold text-slate-600">ความเหนื่อยรวมทั้งเซสชัน (Session RPE 1–10)</p>
-          <div class="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-            ${Array.from({ length: 10 }, (_, idx) => {
-              const v = idx + 1;
-              return `<button type="button" data-wa-srpe="${v}" class="wa-eval-btn justify-center !px-2 ${reflectState.sessionRpe === v ? 'is-active' : ''}">${v}</button>`;
-            }).join('')}
+        <div class="space-y-1.5">
+          <p class="text-xs lg:text-sm font-semibold text-slate-700">สถานะการฝึก</p>
+          <div class="grid grid-cols-2 gap-2 max-w-md">
+            ${COMPLETION_STATUSES.map(item => `
+              <button type="button" data-wa-comp="${item.id}" class="wa-eval-btn justify-center !py-2.5 ${reflectState.completionStatus === item.id ? 'is-active' : ''}">
+                <span>${esc(item.label)}</span>
+              </button>`).join('')}
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <p class="text-xs lg:text-sm font-semibold text-slate-700">ความเหนื่อย</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${EFFORT_LEVELS.map(item => `
+              <button type="button" data-wa-effort="${item.id}" class="wa-eval-btn justify-start !py-2.5 ${reflectState.effortLevel === item.id ? 'is-active' : ''}">
+                <span>${esc(item.label)}</span>
+              </button>`).join('')}
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <p class="text-xs lg:text-sm font-semibold text-slate-700">อาการระหว่างหรือหลังฝึก</p>
+          <div class="grid grid-cols-2 gap-2">
+            ${WORKOUT_SYMPTOMS.map(item => `
+              <button type="button" data-wa-symptom="${item.id}" class="wa-eval-btn justify-center !py-2.5 ${reflectState.postSymptom === item.id ? 'is-active' : ''}">
+                <span>${esc(item.label)}</span>
+              </button>`).join('')}
           </div>
         </div>
 
         <div class="space-y-1">
-          <label class="label text-xs" for="wa-reflection-note">โน้ตความรู้สึกเพิ่มเติม (ถ้ามี)</label>
+          <label class="label text-xs lg:text-sm" for="wa-reflection-note">โน้ตความรู้สึกเพิ่มเติม (ถ้ามี)</label>
           <textarea id="wa-reflection-note" rows="2" class="input text-sm" placeholder="เช่น วันนี้แรงดี ท่า Squat ลงลึกได้สบาย แต่แขนซ้ายตึงนิดหน่อย">${esc(reflectState.reflectionNote)}</textarea>
         </div>
       </section>
 
       <section class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h4 class="font-bold text-sm sm:text-base text-slate-800">ประเมินรายท่า (RPE &amp; จำนวนครั้งที่เหลือ)</h4>
-            <p class="text-xs text-slate-500">ระบุเฉพาะท่าที่อยากติดตาม ระบบจะคำนวณคำแนะนำรอบถัดไปให้อัตโนมัติ</p>
-          </div>
-          ${extraIndices.length ? `<button type="button" id="wa-toggle-extra-ex" class="text-xs font-semibold text-brand-dark hover:underline py-1">${showAllExercisesInReflect ? 'ซ่อนท่าวอร์มอัพ/คูลดาวน์' : `แสดงเพิ่มอีก ${extraIndices.length} ท่า`}</button>` : ''}
+        <div>
+          <h4 class="font-bold text-sm sm:text-base lg:text-lg text-slate-800">ประเมินรายท่า — เฉพาะท่าหลัก (RPE &amp; จำนวนครั้งที่เหลือ)</h4>
+          <p class="text-xs lg:text-sm text-slate-500">ประเมินเฉพาะท่าหลัก (Main Workout) ไม่รวมท่าวอร์มอัพและคูลดาวน์ ระบบจะคำนวณคำแนะนำรอบถัดไปให้อัตโนมัติ</p>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">${exCardsHtml}</div>
+        ${mainIndices.length
+          ? `<div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 lg:gap-4">${exCardsHtml}</div>`
+          : `<div class="wa-card p-4 text-xs lg:text-sm text-slate-600">รอบนี้ไม่มีท่าในช่วง "ท่าหลัก (Main Workout)" จึงไม่ต้องประเมินรายท่า — สามารถบันทึกผลการประเมินด้านบนได้เลย</div>`}
       </section>`;
   }
 
@@ -525,21 +631,15 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     const exerciseFeedback = skipReflection
       ? []
       : buildExerciseFeedbackSummary(rows, reflectState.exerciseFeedback, snapshotCheckedCounts);
-    const noteText = skipReflection ? '' : reflectState.reflectionNote.trim();
-    const hasAnyFeedback = !skipReflection && (
-      reflectState.feeling ||
-      reflectState.sessionRpe !== null ||
-      noteText ||
-      exerciseFeedback.length > 0
-    );
-    const feedbackPayload = hasAnyFeedback
-      ? {
-          ...(reflectState.feeling && { feeling: reflectState.feeling }),
-          ...(reflectState.sessionRpe !== null && { sessionRpe: reflectState.sessionRpe }),
-          ...(noteText && { reflectionNote: noteText }),
-          ...(exerciseFeedback.length && { exerciseFeedback })
-        }
-      : null;
+    const feedbackPayload = skipReflection
+      ? null
+      : buildSessionReflectPayload({
+          completionStatus: reflectState.completionStatus,
+          effortLevel: reflectState.effortLevel,
+          postSymptom: reflectState.postSymptom,
+          reflectionNote: reflectState.reflectionNote,
+          exerciseFeedback
+        });
 
     try {
       await onFinish(snapshotDone, snapshotMinutes, feedbackPayload);
@@ -568,18 +668,32 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       return;
     }
 
-    const feelingBtn = e.target.closest('[data-wa-feeling]');
-    if (feelingBtn) {
-      const val = feelingBtn.dataset.waFeeling;
-      reflectState.feeling = reflectState.feeling === val ? '' : val;
+    if (e.target.closest('#wa-toggle-done-cards')) {
+      showCompletedCards = !showCompletedCards;
+      syncProgressUI();
+      return;
+    }
+
+    const compBtn = e.target.closest('[data-wa-comp]');
+    if (compBtn) {
+      const val = compBtn.dataset.waComp;
+      reflectState.completionStatus = reflectState.completionStatus === val ? '' : val;
       renderReflectStep();
       return;
     }
 
-    const srpeBtn = e.target.closest('[data-wa-srpe]');
-    if (srpeBtn) {
-      const val = Number(srpeBtn.dataset.waSrpe);
-      reflectState.sessionRpe = reflectState.sessionRpe === val ? null : val;
+    const effortBtn = e.target.closest('[data-wa-effort]');
+    if (effortBtn) {
+      const val = effortBtn.dataset.waEffort;
+      reflectState.effortLevel = reflectState.effortLevel === val ? '' : val;
+      renderReflectStep();
+      return;
+    }
+
+    const symBtn = e.target.closest('[data-wa-symptom]');
+    if (symBtn) {
+      const val = symBtn.dataset.waSymptom;
+      reflectState.postSymptom = reflectState.postSymptom === val ? '' : val;
       renderReflectStep();
       return;
     }
@@ -602,12 +716,6 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       const val = Number(valStr);
       const cur = reflectState.exerciseFeedback[ri] || { rpe: null, rir: null };
       reflectState.exerciseFeedback[ri] = { ...cur, rir: cur.rir === val ? null : val };
-      renderReflectStep();
-      return;
-    }
-
-    if (e.target.closest('#wa-toggle-extra-ex')) {
-      showAllExercisesInReflect = !showAllExercisesInReflect;
       renderReflectStep();
       return;
     }
@@ -648,6 +756,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       clearInterval(restTimer);
       restSeconds = sec;
       activeRestPreset = sec;
+      restEl.classList.remove('is-expired');
       m.el.querySelectorAll('[data-rest-sec]').forEach(b => {
         b.classList.toggle('is-active', Number(b.dataset.restSec) === activeRestPreset);
       });
@@ -659,7 +768,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         if (restSeconds > 0) {
           restEl.textContent = `พัก ${fmt(restSeconds)}`;
         } else {
-          stopRestTimer('พักครบแล้ว ✓');
+          stopRestTimer('พักครบแล้ว ✓', { expired: true });
         }
       }, 1000);
       return;

@@ -1,10 +1,11 @@
 import { state } from './state.js';
 import { isPreviewMode } from './demo.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, mondayOf } from './util.js';
-import { periodStats } from './period.js';
-import { bodyLatest } from './body.js';
+import { periodStats } from './periodStats.js';
+import { bodyLatest } from './bodyStats.js';
 import { syncLineText, renderSyncStatus } from './sync.js';
 import { iconSvg, iconBubble } from './icons.js';
+import { summarizeWorkoutCollection, formatIntensityBreakdown } from './workoutConstants.js';
 
 let current = null;
 const cacheKey = () => 'summary_cache_' + state.uid;
@@ -27,11 +28,14 @@ function buildLiveSummary() {
   const wkWorkouts = (state.workouts || []).filter(w => w.date >= wkStart && w.date <= wkEnd);
   const doneWorkouts = wkWorkouts.filter(w => w.status !== 'planned');
   const plannedWorkouts = wkWorkouts.filter(w => w.status === 'planned');
+  const wSum = summarizeWorkoutCollection(doneWorkouts);
   const workouts = {
     doneCount: doneWorkouts.length,
     plannedCount: plannedWorkouts.length,
-    minutes: doneWorkouts.reduce((a, w) => a + num(w.durationMin), 0),
-    kcal: Math.round(doneWorkouts.reduce((a, w) => a + num(w.estKcal), 0))
+    minutes: Math.round(wSum.totalMinutes),
+    kcal: wSum.totalKcal,
+    intensitySummary: formatIntensityBreakdown(wSum.byIntensity),
+    avgSessionRpe: wSum.avgSessionRpe
   };
 
   return {
@@ -136,6 +140,14 @@ export function renderSummary() {
 
   const wo = s?.workouts;
   const hasWorkouts = !!(wo && (wo.doneCount > 0 || wo.plannedCount > 0));
+  const woSub = hasWorkouts
+    ? [
+        wo.kcal ? `เผาผลาญ ~${wo.kcal} kcal` : (wo.doneCount ? 'บันทึกเวลาแล้ว' : 'มีเฉพาะแผนที่วางไว้'),
+        wo.intensitySummary || '',
+        wo.avgSessionRpe != null ? `RPE เฉลี่ย ${wo.avgSessionRpe}` : '',
+        wo.plannedCount ? `แผนอีก ${wo.plannedCount}` : ''
+      ].filter(Boolean).join(' · ')
+    : 'ยังไม่มีบันทึกสัปดาห์นี้';
   const c8 = card(
     'workout',
     'text-amber-600',
@@ -143,9 +155,7 @@ export function renderSummary() {
     hasWorkouts
       ? `${wo.doneCount} ครั้ง${wo.minutes ? ` <span class="text-xs font-normal text-slate-500">(${wo.minutes} น.)</span>` : ''}`
       : empty,
-    hasWorkouts
-      ? `${wo.kcal ? `เผาผลาญ ~${wo.kcal} kcal` : (wo.doneCount ? 'บันทึกเวลาแล้ว' : 'มีเฉพาะแผนที่วางไว้')}${wo.plannedCount ? ` · แผนอีก ${wo.plannedCount}` : ''}`
-      : 'ยังไม่มีบันทึกสัปดาห์นี้',
+    esc(woSub),
     hasWorkouts,
     'workout'
   );
@@ -177,7 +187,16 @@ export function copySummary() {
   if (b.sleepHours) L.push(`😴 การนอนล่าสุด: ${round1(b.sleepHours.v)} ชม. (${fmtDate(b.sleepHours.d)})`);
   if (b.steps) L.push(`👣 ก้าวเดินล่าสุด: ${Math.round(b.steps.v).toLocaleString()} ก้าว (${fmtDate(b.steps.d)})`);
   if (fin && fin.count) L.push(`💰 การเงินเดือนนี้: รับ ${fmtMoney(fin.income)} · จ่าย ${fmtMoney(fin.expense)} · ยอดรวม ${fin.net >= 0 ? '+' : ''}${fmtMoney(fin.net)} บาท`);
-  if (wo && (wo.doneCount || wo.plannedCount)) L.push(`💪 ออกกำลังกายสัปดาห์นี้: ${wo.doneCount} ครั้ง (${wo.minutes} นาที · ~${wo.kcal} kcal${wo.plannedCount ? ` · แผนค้าง ${wo.plannedCount}` : ''})`);
+  if (wo && (wo.doneCount || wo.plannedCount)) {
+    const extraParts = [
+      `${wo.minutes} นาที`,
+      wo.kcal ? `~${wo.kcal} kcal` : '',
+      wo.intensitySummary ? `ความหนัก: ${wo.intensitySummary}` : '',
+      wo.avgSessionRpe != null ? `RPE เฉลี่ย ${wo.avgSessionRpe}/10` : '',
+      wo.plannedCount ? `แผนค้าง ${wo.plannedCount}` : ''
+    ].filter(Boolean).join(' · ');
+    L.push(`💪 ออกกำลังกายสัปดาห์นี้: ${wo.doneCount} ครั้ง (${extraParts})`);
+  }
   L.push(syncLineText());
   const text = L.join('\n');
   if (navigator.clipboard?.writeText) {

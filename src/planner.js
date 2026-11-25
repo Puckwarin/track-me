@@ -2,7 +2,13 @@ import { setDoc, updateDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
 import { isPreviewMode } from './preview.js';
-import { TYPES } from './workoutConstants.js';
+import {
+  TYPES,
+  computeWorkoutTotalMinutes,
+  formatIntensityLabel,
+  formatWorkoutEvaluationParts,
+  buildWorkoutNotesText
+} from './workoutConstants.js';
 import { remindersForDate } from './reminders.js';
 import { $, esc, fmtDate, localDateStr, parseLocal, addDays, isDateStr, toast, openModal, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
@@ -23,7 +29,11 @@ let goFn = () => {};
 let selectedDate = localDateStr();
 let stripScrollMode = 'center';
 let dragPayload = null;
+let lastActionFeedback = '';
+let feedbackClearTimer = 0;
+let flashDayPanel = false;
 const boundContainers = new WeakSet();
+const busyTargets = new WeakSet();
 
 function weekdayIdx(dateStr) {
   return (parseLocal(dateStr).getDay() + 6) % 7; // 0 = จ ... 6 = อา
@@ -157,6 +167,89 @@ export const getRecentCompletedRoutines = getFrequentRecentRoutines;
 export function matchingDayPreset(daysSet) {
   const sorted = [...daysSet].sort((a, b) => a - b).join(',');
   return DAY_PRESETS.find(p => p.days.join(',') === sorted)?.key || 'custom';
+}
+
+export function formatPlannerToast(action, {
+  title = '',
+  dateStr = '',
+  weekMonday = '',
+  delta = 0,
+  checked = false,
+  kind = 'routine',
+  scopedToWeek = true
+} = {}) {
+  const cleanTitle = String(title || '').trim();
+  if (action === 'select-day' && isDateStr(dateStr)) {
+    return `เลือกวัน${WEEKDAYS[weekdayIdx(dateStr)]} · ${fmtDate(dateStr)}`;
+  }
+  if (action === 'week-shift' && isDateStr(weekMonday)) {
+    return `${delta < 0 ? 'ย้อนดูสัปดาห์' : 'เลื่อนดูสัปดาห์'} ${weekRangeLabel(weekMonday)}`;
+  }
+  if (action === 'today') {
+    return 'กลับมาที่วันปัจจุบันแล้ว';
+  }
+  if (action === 'toggle') {
+    if (kind === 'workout') {
+      return checked ? 'เช็กออกกำลังกายเสร็จแล้ว 💪' : 'เปลี่ยนกลับเป็นวางแผนไว้';
+    }
+    return checked
+      ? `เช็ก "${cleanTitle || 'กิจกรรม'}" เสร็จแล้ว ✓`
+      : `เปลี่ยน "${cleanTitle || 'กิจกรรม'}" เป็นยังไม่ทำ`;
+  }
+  if (action === 'move' && isDateStr(dateStr)) {
+    return `ย้าย "${cleanTitle || 'งาน'}" ไป ${fmtDate(dateStr)} แล้ว`;
+  }
+  if (action === 'skip') {
+    return scopedToWeek
+      ? `ลบ "${cleanTitle || 'งาน'}" แล้ว`
+      : `นำ "${cleanTitle || 'กิจกรรม'}" ออกจาก ${fmtDate(dateStr)} แล้ว`;
+  }
+  if (action === 'save-edit') return 'แก้ไขงานเฉพาะสัปดาห์นี้แล้ว';
+  if (action === 'save-new') return 'เพิ่มงานในสัปดาห์นี้แล้ว';
+  return '';
+}
+
+export function validateRoutineDraft(rawTitle, rawDays) {
+  const title = String(rawTitle || '').trim().slice(0, 80);
+  if (!title) return { ok: false, message: 'กรอกชื่องานก่อนค่ะ' };
+  const days = [...new Set(Array.isArray(rawDays) ? rawDays : [])]
+    .filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
+    .sort((a, b) => a - b);
+  if (!days.length) return { ok: false, message: 'เลือกวันอย่างน้อย 1 วัน' };
+  return { ok: true, title, days };
+}
+
+function setPlannerFeedback(message, { pulse = true } = {}) {
+  lastActionFeedback = String(message || '').trim();
+  flashDayPanel = Boolean(pulse && lastActionFeedback);
+  clearTimeout(feedbackClearTimer);
+  if (lastActionFeedback && typeof window !== 'undefined') {
+    feedbackClearTimer = window.setTimeout(() => {
+      lastActionFeedback = '';
+      const pill = root ? $('#pl-feedback-slot', root) : null;
+      if (pill) {
+        pill.textContent = '';
+        pill.classList.add('hidden');
+      }
+    }, 2200);
+  }
+}
+
+async function withBusyLock(targetEl, taskFn) {
+  if (!targetEl || busyTargets.has(targetEl)) return false;
+  busyTargets.add(targetEl);
+  const cardEl = targetEl.closest('.tm-swipe-card, .pl-board-task');
+  const hadDisabled = 'disabled' in targetEl;
+  const prevDisabled = hadDisabled ? targetEl.disabled : false;
+  if (hadDisabled) targetEl.disabled = true;
+  cardEl?.classList.add('pl-task-busy');
+  try {
+    return await taskFn();
+  } finally {
+    busyTargets.delete(targetEl);
+    if (targetEl.isConnected && hadDisabled) targetEl.disabled = prevDisabled;
+    if (cardEl?.isConnected) cardEl.classList.remove('pl-task-busy');
+  }
 }
 
 export function resetPlannerToToday() {
@@ -375,15 +468,28 @@ export function itemsForDate(dateStr, rawPlanner = null) {
 
   const workouts = rawPlanner ? [] : (state.workouts || [])
     .filter(w => w.date === dateStr)
-    .map(w => ({
-      kind: 'workout',
-      id: w.id,
-      title: `${TYPES[w.type] || w.type || 'ออกกำลังกาย'}${w.durationMin ? ` (${w.durationMin} นาที)` : ''}`,
-      done: w.status !== 'planned',
-      time: '',
-      icon: '🏃‍♀️',
-      sub: w.note || (w.sections ? `${Object.values(w.sections).reduce((a, r) => a + (r?.length || 0), 0)} ท่า` : '')
-    }));
+    .map(w => {
+      const totalMin = computeWorkoutTotalMinutes(w);
+      const label = w.title || TYPES[w.type] || w.type || 'ออกกำลังกาย';
+      const exCount = w.sections ? Object.values(w.sections).reduce((a, r) => a + (r?.length || 0), 0) : 0;
+      const intensityText = formatIntensityLabel(w.intensity);
+      const evalParts = formatWorkoutEvaluationParts(w);
+      const notesText = buildWorkoutNotesText(w);
+      const subParts = [
+        intensityText ? `ความหนัก: ${intensityText}` : '',
+        ...evalParts,
+        notesText || (exCount ? `${exCount} ท่า` : '')
+      ].filter(Boolean);
+      return {
+        kind: 'workout',
+        id: w.id,
+        title: `${label}${totalMin ? ` (${totalMin} นาที รวม)` : ''}`,
+        done: w.status !== 'planned',
+        time: '',
+        icon: '🏃‍♀️',
+        sub: subParts.join(' · ')
+      };
+    });
 
   const seenRoutineIds = new Set();
   const dayRoutines = [];
@@ -451,6 +557,7 @@ async function toggleTaskStatus(kind, d, id, checked) {
     if (!target) return false;
     const prevStatus = target.status;
     state.workouts = prevWorkouts.map(w => w.id === id ? { ...w, status: checked ? 'done' : 'planned' } : w);
+    setPlannerFeedback(formatPlannerToast('toggle', { kind: 'workout', checked }), { pulse: false });
     renderPlanner();
     if (isPreviewMode()) {
       window.dispatchEvent(new Event('trackme:data-change'));
@@ -462,10 +569,11 @@ async function toggleTaskStatus(kind, d, id, checked) {
         status: checked ? 'done' : 'planned',
         updatedAt: new Date()
       });
-      toast(checked ? 'เช็กออกกำลังกายเสร็จแล้ว 💪' : 'เปลี่ยนกลับเป็นวางแผนไว้');
+      toast(formatPlannerToast('toggle', { kind: 'workout', checked }));
       return true;
     } catch (err) {
       state.workouts = (state.workouts || []).map(w => w.id === id ? { ...w, status: prevStatus } : w);
+      setPlannerFeedback('');
       renderPlanner();
       toast('อัปเดตไม่สำเร็จ: ' + err.message, 'err');
       return false;
@@ -497,7 +605,13 @@ async function toggleTaskStatus(kind, d, id, checked) {
     } else if (!checked) {
       recentDone = recentDone.filter(x => !(x?.id === id && x?.date === d));
     }
-    return savePlanner({ ...p, doneMap, recentDone });
+    const okMsg = formatPlannerToast('toggle', { kind: 'routine', title: matchedRoutine?.title, checked });
+    setPlannerFeedback(okMsg, { pulse: false });
+    const saved = await savePlanner({ ...p, doneMap, recentDone });
+    if (saved) {
+      toast(isPreviewMode() ? `${okMsg} (โหมดดูตัวอย่าง)` : okMsg);
+    }
+    return saved;
   }
   return false;
 }
@@ -547,8 +661,11 @@ async function rescheduleTask(kind, fromDate, id, toDate) {
     }
     selectedDate = toDate;
     stripScrollMode = 'smooth';
+    const movedRoutine = getPlanner().routines.find(r => r.id === id);
+    const msg = formatPlannerToast('move', { title: movedRoutine?.title, dateStr: toDate });
+    setPlannerFeedback(msg);
     const saved = await savePlanner(res.planner);
-    if (saved) toast(`ย้ายงานไป ${fmtDate(toDate)} แล้ว`);
+    if (saved) toast(isPreviewMode() ? `${msg} (โหมดดูตัวอย่าง)` : msg);
     return saved;
   }
 
@@ -572,6 +689,9 @@ export function mountPlanner(el, navigate) {
         const offset = weekdayIdx(selectedDate);
         selectedDate = addDays(nextMon, offset);
         stripScrollMode = 'smooth';
+        const msg = formatPlannerToast('week-shift', { weekMonday: nextMon, delta });
+        setPlannerFeedback(msg);
+        toast(msg);
         renderPlanner();
         return;
       }
@@ -579,6 +699,9 @@ export function mountPlanner(el, navigate) {
       if (e.target.closest('[data-pl-week-today]')) {
         selectedDate = localDateStr();
         stripScrollMode = 'smooth';
+        const msg = formatPlannerToast('today');
+        setPlannerFeedback(msg);
+        toast(msg);
         renderPlanner();
         return;
       }
@@ -587,6 +710,7 @@ export function mountPlanner(el, navigate) {
       if (dayBtn) {
         selectedDate = dayBtn.dataset.plDay;
         stripScrollMode = 'preserve';
+        setPlannerFeedback(formatPlannerToast('select-day', { dateStr: selectedDate }));
         renderPlanner();
         return;
       }
@@ -623,11 +747,19 @@ export function mountPlanner(el, navigate) {
       if (delTaskBtn) {
         const [kind, d, id] = delTaskBtn.dataset.plDel.split(':');
         if (kind === 'routine') {
-          const item = itemsForDate(d).find(x => x.kind === 'routine' && x.id === id);
-          const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: d });
-          if (!res.ok) return toast(res.message, 'err');
-          const saved = await savePlanner(res.planner);
-          if (saved) toast(item?.weekPattern === 'once' ? 'ลบงานแล้ว' : `นำ "${item?.title || 'กิจกรรม'}" ออกจาก ${fmtDate(d)} แล้ว`);
+          await withBusyLock(delTaskBtn, async () => {
+            const item = itemsForDate(d).find(x => x.kind === 'routine' && x.id === id);
+            const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: d });
+            if (!res.ok) return toast(res.message, 'err');
+            const msg = formatPlannerToast('skip', {
+              title: item?.title,
+              dateStr: d,
+              scopedToWeek: item?.weekPattern === 'once'
+            });
+            setPlannerFeedback(msg);
+            const saved = await savePlanner(res.planner);
+            if (saved) toast(msg);
+          });
         }
         return;
       }
@@ -649,8 +781,9 @@ export function mountPlanner(el, navigate) {
       const chk = e.target.closest('[data-pl-toggle]');
       if (!chk) return;
       const [kind, d, id] = chk.dataset.plToggle.split(':');
-      const ok = await toggleTaskStatus(kind, d, id, chk.checked);
-      if (!ok) chk.checked = !chk.checked;
+      const nextChecked = chk.checked;
+      const ok = await withBusyLock(chk, () => toggleTaskStatus(kind, d, id, nextChecked));
+      if (!ok) chk.checked = !nextChecked;
     });
 
     // Desktop Drag & Drop ระหว่างคอลัมน์วันจันทร์–อาทิตย์
@@ -843,12 +976,18 @@ export function renderPlanner() {
       }).join('')}
     </div>`;
 
+  const shouldFlash = flashDayPanel;
+  flashDayPanel = false;
+
   root.innerHTML = `
   <section class="card pl-card space-y-3">
     <div class="pl-card-head">
       <div class="pl-card-head-main">
         <div class="min-w-0">
-          <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>Weekly Planner</span></h2>
+            <span id="pl-feedback-slot" class="pl-feedback-pill ${lastActionFeedback ? '' : 'hidden'}" role="status" aria-live="polite">${esc(lastActionFeedback)}</span>
+          </div>
           <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
         </div>
         <div class="pl-card-actions">
@@ -865,7 +1004,7 @@ export function renderPlanner() {
         <span class="min-w-0">เพิ่มงานวางแผนในสัปดาห์นี้ได้ทันที</span>
         <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
       </div>` : ''}
-      <div class="pl-day-panel rounded-2xl border border-slate-200/80 bg-slate-50/45 p-2.5 sm:p-3 space-y-2">
+      <div class="pl-day-panel ${shouldFlash ? 'pl-feedback-flash' : ''} rounded-2xl border border-slate-200/80 bg-slate-50/45 p-2.5 sm:p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
           <span class="text-xs sm:text-sm font-bold text-slate-800">วัน${WEEKDAYS[weekdayIdx(selectedDate)]} · ${esc(fmtDate(selectedDate))}${selectedDate === today ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white ml-1">วันนี้</span>' : ''}</span>
           <span class="text-[11px] sm:text-xs text-slate-500">${selectedDone}/${selectedItems.length} เสร็จ</span>
@@ -957,20 +1096,28 @@ function openRescheduleModal(kind, fromDate, id) {
     const btn = e.target.closest('[data-mv-to]');
     if (!btn || btn.disabled) return;
     const toDate = btn.dataset.mvTo;
-    const ok = await rescheduleTask(kind, fromDate, id, toDate);
-    if (ok) m.close();
+    await withBusyLock(btn, async () => {
+      const ok = await rescheduleTask(kind, fromDate, id, toDate);
+      if (ok) m.close();
+    });
   });
 
-  $('#pl-move-confirm', m.el)?.addEventListener('click', async () => {
+  $('#pl-move-confirm', m.el)?.addEventListener('click', async e => {
+    const confirmBtn = e.currentTarget;
     const toDate = $('#pl-move-date', m.el)?.value;
     if (!isDateStr(toDate)) return toast('กรุณาเลือกวันที่ที่ถูกต้อง', 'err');
-    const ok = await rescheduleTask(kind, fromDate, id, toDate);
-    if (ok) m.close();
+    await withBusyLock(confirmBtn, async () => {
+      const ok = await rescheduleTask(kind, fromDate, id, toDate);
+      if (ok) m.close();
+    });
   });
 
-  $('#pl-modal-toggle', m.el)?.addEventListener('click', async () => {
-    const ok = await toggleTaskStatus(kind, fromDate, id, !item.done);
-    if (ok) m.close();
+  $('#pl-modal-toggle', m.el)?.addEventListener('click', async e => {
+    const toggleBtn = e.currentTarget;
+    await withBusyLock(toggleBtn, async () => {
+      const ok = await toggleTaskStatus(kind, fromDate, id, !item.done);
+      if (ok) m.close();
+    });
   });
 
   $('#pl-modal-edit', m.el)?.addEventListener('click', () => {
@@ -978,14 +1125,23 @@ function openRescheduleModal(kind, fromDate, id) {
     openRoutinesModal({ editId: id, initialDate: fromDate });
   });
 
-  $('#pl-modal-skip', m.el)?.addEventListener('click', async () => {
-    const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: fromDate });
-    if (!res.ok) return toast(res.message, 'err');
-    const saved = await savePlanner(res.planner);
-    if (saved) {
-      toast(item.weekPattern === 'once' ? 'ลบงานแล้ว' : `นำ "${item.title}" ออกจาก ${fmtDate(fromDate)} แล้ว (สัปดาห์อื่นคงเดิม)`);
-      m.close();
-    }
+  $('#pl-modal-skip', m.el)?.addEventListener('click', async e => {
+    const skipBtn = e.currentTarget;
+    await withBusyLock(skipBtn, async () => {
+      const res = skipRoutineOccurrence(getPlanner(), { routineId: id, dateStr: fromDate });
+      if (!res.ok) return toast(res.message, 'err');
+      const msg = formatPlannerToast('skip', {
+        title: item.title,
+        dateStr: fromDate,
+        scopedToWeek: item.weekPattern === 'once'
+      });
+      setPlannerFeedback(msg);
+      const saved = await savePlanner(res.planner);
+      if (saved) {
+        toast(item.weekPattern === 'once' ? 'ลบงานแล้ว' : `นำ "${item.title}" ออกจาก ${fmtDate(fromDate)} แล้ว (สัปดาห์อื่นคงเดิม)`);
+        m.close();
+      }
+    });
   });
 
   $('#pl-modal-workout', m.el)?.addEventListener('click', () => {
@@ -1217,10 +1373,16 @@ function openRoutinesModal(opts = {}) {
         }
       }
 
-      if (editingId === targetId) resetEdit();
-      const saved = await savePlanner({ ...p, routines, moves, skips, doneMap });
-      if (saved) toast(!orig || isScopedToThisWeek(orig) ? 'ลบงานในสัปดาห์นี้แล้ว' : 'นำงานออกจากสัปดาห์นี้แล้ว (สัปดาห์อื่นคงเดิม)');
-      renderList();
+      await withBusyLock(delBtn, async () => {
+        if (editingId === targetId) resetEdit();
+        const msg = !orig || isScopedToThisWeek(orig)
+          ? 'ลบงานในสัปดาห์นี้แล้ว'
+          : 'นำงานออกจากสัปดาห์นี้แล้ว (สัปดาห์อื่นคงเดิม)';
+        setPlannerFeedback(msg);
+        const saved = await savePlanner({ ...p, routines, moves, skips, doneMap });
+        if (saved) toast(msg);
+        renderList();
+      });
     }
   });
 
@@ -1229,12 +1391,11 @@ function openRoutinesModal(opts = {}) {
     else m.close();
   });
 
-  $('#rt-save', m.el).addEventListener('click', async () => {
-    const title = $('#rt-title', m.el).value.trim().slice(0, 80);
-    if (!title) return toast('กรอกชื่องานก่อนค่ะ', 'err');
-
-    const days = [...pickedDays].sort((a, b) => a - b);
-    if (!days.length) return toast('เลือกวันอย่างน้อย 1 วัน', 'err');
+  $('#rt-save', m.el).addEventListener('click', async e => {
+    const saveBtn = e.currentTarget;
+    const draft = validateRoutineDraft($('#rt-title', m.el).value, [...pickedDays]);
+    if (!draft.ok) return toast(draft.message, 'err');
+    const { title, days } = draft;
 
     const p = getPlanner();
     const icon = inferRoutineEmoji(title, pickedIcon);
@@ -1280,10 +1441,15 @@ function openRoutinesModal(opts = {}) {
       routines = [...p.routines, rec];
     }
 
-    await savePlanner({ ...p, routines, moves, skips, doneMap });
-    toast(editingId ? 'แก้ไขงานเฉพาะสัปดาห์นี้แล้ว' : 'เพิ่มงานในสัปดาห์นี้แล้ว');
-    resetEdit();
-    renderList();
+    await withBusyLock(saveBtn, async () => {
+      const msg = formatPlannerToast(editingId ? 'save-edit' : 'save-new');
+      setPlannerFeedback(msg);
+      const saved = await savePlanner({ ...p, routines, moves, skips, doneMap });
+      if (!saved) return;
+      toast(isPreviewMode() ? `${msg} (โหมดดูตัวอย่าง)` : msg);
+      resetEdit();
+      renderList();
+    });
   });
 
   if (opts.editId) {

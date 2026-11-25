@@ -38,7 +38,7 @@ describe('navigation preferences', () => {
     const preferences = defaultNavigationPreferences();
     preferences.favorites = ['care', 'expense'];
     preferences.landingPage = 'weekly';
-    preferences.subnavOrder.health = ['body', 'overview', 'workout', 'period', 'symptoms'];
+    preferences.subnavOrder.health = ['body', 'workout', 'period', 'symptoms'];
     expect(saveNavigationPreferences('user-1', preferences)).toBe(true);
     expect(readNavigationPreferences('user-1')).toMatchObject({
       customized: true,
@@ -62,12 +62,13 @@ describe('navigation preferences', () => {
     expect(preferences.landingPage).toBe('home');
     expect(preferences.hiddenTabs).toEqual(['report']);
     expect(getSubnavTabs('more', preferences).map(item => item.tab)).toEqual(['notifications', 'settings']);
-    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['overview', 'workout', 'period', 'symptoms', 'body']);
+    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['workout', 'period', 'symptoms', 'body']);
   });
 
-  it('keeps weekly summaries and reports accessible outside the compact health submenu', () => {
+  it('keeps overview, weekly summaries and reports outside the compact health submenu', () => {
     const preferences = defaultNavigationPreferences();
-    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['overview', 'workout', 'period', 'symptoms', 'body']);
+    expect(getSubnavTabs('overview', preferences).map(item => item.tab)).toEqual(['overview']);
+    expect(getSubnavTabs('health', preferences).map(item => item.tab)).toEqual(['workout', 'period', 'symptoms', 'body']);
     expect(getHomeShortcuts({ favorites: ['weekly', 'report'] }).map(item => item.tab)).toEqual(['weekly', 'report']);
   });
 });

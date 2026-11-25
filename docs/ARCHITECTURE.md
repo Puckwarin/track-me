@@ -23,7 +23,7 @@ Track Me เป็นเว็บแอปแบบ client-side สำหรั�
 2. `src/app.js` เป็น entry point: ลงทะเบียน Service Worker และ error monitoring, จัดการ tab/navigation, mount ฟีเจอร์หลักหลังเข้าสู่ระบบ และเชื่อม listener ของ Firestore
 3. `src/auth.js` จัดการ Google sign-in, session, PIN lock เฉพาะอุปกรณ์ และส่ง auth event ให้แอป
 4. โมดูลฟีเจอร์รับ DOM root ผ่าน `mount...()` แล้วสร้าง/อัปเดต UI ของตนเอง เช่น `food.js`, `expense.js`, `profile.js` และ `settings.js`
-5. หน้าและฟีเจอร์ที่ยังไม่ได้เปิดในหน้าแรก (`expense`, `care`, `inventory`, `lab`, `planner`, `food`, `weekly`, `remindLog`, `settings`, `overview`, `reports`, `workout` รวมถึง `chatWidget`) ถูก import แบบ lazy เฉพาะเมื่อผู้ใช้เปิด tab หรือกดปุ่มใช้งาน ส่วนตัวฟัง Firestore หลักและ Share Target (`?shared-slip`) ถูกประสานจาก `src/app.js`; งาน OCR และ AI ที่แยก chunk จะโหลดเมื่อเริ่มใช้ฟีเจอร์นั้น
+5. หน้าและฟีเจอร์รองทั้งหมด (`expense`, `care`, `inventory`, `lab`, `planner`, `food`, `weekly`, `remindLog`, `settings`, `overview`, `reports`, `workout`, `period`, `symptoms`, `body`, `reminders`, `onboarding`, `slipOcr` รวมถึง `chatWidget`) ถูก import แบบ lazy เฉพาะเมื่อผู้ใช้เปิดใช้งาน โดยแยกคำนวณ pure stats (`periodStats.js`, `bodyStats.js`) และกำหนด `manualChunks` ใน `vite.config.js` แยก `vendor-firebase`; ตัวฟัง Firestore หลักและ Share Target (`?shared-slip`) ถูกประสานจาก `src/app.js` ส่วนงาน OCR และ AI โหลดเมื่อเริ่มใช้ฟีเจอร์นั้น
 
 ไม่มี React hooks หรือ React lifecycle; state กลางและ event bus อยู่ใน `src/state.js` และแต่ละโมดูลรับผิดชอบ DOM/event ของตน
 

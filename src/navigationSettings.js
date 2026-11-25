@@ -4,7 +4,7 @@ import { $, toast } from './util.js';
 import { state } from './state.js';
 import { iconSvg } from './icons.js';
 
-const GROUP_LABELS = { home: 'หน้าหลัก', food: 'อาหาร', health: 'สุขภาพ', expense: 'การเงิน', care: 'ดูแล', more: 'เพิ่มเติม' };
+const GROUP_LABELS = { home: 'หน้าหลัก', overview: 'ประวัติ & รายงาน', food: 'อาหาร', health: 'สุขภาพ', expense: 'การเงิน', care: 'ดูแล', more: 'เพิ่มเติม' };
 const ITEMS = [{ tab: 'home', label: 'หน้าหลัก', emoji: '⌂', group: 'home' }, ...getAllNavigationTabs()];
 
 function renderNavItemIcon(tab, icon) {
@@ -13,7 +13,11 @@ function renderNavItemIcon(tab, icon) {
 
 function render(root, preferences) {
   const landing = $('#st-nav-landing', root);
-  landing.innerHTML = ITEMS.map(item => `<option value="${item.tab}">${GROUP_LABELS[item.group]} · ${item.label}</option>`).join('');
+  landing.innerHTML = ITEMS.map(item => {
+    const groupLabel = GROUP_LABELS[item.group];
+    const displayLabel = !groupLabel || groupLabel === item.label ? item.label : `${groupLabel} · ${item.label}`;
+    return `<option value="${item.tab}">${displayLabel}</option>`;
+  }).join('');
   landing.value = preferences.landingPage;
 
   $('#st-nav-favorites', root).innerHTML = ITEMS.filter(item => item.tab !== 'home').map(item => {

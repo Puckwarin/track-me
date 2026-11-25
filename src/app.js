@@ -25,13 +25,10 @@ import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
-import { mountPeriod, render as renderPeriod, checkReminder, resetPeriodToToday } from './period.js';
-import { mountSymptoms, renderList as renderSymptomList, renderSkinList, resetSymptomsToToday } from './symptoms.js';
-import { mountBody, render as renderBody, resetBodyToToday } from './body.js';
+import { getPeriodRemindDays } from './periodStats.js';
+import { createOnboardingProgressStore, shouldShowOnboarding } from './onboardingState.js';
 import { refreshProfile } from './profile.js';
 import { renderSummary, copySummary } from './summary.js';
-import { mountReminders, renderReminders, collectReminders } from './reminders.js';
-import { mountOnboarding, unmountOnboarding } from './onboarding.js';
 
 setRuntimeErrorSink((uid, reports) => {
   if (!uid || isPreviewMode()) return Promise.resolve();
@@ -108,6 +105,10 @@ function renderDesktopNav(activeTab = document.documentElement.dataset.page || '
     <button type="button" data-nav="home" data-tab="home" class="desktop-nav-item">
       <span class="rail-ico" aria-hidden="true">${iconSvg('home', { size: 19 })}</span>
       <span>หน้าหลัก</span>
+    </button>
+    <button type="button" data-nav="overview" data-tab="overview" class="desktop-nav-item">
+      <span class="rail-ico" aria-hidden="true">${iconSvg('overview', { size: 19 })}</span>
+      <span>ประวัติ &amp; รายงาน</span>
     </button>
     <button type="button" data-nav="food" data-tab="food" class="desktop-nav-item">
       <span class="rail-ico" aria-hidden="true">${iconSvg('food', { size: 19 })}</span>
@@ -211,7 +212,7 @@ function makeLazyFeature(loader, onMount, errorLabel) {
 
 const reportLoader = makeLazyFeature(() => import('./reports.js'), m => m.mountReport($('#tab-report')), 'รายงานสุขภาพ');
 const workoutLoader = makeLazyFeature(() => import('./workout.js'), m => m.mountWorkout($('#tab-workout')), 'หน้าออกกำลังกาย');
-const overviewLoader = makeLazyFeature(() => import('./dashboard.js'), m => m.mountDashboard($('#tab-overview')), 'แดชบอร์ดภาพรวม');
+const overviewLoader = makeLazyFeature(() => import('./dashboard.js'), m => m.mountDashboard($('#tab-overview')), 'ประวัติ & รายงาน');
 const expenseLoader = makeLazyFeature(() => import('./expense.js'), m => m.mountExpense($('#tab-expense')), 'หน้ารายรับ-รายจ่าย');
 const careLoader = makeLazyFeature(() => import('./care.js'), m => m.mountCare($('#tab-care')), 'หน้าสัตว์เลี้ยง');
 const inventoryLoader = makeLazyFeature(() => import('./inventory.js'), m => m.mountInventory($('#tab-inventory')), 'หน้าของใช้ & สต๊อก');
@@ -219,6 +220,59 @@ const foodLoader = makeLazyFeature(() => import('./food.js'), m => { m.mountFood
 const weeklyLoader = makeLazyFeature(() => import('./weekly.js'), m => m.mountWeekly($('#db-weekly')), 'หน้าสรุป');
 const remindLoader = makeLazyFeature(() => import('./remindLog.js'), m => m.mountRemind($('#tab-remind')), 'หน้าบันทึกเตือน');
 const settingsLoader = makeLazyFeature(() => import('./settings.js'), m => { m.mountSettings($('#tab-settings')); m.refreshAccount?.(); }, 'หน้าตั้งค่า');
+const periodLoader = makeLazyFeature(() => import('./period.js'), m => m.mountPeriod($('#tab-period')), 'หน้าประจำเดือน');
+const symptomsLoader = makeLazyFeature(() => import('./symptoms.js'), m => m.mountSymptoms($('#tab-symptoms')), 'หน้าอาการประจำวัน');
+const bodyLoader = makeLazyFeature(() => import('./body.js'), m => m.mountBody($('#tab-body')), 'หน้าน้ำหนัก & สัดส่วน');
+const remindersLoader = makeLazyFeature(() => import('./reminders.js'), m => m.mountReminders($('#tab-notifications')), 'หน้าการแจ้งเตือน');
+
+let onboardingModule = null;
+const onboardingStore = createOnboardingProgressStore({
+  getItem: key => { try { return localStorage.getItem(key); } catch { return null; } },
+  setItem: (key, value) => { try { localStorage.setItem(key, value); } catch {} }
+});
+
+function maybeMountOnboarding(uid, user, profile) {
+  if (!shouldShowOnboarding({ uid, metadata: user?.metadata, profile, progressStore: onboardingStore })) return;
+  if (onboardingModule) {
+    onboardingModule.mountOnboarding(user, profile);
+    return;
+  }
+  void import('./onboarding.js')
+    .then(m => {
+      onboardingModule = m;
+      if (state.uid === uid) m.mountOnboarding(state.user, state.profile);
+    })
+    .catch(err => reportRuntimeError(err, { category: 'chunk', source: 'onboarding-load' }));
+}
+
+let bellRefreshTimer = 0;
+function scheduleBellSync() {
+  if (remindersLoader.get()) {
+    updateBell();
+    return;
+  }
+  const hasPotentialReminders = Boolean(
+    (state.petCare && state.petCare.length) ||
+    (state.replacements && state.replacements.length) ||
+    (getPeriodRemindDays() >= 0 && state.period && state.period.length)
+  );
+  if (!hasPotentialReminders || bellRefreshTimer) return;
+  bellRefreshTimer = window.setTimeout(() => {
+    bellRefreshTimer = 0;
+    void remindersLoader.ensure().then(() => updateBell());
+  }, 600);
+}
+
+function checkPeriodReminderIfNeeded() {
+  const loadedPeriod = periodLoader.get();
+  if (loadedPeriod) {
+    loadedPeriod.checkReminder?.();
+    return;
+  }
+  if (getPeriodRemindDays() >= 0 && (state.period || []).length) {
+    void periodLoader.ensure().then(m => m?.checkReminder?.());
+  }
+}
 
 let chatFeature = null;
 let chatMountPromise = null;
@@ -314,45 +368,26 @@ export function showTab(name, { preserveDate = false } = {}) {
   $('#btn-settings').classList.toggle('is-active', name === 'settings');
   document.documentElement.dataset.page = name;
   renderSubnav(group, lastSub[group]);
-  const syncOverviewHeader = () => {
-    const isWeekly = name === 'weekly';
-    $('#db-content')?.classList.toggle('hidden', isWeekly);
-    $('#db-weekly')?.classList.toggle('hidden', !isWeekly);
-    document.querySelectorAll('#tab-overview .db-overview-only').forEach(el => el.classList.toggle('hidden', isWeekly));
-    const ovBtn = $('#db-view-overview');
-    const wkBtn = $('#db-view-weekly');
-    ovBtn?.classList.toggle('is-active', !isWeekly);
-    ovBtn?.setAttribute('aria-pressed', String(!isWeekly));
-    ovBtn?.setAttribute('aria-selected', String(!isWeekly));
-    wkBtn?.classList.toggle('is-active', isWeekly);
-    wkBtn?.setAttribute('aria-pressed', String(isWeekly));
-    wkBtn?.setAttribute('aria-selected', String(isWeekly));
-  };
-  syncOverviewHeader();
-  if (!preserveDate) {
-    if (name === 'home') resetHomePlannerToToday();
-    if (name === 'period') resetPeriodToToday();
-    if (name === 'symptoms') resetSymptomsToToday();
-    if (name === 'body') resetBodyToToday();
-  }
   let pending = Promise.resolve();
+  if (!preserveDate && name === 'home') resetHomePlannerToToday();
   if (name === 'home') { renderHome(); renderHomeShortcuts(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
   if (name === 'overview' || name === 'weekly') {
     pending = overviewLoader.ensure().then(async m => {
       m?.renderDashboard?.();
-      syncOverviewHeader();
-      if (name !== 'weekly') return;
       const weekly = await weeklyLoader.ensure();
       if (!preserveDate) weekly?.resetWeeklyToToday?.();
       weekly?.renderWeekly?.();
     });
   }
+  if (name === 'period') pending = periodLoader.ensure().then(m => { if (!preserveDate) m?.resetPeriodToToday?.(); else m?.render?.(); });
+  if (name === 'symptoms') pending = symptomsLoader.ensure().then(m => { if (!preserveDate) m?.resetSymptomsToToday?.(); else { m?.renderList?.(); m?.renderSkinList?.(); } });
+  if (name === 'body') pending = bodyLoader.ensure().then(m => { if (!preserveDate) m?.resetBodyToToday?.(); else m?.render?.(); });
   if (name === 'care') pending = careLoader.ensure().then(m => { if (!preserveDate) m?.resetCareToToday?.(); });
   if (name === 'remind') pending = remindLoader.ensure().then(m => m?.renderRemind?.());
   if (name === 'expense') pending = expenseLoader.ensure().then(m => { if (!preserveDate) m?.resetExpenseToToday?.(); m?.renderExpense?.(); });
   if (name === 'inventory') pending = inventoryLoader.ensure().then(m => m?.renderInventory?.());
-  if (name === 'notifications') renderReminders();
+  if (name === 'notifications') pending = remindersLoader.ensure().then(m => m?.renderReminders?.());
   if (name === 'settings') pending = settingsLoader.ensure().then(m => m?.refreshAccount?.());
   if (name === 'report') pending = reportLoader.ensure().then(m => { if (!preserveDate) m?.resetReportToToday?.(); });
   if (name === 'workout') pending = workoutLoader.ensure().then(m => { if (!preserveDate) m?.resetToToday?.(); });
@@ -396,7 +431,9 @@ document.addEventListener('click', event => {
 });
 
 function updateBell() {
-  const n = collectReminders().length;
+  const mod = remindersLoader.get();
+  if (!mod) return;
+  const n = mod.collectReminders().length;
   const badge = $('#bell-badge');
   badge.textContent = n > 9 ? '9+' : String(n);
   badge.classList.toggle('hidden', !n);
@@ -492,10 +529,6 @@ function mountAll() {
   mounted = true;
   mountHome(goTo);
   renderHomeShortcuts();
-  mountPeriod($('#tab-period'));
-  mountSymptoms($('#tab-symptoms'));
-  mountBody($('#tab-body'));
-  mountReminders($('#tab-notifications'));
   mountChatFab();
 }
 
@@ -620,12 +653,13 @@ function hydratePreviewState() {
   emit('profile');
   emit('customFoods');
   emit('pushSettings');
-  renderPeriod();
-  renderBody();
-  renderSymptomList();
-  renderSkinList();
-  checkReminder();
-  renderReminders();
+  periodLoader.get()?.render?.();
+  bodyLoader.get()?.render?.();
+  symptomsLoader.get()?.renderList?.();
+  symptomsLoader.get()?.renderSkinList?.();
+  checkPeriodReminderIfNeeded();
+  remindersLoader.get()?.renderReminders?.();
+  scheduleBellSync();
   renderHome();
   renderSummary();
   careLoader.get()?.renderCare?.();
@@ -648,13 +682,14 @@ function startData() {
   expenseRecordsLoaded = false;
   legacyMigrationBlocked = false;
   state.loaded = { period: false, body: false };
-  watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; renderPeriod(); renderSummary(); checkReminder(); renderReminders(); renderHome(); });
-  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; renderBody(); renderReminders(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderDashboard?.(); });
+  watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; periodLoader.get()?.render?.(); renderSummary(); checkPeriodReminderIfNeeded(); remindersLoader.get()?.renderReminders?.(); scheduleBellSync(); renderHome(); });
+  watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; bodyLoader.get()?.render?.(); remindersLoader.get()?.renderReminders?.(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderDashboard?.(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
   for (const [key, col] of [['petProfiles', 'pet_profiles'], ['petCare', 'pet_care_records'], ['petFoods', 'pet_food_records']]) {
     watch(`care:${col}`, userCol(uid, col), records => {
       state[key] = records;
       careLoader.get()?.renderCare?.();
+      scheduleBellSync();
       window.dispatchEvent(new Event('trackme:data-change'));
     });
   }
@@ -662,11 +697,12 @@ function startData() {
     watch(`inventory:${col}`, userCol(uid, col), rows => {
       state[key] = rows;
       inventoryLoader.get()?.renderInventory?.();
+      scheduleBellSync();
       window.dispatchEvent(new Event('trackme:data-change'));
     });
   }
-  watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; renderSymptomList(); renderPeriod(); renderReminders(); renderHome(); });
-  watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; renderSkinList(); });
+  watch('symptom_records', query(userCol(uid, 'symptom_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.symptoms = list; symptomsLoader.get()?.renderList?.(); periodLoader.get()?.render?.(); remindersLoader.get()?.renderReminders?.(); renderHome(); });
+  watch('skin_records', query(userCol(uid, 'skin_records'), where('date', '>=', addDays(localDateStr(), -399))), list => { state.skinRecords = list; symptomsLoader.get()?.renderSkinList?.(); });
   watch('workout_records', query(userCol(uid, 'workout_records'), where('date', '>=', addDays(localDateStr(), -400))), list => { state.workouts = list; workoutLoader.get()?.render?.(); weeklyLoader.get()?.renderWeekly?.(); renderHome(); renderSummary(); overviewLoader.get()?.renderDashboard?.(); });
   watch('lab_records', userCol(uid, 'lab_records'), list => { state.labs = list; careLoader.get()?.onLabsUpdated?.(); });
   watch('workout_templates', userCol(uid, 'workout_templates'), list => { state.templates = list; workoutLoader.get()?.render?.(); });
@@ -694,7 +730,7 @@ function startData() {
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     if (state.uid === uid && onboardingCheckedUid !== uid) {
       onboardingCheckedUid = uid;
-      mountOnboarding(state.user, state.profile);
+      maybeMountOnboarding(uid, state.user, state.profile);
     }
     state.legacyExpenseDocs = list.filter(x => x.kind === 'expense_month' && Array.isArray(x.items));
     mergeExpenses();
@@ -731,8 +767,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 on('auth', user => {
   stopAll();
+  clearTimeout(bellRefreshTimer);
+  bellRefreshTimer = 0;
   onboardingCheckedUid = null;
-  unmountOnboarding();
+  onboardingModule?.unmountOnboarding?.();
   overviewLoader.get()?.resetDashboardState?.();
   resetHomePlannerState();
   state.period = []; state.body = []; state.customFoods = []; state.demoFoodRecords = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
@@ -807,7 +845,7 @@ document.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
-window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); renderReminders(); renderHome(); renderHomeShortcuts(); renderSummary(); });
+window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); remindersLoader.get()?.renderReminders?.(); scheduleBellSync(); renderHome(); renderHomeShortcuts(); renderSummary(); });
 window.addEventListener('trackme:auth-change', () => {
   renderDesktopNav(document.documentElement.dataset.page || 'home');
 });

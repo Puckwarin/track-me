@@ -1,8 +1,9 @@
 import { state } from './state.js';
 import { getFoodRecordsInRange } from './foodService.js';
+import { isPreviewMode } from './preview.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
-import { TYPES } from './workoutConstants.js';
+import { TYPES, formatIntensityBreakdown, summarizeWorkoutCollection } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
 import { iconSvg } from './icons.js';
 import { bindChartInspector } from './ui.js';
@@ -46,27 +47,28 @@ function financeRangeSummary(start, end) {
 export function mountWeekly(el) {
   root = el;
   root.innerHTML = `
-  <div class="lg:col-span-3 space-y-6">
-    <div class="card space-y-3">
-      <div class="tm-seg tm-seg--2 max-w-xs mx-auto" role="tablist" aria-label="ช่วงสรุปข้อมูล">
-        <button id="sum-week" type="button" role="tab" aria-selected="true" class="tm-seg-btn is-active">รายสัปดาห์</button>
-        <button id="sum-month" type="button" role="tab" aria-selected="false" class="tm-seg-btn">รายเดือน</button>
-      </div>
-      <div class="flex items-center justify-between gap-3">
+  <div class="space-y-4">
+    <div class="card !py-3.5 !px-4 sm:!px-5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
         <button id="wk-prev" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงก่อน">${iconSvg('chevron-left', { size: 16 })}</button>
-        <div class="text-center min-w-0">
-          <h2 id="wk-title" class="font-bold text-slate-800 inline-flex items-center justify-center gap-1.5">${iconSvg('health', { size: 18, className: 'text-brand' })}<span>สรุป</span></h2>
-          <p id="wk-range" class="text-sm text-slate-600 tabular-nums"></p>
+        <div class="min-w-0">
+          <h3 id="wk-title" class="font-bold text-slate-800 inline-flex items-center gap-1.5 text-base">${iconSvg('weekly', { size: 17, className: 'text-brand' })}<span>สรุปช่วงเวลา</span></h3>
+          <p id="wk-range" class="text-xs sm:text-sm text-slate-600 tabular-nums"></p>
         </div>
         <button id="wk-next" type="button" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="ช่วงถัดไป">${iconSvg('chevron-right', { size: 16 })}</button>
       </div>
+      <div class="tm-seg tm-seg--2 shrink-0" role="tablist" aria-label="ช่วงสรุปข้อมูล">
+        <button id="sum-week" type="button" role="tab" aria-selected="true" class="tm-seg-btn is-active">รายสัปดาห์</button>
+        <button id="sum-month" type="button" role="tab" aria-selected="false" class="tm-seg-btn">รายเดือน</button>
+      </div>
     </div>
-    <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
+    <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6"></div>
   </div>`;
   $('#wk-prev', root).addEventListener('click', () => { if (summaryMode === 'monthly') { selectedMonth = shiftMonth(selectedMonth, -1); renderWeekly(); } else { weekStart = addDays(weekStart, -7); renderWeekly(); } });
   $('#wk-next', root).addEventListener('click', () => { if (summaryMode === 'monthly') { selectedMonth = shiftMonth(selectedMonth, 1); renderWeekly(); } else { weekStart = addDays(weekStart, 7); renderWeekly(); } });
   $('#sum-week', root).onclick = () => { summaryMode = 'weekly'; renderWeekly(); };
   $('#sum-month', root).onclick = () => { summaryMode = 'monthly'; renderWeekly(); };
+  window.addEventListener('trackme:overview-refresh', () => { if (root?.isConnected) void renderWeekly(); });
   renderWeekly();
 }
 
@@ -79,7 +81,7 @@ export function resetWeeklyToToday() {
 const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {
-  if (!root || !state.uid) return;
+  if (!root || (!state.uid && !isPreviewMode())) return;
   const weekBtn = $('#sum-week', root);
   const monthBtn = $('#sum-month', root);
   weekBtn.className = `tm-seg-btn ${summaryMode === 'weekly' ? 'is-active' : ''}`;
@@ -139,8 +141,16 @@ export async function renderWeekly() {
   const stepsTotal = stepVals.reduce((a, b) => a + b, 0);
 
   const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end && w.status !== 'planned');
-  const mins = ws.reduce((a, w) => a + (w.durationMin || 0), 0), burn = ws.reduce((a, w) => a + (w.estKcal || 0), 0);
-  const types = {}; ws.forEach(w => { types[w.type] = (types[w.type] || 0) + 1; });
+  const wSum = summarizeWorkoutCollection(ws);
+  const wIntensityText = formatIntensityBreakdown(wSum.byIntensity);
+  const wEffortText = Object.entries(wSum.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wFeelingText = Object.entries(wSum.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wRecoveryText = Object.entries(wSum.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wEvalText = [
+    wSum.avgSessionRpe != null ? `RPE เฉลี่ย ${wSum.avgSessionRpe}/10` : '',
+    wEffortText || wFeelingText,
+    wRecoveryText ? `ฟื้นตัว: ${wRecoveryText}` : ''
+  ].filter(Boolean).join(' · ');
   const sx = state.symptoms.filter(s => s.date >= weekStart && s.date <= end && Object.values(s.symptoms || {}).some(v => v > 0)).length;
 
   const tips = [];
@@ -154,6 +164,9 @@ export async function renderWeekly() {
   }
   if (ws.length === 0 && end < today) tips.push('สัปดาห์นี้ไม่ได้ออกกำลังกายตามที่บันทึก');
   if (ws.length >= 3) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก`);
+  if ((wSum.avgSessionRpe != null && wSum.avgSessionRpe >= 8.5) || ws.some(w => w.feeling === 'exhausted' || w.effortLevel === 'very_hard' || w.nextDayRecovery === 'sore_multi')) {
+    tips.push('ความเหนื่อยสะสมจากการออกกำลังกายค่อนข้างสูง ลองจัดวันพักฟื้นหรือลดความหนักสลับกัน');
+  }
   if (wDelta !== null && Math.abs(wDelta) >= 1) tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. จากสัปดาห์ก่อน (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
   if (sleepAvg !== null && sleepAvg < 6) tips.push(`สัปดาห์นี้นอนเฉลี่ย ${round1(sleepAvg)} ชม./คืน — ลองพักผ่อนให้ใกล้เคียง 7–8 ชม. จะช่วยการฟื้นตัวและความอยากอาหารได้`);
 
@@ -183,9 +196,11 @@ export async function renderWeekly() {
           ${stepsAvg !== null ? `<p>ก้าวเดินเฉลี่ย <b>${Math.round(stepsAvg).toLocaleString()}</b> ก้าว/วัน (รวม ${Math.round(stepsTotal).toLocaleString()})</p>` : ''}
         </div>` : ''}</div>
       <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 17, className: 'text-brand' })}<span>ออกกำลังกาย</span></h3>
-        ${ws.length
-          ? `<p class="text-lg font-bold tabular-nums">${ws.length} ครั้ง <span class="text-xs font-normal text-slate-500">${mins ? `· ${mins} นาที` : ''}${burn ? ` · เผาผลาญ ~${burn} kcal` : ''}</span></p>
-             ${Object.entries(types).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}`
+        ${wSum.count
+          ? `<p class="text-lg font-bold tabular-nums">${wSum.count} ครั้ง <span class="text-xs font-normal text-slate-500">${wSum.totalMinutes ? `· ${wSum.totalMinutes} นาที รวม` : ''}${wSum.totalKcal ? ` · เผาผลาญ ~${wSum.totalKcal} kcal` : ''}</span></p>
+             ${Object.entries(wSum.byType).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
+             ${wIntensityText ? `<p class="text-xs text-slate-600 tabular-nums">ความหนัก: ${esc(wIntensityText)}</p>` : ''}
+             ${wEvalText ? `<p class="text-xs text-brand-dark tabular-nums">${esc(wEvalText)}</p>` : ''}`
           : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกออกกำลังกายในสัปดาห์นี้</p>'}
         ${sx ? `<p class="text-xs text-slate-500 pt-1 tabular-nums">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
       <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>การเงินสัปดาห์นี้</span></h3>
@@ -218,7 +233,19 @@ async function renderMonthly() {
 
   const loggedDays = new Set(food.map(x => x.date)), avgCal = loggedDays.size ? food.reduce((a, x) => a + num(x.calories), 0) / loggedDays.size : null, avgP = loggedDays.size ? food.reduce((a, x) => a + num(x.protein), 0) / loggedDays.size : null;
   const weights = state.body.filter(x => x.date >= start && x.date <= end && typeof x.weight === 'number').sort((a, b) => a.date.localeCompare(b.date));
-  const workouts = state.workouts.filter(x => x.date >= start && x.date <= end && x.status !== 'planned'), minutes = workouts.reduce((a, x) => a + (x.durationMin || 0), 0);
+  const workouts = state.workouts.filter(x => x.date >= start && x.date <= end && x.status !== 'planned');
+  const wSum = summarizeWorkoutCollection(workouts);
+  const wIntText = formatIntensityBreakdown(wSum.byIntensity);
+  const wEffortText = Object.entries(wSum.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wFeelText = Object.entries(wSum.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wRecoveryText = Object.entries(wSum.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const wSubParts = [
+    wSum.totalMinutes ? `${wSum.totalMinutes} นาที รวม` : '',
+    wIntText ? `ความหนัก: ${wIntText}` : '',
+    wSum.avgSessionRpe != null ? `RPE เฉลี่ย ${wSum.avgSessionRpe}/10` : '',
+    wEffortText || wFeelText,
+    wRecoveryText ? `ฟื้นตัว: ${wRecoveryText}` : ''
+  ].filter(Boolean).join(' · ');
   const symptoms = state.symptoms.filter(x => x.date >= start && x.date <= end && Object.values(x.symptoms || {}).some(v => v > 0)).length, targets = getTargets();
   const stat = (label, value, sub = '') => `<div class="bg-white border border-slate-100 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${value}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
   const daysInMonth = Array.from({ length: new Date(y, m, 0).getDate() }, (_, i) => `${selectedMonth}-${String(i + 1).padStart(2, '0')}`);
@@ -246,7 +273,7 @@ async function renderMonthly() {
   $('#wk-body', root).innerHTML = `<div class="card space-y-3 lg:col-span-2"><div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-800">สรุปรายเดือน</h3>${foodError ? '<span class="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">โหลดบันทึกอาหารไม่สำเร็จ</span>' : ''}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
     ${stat('วันที่บันทึกอาหาร', `${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก', avgCal === null ? '—' : Math.round(avgCal).toLocaleString() + ' kcal', `เป้า ${targets.kcal.toLocaleString()} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก', avgP === null ? '—' : round1(avgP) + ' g', `เป้า ${targets.protein} g`)}
     ${stat('น้ำหนัก', weights.length ? round1(weights[weights.length - 1].weight) + ' กก.' : '—', weights.length ? `เปลี่ยนจากครั้งแรก ${round1(weights[weights.length - 1].weight - weights[0].weight)} กก.` : 'ไม่มีบันทึกเดือนนี้')}
-    ${stat('ออกกำลังกาย', workouts.length ? `${workouts.length} ครั้ง` : '—', minutes ? `${minutes} นาทีรวม` : 'ยังไม่มีบันทึก')}${stat('วันที่มีบันทึกอาการ', `${symptoms} วัน`)}
+    ${stat('ออกกำลังกาย', wSum.count ? `${wSum.count} ครั้ง` : '—', wSum.count ? esc(wSubParts || 'บันทึกแล้ว') : 'ยังไม่มีบันทึก')}${stat('วันที่มีบันทึกอาการ', `${symptoms} วัน`)}
     ${(mSleep.length || mSteps.length) ? stat('การนอน / ก้าวเดิน', mSleep.length ? `${round1(avg(mSleep))} ชม.` : `${Math.round(avg(mSteps)).toLocaleString()} ก้าว`, `${mSleep.length ? `นอน ${mSleep.length} คืน` : ''}${mSleep.length && mSteps.length ? ' · ' : ''}${mSteps.length ? `เดินเฉลี่ย ${Math.round(avg(mSteps)).toLocaleString()} ก้าว/วัน` : ''}`) : ''}
   </div>${chart}<p class="text-xs text-slate-500">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
   <div class="space-y-6">

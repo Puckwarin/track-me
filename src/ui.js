@@ -186,13 +186,14 @@ export function successInline({ message = '' } = {}) {
 }
 
 /* ---- Modal (programmatic) ---- */
-export function openModal(innerHtml, { size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop } = {}) {
+export function openModal(innerHtml, { size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop, boxClass = '' } = {}) {
   const sizeClass = size === 'xl' ? 'tm-modal-xl' : (size === 'lg' ? 'tm-modal-lg' : '');
   const flushClass = flush ? 'tm-modal-flush' : '';
+  const extraClass = boxClass ? ` ${boxClass}` : '';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
   el.className = 'tm-modal-backdrop';
-  el.innerHTML = `<div class="tm-modal-box ${sizeClass} ${flushClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
+  el.innerHTML = `<div class="tm-modal-box ${sizeClass} ${flushClass}${extraClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
   const box = el.firstElementChild;
   const heading = box.querySelector('h1, h2, h3, h4, h5, h6');
   box.tabIndex = -1;
@@ -680,11 +681,12 @@ export function weekNavBarHtml({
   prevAttrs = '',
   todayAttrs = '',
   nextAttrs = '',
-  ariaLabel = 'เลื่อนดูสัปดาห์'
+  ariaLabel = 'เลื่อนดูสัปดาห์',
+  showArrows = true
 } = {}) {
   return `<div class="pl-week-nav" role="group" aria-label="${esc(ariaLabel)}">
-    <button type="button" ${prevAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ก่อนหน้า" title="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>
+    ${showArrows ? `<button type="button" ${prevAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ก่อนหน้า" title="สัปดาห์ก่อนหน้า">${iconSvg('chevron-left', { size: 14 })}</button>` : ''}
     <button type="button" ${todayAttrs} class="pl-week-nav-label ${isToday ? 'is-current' : ''}" aria-label="กลับไปวันนี้" title="กลับไปวันนี้">วันนี้</button>
-    <button type="button" ${nextAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>
+    ${showArrows ? `<button type="button" ${nextAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>` : ''}
   </div>`;
 }

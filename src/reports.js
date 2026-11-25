@@ -3,11 +3,23 @@ import { userCol, auth } from './firebase.js';
 import { state } from './state.js';
 import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
 import { $, esc, fmtDate, fmtDateTime, localDateStr, addDays, daysBetween, round1, toCsv, downloadFile, toast } from './util.js';
-import { periodStats } from './period.js';
+import { periodStats } from './periodStats.js';
 import { sortBodyDesc, weightChartSvg } from './body.js';
 import { SYMPTOMS, SEVERITY, MOODS, STRESS } from './symptoms.js';
 import { syncLineText } from './sync.js';
-import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
+import {
+  TYPES,
+  SECTIONS,
+  repLabel,
+  formatIntensityLabel,
+  formatWorkoutEvaluationParts,
+  countMainCompletedSets,
+  computeWorkoutTotalMinutes,
+  buildWorkoutNotesText,
+  summarizeWorkoutCollection,
+  formatIntensityBreakdown,
+  buildWorkoutCsvRows
+} from './workoutConstants.js';
 import { labFlag, refText } from './lab.js';
 import { iconSvg } from './icons.js';
 
@@ -16,9 +28,22 @@ let root, data = null;
 export function mountReport(el) {
   root = el;
   root.innerHTML = `
-  <div class="lg:col-span-3 space-y-6">
+  <div class="db-page space-y-5">
+    <header class="db-header no-print">
+      <div class="db-heading">
+        <div class="db-eyebrow">TRACK ME · HISTORY &amp; REPORTS</div>
+        <h2>ประวัติ &amp; รายงาน</h2>
+        <p>รวมสรุปรายสัปดาห์/รายเดือน และแนวโน้มระยะยาวครบทุกหมวด พร้อมส่งออกรายงานในที่เดียว</p>
+      </div>
+      <div class="db-controls">
+        <div class="tm-seg tm-seg--2" role="tablist" aria-label="สลับมุมมองประวัติและรายงาน">
+          <button type="button" role="tab" data-page-go="overview" aria-pressed="false" aria-selected="false" class="tm-seg-btn">ภาพรวม &amp; สรุป</button>
+          <button type="button" role="tab" data-page-go="report" aria-pressed="true" aria-selected="true" class="tm-seg-btn is-active">${iconSvg('report', { size: 14 })}<span>รายงาน (PDF / CSV)</span></button>
+        </div>
+      </div>
+    </header>
     <div class="card space-y-4 no-print">
-      <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 19, className: 'text-brand' })}<span>รายงานสุขภาพ (Health Report)</span></h2>
+      <h3 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 19, className: 'text-brand' })}<span>รายงานสุขภาพ (Health Report)</span></h3>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div><label class="lbl">ตั้งแต่วันที่</label><input type="date" id="r-from" class="input"></div>
         <div><label class="lbl">ถึงวันที่</label><input type="date" id="r-to" class="input"></div>
@@ -135,12 +160,71 @@ async function generate() {
       tbl(['วันที่', 'รายการ', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน'], days.map(k => [esc(fmtDate(k)), by[k].n, Math.round(by[k].cal), round1(by[k].p), round1(by[k].c), round1(by[k].f)])) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('workout')) {
-    const ws = d.workouts.filter(w => w.status !== 'planned').slice().sort((a, b) => a.date.localeCompare(b.date)), by = {};
-    ws.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
-    const rowT = r => `${esc(r.name)} — ${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
-    h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2 tabular-nums">${ws.length} ครั้ง · ${Object.entries(by).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
-      tbl(['วันที่', 'ประเภท', 'นาที', 'รายละเอียด'], ws.map(w => [esc(fmtDate(w.date)), esc(TYPES[w.type] || w.type), w.durationMin ?? '—',
-        SECTIONS.map(([k, t]) => (w.sections?.[k]?.length ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(rowT).join('; ') : '')).filter(Boolean).join('<br>') || '—'])) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
+    const ws = d.workouts.filter(w => w.status !== 'planned').slice().sort((a, b) => a.date.localeCompare(b.date));
+    const wSum = summarizeWorkoutCollection(ws);
+    const intensitySummary = formatIntensityBreakdown(wSum.byIntensity);
+    const fmtCounts = obj => Object.entries(obj || {}).map(([lbl, cnt]) => `${lbl} ${cnt}`).join(' · ');
+    const completionSummary = fmtCounts(wSum.byCompletion);
+    const effortSummary = fmtCounts(wSum.byEffort);
+    const feelingSummary = fmtCounts(wSum.byFeeling);
+    const symptomSummary = fmtCounts(wSum.bySymptom);
+    const recoverySummary = fmtCounts(wSum.byRecovery);
+    const rowT = (r, fb = null) => {
+      const base = `${esc(r.name)} — ${r.weightKg != null ? r.weightKg + ' kg' + (r.perSide ? '/ข้าง' : '') + ' · ' : ''}${r.sets || 1} × ${r.reps ?? '-'} ${repLabel(r.repUnit)}`;
+      if (!fb) return base;
+      const fbParts = [fb.rpe != null ? `RPE ${fb.rpe}` : '', fb.rir != null ? `เหลือ ${fb.rir}` : ''].filter(Boolean).join('/');
+      return `${base}${fbParts ? ` (${esc(fbParts)})` : ''}${fb.nextLabel ? ` → ${esc(fb.nextLabel)}` : ''}`;
+    };
+    const workoutHeadSummary = [
+      `${wSum.count} ครั้ง`,
+      wSum.totalMinutes ? `${wSum.totalMinutes} นาที รวม` : '',
+      wSum.totalMainSets ? `ทำจริง ${wSum.totalMainSets} เซต (ท่าหลัก)` : '',
+      wSum.totalKcal ? `~${wSum.totalKcal} kcal` : '',
+      intensitySummary ? `ความหนัก: ${intensitySummary}` : '',
+      completionSummary,
+      effortSummary ? `ความเหนื่อย: ${effortSummary}` : '',
+      wSum.avgSessionRpe != null ? `RPE เฉลี่ย ${wSum.avgSessionRpe}/10` : '',
+      feelingSummary,
+      symptomSummary ? `อาการ: ${symptomSummary}` : '',
+      recoverySummary ? `ฟื้นตัววันถัดไป: ${recoverySummary}` : ''
+    ].filter(Boolean).join(' · ');
+    h += sec('ออกกำลังกาย', ws.length ? `<p class="text-sm mb-2 tabular-nums">${esc(workoutHeadSummary)}</p>` +
+      `<p class="text-xs text-slate-600 mb-2 tabular-nums">${Object.entries(wSum.byType).map(([t, n]) => `${esc(TYPES[t] || t)} ${n}`).join(' · ')}</p>` +
+      tbl(['วันที่', 'กิจกรรม / ประเภท', 'เวลา & ความหนัก', 'ประเมินหลังฝึก', 'รายละเอียด'], ws.map(w => {
+        const totalMin = computeWorkoutTotalMinutes(w);
+        const intLabel = formatIntensityLabel(w.intensity);
+        const mainSets = countMainCompletedSets(w);
+        const kcalVal = Math.round(Number(w.estKcal ?? w.caloriesBurn) || 0);
+        const evalParts = formatWorkoutEvaluationParts(w);
+        const notesText = buildWorkoutNotesText(w);
+        const fbList = Array.isArray(w.exerciseFeedback) ? w.exerciseFeedback : [];
+        const fbByName = Object.fromEntries(
+          fbList
+            .filter(x => !x?.section || x.section === 'main')
+            .map(x => [String(x.name || '').trim().toLowerCase(), x])
+        );
+        const typeText = TYPES[w.type] || w.typeLabel || w.type || '—';
+        const activityCol = w.title
+          ? `<b>${esc(w.title)}</b><div class="text-xs text-slate-500">${esc(typeText)}${w.muscleGroup ? ` · ${esc(w.muscleGroup)}` : ''}</div>`
+          : `<b>${esc(typeText)}</b>${w.muscleGroup ? `<div class="text-xs text-slate-500">${esc(w.muscleGroup)}</div>` : ''}`;
+        const metricsCol = [
+          totalMin ? `<b>${totalMin} นาที รวม</b>` : '—',
+          intLabel ? `ความหนัก: ${esc(intLabel)}` : '',
+          kcalVal ? `~${kcalVal} kcal` : '',
+          mainSets ? `ทำจริง ${mainSets} เซต` : ''
+        ].filter(Boolean).join('<br>');
+        const evalCol = [
+          ...evalParts.map(p => esc(p)),
+          notesText ? `<span class="text-xs text-slate-500">${esc(notesText)}</span>` : ''
+        ].filter(Boolean).join('<br>') || '—';
+        const detailCol = SECTIONS.map(([k, t]) => (w.sections?.[k]?.length
+          ? `<b>${t.split(' ')[0]}:</b> ` + w.sections[k].map(r => {
+              const fb = k === 'main' ? fbByName[String(r.name || '').trim().toLowerCase()] : null;
+              return rowT(r, fb);
+            }).join('; ')
+          : '')).filter(Boolean).join('<br>') || '—';
+        return [esc(fmtDate(w.date)), activityCol, metricsCol, evalCol, detailCol];
+      })) : '<p class="text-sm text-slate-500">ไม่มีข้อมูลในช่วงนี้</p>');
   }
   if (inc('lab')) {
     const labs = state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.name.localeCompare(b.name, 'th') || a.date.localeCompare(b.date));
@@ -177,7 +261,7 @@ async function csv() {
     symptoms: [['วันที่', ...SYMPTOMS.map(s => s[1]), 'อารมณ์(1-5)', 'เครียด(1-5)', 'หมายเหตุ'], ...d.symptoms.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, ...SYMPTOMS.map(([k]) => r.symptoms?.[k] ?? 0), r.mood ?? '', r.stress ?? '', r.note || ''])],
     body: [['วันที่', 'น้ำหนัก(กก.)', 'อก(ซม.)', 'เอว(ซม.)', 'สะโพก(ซม.)', 'แขน(ซม.)', 'ขา(ซม.)', 'หมายเหตุ'], ...d.body.slice().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.weight ?? '', r.bust ?? '', r.waist ?? '', r.hip ?? '', r.arm ?? '', r.thigh ?? '', r.note || ''])],
     lab: [['วันที่', 'รายการ', 'ผล', 'หน่วย', 'อ้างอิงต่ำสุด', 'อ้างอิงสูงสุด', 'หมายเหตุ'], ...state.labs.filter(l => l.date >= d.from && l.date <= d.to).sort((a, b) => a.date.localeCompare(b.date)).map(l => [l.date, l.name, l.value, l.unit || '', l.refLow ?? '', l.refHigh ?? '', l.note || ''])],
-    workout: [['วันที่', 'ประเภท', 'นาทีรวม', 'ช่วง', 'ท่า', 'น้ำหนัก(kg)', 'ต่อข้าง', 'เซต', 'จำนวน', 'หน่วย', 'โน้ต'], ...d.workouts.filter(w => w.status !== 'planned').sort((a, b) => a.date.localeCompare(b.date)).flatMap(w => SECTIONS.flatMap(([k, t]) => (w.sections?.[k] || []).map(r => [w.date, TYPES[w.type] || w.type, w.durationMin ?? '', t.split(' ')[0], r.name, r.weightKg ?? '', r.perSide ? 'ใช่' : '', r.sets ?? '', r.reps ?? '', repLabel(r.repUnit), r.note || ''])))],
+    workout: buildWorkoutCsvRows(d.workouts),
     food: [['วันที่', 'มื้อ', 'เมนู', 'kcal', 'โปรตีน', 'คาร์บ', 'ไขมัน', 'น้ำตาล', 'โซเดียม(mg)'], ...d.food.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.meal, r.name, r.calories, r.protein, r.carbs, r.fat, r.sugar ?? '', r.sodium ?? ''])]
   }[kind];
   downloadFile(`trackme-${kind}-${d.from}_${d.to}.csv`, toCsv(rows), 'text/csv');

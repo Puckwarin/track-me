@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { $, esc, localDateStr, round1, toast, openModal, isDateStr, addMonthsLocal, daysBetween } from './util.js';
 import { watch } from './sync.js';
 import { estimateStockFromPhotos, explainGeminiError, formatImageProgress } from './nutrition.js';
-import { REMIND_OPTIONS, remindLabel } from './period.js';
+import { REMIND_OPTIONS, remindLabel } from './periodStats.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows } from './ui.js';

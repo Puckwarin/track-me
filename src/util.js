@@ -115,13 +115,14 @@ export function trapFocus(el, { autoFocus = true } = {}) {
 }
 
 // Modal เล็ก ๆ ใช้ซ้ำได้
-export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop, onClose = null } = {}) {
+export function openModal(innerHtml, { wide = false, size = '', flush = false, staticBackdrop = false, closeOnEscape = !staticBackdrop, onClose = null, boxClass = '' } = {}) {
   const widthClass = size === 'xl' ? 'max-w-5xl' : (size === 'lg' || wide ? 'max-w-2xl' : 'max-w-lg');
   const bodyClass = flush ? 'is-flush p-0 overflow-hidden flex flex-col' : 'overflow-y-auto p-6';
+  const extraClass = boxClass ? ` ${boxClass}` : '';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
   el.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4';
-  el.innerHTML = `<div class="modal-box bg-white w-full ${widthClass} ${bodyClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
+  el.innerHTML = `<div class="modal-box bg-white w-full ${widthClass} ${bodyClass}${extraClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
   const box = el.firstElementChild;
   const heading = box.querySelector('h1, h2, h3, h4, h5, h6');
   box.tabIndex = -1;

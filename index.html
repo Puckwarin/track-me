@@ -77,7 +77,7 @@
     </div>
     <div id="onboarding-root" class="hidden"></div>
     <header class="app-header sticky top-0 z-40">
-      <div class="max-w-7xl mx-auto px-4 md:px-6 py-2.5 flex justify-between items-center gap-2">
+      <div class="w-full px-4 md:px-6 lg:px-8 py-2.5 flex justify-between items-center gap-2">
         <button id="btn-logo" class="flex items-center gap-2.5 min-w-0 cursor-pointer" aria-label="ไปหน้าหลัก">
           <span class="logo-bubble logo-sm" aria-hidden="true" data-ph-icon="brand" data-ph-size="19"></span>
           <span class="text-lg font-bold text-slate-800 truncate">Track Me</span>
@@ -112,6 +112,10 @@
           <span class="rail-ico" aria-hidden="true" data-ph-icon="home" data-ph-size="19"></span>
           <span>หน้าหลัก</span>
         </button>
+        <button type="button" data-nav="overview" data-tab="overview" class="desktop-nav-item">
+          <span class="rail-ico" aria-hidden="true" data-ph-icon="overview" data-ph-size="19"></span>
+          <span>ประวัติ &amp; รายงาน</span>
+        </button>
         <button type="button" data-nav="food" data-tab="food" class="desktop-nav-item">
           <span class="rail-ico" aria-hidden="true" data-ph-icon="food" data-ph-size="19"></span>
           <span>อาหาร</span>
@@ -123,10 +127,6 @@
             <span class="rail-chev" aria-hidden="true" data-ph-icon="chevron-down" data-ph-size="14"></span>
           </summary>
           <div class="desktop-nav-sublist">
-            <button type="button" data-nav="health" data-tab="overview" class="desktop-nav-subitem">
-              <span class="rail-ico" aria-hidden="true" data-ph-icon="overview" data-ph-size="16"></span>
-              <span>แดชบอร์ด</span>
-            </button>
             <button type="button" data-nav="health" data-tab="workout" class="desktop-nav-subitem">
               <span class="rail-ico" aria-hidden="true" data-ph-icon="workout" data-ph-size="16"></span>
               <span>ออกกำลังกาย</span>
@@ -175,9 +175,9 @@
     </nav>
     <div id="reminder-banner" class="hidden bg-pink-soft text-pink-800"></div>
 
-    <nav id="subnav" class="subnav hidden max-w-7xl mx-auto px-4 md:px-6" aria-label="หน้าย่อย"></nav>
+    <nav id="subnav" class="subnav hidden w-full px-4 md:px-6 lg:px-8" aria-label="หน้าย่อย"></nav>
 
-    <main id="tab-home" class="page max-w-[74rem] mx-auto px-4 md:px-6 grid grid-cols-1 gap-4 md:gap-6">
+    <main id="tab-home" class="page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6">
       <div id="home-today"></div>
       <section id="summary-section" class="space-y-4">
         <div class="card">
@@ -186,29 +186,35 @@
               <span class="emoji-bubble icon-bubble emoji-sm" aria-hidden="true" data-ph-icon="overview" data-ph-size="16"></span>
               <span>สรุปภาพรวมทั้งหมด</span>
             </h2>
-            <button id="btn-copy-summary" class="chip bg-slate-100 text-slate-700">
-              <span class="inline-flex" data-ph-icon="copy" data-ph-size="14" aria-hidden="true"></span>
-              <span>คัดลอกสรุป</span>
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="btn-home-history-report" data-page-go="overview" class="chip bg-sky-soft text-brand-dark font-semibold min-h-[44px]">
+                <span class="inline-flex" data-ph-icon="overview" data-ph-size="14" aria-hidden="true"></span>
+                <span>ประวัติ &amp; รายงาน</span>
+              </button>
+              <button id="btn-copy-summary" class="chip bg-slate-100 text-slate-700">
+                <span class="inline-flex" data-ph-icon="copy" data-ph-size="14" aria-hidden="true"></span>
+                <span>คัดลอกสรุป</span>
+              </button>
+            </div>
           </div>
           <div id="summary-grid" class="grid grid-cols-2 gap-3"></div>
           <p id="sum-sync" class="text-xs text-slate-500 mt-3"></p>
         </div>
       </section>
     </main>
-    <main id="tab-food" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8"></main>
-    <main id="tab-overview" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-workout" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8"></main>
-    <main id="tab-remind" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
-    <main id="tab-expense" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-period" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-symptoms" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-care" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
-    <main id="tab-inventory" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
-    <main id="tab-body" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8"></main>
-    <main id="tab-report" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-notifications" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
-    <main id="tab-settings" class="hidden page max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
+    <main id="tab-food" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6 lg:gap-8"></main>
+    <main id="tab-overview" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6"></main>
+    <main id="tab-workout" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6 lg:gap-8"></main>
+    <main id="tab-remind" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
+    <main id="tab-expense" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
+    <main id="tab-period" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
+    <main id="tab-symptoms" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
+    <main id="tab-care" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
+    <main id="tab-inventory" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-2 gap-4 lg:gap-8"></main>
+    <main id="tab-body" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6 lg:gap-8"></main>
+    <main id="tab-report" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 gap-4 md:gap-6"></main>
+    <main id="tab-notifications" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
+    <main id="tab-settings" class="hidden page w-full px-4 md:px-6 lg:px-8 grid grid-cols-1 md:gap-6 lg:grid-cols-3 gap-4 lg:gap-8"></main>
 
     <!-- แถบเมนูมือถือ 5 ตำแหน่ง: หน้าหลัก, อาหาร, โลโก้แอป (Bottom Sheet), ออกกำลังกาย, ดูแล -->
     <nav id="bottom-nav" class="bottom-nav" aria-label="เมนูหลัก">

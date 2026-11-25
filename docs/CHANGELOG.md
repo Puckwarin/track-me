@@ -3,7 +3,42 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
-## [v5.10.0] - 2026-11-23
+## [v6.0.0] - 2026-11-24
+
+### Workout UX Upgrade, Active Mode Enhancements, Session Evaluation, Next-Day Recovery & Complete Reporting
+- **ประเมินรายท่าเฉพาะท่าหลัก (`src/workoutActive.js`, `src/workoutConstants.js`, `src/workoutActive.test.js`)**:
+  - เพิ่ม `getMainExerciseIndices()` และใช้ `isMainWorkoutSection()` ใน `buildExerciseFeedbackSummary()` เพื่อประเมิน RPE / RIR เฉพาะรายการที่อยู่ในช่วง **ท่าหลัก (`section === 'main'`)** เท่านั้น ไม่นำท่า `warmup` และ `cooldown` มาสร้างการ์ดประเมินหรือบันทึกลง `exerciseFeedback` พร้อมคงข้อความแนะนำเมื่อรอบนั้นไม่มีท่าหลัก
+- **ล้างช่องกรอกใน "วางแผน & บันทึก" ทุกครั้งที่เข้าหรือกลับมา & ปรับปรุงหน้าออกกำลังกาย (`src/workout.js`, `src/exerciseMedia.js`, `src/ui.js`)**:
+  - ปรับ `mountWorkout()`, `setWorkoutTab('plan')` และ `resetToToday()` ให้เรียก `clearForm()` ทุกครั้งเมื่อเข้าแท็บออกกำลังกายหรือสลับกลับมายังแท็บ **วางแผน & บันทึก** และปรับปุ่ม **`เริ่ม`** / **`เริ่มตามแผน`** ให้เรียก `launchActiveWorkoutSession()` โดยตรงไม่เขียนทับช่องกรอกในฟอร์ม
+  - **เติมลิงก์รูป/GIF อัตโนมัติ**: เพิ่ม `findExistingExerciseImage()` และ `getCachedExerciseImage()` (`src/exerciseMedia.js`) เพื่อดึง `imageUrl` จากประวัติที่บันทึก เทมเพลต หรือแคช `trackme_eximg_v1` มาเติมให้ทันทีเมื่อกรอกชื่อท่าที่ตรงกัน (ทั้งในฟอร์มวางแผนและรายการนำเข้า) โดยไม่ทับค่าเมื่อผู้ใช้แก้หรือเคลียร์ช่องลิงก์เอง (`WeakSet`)
+  - **หุบ-กางกลุ่มท่า / ปุ่มยกเลิก / ช่อง URL / ปุ่มวันนี้**: เพิ่มปุ่มหุบและกาง (`collapsedSections`) ในกลุ่ม **วอร์มอัพ**, **ท่าหลัก** และ **คูลดาวน์**, ย้ายปุ่ม **`ยกเลิก`** (`#w-edit-cancel`, `#w-tpl-edit-cancel`) ไปด้านซ้ายมือด้วยโทนสี Rose (`bg-rose-50 text-rose-700 border-rose-300`), คงเฉพาะช่อง **`รูป/GIF ประกอบท่า`** (ถอดช่อง `refTitle`/`refUrl` ออกจากฟอร์มและพรีวิวนำเข้าโดยยังคงอ่าน/แสดง badge เดิมได้) และปรับปุ่ม **`วันนี้`** บนหน้าออกกำลังกายให้ไม่มีลูกศรเลื่อนสัปดาห์ (`showArrows: false` ใน `weekNavBarHtml()`)
+- **โหมด "เริ่มตามแผน" (`src/workoutActive.js`, `src/style.css`, `src/util.js`)**:
+  - **นับเวลาพักครบ 0**: เปลี่ยนข้อความ `"พักครบแล้ว ✓"` เป็นสีแดงและกะพริบ (`.wa-rest-time.is-expired`, รองรับ `prefers-reduced-motion`) และคืนสถานะปกติเมื่อเริ่มนับใหม่หรือหยุด
+  - **ขยายหน้าต่างบนคอมพิวเตอร์ & ย้ายคำอธิบายท่า**: เพิ่ม `.wa-modal-box` (`boxClass`) และขนาดตัวอักษร/รูป/ปุ่มบนหน้าจอ `>= 1024px` (คงเลย์เอาต์ 2 คอลัมน์ `lg:grid-cols-2`), และย้ายคำอธิบายท่า (`r.note`) ไปต่อท้ายบรรทัดน้ำหนัก/เซต-ครั้งเพื่อให้ห่อบรรทัดกระชับขึ้น
+  - **ซ่อนท่าที่เช็กครบแล้ว**: เมื่อเช็กเซตครบทุกเซตในท่าหนึ่ง การ์ดท่านั้นจะถูกซ่อนทันทีโดยยังเก็บ checkbox ที่ติ๊กไว้ใน DOM สำหรับคำนวณผลหลังฝึก และมีปุ่ม **`แสดงท่าที่เสร็จแล้ว (X)`** (`#wa-toggle-done-cards`) ให้กดดูย้อนหลังได้
+- **หัวข้อประเมินหลังออกกำลังกาย & การฟื้นตัวในวันถัดไป (`src/workoutActive.js`, `src/workout.js`, `src/workoutConstants.js`, `src/schema.js`)**:
+  - เปลี่ยนหัวข้อประเมินเซสชันเป็น **สถานะการฝึก** (`completionStatus`: `ทำครบ` / `ทำบางส่วน`), **ความเหนื่อย** (`effortLevel`: `4-5 ค่อนข้างสบาย` ถึง `8-10 หนักมาก/ใกล้หมดแรง` พร้อม map เป็น `sessionRpe`), และ **อาการระหว่างหรือหลังฝึก** (`postSymptom`: `ปกติ`, `คอหรือบ่าตึง`, `แขนหรือขาล้ามาก`, `ปวดหรือมีอาการผิดปกติ`) โดยยังคงรองรับข้อมูล `feeling`/`sessionRpe` เดิม
+  - เพิ่มหัวข้อ **การฟื้นตัวในวันถัดไป** (`nextDayRecovery`: `ฟื้นตัวดี`, `ยังล้าเล็กน้อย`, `ล้าหรือปวดหลายวัน`) ใต้การ์ดประจำวันเมื่อวันที่เลือกเป็นวันถัดจากวันที่มีบันทึกออกกำลังกายสำเร็จ (`getNextDayRecoveryTargets()`) รวมถึงแก้ไขย้อนหลังได้ในการ์ด **ประวัติ & แผน** โดยบันทึก `nextDayRecovery` และ `nextDayRecoveryDate` ลงเอกสาร `workout_records` ของวันออกกำลังกายนั้นโดยตรง
+- **แท็บ `"ประวัติ & แผน"`, นับเซตท่าหลัก, `"x นาที รวม"` และรายงานทุกหน้า (`src/reports.js`, `src/weekly.js`, `src/dashboard.js`, `src/overviewLogic.js`, `src/summary.js`, `src/planner.js`, `src/services/aiAssistant.js`, `src/services/localAssistant.js`, `src/preview.js`, `src/demo.js`)**:
+  - เปลี่ยนชื่อแท็บเป็น **`"ประวัติ & แผน"`**, นับ **"ทำจริง x เซต"** จากเฉพาะท่าหลัก (`countMainCompletedSets()`), แสดง **`"x นาที รวม"`** (`computeWorkoutTotalMinutes()`), ขยาย `summarizeWorkoutCollection()` (`byCompletion`, `byEffort`, `bySymptom`, `byRecovery`), เพิ่มคอลัมน์ CSV ที่ 22–26 ใน `buildWorkoutCsvRows()` (`27` คอลัมน์ทั้งหมดโดยคงคอลัมน์เดิม `0..21`), และส่งต่อฟิลด์ประเมินใหม่กับการฟื้นตัวในวันถัดไปไปยังรายงาน HTML/PDF (`reports.js`), สรุปรายสัปดาห์/เดือน (`weekly.js`), Weekly Planner (`planner.js`), AI Assistant `getWorkouts` / Offline Assistant และ `preview.js`
+
+---
+## [v5.10.0] - 2026-11-24
+
+### Top-Level "ประวัติ & รายงาน", Full-Width Desktop Layout, `statementParser` Tests, AI `[DATA_START]`/`[DATA_END]` Guard, Instant Planner Feedback & Bundle Splitting
+- **เมนูหลัก & รวมมุมมอง `"ประวัติ & รายงาน"` (`src/categories.js`, `src/navigationSettings.js`, `src/app.js`, `src/dashboard.js`, `src/weekly.js`, `src/reports.js`, `index.html`, `src/navigation.test.js`)**:
+  - เปลี่ยนชื่อ `"แดชบอร์ด"` เป็น **`"ประวัติ & รายงาน"`** และย้ายออกจากกลุ่มเมนูย่อย `สุขภาพ` ขึ้นมาเป็นเมนูระดับหลักต่อจาก **`หน้าหลัก`** เพื่อให้เข้าถึงข้อมูลรวมหลายหมวด (สุขภาพ อาหาร ออกกำลังกาย น้ำหนัก และการเงิน) ได้ตรงโดยไม่ปะปนกับเครื่องมือบันทึกรายวันในหมวดสุขภาพ
+  - รวมหน้า **ภาพรวม** (`src/dashboard.js`) และ **สรุป** (`src/weekly.js`) เข้าไว้ในแท็บ **`ประวัติ & รายงาน`** ภายใต้แถบสลับมุมมอง **`ภาพรวม & สรุป`** / **`รายงาน (PDF / CSV)`** โดยคงกราฟรายเดือนและปฏิทินสรุปรายสัปดาห์/เดือนพร้อมตัดการ์ด KPI ที่ซ้ำกันออก
+- **ปลดล็อกเลย์เอาต์เต็มหน้าจอบน Desktop / Tablet (`src/style.css`, `src/body.js`, `src/symptoms.js`, `src/expense.js`)**:
+  - ถอดข้อจำกัด `max-width` ของ `.db-page`, `#reminder-banner` และ `.preview-banner-inner` พร้อมเพิ่ม `.db-charts-grid` (2 คอลัมน์ตั้งแต่ `>= 768px`), ขยายสัดส่วน 2 คอลัมน์ใน `src/body.js` (`lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,1fr)]`) และ `src/symptoms.js` (`lg:col-span-3`), และถอด `max-w-2xl` ในฟอร์มบันทึกของ `src/expense.js`
+- **เทสต์ถาวร `src/statementParser.test.js` (`9 tests`)**:
+  - ทดสอบฟังก์ชัน `parseStatementLine` และ `parseStatementText` ครอบคลุมการแปลงปี พ.ศ. 2 หลัก (`67`→`2024`, `69`→`2026`), ปฏิทินที่ไม่มีจริง (`31/02/69`, `29/02/68`, `31/04/69`), ขีดจำกัดวันที่อนาคต >7 วัน, การแยกประเภทรายการเติมเงิน `TrueWallet` / `TrueMoney Wallet` / `Rabbit LinePay` เป็น `income` (ไม่นับเป็น `expense`), โอนบัญชีตัวเองเป็น `transfer` และการลบเลขบัญชี/ยอดคงเหลือ
+- **ชั้นป้องกัน `[DATA_START]` / `[DATA_END]` ใน `src/services/aiAssistant.js` & `src/services/aiAssistant.test.js`**:
+  - คง `sanitizeDataText()` ทุกจุดเดิมพร้อมตัด tag ปลอม `[DATA_START]` / `[DATA_END]` / `[/DATA_*]`, เพิ่ม `wrapDataBoundary()` และ `formatToolOutcomeForModel()` ครอบข้อมูลจาก Firestore ที่ส่งเข้า Gemini, Groq และ OpenRouter ด้วย `[DATA_START]` ... `[DATA_END]` และอัปเดต `buildSystemPrompt()` โดยคง flow การกดปุ่ม **`ยืนยันบันทึก`** ใน `src/chatWidget.js` ไว้ครบถ้วน
+- **Toast / Visual Feedback ทันที & Double-Tap Lock ใน Weekly Planner (`src/planner.js`, `src/planner.test.js`, `src/style.css`)**:
+  - เพิ่ม Pure helpers `formatPlannerToast()` และ `validateRoutineDraft()` (ทดสอบใน `src/planner.test.js`), เพิ่มสถานะ `#pl-feedback-slot` (`.pl-feedback-pill`), แอนิเมชัน `.pl-feedback-flash` และ `withBusyLock()` (`.pl-task-busy` / `disabled`) เมื่อกดเลือกวัน เลื่อนสัปดาห์ กด `"วันนี้"` เช็กสถานะงาน (ทั้งออกกำลังกายและกิจวัตร) ย้ายวัน ลบ หรือบันทึก รวมถึงตรวจผล `savePlanner()` ใน `#rt-save` เพื่อไม่แสดงสำเร็จเมื่อเกิด rollback
+- **ลดขนาด Initial Entry Bundle (`vite.config.js`, `src/app.js`, `src/periodStats.js`, `src/bodyStats.js`, `src/period.js`, `src/body.js`, `src/push.js`, `src/inventory.js`, `src/remindLog.js`, `src/reminders.js`, `src/expense.js`, `src/summary.js`, `src/profile.js`, `src/workout.js`, `src/reports.js`)**:
+  - แยก Pure stats (`periodStats.js`, `bodyStats.js`), เปลี่ยน `period.js`, `symptoms.js`, `body.js`, `reminders.js`, `onboarding.js` และ `slipOcr.js` เป็น dynamic `import()`, และแยก `vendor-firebase` ผ่าน Rollup `manualChunks` ทำให้ `index-*.js` ลดจาก `1,208.83 kB` (`323.26 kB` gzip) เหลือ `241.02 kB` (`74.68 kB` gzip)
 
 ### 4-Tile Macro Cards (`น้ำตาล · โซเดียม`), Target-Relative Donut Scale, Streamlined Food Summary, Planner Modal Upgrades & Button-Matched Input Typography
 - **หน้า Home & สรุปภาพรวม (`src/home.js`, `src/home.css`, `src/donutChart.js`, `src/donutChart.test.js`)**:

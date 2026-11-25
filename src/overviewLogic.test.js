@@ -54,7 +54,16 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
       workouts: [
         { date: '2026-10-10', status: 'done', durationMin: 45, estKcal: 300 },
         { date: '2026-10-12', status: 'planned', durationMin: 60, estKcal: 400 },
-        { date: '2026-11-03', status: 'done', durationMin: 30, estKcal: 210 }
+        {
+          date: '2026-11-03',
+          status: 'done',
+          durationMin: null,
+          estKcal: 210,
+          performedSets: [
+            { section: 'warmup', repUnit: 'min', reps: 5, completed: true },
+            { section: 'main', repUnit: 'min', reps: 25, completed: true }
+          ]
+        }
       ],
       expenses: [
         { date: '2026-11-01', type: 'income', amount: 30000 },

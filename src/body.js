@@ -6,6 +6,9 @@ import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindChartInspector, bindSwipeRows } from './ui.js';
+import { BODY_MEASUREMENT_KEYS, bodyLatest, resolvedSleepHours, sortBodyDesc } from './bodyStats.js';
+
+export { bodyLatest, sortBodyDesc };
 
 const CHART_METRICS = [
   { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#1F4A74' },
@@ -21,18 +24,13 @@ const SLEEP_STEPS_METRICS = [
   { key: 'steps', label: 'ก้าวเดิน', unit: 'ก้าว', color: '#217A68', decimals: 0 }
 ];
 
-const BODY_MEASUREMENT_KEYS = ['weight', 'bust', 'waist', 'hip', 'arm', 'thigh'];
+const hasBodyMeasurement = r => BODY_MEASUREMENT_KEYS.some(k => typeof r?.[k] === 'number');
+const hasSleepOrSteps = r => r && (typeof r.sleepHours === 'number' || typeof r.sleepMinutes === 'number' || typeof r.steps === 'number');
 
 let root;
 let activeBodyTab = 'body';
 let activeMetric = 'weight';
 let activeSleepStepsMetric = 'sleepHours';
-
-const hasBodyMeasurement = r => BODY_MEASUREMENT_KEYS.some(k => typeof r?.[k] === 'number');
-const hasSleepOrSteps = r => r && (typeof r.sleepHours === 'number' || typeof r.sleepMinutes === 'number' || typeof r.steps === 'number');
-const resolvedSleepHours = r => typeof r?.sleepHours === 'number'
-  ? r.sleepHours
-  : (typeof r?.sleepMinutes === 'number' ? Math.round((r.sleepMinutes / 60) * 100) / 100 : null);
 
 function sourceBadgeLabel(src) {
   if (src === 'zepp_csv') return 'Zepp CSV';
@@ -74,7 +72,7 @@ export function mountBody(el) {
       <button type="button" role="tab" data-body-tab="sleep" aria-selected="false" class="tm-seg-btn">นอน & ก้าวเดิน (Zepp)</button>
     </div>
   </div>
-  <div id="b-panel-body" class="md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
+  <div id="b-panel-body" class="md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,1fr)] gap-4 md:gap-6 lg:gap-8">
     <div class="space-y-6">
       <div class="card space-y-4">
         <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-brand' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
@@ -111,7 +109,7 @@ export function mountBody(el) {
       </div>
     </div>
   </div>
-  <div id="b-panel-sleep" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-4 md:gap-6 lg:gap-8">
+  <div id="b-panel-sleep" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,1fr)] gap-4 md:gap-6 lg:gap-8">
     <div class="space-y-6">
       <div class="card space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-2">
@@ -208,20 +206,7 @@ export function resetBodyToToday() {
   if (modalDateEl) modalDateEl.value = today;
 }
 
-export const sortBodyDesc = items => items.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-export function bodyLatest(items) {
-  const desc = sortBodyDesc(items), out = {};
-  BODY_MEASUREMENT_KEYS.forEach(k => {
-    const f = desc.find(i => typeof i[k] === 'number');
-    if (f) out[k] = { v: f[k], d: f.date };
-  });
-  const sRec = desc.find(i => resolvedSleepHours(i) !== null);
-  if (sRec) out.sleepHours = { v: resolvedSleepHours(sRec), d: sRec.date };
-  const stepRec = desc.find(i => typeof i.steps === 'number');
-  if (stepRec) out.steps = { v: stepRec.steps, d: stepRec.date };
-  return out;
-}
+// sortBodyDesc and bodyLatest re-exported from ./bodyStats.js
 
 export function metricChartSvg(items, metricKey = 'weight') {
   const meta = CHART_METRICS.find(m => m.key === metricKey) || SLEEP_STEPS_METRICS.find(m => m.key === metricKey) || CHART_METRICS[0];

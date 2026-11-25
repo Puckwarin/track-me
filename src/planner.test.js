@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { getFrequentRecentRoutines, inferRoutineEmoji, matchingDayPreset, routineAppliesToDate } from './planner.js';
+import {
+  formatPlannerToast,
+  getFrequentRecentRoutines,
+  inferRoutineEmoji,
+  matchingDayPreset,
+  moveRoutineOccurrence,
+  routineAppliesToDate,
+  skipRoutineOccurrence,
+  validateRoutineDraft
+} from './planner.js';
 
 describe('planner routine emoji and frequent-recent helpers', () => {
   it('infers matching emojis for Thai/English chores and preserves custom non-default icons', () => {
@@ -79,5 +88,52 @@ describe('planner routine emoji and frequent-recent helpers', () => {
     expect(routineAppliesToDate(weekScoped, '2026-11-17')).toBe(false); // อังคารสัปดาห์นั้น
     expect(routineAppliesToDate(weekScoped, '2026-11-23')).toBe(false); // จันทร์สัปดาห์ถัดไป
     expect(routineAppliesToDate(weekScoped, '2026-11-09')).toBe(false); // จันทร์สัปดาห์ก่อนหน้า
+  });
+
+  it('builds consistent Thai feedback messages and validates routine drafts', () => {
+    expect(formatPlannerToast('select-day', { dateStr: '2026-11-24' })).toContain('เลือกวันอ');
+    expect(formatPlannerToast('week-shift', { weekMonday: '2026-11-23', delta: 1 })).toContain('เลื่อนดูสัปดาห์');
+    expect(formatPlannerToast('today')).toBe('กลับมาที่วันปัจจุบันแล้ว');
+    expect(formatPlannerToast('toggle', { kind: 'routine', title: 'ล้างจาน', checked: true })).toContain('เช็ก "ล้างจาน" เสร็จแล้ว');
+    expect(formatPlannerToast('toggle', { kind: 'routine', title: 'ล้างจาน', checked: false })).toContain('ยังไม่ทำ');
+    expect(formatPlannerToast('move', { title: 'ซักผ้า', dateStr: '2026-11-25' })).toContain('ย้าย "ซักผ้า"');
+    expect(formatPlannerToast('skip', { title: 'ล้างจาน', dateStr: '2026-11-24', scopedToWeek: false })).toContain('นำ "ล้างจาน" ออกจาก');
+
+    expect(validateRoutineDraft('   ', [0, 1]).ok).toBe(false);
+    expect(validateRoutineDraft('อ่านหนังสือ', []).ok).toBe(false);
+    expect(validateRoutineDraft(' อ่านหนังสือ ', [3, 1, 3, 9])).toEqual({
+      ok: true,
+      title: 'อ่านหนังสือ',
+      days: [1, 3]
+    });
+  });
+
+  it('moves and skips recurring routine occurrences without corrupting other weeks', () => {
+    const planner = {
+      routines: [{ id: 'r1', title: 'ล้างจาน', days: [0, 2], weekPattern: 'every' }],
+      doneMap: { '2026-11-23': ['r1'] },
+      moves: [],
+      skips: [],
+      recentDone: [{ id: 'r1', title: 'ล้างจาน', date: '2026-11-23' }]
+    };
+
+    const moved = moveRoutineOccurrence(planner, {
+      routineId: 'r1',
+      fromDate: '2026-11-23',
+      toDate: '2026-11-24'
+    });
+    expect(moved.ok).toBe(true);
+    expect(moved.planner.moves).toEqual([{ routineId: 'r1', from: '2026-11-23', to: '2026-11-24' }]);
+    expect(moved.planner.doneMap['2026-11-23']).toBeUndefined();
+    expect(moved.planner.doneMap['2026-11-24']).toEqual(['r1']);
+
+    const skipped = skipRoutineOccurrence(moved.planner, {
+      routineId: 'r1',
+      dateStr: '2026-11-24'
+    });
+    expect(skipped.ok).toBe(true);
+    expect(skipped.planner.moves).toEqual([]);
+    expect(skipped.planner.skips).toEqual([{ routineId: 'r1', date: '2026-11-23' }]);
+    expect(skipped.planner.doneMap['2026-11-24']).toBeUndefined();
   });
 });

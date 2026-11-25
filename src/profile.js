@@ -2,7 +2,7 @@ import { setDoc, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, emit } from './state.js';
 import { $, esc, toNum, round1, toast } from './util.js';
-import { bodyLatest } from './body.js';
+import { bodyLatest } from './bodyStats.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 

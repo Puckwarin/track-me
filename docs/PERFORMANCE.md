@@ -67,3 +67,27 @@
 | PWA precache | 49 รายการ / 6,509.88 KiB | 49 รายการ / 6,530.35 KiB | +20.47 KiB |
 
 - ขนาดเพิ่มขึ้น +14.57 kB (gzip) สำหรับชุดไอคอน Phosphor Duotone ทั้งแอปโดยไม่มีการเรียกเครือข่ายหรือ CDN ภายนอก
+
+---
+
+## ผลหลังปรับ Dynamic `import()` & Vendor Chunking ใน v5.10.0
+
+แยกโมดูลคำนวณสถิติแบบ pure (`src/periodStats.js`, `src/bodyStats.js`), เปลี่ยนฟีเจอร์รอง (`period.js`, `symptoms.js`, `body.js`, `reminders.js`, `onboarding.js`, `slipOcr.js`) เป็น dynamic `import()`, และกำหนด `manualChunks` ใน `vite.config.js` เพื่อแยก Firebase SDK (`firebase` / `@firebase`) เป็น `vendor-firebase`
+
+| รายการ (`vite v6.4.6`) | v5.10.0 (ก่อนแยกเพิ่ม) | v5.10.0 (หลังปรับ Code-Splitting) | เปลี่ยนแปลง |
+|---|---:|---:|---:|
+| Application Entry (`index`) minified | 1,208.83 kB | 241.02 kB | ลด 967.81 kB (-80.1%) |
+| Application Entry (`index`) gzip | 323.26 kB | 74.68 kB | ลด 248.58 kB (-76.9%) |
+| `vendor-firebase` (`firebase`/`@firebase`) | รวมอยู่ใน `index` | 804.93 kB (`204.65 kB` gzip) | แยก cache ออกจากโค้ดแอป |
+| PWA precache | 49 รายการ | 62 รายการ (`5,313.85 KiB`) | แยก chunk รายฟีเจอร์ |
+
+### ขนาด Lazy Chunks ใหม่ที่แยกออกจาก Entry (`v5.10.0`)
+
+- `body`: `51.56 kB` (`14.61 kB` gzip) · `reminders`: `15.89 kB` (`4.99 kB` gzip) · `onboarding`: `15.81 kB` (`5.23 kB` gzip)
+- `symptoms`: `15.59 kB` (`4.34 kB` gzip) · `period`: `15.06 kB` (`5.01 kB` gzip) · `slipOcr`: `10.61 kB` (`4.45 kB` gzip)
+
+### ข้อสังเกตที่ยังคงอยู่หลัง v5.10.0
+
+- `vendor-firebase` (`804.93 kB` minified / `204.65 kB` gzip) ยังเกินคำเตือน Vite `500 kB` และยังคงโหลดเมื่อเริ่มต้นเนื่องจากระบบ Authentication (`auth.js`) และ Firestore listeners หลัก (`app.js`/`sync.js`) ต้องใช้งานตั้งแต่เริ่ม session แต่ถูกแยกออกจากโค้ดฟีเจอร์ของแอปเพื่อให้ browser cache Firebase SDK แยกได้เมื่ออัปเดตเวอร์ชันแอป
+- ค่าทั้งหมดวัดจาก `npm run build` บนเครื่องพัฒนา; ยังไม่ได้วัดเวลาโหลด FCP/LCP จริงบนอุปกรณ์มือถือ
+

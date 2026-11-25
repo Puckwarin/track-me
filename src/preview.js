@@ -156,7 +156,7 @@ export function createPreviewDataset(today = localDateStr()) {
       type: 'pilates',
       durationMin: 25,
       intensity: 'light',
-      caloriesBurn: 85,
+      estKcal: 85,
       status: 'planned',
       title: 'Pilates & Core ยืดเหยียดเย็น',
       note: 'ทำหลังเลิกงาน 25 นาที'
@@ -167,10 +167,29 @@ export function createPreviewDataset(today = localDateStr()) {
       type: 'lower',
       durationMin: 35,
       intensity: 'moderate',
-      caloriesBurn: 165,
+      estKcal: 165,
       status: 'done',
       title: 'Day A — Lower Body',
-      feeling: 'great',
+      completionStatus: 'complete',
+      effortLevel: 'hard',
+      postSymptom: 'normal',
+      feeling: 'energized',
+      sessionRpe: 7,
+      completedSetCount: 6,
+      performedSets: [
+        { name: 'March in Place', section: 'warmup', set: 1, reps: 60, repUnit: 'sec', completed: true },
+        { name: 'Goblet Squat', section: 'main', set: 1, weightKg: 4, reps: 12, repUnit: 'reps', completed: true },
+        { name: 'Goblet Squat', section: 'main', set: 2, weightKg: 4, reps: 12, repUnit: 'reps', completed: true },
+        { name: 'Goblet Squat', section: 'main', set: 3, weightKg: 4, reps: 12, repUnit: 'reps', completed: true },
+        { name: 'Glute Bridge', section: 'main', set: 1, weightKg: 4, reps: 15, repUnit: 'reps', completed: true },
+        { name: 'Glute Bridge', section: 'main', set: 2, weightKg: 4, reps: 15, repUnit: 'reps', completed: true },
+        { name: 'Glute Bridge', section: 'main', set: 3, weightKg: 4, reps: 15, repUnit: 'reps', completed: true },
+        { name: 'Hamstring Stretch', section: 'cooldown', set: 1, reps: 45, repUnit: 'sec', completed: true }
+      ],
+      exerciseFeedback: [
+        { name: 'Goblet Squat', section: 'main', rpe: 7, rir: 3, nextAction: 'increase', nextLabel: 'รอบหน้าเพิ่มน้ำหนัก (+1–2 kg) หรือเพิ่ม 1–2 ครั้ง' },
+        { name: 'Glute Bridge', section: 'main', rpe: 7, rir: 2, nextAction: 'maintain', nextLabel: 'คงน้ำหนักและเซตเดิม โฟกัสฟอร์มให้แน่น' }
+      ],
       note: 'Goblet Squat คุมจังหวะได้ดีมาก',
       sections: {
         warmup: [{ name: 'March in Place', sets: 1, reps: 60, repUnit: 'sec', note: 'วอร์มอัพ' }],
@@ -181,12 +200,12 @@ export function createPreviewDataset(today = localDateStr()) {
         cooldown: [{ name: 'Hamstring Stretch', sets: 1, reps: 45, repUnit: 'sec', note: 'ผ่อนคลาย' }]
       }
     },
-    { id: 'pw_2', date: d3, type: 'walk', durationMin: 40, intensity: 'moderate', caloriesBurn: 140, status: 'done', title: 'เดินเร็วช่วงเย็นในสวน', feeling: 'good' },
-    { id: 'pw_3', date: d7, type: 'upper', durationMin: 30, intensity: 'moderate', caloriesBurn: 130, status: 'done', title: 'Upper Body & Posture', feeling: 'good' },
-    { id: 'pw_4', date: m1a, type: 'full', durationMin: 40, intensity: 'moderate', caloriesBurn: 195, status: 'done', title: 'Full Body Circuit', feeling: 'great' },
-    { id: 'pw_5', date: m1b, type: 'walk', durationMin: 35, intensity: 'light', caloriesBurn: 105, status: 'done', title: 'เดินเร็ว 35 นาที' },
-    { id: 'pw_6', date: m2a, type: 'lower', durationMin: 30, intensity: 'moderate', caloriesBurn: 150, status: 'done', title: 'Lower Body Foundation' },
-    { id: 'pw_7', date: m3a, type: 'pilates', durationMin: 30, intensity: 'moderate', caloriesBurn: 115, status: 'done', title: 'Mat Pilates' }
+    { id: 'pw_2', date: d3, type: 'walk', durationMin: 40, intensity: 'moderate', estKcal: 140, status: 'done', title: 'เดินเร็วช่วงเย็นในสวน', completionStatus: 'complete', effortLevel: 'moderate', postSymptom: 'normal', nextDayRecovery: 'good', nextDayRecoveryDate: twoDaysAgo, feeling: 'good', sessionRpe: 6 },
+    { id: 'pw_3', date: d7, type: 'upper', durationMin: 30, intensity: 'moderate', estKcal: 130, status: 'done', title: 'Upper Body & Posture', feeling: 'good', sessionRpe: 7 },
+    { id: 'pw_4', date: m1a, type: 'full', durationMin: 40, intensity: 'moderate', estKcal: 195, status: 'done', title: 'Full Body Circuit', feeling: 'energized', sessionRpe: 8 },
+    { id: 'pw_5', date: m1b, type: 'walk', durationMin: 35, intensity: 'light', estKcal: 105, status: 'done', title: 'เดินเร็ว 35 นาที', feeling: 'good', sessionRpe: 5 },
+    { id: 'pw_6', date: m2a, type: 'lower', durationMin: 30, intensity: 'moderate', estKcal: 150, status: 'done', title: 'Lower Body Foundation', feeling: 'good', sessionRpe: 7 },
+    { id: 'pw_7', date: m3a, type: 'pilates', durationMin: 30, intensity: 'moderate', estKcal: 115, status: 'done', title: 'Mat Pilates', feeling: 'good', sessionRpe: 6 }
   ];
 
   const workout_templates = [

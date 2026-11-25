@@ -61,9 +61,12 @@ export function seedDemoState() {
   state.workouts = Array.from({ length: 8 }, (_, index) => ({
     id: `demo-workout-${index}`,
     date: addDays(today, -(index * 3 + 1)),
-    type: index % 2 ? 'strength' : 'walking',
+    type: index % 2 ? 'full' : 'walk',
     title: index % 2 ? 'เวทเทรนนิ่งเบา ๆ' : 'เดินเร็วในสวน',
     durationMin: index % 2 ? 35 : 42,
+    intensity: index % 2 ? 'moderate' : 'light',
+    feeling: index % 2 ? 'good' : 'energized',
+    sessionRpe: index % 2 ? 7 : 5,
     estKcal: index % 2 ? 180 : 205,
     status: 'done'
   }));

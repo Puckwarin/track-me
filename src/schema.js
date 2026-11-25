@@ -127,6 +127,12 @@ export const SANITIZERS = {
     performedSets:Array.isArray(o.performedSets)?o.performedSets.slice(0,300).filter(x=>x&&str(x.name,80)).map(x=>({name:str(x.name,80),section:['warmup','main','cooldown'].includes(x.section)?x.section:'main',set:int(x.set,1,99),weightKg:num(x.weightKg),reps:num(x.reps),completed:x.completed===true})):[], completedSetCount:int(o.completedSetCount,0,300), volumeKg:num(o.volumeKg),
     ...(['energized','good','tired','exhausted'].includes(o.feeling)&&{feeling:o.feeling}),
     ...(int(o.sessionRpe,1,10)!==null&&{sessionRpe:int(o.sessionRpe,1,10)}),
+    ...(['complete','partial'].includes(o.completionStatus)&&{completionStatus:o.completionStatus}),
+    ...(['easy','moderate','hard','very_hard'].includes(o.effortLevel)&&{effortLevel:o.effortLevel}),
+    ...(['normal','neck_shoulder_tight','limb_fatigue','pain_abnormal'].includes(o.postSymptom)&&{postSymptom:o.postSymptom}),
+    ...(['good','sore_mild','sore_multi'].includes(o.nextDayRecovery)&&{nextDayRecovery:o.nextDayRecovery}),
+    ...(validCalendarDate(o.nextDayRecoveryDate)&&{nextDayRecoveryDate:o.nextDayRecoveryDate}),
+    ...(str(o.reflectionNote,500)&&{reflectionNote:str(o.reflectionNote,500)}),
     ...(Array.isArray(o.exerciseFeedback)&&{exerciseFeedback:o.exerciseFeedback.slice(0,40).filter(x=>x&&str(x.name,80)).map(x=>({name:str(x.name,80),section:['warmup','main','cooldown'].includes(x.section)?x.section:'main',...(int(x.rpe,1,10)!==null&&{rpe:int(x.rpe,1,10)}),...(int(x.rir,0,10)!==null&&{rir:int(x.rir,0,10)}),...(['increase','maintain','deload'].includes(x.nextAction)&&{nextAction:x.nextAction}),...(str(x.nextLabel,120)&&{nextLabel:str(x.nextLabel,120)})}))}),
     note:str(o.note,500), createdAt:ts(o.createdAt), ...(o.updatedAt&&{updatedAt:ts(o.updatedAt)})
   } : null,

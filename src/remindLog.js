@@ -2,7 +2,7 @@ import { addDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestor
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
-import { REMIND_OPTIONS, remindLabel } from './period.js';
+import { REMIND_OPTIONS, remindLabel } from './periodStats.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';

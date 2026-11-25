@@ -137,7 +137,7 @@ input.input::-webkit-datetime-edit { padding: 0; }
 .sync-pill > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 380px) { .sync-pill #sync-text { display: none; } }
 #reminder-banner { border-radius: 1.25rem; margin: .75rem 1rem 0; }
-@media (min-width: 1152px) { #reminder-banner { max-width: 78rem; margin-inline: auto; padding-inline: 1rem; } }
+@media (min-width: 1152px) { #reminder-banner { margin-inline: 1.5rem; padding-inline: 1rem; } }
 
 /* ---------- à¹€à¸¡à¸™à¸¹à¸¢à¹ˆà¸­à¸¢ (à¸Šà¸´à¸›à¹€à¸¥à¸·à¹ˆà¸­à¸™à¹à¸™à¸§à¸™à¸­à¸™) ---------- */
 .page { margin-top: 1rem; }
@@ -700,6 +700,45 @@ input.input::-webkit-datetime-edit { padding: 0; }
 }
 .wa-eval-btn:hover { background: #D7EBF6; border-color: #99C3E4; }
 .wa-eval-btn.is-active { background: #4A90D4; border-color: #4A90D4; color: #FFFFFF; font-weight: 600; }
+.wa-rest-time {
+  color: var(--color-brand-dark);
+  transition: color .15s;
+}
+.wa-rest-time.is-expired {
+  color: #DC2626;
+  font-weight: 700;
+  animation: wa-rest-blink 1s ease-in-out infinite;
+}
+@keyframes wa-rest-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-rest-time.is-expired { animation: none; }
+}
+@media (min-width: 1024px) {
+  .modal-box.wa-modal-box,
+  .tm-modal-box.wa-modal-box {
+    max-width: min(76rem, calc(100vw - 2.5rem));
+    max-height: min(92dvh, 62rem);
+  }
+  .wa-set-btn {
+    min-height: 2.95rem;
+    padding: 0.55rem 1.05rem;
+    font-size: 0.95rem;
+  }
+  .wa-eval-btn {
+    min-height: 2.75rem;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.875rem;
+  }
+  .wa-sec-tab,
+  .wa-rest-btn {
+    min-height: 2.65rem;
+    font-size: 0.875rem;
+    padding: 0.45rem 0.95rem;
+  }
+}
 
 /* ---------- Responsive usability refinements ---------- */
 :where(button, a, input, select, textarea) { min-width: 0; }
@@ -1159,8 +1198,7 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .preview-banner.hidden { display: none; }
 .preview-banner-inner {
-  max-width: 80rem;
-  margin: 0 auto;
+  width: 100%;
   padding: .55rem 1rem;
   display: flex;
   flex-wrap: wrap;
@@ -1481,6 +1519,34 @@ img, video, canvas, svg { max-width: 100%; }
   opacity: .42;
   cursor: grabbing;
 }
+.pl-feedback-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .2rem .65rem;
+  border-radius: 9999px;
+  border: 1px solid #A8D0EF;
+  background: #E9F1FC;
+  color: #194971;
+  font-size: .7rem;
+  font-weight: 600;
+  transition: opacity .2s ease;
+}
+.pl-feedback-pill.hidden {
+  display: none;
+}
+.pl-feedback-flash {
+  animation: pl-soft-pulse .42s ease-out;
+}
+@keyframes pl-soft-pulse {
+  0% { box-shadow: 0 0 0 3px rgb(168 208 239 / .75); }
+  100% { box-shadow: 0 0 0 0 rgb(168 208 239 / 0); }
+}
+.pl-task-busy {
+  opacity: .72;
+  pointer-events: none;
+  transition: opacity .12s ease;
+}
 .pl-board-task-top {
   display: flex;
   align-items: flex-start;
@@ -1524,8 +1590,12 @@ img, video, canvas, svg { max-width: 100%; }
 }
 .pl-board-move-btn:hover { background: #CBE5FC; border-color: #99C3E4; }
 
-/* ---------- แดชบอร์ด: shared responsive layout ---------- */
-.db-page { display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 76rem; margin-inline: auto; }
+/* ---------- ประวัติ & รายงาน: shared responsive layout ---------- */
+.db-page { display: flex; flex-direction: column; gap: 1rem; width: 100%; }
+.db-charts-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 768px) {
+  .db-charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+}
 .db-header { display: flex; flex-direction: column; align-items: stretch; gap: 1rem; }
 .db-heading { min-width: 0; }
 .db-eyebrow { color: var(--color-ink-muted); font-size: .65rem; font-weight: 700; letter-spacing: .14em; }
@@ -1687,7 +1757,7 @@ img, video, canvas, svg { max-width: 100%; }
 }
 @media (min-width: 1024px) {
   .tm-food-log-grid {
-    grid-template-columns: minmax(0, 26.5rem) minmax(0, 1fr);
+    grid-template-columns: minmax(23rem, 29rem) minmax(0, 1fr);
     gap: 1.5rem;
   }
 }

@@ -42,6 +42,13 @@ function writeExCache(key, value) {
   }
 }
 
+export function getCachedExerciseImage(name) {
+  const key = norm(name) || String(name || '').toLowerCase().trim();
+  if (!key) return null;
+  const cached = readExCache()[key];
+  return cached?.url ? { name: cached.name || name, url: cached.url } : null;
+}
+
 export async function findExerciseImage(name) {
   const key = norm(name) || String(name || '').toLowerCase().trim();
   if (!key) return null;

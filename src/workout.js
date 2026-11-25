@@ -1,9 +1,25 @@
 import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { bodyLatest } from './body.js';
-import { findExerciseImage } from './exerciseMedia.js';
-import { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
+import { bodyLatest } from './bodyStats.js';
+import { findExerciseImage, getCachedExerciseImage } from './exerciseMedia.js';
+import {
+  TYPES,
+  SECTIONS,
+  repLabel,
+  INTENSITY,
+  NEXT_DAY_RECOVERIES,
+  formatIntensityLabel,
+  formatRecoveryLabel,
+  formatWorkoutEvaluationParts,
+  summarizeSessionNextStep,
+  isMainWorkoutSection,
+  countMainCompletedSets,
+  computeWorkoutTotalMinutes,
+  buildWorkoutNotesText,
+  summarizeWorkoutCollection,
+  formatIntensityBreakdown
+} from './workoutConstants.js';
 import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl } from './workoutParser.js';
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
@@ -11,13 +27,58 @@ import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 
-import { formatFeelingLabel, summarizeSessionNextStep } from './workoutConstants.js';
+export { TYPES, SECTIONS, repLabel, INTENSITY } from './workoutConstants.js';
 
-export { TYPES, SECTIONS, repLabel } from './workoutConstants.js';
+export function findExistingExerciseImage(name, {
+  workouts = state.workouts || [],
+  templates = state.templates || [],
+  cachedLookup = getCachedExerciseImage
+} = {}) {
+  const target = String(name || '').trim().toLowerCase();
+  if (!target) return '';
+
+  const sortedWorkouts = (workouts || [])
+    .slice()
+    .sort((a, b) => String(b?.date || '').localeCompare(String(a?.date || '')));
+  for (const w of sortedWorkouts) {
+    for (const sec of ['main', 'warmup', 'cooldown']) {
+      for (const r of (w?.sections?.[sec] || [])) {
+        if (String(r?.name || '').trim().toLowerCase() === target) {
+          const valid = safeHttpUrl(r?.imageUrl);
+          if (valid) return valid;
+        }
+      }
+    }
+  }
+
+  for (const t of (templates || [])) {
+    for (const sec of ['main', 'warmup', 'cooldown']) {
+      for (const r of (t?.sections?.[sec] || [])) {
+        if (String(r?.name || '').trim().toLowerCase() === target) {
+          const valid = safeHttpUrl(r?.imageUrl);
+          if (valid) return valid;
+        }
+      }
+    }
+  }
+
+  if (typeof cachedLookup === 'function') {
+    const cached = cachedLookup(name);
+    const valid = safeHttpUrl(cached?.url);
+    if (valid) return valid;
+  }
+
+  return '';
+}
+
+export function getNextDayRecoveryTargets(workouts = [], selectedDate = '', today = localDateStr()) {
+  if (!selectedDate || (today && selectedDate > today)) return [];
+  const prevDate = addDays(selectedDate, -1);
+  return (workouts || []).filter(w => w && w.date === prevDate && w.status !== 'planned');
+}
 const STARTER = ['Goblet Squat', 'Standing RDL', 'Bent-Over Row', 'Shoulder Press', 'Bicep Curl', 'Lateral Raise', 'Push-up', 'Glute Bridge', 'Lunge', 'Plank', 'Cat-Cow', 'Child’s Pose', 'Hamstring Stretch', 'เดินเร็ว'];
 // ค่า MET (Compendium of Physical Activities, ปัดเป็นช่วงโดยประมาณ) ตามประเภทและความหนัก
 const MET = { walk: [2.8, 3.5, 5.0], upper: [3.0, 3.5, 6.0], lower: [3.0, 3.5, 6.0], full: [3.5, 4.3, 6.0], pilates: [2.5, 3.0, 4.0], stretch: [2.0, 2.3, 3.0], other: [3.0, 4.0, 6.0] };
-export const INTENSITY = [['light', 'เบา'], ['moderate', 'ปานกลาง'], ['vigorous', 'หนัก']];
 export const currentWeightKg = () => bodyLatest(state.body).weight?.v ?? state.profile?.weightKg ?? null;
 // พลังงานที่เผาผลาญ "เพิ่มจากตอนพัก" = (MET − 1) × น้ำหนัก(กก.) × ชั่วโมง (ไม่นับ BMR ซ้ำกับ TDEE) — ค่าจริงคลาดเคลื่อนได้ ±25%
 export function estimateBurn(type, intensity, minutes, weightKg) {
@@ -35,10 +96,16 @@ let lastParsedImport = null;
 let importTargetDate = '';
 let importTargetStatus = 'planned';
 let historyStatusFilter = 'all';
+let collapsedSections = { warmup: false, main: false, cooldown: false };
+const manuallyEditedImageRows = new WeakSet();
+const manuallyEditedImportRows = new WeakSet();
 
-function setWorkoutTab(tab) {
+function setWorkoutTab(tab, { reset = true } = {}) {
   if (!root) return;
   activeWorkoutTab = ['plan', 'history', 'templates'].includes(tab) ? tab : 'plan';
+  if (activeWorkoutTab === 'plan' && reset) {
+    clearForm();
+  }
   root.querySelectorAll('[data-workout-tab]').forEach(btn => {
     const on = btn.dataset.workoutTab === activeWorkoutTab;
     btn.classList.toggle('is-active', on);
@@ -125,7 +192,7 @@ export function mountWorkout(el) {
   <div class="md:col-span-2">
     <div class="tm-seg tm-seg--3 max-w-lg" role="tablist" aria-label="หมวดการออกกำลังกาย">
       <button type="button" role="tab" data-workout-tab="plan" aria-selected="true" class="tm-seg-btn is-active">วางแผน & บันทึก</button>
-      <button type="button" role="tab" data-workout-tab="history" aria-selected="false" class="tm-seg-btn">ประวัติ & 7 วัน</button>
+      <button type="button" role="tab" data-workout-tab="history" aria-selected="false" class="tm-seg-btn">ประวัติ & แผน</button>
       <button type="button" role="tab" data-workout-tab="templates" aria-selected="false" class="tm-seg-btn">เทมเพลต</button>
     </div>
   </div>
@@ -140,19 +207,22 @@ export function mountWorkout(el) {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('weekly', { size: 15, className: 'text-brand' })}<span>วางแผนรายสัปดาห์</span></span>
           <div class="ml-auto shrink-0">
-            ${weekNavBarHtml({ isToday: true, prevAttrs: 'id="w-wk-prev"', todayAttrs: 'id="w-wk-now"', nextAttrs: 'id="w-wk-next"' })}
+            ${weekNavBarHtml({ isToday: true, todayAttrs: 'id="w-wk-now"', showArrows: false })}
           </div>
         </div>
         <div id="w-week-strip" class="tm-week-strip tabular-nums" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
         <div id="w-day-plans" class="space-y-1.5"></div>
+        <div id="w-nextday-recovery" class="space-y-2"></div>
       </div>
 
       <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-slate-200 bg-[#E9F1FC] p-3 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-semibold text-brand-dark inline-flex items-center gap-1">${iconSvg('edit-square', { size: 14 })}<span>กำลังแก้ไขเทมเพลต:</span></span>
           <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต">
-          <button type="button" id="w-tpl-edit-save" class="btn btn-primary !py-1.5 !px-3 text-xs">${iconSvg('save', { size: 14 })} บันทึกเทมเพลต</button>
-          <button type="button" id="w-tpl-edit-cancel" class="btn btn-ghost !py-1.5 !px-2.5 text-xs">ยกเลิก</button>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" id="w-tpl-edit-cancel" class="btn bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 font-semibold !py-1.5 !px-3 text-xs mr-auto">ยกเลิก</button>
+          <button type="button" id="w-tpl-edit-save" class="btn btn-primary !py-1.5 !px-3 text-xs ml-auto">${iconSvg('save', { size: 14 })} บันทึกเทมเพลต</button>
         </div>
       </div>
 
@@ -206,12 +276,14 @@ export function mountWorkout(el) {
       <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
       <div id="w-sections" class="space-y-5"></div>
       <div><label class="lbl">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
-      <div class="flex flex-wrap justify-end gap-2">
-        <button type="button" id="w-edit-cancel" class="btn btn-ghost hidden">ยกเลิกการแก้ไข</button>
-        <button type="button" id="w-copy-tpl" class="btn btn-ghost">${iconSvg('copy', { size: 15 })} คัดลอก Template</button>
-        <button type="button" id="w-active" class="btn btn-soft">${iconSvg('play', { size: 15 })} เริ่มตามแผน</button>
-        <button type="button" id="w-tpl-save" class="btn btn-soft">${iconSvg('bookmark', { size: 15 })} บันทึกเป็นเทมเพลต</button>
-        <button type="button" id="w-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกการออกกำลังกาย</button>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <button type="button" id="w-edit-cancel" class="btn bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 font-semibold hidden mr-auto">ยกเลิกการแก้ไข</button>
+        <div class="flex flex-wrap justify-end gap-2 ml-auto">
+          <button type="button" id="w-copy-tpl" class="btn btn-ghost">${iconSvg('copy', { size: 15 })} คัดลอก Template</button>
+          <button type="button" id="w-active" class="btn btn-soft">${iconSvg('play', { size: 15 })} เริ่มตามแผน</button>
+          <button type="button" id="w-tpl-save" class="btn btn-soft">${iconSvg('bookmark', { size: 15 })} บันทึกเป็นเทมเพลต</button>
+          <button type="button" id="w-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกการออกกำลังกาย</button>
+        </div>
       </div>
       <datalist id="w-names"></datalist>
     </div>
@@ -285,12 +357,21 @@ export function mountWorkout(el) {
   $('#w-sections', root).addEventListener('input', onInput);
   $('#w-sections', root).addEventListener('change', onInput);
   $('#w-sections', root).addEventListener('click', e => {
+    const toggle = e.target.closest('[data-sec-toggle]');
+    if (toggle) {
+      const k = toggle.dataset.secToggle;
+      if (k && Object.hasOwn(collapsedSections, k)) {
+        collapsedSections[k] = !collapsedSections[k];
+        renderSections();
+      }
+      return;
+    }
     const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), media = e.target.closest('[data-media]'), refEdit = e.target.closest('[data-ref-edit]');
     if (refEdit) {
       const box = refEdit.closest('[data-row]')?.querySelector('[data-ref-box]');
       if (box) {
         box.open = true;
-        box.querySelector('[data-k="refUrl"]')?.focus();
+        box.querySelector('[data-k="imageUrl"]')?.focus();
       }
       return;
     }
@@ -298,9 +379,19 @@ export function mountWorkout(el) {
       const [sec, i] = media.dataset.media.split(':');
       const row = draft[sec]?.[+i];
       if (!row?.name.trim()) return toast('ใส่ชื่อท่าก่อนค้นหารูป', 'err');
+      const localHit = findExistingExerciseImage(row.name);
+      if (localHit) {
+        manuallyEditedImageRows.delete(row);
+        row.imageUrl = localHit;
+        row.imageHint = '';
+        renderSections();
+        toast('ดึงรูปจากคลังท่าที่เคยบันทึกแล้ว');
+        return;
+      }
       media.disabled = true;
       findExerciseImage(row.name).then(hit => {
         if (!hit) return toast('ไม่พบภาพท่าที่ตรงกัน — วาง URL รูป/GIF เองได้');
+        manuallyEditedImageRows.delete(row);
         row.imageUrl = hit.url;
         row.imageHint = '';
         renderSections();
@@ -308,7 +399,12 @@ export function mountWorkout(el) {
       }).catch(err => toast(err.message, 'err')).finally(() => { media.disabled = false; });
       return;
     }
-    if (add) { draft[add.dataset.add].push(blankRow()); renderSections(); }
+    if (add) {
+      const k = add.dataset.add;
+      if (Object.hasOwn(collapsedSections, k)) collapsedSections[k] = false;
+      draft[k].push(blankRow());
+      renderSections();
+    }
     if (rm) { const [sec, i] = rm.dataset.rm.split(':'); draft[sec].splice(+i, 1); renderSections(); }
   });
 
@@ -342,9 +438,19 @@ export function mountWorkout(el) {
       const [sec, i] = mediaBtn.dataset.impMedia.split(':');
       const row = lastParsedImport.sections?.[sec]?.[+i];
       if (!row?.name?.trim()) return toast('ใส่ชื่อท่าก่อนค้นหารูป', 'err');
+      const localHit = findExistingExerciseImage(row.name);
+      if (localHit) {
+        manuallyEditedImportRows.delete(row);
+        row.imageUrl = localHit;
+        row.imageHint = '';
+        renderImportPreview();
+        toast('ดึงรูปจากคลังท่าเดิมแล้ว');
+        return;
+      }
       mediaBtn.disabled = true;
       findExerciseImage(row.name).then(hit => {
         if (!hit) return toast('ไม่พบภาพท่าที่ตรงกัน — วาง URL รูป/GIF เองได้');
+        manuallyEditedImportRows.delete(row);
         row.imageUrl = hit.url;
         row.imageHint = '';
         renderImportPreview();
@@ -375,14 +481,6 @@ export function mountWorkout(el) {
     if (e.target.closest('#w-import-copy')) copyFormattedImport();
   });
 
-  const shiftWorkoutWeek = delta => {
-    const cur = $('#w-date', root).value || localDateStr();
-    const next = addDays(cur, delta * 7);
-    weekStart = mondayOf(next);
-    selectPlanDate(next, { scrollMode: 'smooth' });
-  };
-  $('#w-wk-prev', root).addEventListener('click', () => shiftWorkoutWeek(-1));
-  $('#w-wk-next', root).addEventListener('click', () => shiftWorkoutWeek(1));
   $('#w-wk-now', root).addEventListener('click', () => {
     const t = localDateStr();
     weekStart = mondayOf(t);
@@ -396,6 +494,7 @@ export function mountWorkout(el) {
     }
   });
   $('#w-day-plans', root).addEventListener('click', handleRecordAction);
+  $('#w-nextday-recovery', root).addEventListener('click', handleRecordAction);
   $('#w-history', root).addEventListener('click', handleRecordAction);
   ['w-hist-q', 'w-hist-from', 'w-hist-to'].forEach(id => {
     $('#' + id, root).addEventListener('input', renderHistory);
@@ -449,10 +548,22 @@ export function mountWorkout(el) {
     if (startBtn) {
       const t = state.templates.find(x => x.id === startBtn.dataset.tstart);
       if (t) {
-        editingId = null;
-        updateRecordEditUi();
-        loadTemplate(t, true);
-        startActiveWorkout();
+        const cleanSec = cleanRowsObject(t.sections);
+        const rows = SECTIONS.flatMap(([section, sectionLabel]) => (cleanSec[section] || []).map(r => ({ ...r, section, sectionLabel })));
+        if (!rows.length) return toast('ยังไม่มีท่าในเทมเพลตนี้', 'err');
+        const type = TYPES[t.type] ? t.type : 'other';
+        await launchActiveWorkoutSession({
+          rows,
+          sections: cleanSec,
+          type,
+          intensity: 'moderate',
+          title: (t.name || '').trim().slice(0, 100),
+          muscleGroup: (t.muscleGroup || '').trim().slice(0, 100),
+          durInput: t.durationMin ?? null,
+          date: localDateStr(),
+          baseNote: '',
+          recordId: null
+        });
       }
       return;
     }
@@ -479,8 +590,8 @@ export function mountWorkout(el) {
     }
   });
 
-  setWorkoutTab('plan');
-  renderSections();
+  historyStatusFilter = 'all';
+  setWorkoutTab('plan', { reset: true });
   render();
 }
 
@@ -500,7 +611,43 @@ function selectPlanDate(d, { scrollMode = 'preserve' } = {}) {
   renderWeekStrip();
 }
 
+async function saveNextDayRecovery(workoutId, recoveryId, recoveryDate) {
+  if (guardPreviewWrite('การบันทึกการฟื้นตัวในวันถัดไป')) return;
+  const target = state.workouts.find(x => x.id === workoutId);
+  if (!target) return;
+  const nextVal = target.nextDayRecovery === recoveryId ? '' : recoveryId;
+  const prevRec = target.nextDayRecovery || '';
+  const prevDate = target.nextDayRecoveryDate || '';
+  const nextDateVal = nextVal ? (recoveryDate || addDays(target.date || localDateStr(), 1)) : '';
+  target.nextDayRecovery = nextVal || null;
+  target.nextDayRecoveryDate = nextDateVal || null;
+  renderWeekStrip();
+  renderHistory();
+  try {
+    await updateDoc(userDoc(state.uid, 'workout_records', workoutId), {
+      nextDayRecovery: nextVal || null,
+      nextDayRecoveryDate: nextVal ? nextDateVal : null,
+      updatedAt: new Date()
+    });
+    toast(nextVal ? `บันทึกการฟื้นตัว (${formatRecoveryLabel(nextVal)}) เข้าวันที่ ${fmtDate(target.date)} แล้ว` : 'ล้างบันทึกการฟื้นตัวแล้ว');
+  } catch (err) {
+    target.nextDayRecovery = prevRec || null;
+    target.nextDayRecoveryDate = prevDate || null;
+    renderWeekStrip();
+    renderHistory();
+    toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+  }
+}
+
 async function handleRecordAction(e) {
+  const recBtn = e.target.closest('[data-recovery-set]');
+  if (recBtn) {
+    const [workoutId, recoveryId, recoveryDate] = recBtn.dataset.recoverySet.split(':');
+    if (workoutId && recoveryId) {
+      await saveNextDayRecovery(workoutId, recoveryId, recoveryDate);
+    }
+    return;
+  }
   const startBtn = e.target.closest('[data-start-workout]');
   const doneBtn = e.target.closest('[data-done-workout]');
   const editBtn = e.target.closest('[data-edit-workout]');
@@ -509,16 +656,26 @@ async function handleRecordAction(e) {
   if (startBtn) {
     const w = state.workouts.find(x => x.id === startBtn.dataset.startWorkout);
     if (w) {
-      editingId = w.status === 'planned' ? w.id : null;
-      $('#w-date', root).value = w.status === 'planned' ? (w.date || localDateStr()) : localDateStr();
-      $('#w-title', root).value = w.title || '';
-      $('#w-muscle', root).value = w.muscleGroup || '';
-      $('#w-dur', root).value = w.durationMin ?? '';
-      $('#w-int', root).value = ['light', 'moderate', 'vigorous'].includes(w.intensity) ? w.intensity : 'moderate';
-      $('#w-note', root).value = w.note || '';
-      updateRecordEditUi();
-      loadSections(w.sections, w.type, true);
-      startActiveWorkout();
+      const cleanSec = cleanRowsObject(w.sections);
+      const rows = SECTIONS.flatMap(([section, sectionLabel]) => (cleanSec[section] || []).map(r => ({ ...r, section, sectionLabel })));
+      if (!rows.length) return toast('ยังไม่มีท่าในแผนนี้', 'err');
+      const type = TYPES[w.type] ? w.type : 'other';
+      const intensity = ['light', 'moderate', 'vigorous'].includes(w.intensity) ? w.intensity : 'moderate';
+      await launchActiveWorkoutSession({
+        rows,
+        sections: cleanSec,
+        type,
+        intensity,
+        title: (w.title || '').trim().slice(0, 100),
+        muscleGroup: (w.muscleGroup || '').trim().slice(0, 100),
+        durInput: w.durationMin ?? null,
+        date: w.status === 'planned' ? (w.date || localDateStr()) : localDateStr(),
+        baseNote: w.note || '',
+        recordId: w.status === 'planned' ? w.id : null,
+        onSaved: () => {
+          if (editingId && w.status === 'planned' && editingId === w.id) clearForm();
+        }
+      });
     }
     return;
   }
@@ -538,6 +695,7 @@ async function handleRecordAction(e) {
       updateRecordEditUi();
       $('#w-title', root).value = r.title || '';
       $('#w-muscle', root).value = r.muscleGroup || '';
+      $('#w-int', root).value = ['light', 'moderate', 'vigorous'].includes(r.intensity) ? r.intensity : 'moderate';
       if (r.durationMin) $('#w-dur', root).value = String(r.durationMin);
       loadSections(r.sections, r.type);
       burnPreview();
@@ -600,13 +758,8 @@ function startRecordEdit(id) {
 }
 
 export function resetToToday() {
-  if (!root || editingId || editingTemplateId) return;
-  const today = localDateStr();
-  weekStart = mondayOf(today);
-  stripScrollMode = 'center';
-  $('#w-date', root).value = today;
-  $('#w-status', root).value = 'done';
-  renderWeekStrip();
+  if (!root) return;
+  setWorkoutTab('plan', { reset: true });
 }
 
 function clearImportBox({ keepOpen = false } = {}) {
@@ -625,10 +778,12 @@ function clearImportBox({ keepOpen = false } = {}) {
 }
 
 function clearForm() {
+  if (!root) return;
   const today = localDateStr();
   editingId = null;
   exitTemplateEdit();
   draft = emptyDraft();
+  collapsedSections = { warmup: false, main: false, cooldown: false };
   $('#w-date', root).value = today;
   $('#w-type', root).value = 'walk';
   $('#w-int', root).value = 'moderate';
@@ -748,16 +903,51 @@ async function fillMissingImages() {
   }
 }
 
+function syncRowImageInPlace(rowEl, row, sizeClass = 'w-16 h-16', urlSelector = '[data-k="imageUrl"]') {
+  if (!rowEl) return;
+  const urlInp = rowEl.querySelector(urlSelector);
+  if (urlInp && urlInp.value !== (row.imageUrl || '')) urlInp.value = row.imageUrl || '';
+  const frameEl = rowEl.querySelector('[data-img-frame]');
+  if (frameEl) frameEl.outerHTML = renderImageFrame(row, sizeClass);
+}
+
 // เก็บค่าที่พิมพ์ลง draft ทันที (ไม่ต้อง re-render จึงไม่เสียโฟกัส)
 function onInput(e) {
   const t = e.target, sec = t.dataset.sec; if (!sec) return;
   const row = draft[sec][+t.dataset.i]; if (!row) return;
   const k = t.dataset.k;
-  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl' || k === 'refTitle' || k === 'refUrl') row[k] = t.value;
+  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl') row[k] = t.value;
   else if (k === 'perSide') row.perSide = t.checked;
   else row[k] = toNum(t.value);
-  if (k === 'imageUrl') row.imageHint = '';
-  if (k === 'name' && e.type === 'change') { const h = t.closest('[data-row]')?.querySelector('[data-hint]'); if (h) h.textContent = lastHint(t.value); }
+
+  const rowEl = t.closest('[data-row]');
+  if (k === 'imageUrl') {
+    manuallyEditedImageRows.add(row);
+    row.imageHint = '';
+  }
+  if (k === 'name') {
+    if (!manuallyEditedImageRows.has(row)) {
+      const existingUrl = findExistingExerciseImage(t.value);
+      if (existingUrl && existingUrl !== row.imageUrl) {
+        row.imageUrl = existingUrl;
+        row.imageHint = '';
+        syncRowImageInPlace(rowEl, row, 'w-16 h-16', '[data-k="imageUrl"]');
+      } else if (e.type === 'change' && !row.imageUrl && t.value.trim()) {
+        const expectedName = t.value.trim().toLowerCase();
+        findExerciseImage(t.value).then(hit => {
+          if (!hit?.url || manuallyEditedImageRows.has(row) || row.imageUrl) return;
+          if (String(row.name || '').trim().toLowerCase() !== expectedName) return;
+          row.imageUrl = hit.url;
+          row.imageHint = '';
+          syncRowImageInPlace(rowEl, row, 'w-16 h-16', '[data-k="imageUrl"]');
+        }).catch(() => {});
+      }
+    }
+    if (e.type === 'change') {
+      const h = rowEl?.querySelector('[data-hint]');
+      if (h) h.textContent = lastHint(t.value);
+    }
+  }
   if (k === 'repUnit') renderSections();
   if (k === 'imageUrl' && e.type === 'change') renderSections();
 }
@@ -766,9 +956,11 @@ function lastPerformance(name) {
   const n = name.trim().toLowerCase(); if (!n) return null;
   for (const w of state.workouts.filter(x => x.status !== 'planned').slice().sort((a, b) => b.date.localeCompare(a.date))) {
     for (const sec of ['main', 'warmup', 'cooldown']) {
-      const r = (w.sections?.[sec] || []).find(x => x.name.toLowerCase() === n);
+      const r = (w.sections?.[sec] || []).find(x => String(x?.name || '').trim().toLowerCase() === n);
       if (r) {
-        const fb = (w.exerciseFeedback || []).find(f => String(f.name || '').trim().toLowerCase() === n) || null;
+        const fb = sec === 'main'
+          ? (w.exerciseFeedback || []).find(f => (!f?.section || f.section === 'main') && String(f?.name || '').trim().toLowerCase() === n) || null
+          : null;
         return { r, date: w.date, fb };
       }
     }
@@ -925,14 +1117,26 @@ function onImportPreviewInput(e) {
   const row = lastParsedImport.sections?.[sec]?.[+t.dataset.impI];
   if (!row) return;
   const k = t.dataset.impK;
-  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl' || k === 'refTitle' || k === 'refUrl') {
+  if (k === 'name' || k === 'note' || k === 'repUnit' || k === 'imageUrl') {
     row[k] = t.value;
   } else if (k === 'perSide') {
     row.perSide = t.checked;
   } else {
     row[k] = toNum(t.value);
   }
-  if (k === 'imageUrl') row.imageHint = '';
+  const rowEl = t.closest('[data-imp-row]');
+  if (k === 'imageUrl') {
+    manuallyEditedImportRows.add(row);
+    row.imageHint = '';
+  }
+  if (k === 'name' && !manuallyEditedImportRows.has(row)) {
+    const existingUrl = findExistingExerciseImage(t.value);
+    if (existingUrl && existingUrl !== row.imageUrl) {
+      row.imageUrl = existingUrl;
+      row.imageHint = '';
+      syncRowImageInPlace(rowEl, row, 'w-14 h-14 sm:w-16 sm:h-16', '[data-imp-k="imageUrl"]');
+    }
+  }
   if (k === 'repUnit' || (k === 'imageUrl' && e.type === 'change')) {
     renderImportPreview();
   }
@@ -946,6 +1150,17 @@ function runImportPreview(parsedOverride = null) {
     return;
   }
   const parsed = parsedOverride || parseWorkoutText(text);
+  for (const sec of ['warmup', 'main', 'cooldown']) {
+    for (const r of (parsed.sections?.[sec] || [])) {
+      if (r?.name && !safeHttpUrl(r.imageUrl)) {
+        const hitUrl = findExistingExerciseImage(r.name);
+        if (hitUrl) {
+          r.imageUrl = hitUrl;
+          r.imageHint = '';
+        }
+      }
+    }
+  }
   lastParsedImport = parsed;
   if (!importTargetDate) importTargetDate = $('#w-date', root)?.value || localDateStr();
   importTargetStatus = importTargetDate > localDateStr() ? 'planned' : 'done';
@@ -975,7 +1190,7 @@ function renderImportPreview() {
       </div>
       ${rows.length ? `<div class="space-y-2">
         ${rows.map((r, idx) => `
-          <div class="rounded-xl bg-slate-50/90 border border-slate-200/80 p-2.5 space-y-2 text-xs">
+          <div data-imp-row class="rounded-xl bg-slate-50/90 border border-slate-200/80 p-2.5 space-y-2 text-xs">
             <div class="flex items-start gap-2.5 min-w-0">
               ${renderImageFrame(r, 'w-14 h-14 sm:w-16 sm:h-16')}
               <div class="min-w-0 flex-1 space-y-1.5">
@@ -996,11 +1211,9 @@ function renderImportPreview() {
             </div>
             <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="note" class="input !py-1.5 text-xs" placeholder="คำอธิบายวิธีทำ / โน้ตสั้น ๆ" value="${esc(r.note || '')}">
             <details class="text-[11px] text-slate-500">
-              <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ แก้ไข URL รูปภาพ / แหล่งอ้างอิง${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</summary>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5 mt-1.5">
-                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="imageUrl" type="url" class="input !py-1 text-xs" placeholder="URL รูป/GIF" value="${esc(r.imageUrl || '')}">
-                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="refTitle" class="input !py-1 text-xs" placeholder="ชื่อลิงก์อ้างอิง" value="${esc(r.refTitle || '')}">
-                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="refUrl" type="url" class="input !py-1 text-xs" placeholder="URL อ้างอิง" value="${esc(r.refUrl || '')}">
+              <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</summary>
+              <div class="mt-1.5">
+                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="imageUrl" type="url" class="input !py-1 text-xs" placeholder="URL รูป/GIF ประกอบท่า" value="${esc(r.imageUrl || '')}">
               </div>
             </details>
           </div>`).join('')}
@@ -1188,13 +1401,23 @@ async function copyFormAsTemplate() {
 }
 
 function renderSections() {
-  $('#w-sections', root).innerHTML = SECTIONS.map(([k, title, icon], si) => `
+  $('#w-sections', root).innerHTML = SECTIONS.map(([k, title, icon], si) => {
+    const isCollapsed = !!collapsedSections[k];
+    const rows = draft[k] || [];
+    return `
     <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
-        <h4 class="font-semibold text-slate-700 text-sm inline-flex items-center gap-1.5"><span class="text-brand">${si + 1}.</span>${iconSvg(icon, { size: 15, className: 'text-brand' })}<span>${title}</span></h4>
-        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
+        <button type="button" data-sec-toggle="${k}" aria-expanded="${!isCollapsed}" class="flex items-center gap-1.5 text-left font-semibold text-slate-700 text-sm hover:text-brand-dark py-1 min-h-[36px] cursor-pointer min-w-0">
+          ${iconSvg(isCollapsed ? 'chevron-right' : 'chevron-down', { size: 15, className: 'text-slate-400 shrink-0' })}
+          <span class="text-brand">${si + 1}.</span>
+          ${iconSvg(icon, { size: 15, className: 'text-brand shrink-0' })}
+          <span class="truncate">${title}</span>
+          <span class="text-xs font-normal text-slate-500 tabular-nums shrink-0">(${rows.length} ท่า)</span>
+        </button>
+        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
       </div>
-      ${draft[k].length ? draft[k].map((r, i) => `
+      <div class="${isCollapsed ? 'hidden' : 'space-y-2.5'}">
+      ${rows.length ? rows.map((r, i) => `
         <div data-row class="bg-slate-50/90 rounded-xl p-2.5 space-y-2 border border-slate-200/80">
           <div class="flex items-start gap-2.5">
             ${renderImageFrame(r, 'w-16 h-16')}
@@ -1214,18 +1437,18 @@ function renderSections() {
             </div>
           </div>
           <input data-sec="${k}" data-i="${i}" data-k="note" class="input text-xs" placeholder="คำอธิบายท่า / โน้ต เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
-          ${renderRefBadge(r, `${k}:${i}`)}
+          ${renderRefBadge(r)}
           <details data-ref-box class="text-xs text-slate-500">
-            <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ URL รูปภาพ &amp; แหล่งอ้างอิง (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</summary>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5">
-              <input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า" value="${esc(r.imageUrl || '')}">
-              <input data-sec="${k}" data-i="${i}" data-k="refTitle" class="input text-xs" placeholder="ชื่อบทความ / แหล่งอ้างอิง" value="${esc(r.refTitle || '')}">
-              <input data-sec="${k}" data-i="${i}" data-k="refUrl" type="url" class="input text-xs" placeholder="URL ลิงก์อ้างอิง (https://...)" value="${esc(r.refUrl || '')}">
+            <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</summary>
+            <div class="mt-1.5">
+              <input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า (https://...)" value="${esc(r.imageUrl || '')}">
             </div>
           </details>
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
         </div>`).join('') : '<p class="text-xs text-slate-500">ยังไม่มีท่าในช่วงนี้</p>'}
-    </div>`).join('');
+      </div>
+    </div>`;
+  }).join('');
 }
 
 const cleanRowsObject = obj => Object.fromEntries(['warmup', 'main', 'cooldown'].map(k => [k, (obj?.[k] || []).filter(r => r?.name?.trim()).map(r => ({
@@ -1248,6 +1471,7 @@ async function launchActiveWorkoutSession({ rows, sections, type, intensity, tit
     const { runActiveWorkout } = await import('./workoutActive.js');
     await runActiveWorkout(rows, async (performedSets, actualMinutes, feedback = null) => {
       const duration = durInput || actualMinutes;
+      const mainCompletedSets = performedSets.filter(x => isMainWorkoutSection(x.section));
       const volumeKg = performedSets.reduce((sum, x) => sum + (x.weightKg || 0) * (x.reps || 0), 0);
       const mergedNote = [baseNote, feedback?.reflectionNote].filter(Boolean).join(' · ').slice(0, 500);
       const payload = {
@@ -1262,10 +1486,14 @@ async function launchActiveWorkoutSession({ rows, sections, type, intensity, tit
         estKcal: estimateBurn(type, intensity, duration, currentWeightKg()),
         sections,
         performedSets,
-        completedSetCount: performedSets.length,
+        completedSetCount: mainCompletedSets.length,
         volumeKg,
         ...(feedback?.feeling && { feeling: feedback.feeling }),
+        ...(feedback?.completionStatus && { completionStatus: feedback.completionStatus }),
+        ...(feedback?.effortLevel && { effortLevel: feedback.effortLevel }),
         ...(feedback?.sessionRpe != null && { sessionRpe: feedback.sessionRpe }),
+        ...(feedback?.postSymptom && { postSymptom: feedback.postSymptom }),
+        ...(feedback?.reflectionNote && { reflectionNote: feedback.reflectionNote }),
         ...(feedback?.exerciseFeedback?.length && { exerciseFeedback: feedback.exerciseFeedback }),
         note: mergedNote
       };
@@ -1278,7 +1506,7 @@ async function launchActiveWorkoutSession({ rows, sections, type, intensity, tit
           .catch(err => toast('บันทึกไม่สำเร็จ: ' + err.message, 'err'));
       }
       const nextSummary = summarizeSessionNextStep(feedback?.exerciseFeedback);
-      toast(`บันทึกแล้ว · ${performedSets.length} เซต · ${Math.round(volumeKg)} kg รวม${nextSummary ? ` · ${nextSummary}` : ''}`);
+      toast(`บันทึกแล้ว · ${mainCompletedSets.length} เซต · ${duration || 0} นาที รวม${nextSummary ? ` · ${nextSummary}` : ''}`);
       onSaved?.();
       render();
     }, { title: title || TYPES[type], muscleGroup, durationMin: durInput });
@@ -1429,6 +1657,11 @@ function renderWeekStrip() {
   dayPlansEl.innerHTML = dayList.length ? dayList.map(w => {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
     const titleLabel = w.title || TYPES[w.type] || w.type;
+    const totalMin = computeWorkoutTotalMinutes(w);
+    const mainSets = w.status === 'planned' ? 0 : countMainCompletedSets(w);
+    const intensityLabel = formatIntensityLabel(w.intensity);
+    const sessionEval = formatWorkoutEvaluationParts(w).join(' · ');
+    const notesText = buildWorkoutNotesText(w);
     return `<div class="tm-swipe-row">
       <div class="tm-swipe-actions">
         <button type="button" data-edit-workout="${esc(w.id)}" class="tm-swipe-action-btn is-edit" aria-label="แก้ไข ${esc(titleLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
@@ -1438,8 +1671,8 @@ function renderWeekStrip() {
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
           <div class="min-w-0 flex-1 break-words">
             <span class="font-semibold mr-1 ${w.status === 'planned' ? 'text-amber-700' : 'text-green-700'}">[${w.status === 'planned' ? 'แผน' : 'ทำแล้ว'}]</span>
-            <b>${esc(titleLabel)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}
-            ${w.note ? `<span class="text-slate-500 ml-1">${esc(w.note)}</span>` : ''}
+            <b>${esc(titleLabel)}</b>${w.title ? ` <span class="text-slate-500">(${esc(TYPES[w.type] || w.type)})</span>` : ''}${w.muscleGroup ? ` · <span class="text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${totalMin ? ` · ${totalMin} นาที รวม` : ''}${intensityLabel ? ` · ความหนัก: ${esc(intensityLabel)}` : ''}${mainSets ? ` · ทำจริง ${mainSets} เซต` : ''}${sessionEval ? ` · <span class="text-brand-dark">${esc(sessionEval)}</span>` : ''}
+            ${notesText ? `<span class="text-slate-500 ml-1">${esc(notesText)}</span>` : ''}
           </div>
           <div class="flex flex-wrap items-center gap-1.5 shrink-0">
             ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[38px]">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
@@ -1455,6 +1688,39 @@ function renderWeekStrip() {
   }).join('')
     : `<p class="text-[11px] text-slate-500">ยังไม่มีแผนหรือบันทึกในวันที่ ${esc(fmtDate(selected))} — เลือกท่าด้านล่างแล้วบันทึกเป็น "ทำจริงแล้ว" หรือ "วางแผนไว้" ได้เลย</p>`;
   bindSwipeRows(dayPlansEl);
+
+  const recoveryEl = $('#w-nextday-recovery', root);
+  if (recoveryEl) {
+    const targets = getNextDayRecoveryTargets(state.workouts, selected, today);
+    if (targets.length) {
+      const prevDate = addDays(selected, -1);
+      recoveryEl.innerHTML = `
+        <div class="rounded-xl border border-slate-200 bg-slate-50/90 p-3 space-y-2">
+          <div class="flex flex-wrap items-baseline justify-between gap-1.5">
+            <h4 class="text-xs font-bold text-slate-800 inline-flex items-center gap-1.5">
+              ${iconSvg('heart', { size: 14, className: 'text-brand' })}
+              <span>การฟื้นตัวในวันถัดไป</span>
+            </h4>
+            <span class="text-[11px] text-slate-500">เชื่อมข้อมูลเข้าวันที่ ${esc(fmtDate(prevDate))}</span>
+          </div>
+          ${targets.map(w => {
+            const titleLabel = w.title || TYPES[w.type] || w.type || 'ออกกำลังกาย';
+            return `
+              <div class="space-y-1.5 pt-1 border-t border-slate-200/70 first:border-t-0 first:pt-0">
+                <p class="text-xs font-medium text-slate-700">${esc(titleLabel)}</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  ${NEXT_DAY_RECOVERIES.map(opt => `
+                    <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(selected)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn justify-center !min-h-[36px] !py-1.5 text-xs ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
+                      ${esc(opt.label)}
+                    </button>`).join('')}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    } else {
+      recoveryEl.innerHTML = '';
+    }
+  }
 }
 
 export function render() {
@@ -1492,10 +1758,17 @@ export function render() {
   const today = localDateStr(), since = addDays(today, -6);
   const wk = state.workouts.filter(w => w.date >= since && w.date <= today && w.status !== 'planned');
   const plannedCount = state.workouts.filter(w => w.date >= today && w.status === 'planned').length;
-  const by = {}; wk.forEach(w => { by[w.type] = (by[w.type] || 0) + 1; });
-  const mins = wk.reduce((a, w) => a + (w.durationMin || 0), 0), burn = wk.reduce((a, w) => a + (w.estKcal || 0), 0);
-  $('#w-week', root).innerHTML = (wk.length
-    ? `<p class="tabular-nums"><b>${wk.length}</b> ครั้ง${mins ? ` · รวม ${mins} นาที` : ''}${burn ? ` · เผาผลาญประมาณ ${burn} kcal` : ''}</p>` + Object.entries(by).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t])}: ${n} ครั้ง</p>`).join('')
+  const wkSummary = summarizeWorkoutCollection(wk);
+  const intensitySummaryText = formatIntensityBreakdown(wkSummary.byIntensity);
+  const feelingSummaryText = Object.entries(wkSummary.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const effortSummaryText = Object.entries(wkSummary.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const recoverySummaryText = Object.entries(wkSummary.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  $('#w-week', root).innerHTML = (wkSummary.count
+    ? `<p class="tabular-nums"><b>${wkSummary.count}</b> ครั้ง${wkSummary.totalMinutes ? ` · ${wkSummary.totalMinutes} นาที รวม` : ''}${wkSummary.totalMainSets ? ` · ทำจริง ${wkSummary.totalMainSets} เซต` : ''}${wkSummary.totalKcal ? ` · เผาผลาญประมาณ ${wkSummary.totalKcal} kcal` : ''}</p>`
+      + Object.entries(wkSummary.byType).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')
+      + (intensitySummaryText ? `<p class="text-xs text-slate-600 tabular-nums">ความหนัก: ${esc(intensitySummaryText)}</p>` : '')
+      + ((wkSummary.avgSessionRpe != null || effortSummaryText || feelingSummaryText) ? `<p class="text-xs text-brand-dark tabular-nums">${esc([wkSummary.avgSessionRpe != null ? `RPE เฉลี่ย ${wkSummary.avgSessionRpe}/10` : '', effortSummaryText || feelingSummaryText].filter(Boolean).join(' · '))}</p>` : '')
+      + (recoverySummaryText ? `<p class="text-xs text-slate-600 tabular-nums">การฟื้นตัววันถัดไป: ${esc(recoverySummaryText)}</p>` : '')
     : '<p class="text-xs text-slate-500">ยังไม่มีการออกกำลังกายที่ทำแล้วใน 7 วันนี้</p>')
     + (plannedCount ? `<p class="text-xs text-amber-800 pt-1 tabular-nums">มีแผนที่วางไว้ ${plannedCount} รายการ</p>` : '');
 
@@ -1509,6 +1782,7 @@ function renderHistory() {
   const from = $('#w-hist-from', root)?.value || '';
   const to = $('#w-hist-to', root)?.value || '';
   const filtering = Boolean(q || from || to || historyStatusFilter !== 'all');
+  const today = localDateStr();
 
   const plannedTotal = state.workouts.filter(w => w.status === 'planned').length;
   const tabsWrap = $('#w-hist-status-tabs', root);
@@ -1529,8 +1803,9 @@ function renderHistory() {
     if (from && (w.date || '') < from) return false;
     if (to && (w.date || '') > to) return false;
     if (!q) return true;
+    const evalHay = formatWorkoutEvaluationParts(w).join(' ');
     const exerciseNames = Object.values(w.sections || {}).flat().map(r => `${r?.name || ''} ${r?.note || ''} ${r?.refTitle || ''}`).join(' ');
-    const hay = `${w.title || ''} ${w.muscleGroup || ''} ${TYPES[w.type] || w.type || ''} ${w.note || ''} ${exerciseNames}`.toLowerCase();
+    const hay = `${w.title || ''} ${w.muscleGroup || ''} ${TYPES[w.type] || w.type || ''} ${formatIntensityLabel(w.intensity)} ${evalHay} ${w.reflectionNote || ''} ${w.note || ''} ${exerciseNames}`.toLowerCase();
     return hay.includes(q);
   });
 
@@ -1544,12 +1819,16 @@ function renderHistory() {
     const hasRows = Object.values(w.sections || {}).some(arr => Array.isArray(arr) && arr.length);
     const isPlan = w.status === 'planned';
     const fbList = Array.isArray(w.exerciseFeedback) ? w.exerciseFeedback : [];
-    const fbByName = Object.fromEntries(fbList.map(x => [String(x.name || '').trim().toLowerCase(), x]));
+    const fbByName = Object.fromEntries(
+      fbList
+        .filter(x => !x?.section || x.section === 'main')
+        .map(x => [String(x.name || '').trim().toLowerCase(), x])
+    );
     const detail = SECTIONS.map(([k, t], si) => (w.sections?.[k]?.length ? `
       <div class="mt-2 space-y-1.5">
         <p class="text-xs font-semibold text-slate-600">${si + 1}. ${t}</p>
         ${w.sections[k].map((r, ri) => {
-          const exFb = fbByName[String(r.name || '').trim().toLowerCase()];
+          const exFb = k === 'main' ? fbByName[String(r.name || '').trim().toLowerCase()] : null;
           const exFbText = exFb
             ? [exFb.rpe != null ? `RPE ${exFb.rpe}` : '', exFb.rir != null ? `เหลือ ${exFb.rir} ครั้ง` : ''].filter(Boolean).join(' · ')
             : '';
@@ -1569,11 +1848,27 @@ function renderHistory() {
         }).join('')}
       </div>` : '')).join('');
 
-    const feelingStr = formatFeelingLabel(w.feeling);
-    const sessionEval = [feelingStr, w.sessionRpe != null ? `RPE ${w.sessionRpe}/10` : ''].filter(Boolean).join(' · ');
+    const totalMinutes = computeWorkoutTotalMinutes(w);
+    const intensityLabel = formatIntensityLabel(w.intensity);
+    const mainSets = countMainCompletedSets(w);
+    const estKcal = Number(w.estKcal ?? w.caloriesBurn) || 0;
+    const sessionEval = formatWorkoutEvaluationParts(w).join(' · ');
+    const notesText = buildWorkoutNotesText(w);
     const statusPrefix = isPlan ? '<span class="text-amber-700 font-semibold mr-1">[วางแผนไว้]</span>' : '';
     const titleStr = w.title ? `${esc(w.title)} <span class="text-xs font-normal text-slate-400">(${esc(TYPES[w.type] || w.type)})</span>` : esc(TYPES[w.type] || w.type);
     const ariaLabel = w.title || TYPES[w.type] || w.type;
+    const nextDayDate = w.date ? addDays(w.date, 1) : '';
+    const canLogNextDayRecovery = !isPlan && w.date && nextDayDate <= today;
+    const recoveryPickerHtml = canLogNextDayRecovery ? `
+      <div class="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
+        <p class="text-[11px] font-semibold text-slate-600">การฟื้นตัวในวันถัดไป (${esc(fmtDate(nextDayDate))})</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${NEXT_DAY_RECOVERIES.map(opt => `
+            <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(nextDayDate)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn !min-h-[32px] !py-1 !px-2.5 text-[11px] ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
+              ${esc(opt.label)}
+            </button>`).join('')}
+        </div>
+      </div>` : '';
     const quickBtnsHtml = (hasRows || isPlan || !isPlan) ? `
       <div class="flex flex-wrap gap-2 ${isPlan ? 'pt-1.5' : 'mt-2.5'}">
         ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
@@ -1589,8 +1884,8 @@ function renderHistory() {
       <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
         <div class="flex items-start justify-between gap-2">
           <details class="min-w-0 flex-1">
-            <summary class="cursor-pointer text-sm break-words tabular-nums py-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${w.durationMin ? ` · ${w.durationMin} นาที` : ''}${w.estKcal ? ` · ~${w.estKcal} kcal` : ''}${w.completedSetCount ? ` · ทำจริง ${w.completedSetCount} เซต` : ''}${w.volumeKg ? ` · ${Math.round(w.volumeKg)} kg รวม` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
-            <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${w.note ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(w.note)}</p>` : ''}${isPlan ? '' : quickBtnsHtml}</div>
+            <summary class="cursor-pointer text-sm break-words tabular-nums py-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${totalMinutes ? ` · ${totalMinutes} นาที รวม` : ''}${intensityLabel ? ` · ความหนัก: ${esc(intensityLabel)}` : ''}${estKcal ? ` · ~${estKcal} kcal` : ''}${mainSets ? ` · ทำจริง ${mainSets} เซต` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
+            <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${notesText ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(notesText)}</p>` : ''}${recoveryPickerHtml}${isPlan ? '' : quickBtnsHtml}</div>
           </details>
           <div class="tm-row-actions">
             <button type="button" data-edit-workout="${esc(w.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(ariaLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>

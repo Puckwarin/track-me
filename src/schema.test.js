@@ -71,6 +71,11 @@ describe('schema sanitizers', () => {
       date: '2026-11-15',
       type: 'lower',
       status: 'done',
+      completionStatus: 'complete',
+      effortLevel: 'hard',
+      postSymptom: 'neck_shoulder_tight',
+      nextDayRecovery: 'sore_mild',
+      nextDayRecoveryDate: '2026-11-16',
       feeling: 'energized',
       sessionRpe: 8,
       exerciseFeedback: [
@@ -78,6 +83,11 @@ describe('schema sanitizers', () => {
         { name: '', section: 'main', rpe: 7 }
       ]
     });
+    expect(workout.completionStatus).toBe('complete');
+    expect(workout.effortLevel).toBe('hard');
+    expect(workout.postSymptom).toBe('neck_shoulder_tight');
+    expect(workout.nextDayRecovery).toBe('sore_mild');
+    expect(workout.nextDayRecoveryDate).toBe('2026-11-16');
     expect(workout.feeling).toBe('energized');
     expect(workout.sessionRpe).toBe(8);
     expect(workout.exerciseFeedback).toHaveLength(1);
@@ -86,9 +96,19 @@ describe('schema sanitizers', () => {
     const invalidWorkout = SANITIZERS.workout_records({
       date: '2026-11-15',
       type: 'lower',
+      completionStatus: 'invalid',
+      effortLevel: 'extreme',
+      postSymptom: 'unknown',
+      nextDayRecovery: 'bad',
+      nextDayRecoveryDate: '2026-02-30',
       feeling: 'unknown_value',
       sessionRpe: 99
     });
+    expect(invalidWorkout.completionStatus).toBeUndefined();
+    expect(invalidWorkout.effortLevel).toBeUndefined();
+    expect(invalidWorkout.postSymptom).toBeUndefined();
+    expect(invalidWorkout.nextDayRecovery).toBeUndefined();
+    expect(invalidWorkout.nextDayRecoveryDate).toBeUndefined();
     expect(invalidWorkout.feeling).toBeUndefined();
     expect(invalidWorkout.sessionRpe).toBeUndefined();
 

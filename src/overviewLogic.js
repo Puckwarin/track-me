@@ -1,4 +1,5 @@
 import { localDateStr, parseLocal, round1, shiftMonth } from './util.js';
+import { computeWorkoutTotalMinutes } from './workoutConstants.js';
 
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : (Number.isFinite(Number(v)) ? Number(v) : 0));
 
@@ -65,7 +66,7 @@ export function aggregateMonthlyOverview({
     const b = buckets[ym];
     if (!b || row?.status === 'planned') continue;
     b.workoutCount += 1;
-    b.workoutMinutes += Math.max(0, Math.round(num(row.durationMin)));
+    b.workoutMinutes += Math.max(0, Math.round(computeWorkoutTotalMinutes(row)));
     b.workoutKcal += Math.max(0, Math.round(num(row.estKcal)));
   }
 

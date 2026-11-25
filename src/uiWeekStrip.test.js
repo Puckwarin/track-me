@@ -45,6 +45,17 @@ describe('shared week strip and today navigator helpers', () => {
       nextAttrs: 'data-pl-week-shift="1"'
     });
     expect(otherDayHtml).toContain('data-pl-week-today class="pl-week-nav-label " aria-label="กลับไปวันนี้" title="กลับไปวันนี้">วันนี้</button>');
+    expect(otherDayHtml).toContain('data-pl-week-shift="-1"');
+    expect(otherDayHtml).toContain('data-pl-week-shift="1"');
+
+    const noArrowsHtml = weekNavBarHtml({
+      isToday: true,
+      todayAttrs: 'id="w-wk-now"',
+      showArrows: false
+    });
+    expect(noArrowsHtml).toContain('id="w-wk-now"');
+    expect(noArrowsHtml).toContain('>วันนี้</button>');
+    expect(noArrowsHtml).not.toContain('<svg');
   });
 
   it('calculates centered horizontal scrollLeft cleanly without touching vertical scroll', () => {

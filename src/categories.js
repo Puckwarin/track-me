@@ -13,23 +13,24 @@ export const CATEGORIES = [
 ];
 export const catOf = tab => CATEGORIES.find(c => c.tab === tab);
 
-// กลุ่มเมนูด้านล่าง → หน้าย่อยในกลุ่ม
+// กลุ่มเมนูหลัก → หน้าย่อยในกลุ่ม
 export const GROUPS = {
   home: ['home'],
+  overview: ['overview'],
   food: ['food'],
-  health: ['overview', 'workout', 'period', 'symptoms', 'body'],
+  health: ['workout', 'period', 'symptoms', 'body'],
   expense: ['expense'],
   care: ['care', 'remind', 'inventory'],
   more: ['notifications', 'settings']
 };
 export const SUBTABS = {
-  overview: { icon: 'overview', emoji: '📈', label: 'แดชบอร์ด' },
-  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุป' },
+  overview: { icon: 'overview', emoji: '📈', label: 'ประวัติ & รายงาน' },
+  weekly: { icon: 'weekly', emoji: '📊', label: 'สรุปรายสัปดาห์/เดือน' },
   workout: { icon: 'workout', emoji: '🏃‍♀️', label: 'ออกกำลังกาย' },
   period: { icon: 'period', emoji: '🌸', label: 'ประจำเดือน' },
   symptoms: { icon: 'symptoms', emoji: '🌿', label: 'อาการ & ผิว' },
   body: { icon: 'body', emoji: '⚖️', label: 'น้ำหนัก · นอน/ก้าว' },
-  report: { icon: 'report', emoji: '📄', label: 'รายงาน' },
+  report: { icon: 'report', emoji: '📄', label: 'รายงาน (PDF / CSV)' },
   care: { icon: 'care', emoji: '🐾', label: 'สัตว์เลี้ยง & ผลตรวจ' },
   remind: { icon: 'remind', emoji: '📌', label: 'บันทึกเตือน' },
   expense: { icon: 'expense', emoji: '💸', label: 'รายรับ-รายจ่าย' },
@@ -37,4 +38,4 @@ export const SUBTABS = {
   notifications: { icon: 'notifications', emoji: '🔔', label: 'แจ้งเตือน' },
   settings: { icon: 'settings', emoji: '⚙️', label: 'ตั้งค่า' }
 };
-export const groupOf = tab => ['weekly', 'report'].includes(tab) ? 'health' : Object.keys(GROUPS).find(g => GROUPS[g].includes(tab)) || 'home';
+export const groupOf = tab => ['overview', 'weekly', 'report'].includes(tab) ? 'overview' : Object.keys(GROUPS).find(g => GROUPS[g].includes(tab)) || 'home';

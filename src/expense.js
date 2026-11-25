@@ -6,7 +6,6 @@ import { $, esc, fmtDate, localDateStr, round1, toCsv, downloadFile, toast, open
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindSwipeRows } from './ui.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
-import { ocrSlipInBrowser, ocrMultipleSlipsInBrowser, consumePendingSharedSlip } from './slipOcr.js';
 import { parseStatementText } from './statementParser.js';
 import {
   advanceRecurringDate, calculateExpenseBudgets, detectRecurringExpenses,
@@ -238,7 +237,7 @@ export function mountExpense(el) {
   </div>
 
   <div id="ex-panel-log" class="lg:col-span-3 space-y-4">
-    <section class="card space-y-4 max-w-2xl">
+    <section class="card space-y-4">
       <header class="space-y-1">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('expense', { size: 19, className: 'text-brand' })}<span>รายรับ-รายจ่าย</span></h2>
@@ -630,6 +629,7 @@ async function runSlipScan(file) {
     statusEl.textContent = 'กำลังเริ่มสแกนสลิปในเครื่อง…';
   }
   try {
+    const { ocrSlipInBrowser } = await import('./slipOcr.js');
     const { parsed } = await ocrSlipInBrowser(file, msg => {
       if (statusEl && statusEl.isConnected) statusEl.textContent = msg;
     });
@@ -654,6 +654,7 @@ async function runMultiSlipScan(files) {
     statusEl.textContent = `อัปโหลด ${files.length} รูป · กำลังเตรียมอ่านสลิป 1/${files.length} (0%)…`;
   }
   try {
+    const { ocrMultipleSlipsInBrowser } = await import('./slipOcr.js');
     const results = await ocrMultipleSlipsInBrowser(files, msg => {
       if (statusEl && statusEl.isConnected) statusEl.textContent = msg;
     });
@@ -860,6 +861,7 @@ export async function handleSharedSlipLaunch(showTabFn) {
     window.history.replaceState({}, '', cleanUrl);
   } catch (e) {}
 
+  const { consumePendingSharedSlip } = await import('./slipOcr.js');
   const file = await consumePendingSharedSlip();
   if (!file) return;
   if (typeof showTabFn === 'function') showTabFn('expense');

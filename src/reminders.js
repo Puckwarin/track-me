@@ -2,7 +2,7 @@ import { updateDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { $, esc, fmtDate, localDateStr, daysBetween, toast, addMonthsLocal } from './util.js';
-import { periodStats, checkReminder, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './period.js';
+import { periodStats, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays } from './periodStats.js';
 import { syncPeriodRemindToPush } from './push.js';
 import { resolveRuleNextDate } from './reminderParser.js';
 import { iconSvg } from './icons.js';
@@ -168,7 +168,7 @@ export function mountReminders(el) {
 async function onChange(e) {
   if (e.target.id === 'nt-period-days') {
     setPeriodRemindDays(e.target.value);
-    checkReminder();
+    void import('./period.js').then(m => m.checkReminder());
     syncPeriodRemindToPush();
     renderReminders();
     toast('อัปเดตการเตือนรอบเดือนแล้ว');
@@ -217,7 +217,8 @@ async function onClick(e) {
     const cycle = periodStats(state.period || []);
     if (cycle?.next) {
       localStorage.setItem('reminder_dismissed', cycle.next);
-      checkReminder();
+      $('#reminder-banner')?.classList.add('hidden');
+      void import('./period.js').then(m => m.checkReminder());
       renderReminders();
       toast('ปิดเตือนรอบเดือนรอบนี้แล้ว');
     }
@@ -254,7 +255,8 @@ async function onClick(e) {
     if (key === 'period:next') {
       const cycle = periodStats(state.period || []);
       if (cycle?.next) localStorage.setItem('reminder_dismissed', cycle.next);
-      checkReminder();
+      $('#reminder-banner')?.classList.add('hidden');
+      void import('./period.js').then(m => m.checkReminder());
       renderReminders();
       toast('รับทราบแจ้งเตือนรอบนี้แล้ว');
       return;
