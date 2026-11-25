@@ -45,6 +45,9 @@ export function openFoodHistorySearch() {
 
   let mealGroups = [];
   let flatRows = [];
+  let lastRows = [];
+  const collapsedDates = new Set();
+  const collapsedMeals = new Set();
 
   const copyRecords = async records => {
     if (guardPreviewWrite('การคัดลอกประวัติอาหาร')) return;
@@ -77,6 +80,8 @@ export function openFoodHistorySearch() {
 
   const renderGroups = rows => {
     const out = $('#fh-res', m.el);
+    const prevScrollTop = out.scrollTop;
+    lastRows = rows;
     mealGroups = [];
     flatRows = rows.slice(0, 150);
     if (!flatRows.length) {
@@ -92,7 +97,12 @@ export function openFoodHistorySearch() {
     }
 
     const sortedDates = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
-    const html = [`<p class="text-xs text-slate-500">พบทั้งหมด <b class="text-slate-700">${rows.length}</b> รายการ${rows.length > 150 ? ' (แสดง 150 รายการล่าสุด)' : ''}</p>`];
+    const allDatesCollapsed = sortedDates.length > 1 && sortedDates.every(d => collapsedDates.has(d));
+    const html = [`
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-xs text-slate-500">พบทั้งหมด <b class="text-slate-700">${rows.length}</b> รายการ${rows.length > 150 ? ' (แสดง 150 รายการล่าสุด)' : ''}</p>
+        ${sortedDates.length > 1 ? `<button type="button" data-fh-toggle-all-dates class="chip bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold min-h-[36px] px-3">${allDatesCollapsed ? 'กางทุกวัน' : 'หุบทุกวัน'}</button>` : ''}
+      </div>`];
 
     for (const d of sortedDates) {
       const dayItems = byDate.get(d);
@@ -102,6 +112,7 @@ export function openFoodHistorySearch() {
         const ib = MEAL_ORDER.indexOf(b);
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
       });
+      const isDateCollapsed = collapsedDates.has(d);
 
       const mealsHtml = mealsPresent.map(mealName => {
         const mealRows = dayItems.filter(r => (r.meal || 'ไม่ระบุมื้อ') === mealName);
@@ -110,18 +121,21 @@ export function openFoodHistorySearch() {
         const mealKcal = Math.round(mealRows.reduce((s, r) => s + (Number(r.calories) || 0), 0));
         const mealPro = round1(mealRows.reduce((s, r) => s + (Number(r.protein) || 0), 0));
         const mealIcon = MEAL_ICONS[mealName] || 'food';
+        const mealKey = `${d}::${mealName}`;
+        const isMealCollapsed = collapsedMeals.has(mealKey);
 
         return `
           <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-            <div class="bg-slate-50 border-b border-slate-200 px-3.5 py-2 flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
+            <div class="bg-slate-50 ${isMealCollapsed ? '' : 'border-b border-slate-200'} px-2.5 sm:px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-2">
+              <button type="button" data-fh-toggle-meal="${esc(mealKey)}" aria-expanded="${!isMealCollapsed}" aria-label="${isMealCollapsed ? 'กาง' : 'หุบ'}${esc(mealName)} (${esc(fmtDate(d))})" class="flex items-center gap-2 min-w-0 flex-1 min-h-[44px] px-1.5 py-1 rounded-xl text-left hover:bg-slate-100/80 transition cursor-pointer">
+                <span class="text-slate-500 shrink-0">${iconSvg(isMealCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
                 <span class="text-brand shrink-0">${iconSvg(mealIcon, { size: 15 })}</span>
                 <span class="font-semibold text-sm text-slate-800 truncate">${esc(mealName)}</span>
-                <span class="text-xs text-slate-500 tabular-nums shrink-0">${mealRows.length} รายการ · ${mealKcal.toLocaleString()} kcal · P ${mealPro}g</span>
-              </div>
+                <span class="text-xs text-slate-500 tabular-nums truncate">${mealRows.length} รายการ · ${mealKcal.toLocaleString()} kcal · P ${mealPro}g</span>
+              </button>
               <button type="button" data-copy-meal-idx="${groupIdx}" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs font-semibold shrink-0">${iconSvg('copy', { size: 14 })} คัดลอกมื้อนี้</button>
             </div>
-            <div class="divide-y divide-slate-100">
+            ${isMealCollapsed ? '' : `<div class="divide-y divide-slate-100">
               ${mealRows.map(r => {
                 const rowIdx = flatRows.indexOf(r);
                 const nameText = foodLogName(r.name);
@@ -139,21 +153,25 @@ export function openFoodHistorySearch() {
                     <button type="button" data-copy-item-idx="${rowIdx}" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs shrink-0 self-start sm:self-center">${iconSvg('plus', { size: 13 })} ใช้เมนูนี้</button>
                   </div>`;
               }).join('')}
-            </div>
+            </div>`}
           </div>`;
       }).join('');
 
       html.push(`
         <section class="space-y-2">
-          <div class="flex items-center justify-between gap-2 px-1">
-            <h4 class="text-xs font-bold text-slate-700">${esc(fmtDate(d))} <span class="font-normal text-slate-400">(${esc(d)})</span></h4>
-            <span class="text-xs font-semibold text-slate-600 tabular-nums">รวม ${dayTotalKcal.toLocaleString()} kcal</span>
-          </div>
-          <div class="space-y-2">${mealsHtml}</div>
+          <button type="button" data-fh-toggle-date="${esc(d)}" aria-expanded="${!isDateCollapsed}" aria-label="${isDateCollapsed ? 'กาง' : 'หุบ'}รายการวันที่ ${esc(fmtDate(d))}" class="w-full flex items-center justify-between gap-2 px-3 py-1.5 min-h-[44px] rounded-xl bg-slate-100/80 hover:bg-slate-100 border border-slate-200/80 text-left transition cursor-pointer">
+            <span class="inline-flex items-center gap-2 min-w-0">
+              <span class="text-slate-500 shrink-0">${iconSvg(isDateCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
+              <h4 class="text-xs font-bold text-slate-700 truncate">${esc(fmtDate(d))} <span class="font-normal text-slate-400">(${esc(d)})</span></h4>
+            </span>
+            <span class="text-xs font-semibold text-slate-600 tabular-nums shrink-0">${mealsPresent.length} มื้อ · รวม ${dayTotalKcal.toLocaleString()} kcal</span>
+          </button>
+          ${isDateCollapsed ? '' : `<div class="space-y-2">${mealsHtml}</div>`}
         </section>`);
     }
 
     out.innerHTML = html.join('');
+    out.scrollTop = prevScrollTop;
   };
 
   const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
@@ -200,6 +218,31 @@ export function openFoodHistorySearch() {
   };
 
   $('#fh-res', m.el).addEventListener('click', e => {
+    const toggleAllBtn = e.target.closest('[data-fh-toggle-all-dates]');
+    if (toggleAllBtn) {
+      const datesInView = [...new Set(flatRows.map(r => r.date || '-'))];
+      const allCollapsed = datesInView.length > 0 && datesInView.every(d => collapsedDates.has(d));
+      if (allCollapsed) datesInView.forEach(d => collapsedDates.delete(d));
+      else datesInView.forEach(d => collapsedDates.add(d));
+      renderGroups(lastRows);
+      return;
+    }
+    const toggleDateBtn = e.target.closest('[data-fh-toggle-date]');
+    if (toggleDateBtn) {
+      const d = toggleDateBtn.dataset.fhToggleDate;
+      if (collapsedDates.has(d)) collapsedDates.delete(d);
+      else collapsedDates.add(d);
+      renderGroups(lastRows);
+      return;
+    }
+    const toggleMealBtn = e.target.closest('[data-fh-toggle-meal]');
+    if (toggleMealBtn) {
+      const key = toggleMealBtn.dataset.fhToggleMeal;
+      if (collapsedMeals.has(key)) collapsedMeals.delete(key);
+      else collapsedMeals.add(key);
+      renderGroups(lastRows);
+      return;
+    }
     const mealBtn = e.target.closest('[data-copy-meal-idx]');
     if (mealBtn) {
       const group = mealGroups[Number(mealBtn.dataset.copyMealIdx)];

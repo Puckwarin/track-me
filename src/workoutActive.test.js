@@ -115,9 +115,19 @@ describe('workoutActive helpers', () => {
   });
 
   it('exports updated session reflection choices and builds reflect payload with effort-to-RPE mapping', () => {
-    expect(COMPLETION_STATUSES.map(c => c.id)).toEqual(['complete', 'partial']);
-    expect(EFFORT_LEVELS.map(e => e.id)).toEqual(['easy', 'moderate', 'hard', 'very_hard']);
-    expect(WORKOUT_SYMPTOMS.map(s => s.id)).toEqual(['normal', 'neck_shoulder_tight', 'limb_fatigue', 'pain_abnormal']);
+    expect(COMPLETION_STATUSES.map(c => c.label)).toEqual(['ทำครบ', 'ทำบางส่วน']);
+    expect(EFFORT_LEVELS.map(e => e.label)).toEqual([
+      '4-5 ค่อนข้างสบาย',
+      '6 เริ่มเหนื่อยแต่ยังควบคุม',
+      '7 หนักพอสมควร',
+      '8-10 หนักมาก/ใกล้หมดแรง'
+    ]);
+    expect(WORKOUT_SYMPTOMS.map(s => s.label)).toEqual([
+      'ปกติ',
+      'คอหรือบ่าตึง',
+      'แขนหรือขาล้ามาก',
+      'ปวดหรือมีอาการผิดปกติ'
+    ]);
 
     expect(buildSessionReflectPayload({})).toBeNull();
 

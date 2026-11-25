@@ -7,7 +7,7 @@
   --hx-muted: #4E6E8E;
   --hx-brand: #4A90D4;
   --hx-brand-strong: #2C6BA8;
-  --hx-track: #E3ECF7;
+  --hx-track: #D6E4F3;
   --hx-protein-bg: #DCEBFC; --hx-protein-fg: #194971; --hx-protein-bar: #4A90D4;
   --hx-carb-bg: #CBE6FA;    --hx-carb-fg: #194971;    --hx-carb-bar: #5B9BD5;
   --hx-fat-bg: #E7F2FD;     --hx-fat-fg: #194971;     --hx-fat-bar: #8FC2EC;
@@ -169,27 +169,29 @@
 @media (min-width: 1024px) {
   #home-planner .pl-card { padding: 1.15rem 1.25rem; }
   .hx-hero-grid {
-    grid-template-columns: minmax(0, 1fr) auto minmax(15.5rem, 18.5rem);
-    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1fr) auto minmax(18.5rem, 23.5rem);
+    gap: 1.35rem;
     align-items: center;
   }
   .hx-macros {
     grid-column: auto;
-    grid-template-columns: minmax(0, 1fr);
-    gap: .45rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .55rem;
   }
   .hx-macro,
   .hx-macro.is-sugar-sodium {
     grid-column: auto;
-    padding: .5rem .8rem;
+    padding: .6rem .75rem;
   }
   .hx-macro-head {
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: .5rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .15rem;
+  }
+  .hx-macro-value {
+    font-size: .95rem;
   }
   .hx-macro.is-sugar-sodium .hx-macro-value {
-    font-size: .875rem;
+    font-size: .84rem;
   }
 }

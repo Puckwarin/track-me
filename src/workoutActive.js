@@ -194,7 +194,6 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     completionStatus: '',
     effortLevel: '',
     postSymptom: '',
-    reflectionNote: '',
     exerciseFeedback: {} // [ri]: { rpe: number|null, rir: number|null }
   };
 
@@ -559,11 +558,6 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
               </button>`).join('')}
           </div>
         </div>
-
-        <div class="space-y-1">
-          <label class="label text-xs lg:text-sm" for="wa-reflection-note">โน้ตความรู้สึกเพิ่มเติม (ถ้ามี)</label>
-          <textarea id="wa-reflection-note" rows="2" class="input text-sm" placeholder="เช่น วันนี้แรงดี ท่า Squat ลงลึกได้สบาย แต่แขนซ้ายตึงนิดหน่อย">${esc(reflectState.reflectionNote)}</textarea>
-        </div>
       </section>
 
       <section class="space-y-3">
@@ -637,7 +631,6 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
           completionStatus: reflectState.completionStatus,
           effortLevel: reflectState.effortLevel,
           postSymptom: reflectState.postSymptom,
-          reflectionNote: reflectState.reflectionNote,
           exerciseFeedback
         });
 
@@ -654,12 +647,6 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
 
   m.el.addEventListener('change', e => {
     if (e.target.matches('[data-done]')) syncProgressUI();
-  });
-
-  m.el.addEventListener('input', e => {
-    if (e.target.id === 'wa-reflection-note') {
-      reflectState.reflectionNote = e.target.value;
-    }
   });
 
   m.el.addEventListener('click', e => {

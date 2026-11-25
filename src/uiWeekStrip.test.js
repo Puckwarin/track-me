@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { bindChartInspector, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 
 describe('shared week strip and today navigator helpers', () => {
   it('builds a multi-week scrollable strip with today comfortably in the middle zone', () => {
@@ -83,5 +83,75 @@ describe('shared week strip and today navigator helpers', () => {
     } finally {
       globalThis.requestAnimationFrame = origRaf;
     }
+  });
+
+  describe('bindChartInspector floating tooltips across all chart types', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('shows floating tooltip on mouseover for generic non-donut SVG targets and hides on mouseout', () => {
+      const makeClassList = initial => {
+        const set = new Set(initial);
+        return {
+          add: (...cls) => cls.forEach(c => set.add(c)),
+          remove: (...cls) => cls.forEach(c => set.delete(c)),
+          contains: c => set.has(c)
+        };
+      };
+      const makeNode = (cls = []) => ({
+        isConnected: true,
+        className: cls.join(' '),
+        classList: makeClassList(cls),
+        dataset: {},
+        style: {},
+        attrs: {},
+        setAttribute(k, v) { this.attrs[k] = v; },
+        getBoundingClientRect: () => ({ left: 40, right: 60, top: 80, bottom: 120, width: 20, height: 40 })
+      });
+
+      const floatingNodes = [];
+      vi.stubGlobal('window', {
+        innerWidth: 1024,
+        innerHeight: 768,
+        addEventListener: () => {}
+      });
+      vi.stubGlobal('document', {
+        documentElement: { clientWidth: 1024, clientHeight: 768 },
+        body: { appendChild: node => floatingNodes.push(node) },
+        createElement: () => makeNode(),
+        addEventListener: () => {}
+      });
+
+      const readoutEl = makeNode(['tm-chart-readout']);
+      const barTarget = {
+        ...makeNode(),
+        dataset: { chartTip: '25 พ.ย.: 1,850 kcal', chartSub: 'ใกล้เคียงเป้า', chartColor: '#1F4A74' },
+        closest: sel => (sel === '[data-chart-tip]' ? barTarget : null)
+      };
+      const emptyBg = {
+        closest: () => null
+      };
+      const listeners = new Map();
+      const container = {
+        dataset: {},
+        contains: node => node === barTarget || node === emptyBg,
+        querySelector: sel => (sel === '[data-chart-readout]' ? readoutEl : null),
+        querySelectorAll: sel => (sel === '[data-chart-tip]' ? [barTarget] : []),
+        addEventListener: (ev, fn) => listeners.set(ev, fn)
+      };
+
+      bindChartInspector(container, { hint: 'แตะแท่งกราฟ' });
+      listeners.get('mouseover')({ target: barTarget, clientX: 120, clientY: 160 });
+
+      const tipEl = floatingNodes.at(-1);
+      expect(tipEl).toBeTruthy();
+      expect(tipEl.classList.contains('hidden')).toBe(false);
+      expect(tipEl.innerHTML).toContain('25 พ.ย.: 1,850 kcal');
+      expect(tipEl.innerHTML).toContain('ใกล้เคียงเป้า');
+
+      listeners.get('mouseout')({ target: barTarget, relatedTarget: emptyBg });
+      expect(tipEl.classList.contains('hidden')).toBe(true);
+    });
   });
 });

@@ -681,21 +681,6 @@ export function mountPlanner(el, navigate) {
     boundContainers.add(root);
 
     root.addEventListener('click', async e => {
-      const weekShiftBtn = e.target.closest('[data-pl-week-shift]');
-      if (weekShiftBtn) {
-        const delta = Number(weekShiftBtn.dataset.plWeekShift) || 0;
-        const curMon = mondayOf(selectedDate);
-        const nextMon = addDays(curMon, delta * 7);
-        const offset = weekdayIdx(selectedDate);
-        selectedDate = addDays(nextMon, offset);
-        stripScrollMode = 'smooth';
-        const msg = formatPlannerToast('week-shift', { weekMonday: nextMon, delta });
-        setPlannerFeedback(msg);
-        toast(msg);
-        renderPlanner();
-        return;
-      }
-
       if (e.target.closest('[data-pl-week-today]')) {
         selectedDate = localDateStr();
         stripScrollMode = 'smooth';
@@ -991,7 +976,7 @@ export function renderPlanner() {
           <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
         </div>
         <div class="pl-card-actions">
-          ${weekNavBarHtml({ isToday: selectedDate === today, prevAttrs: 'data-pl-week-shift="-1"', todayAttrs: 'data-pl-week-today', nextAttrs: 'data-pl-week-shift="1"' })}
+          ${weekNavBarHtml({ isToday: selectedDate === today, todayAttrs: 'data-pl-week-today', showArrows: false })}
           <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[40px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
         </div>
       </div>

@@ -1779,9 +1779,38 @@ img, video, canvas, svg { max-width: 100%; }
   align-items: center;
   justify-content: space-between;
   gap: .5rem;
-  padding: .65rem .85rem;
+  padding: .5rem .75rem;
   background: #F4F9FE;
   border-bottom: 1px solid var(--color-border);
+}
+.tm-meal-group.is-collapsed .tm-meal-group-head {
+  border-bottom: none;
+}
+.tm-meal-toggle-btn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .45rem;
+  min-height: 2.75rem;
+  padding: .2rem .35rem;
+  border-radius: .65rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .15s;
+}
+.tm-meal-toggle-btn:hover {
+  background: #E8F2FC;
+}
+.tm-meal-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: .5rem;
+  color: #4E6E8E;
 }
 .tm-meal-add-btn {
   display: inline-flex;

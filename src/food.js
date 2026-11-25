@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, esc, localDateStr, addDays, numField, round1, toast, openModal, toNum } from './util.js';
+import { $, esc, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindChartInspector, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 import { buildMealDonutParts } from './donutChart.js';
@@ -43,9 +43,11 @@ let lastCustomFoodsSnapshot = new Map();
 let lastTrackedUid = null;
 let stripScrollMode = 'center';
 const selectedFoodIds = new Set();
+const collapsedMeals = new Set();
 const num = v => (typeof v === 'number' ? v : 0);
 
 export function mountFood(el) {
+  if (lastTrackedUid !== state.uid) collapsedMeals.clear();
   root = el;
   root.innerHTML = `
   <div class="md:col-span-2 space-y-4">
@@ -56,7 +58,7 @@ export function mountFood(el) {
             <span class="text-xs font-semibold text-slate-600 whitespace-nowrap">วันที่บันทึก</span>
             <input type="date" id="f-date" class="input !w-auto min-h-[44px]" aria-label="เลือกวันที่">
           </div>
-          <div id="f-week-nav-slot" class="ml-auto shrink-0">${weekNavBarHtml({ isToday: true, prevAttrs: 'id="f-wk-prev"', todayAttrs: 'id="f-wk-now"', nextAttrs: 'id="f-wk-next"' })}</div>
+          <div id="f-week-nav-slot" class="ml-auto shrink-0">${weekNavBarHtml({ isToday: true, todayAttrs: 'id="f-wk-now"', showArrows: false })}</div>
         </div>
         <div id="f-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
       </div>
@@ -174,20 +176,6 @@ export function mountFood(el) {
     watchDay();
   });
   setupFoodCombobox();
-  $('#f-wk-prev', root)?.addEventListener('click', () => {
-    const dateEl = $('#f-date', root);
-    if (!dateEl) return;
-    dateEl.value = addDays(dateEl.value || localDateStr(), -7);
-    stripScrollMode = 'smooth';
-    watchDay();
-  });
-  $('#f-wk-next', root)?.addEventListener('click', () => {
-    const dateEl = $('#f-date', root);
-    if (!dateEl) return;
-    dateEl.value = addDays(dateEl.value || localDateStr(), 7);
-    stripScrollMode = 'smooth';
-    watchDay();
-  });
   $('#f-wk-now', root)?.addEventListener('click', () => {
     const dateEl = $('#f-date', root);
     const t = localDateStr();
@@ -269,8 +257,19 @@ export function mountFood(el) {
     renderDay();
   });
   $('#f-body', root).addEventListener('click', e => {
+    const toggleMeal = e.target.closest('[data-meal-toggle]');
+    if (toggleMeal) {
+      const mealName = toggleMeal.dataset.mealToggle;
+      if (collapsedMeals.has(mealName)) collapsedMeals.delete(mealName);
+      else collapsedMeals.add(mealName);
+      renderDay();
+      return;
+    }
     const addMeal = e.target.closest('[data-add-meal]');
-    if (addMeal) return focusMealLogForm(addMeal.dataset.addMeal);
+    if (addMeal) {
+      collapsedMeals.delete(addMeal.dataset.addMeal);
+      return focusMealLogForm(addMeal.dataset.addMeal);
+    }
     const favBtn = e.target.closest('[data-fav-log]');
     if (favBtn) return void toggleFoodRecordFavorite(favBtn.dataset.favLog);
     const edit = e.target.closest('[data-edit-log]');
@@ -1162,20 +1161,22 @@ function renderDay() {
     const mealCarbs = rows.reduce((sum, i) => sum + num(i.carbs), 0);
     const mealFat = rows.reduce((sum, i) => sum + num(i.fat), 0);
     const allMealSelected = rows.every(i => selectedFoodIds.has(i.id));
+    const isCollapsed = collapsedMeals.has(meal);
     return `
-      <section class="tm-meal-group" data-meal-drop="${esc(meal)}">
+      <section class="tm-meal-group${isCollapsed ? ' is-collapsed' : ''}" data-meal-drop="${esc(meal)}">
         <header class="tm-meal-group-head">
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
-            <label class="inline-flex items-center gap-2 cursor-pointer font-semibold text-sm text-slate-800 min-w-0">
-              <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-violet-500 w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
+          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+            <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-violet-500 w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
+            <button type="button" data-meal-toggle="${esc(meal)}" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}รายการ${esc(meal)}" class="tm-meal-toggle-btn min-w-0 flex-1">
               <span class="inline-flex items-center gap-1.5 text-brand shrink-0">${iconSvg(mealIcon, { size: 16 })}</span>
-              <span class="truncate">${esc(meal)}</span>
-            </label>
-            <span class="text-xs text-slate-500 tabular-nums shrink-0">${rows.length} รายการ · <b class="text-slate-700">${Math.round(mealCalories)} kcal</b> · <span class="font-semibold text-slate-700">P ${round1(mealProtein)}g</span><span class="hidden sm:inline"> · C ${round1(mealCarbs)}g · F ${round1(mealFat)}g</span></span>
+              <span class="font-semibold text-sm text-slate-800 truncate">${esc(meal)}</span>
+              <span class="text-xs text-slate-500 tabular-nums truncate">${rows.length} รายการ · <b class="text-slate-700">${Math.round(mealCalories)} kcal</b> · <span class="font-semibold text-slate-700">P ${round1(mealProtein)}g</span><span class="hidden sm:inline"> · C ${round1(mealCarbs)}g · F ${round1(mealFat)}g</span></span>
+              <span class="tm-meal-chevron shrink-0 ml-auto" aria-hidden="true">${iconSvg(isCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
+            </button>
           </div>
           <button type="button" data-add-meal="${esc(meal)}" class="tm-meal-add-btn shrink-0" aria-label="เพิ่มอาหารใน${esc(meal)}">${iconSvg('plus', { size: 13 })}<span>เพิ่ม</span></button>
         </header>
-        <div class="tm-swipe-list">
+        ${isCollapsed ? '' : `<div class="tm-swipe-list">
           ${rows.map(i => {
             const fav = isFoodRecordFavorite(i);
             const nameText = foodLogName(i.name);
@@ -1227,7 +1228,7 @@ function renderDay() {
                 </div>
               </div>`;
           }).join('')}
-        </div>
+        </div>`}
       </section>`;
   }).join('')
     : '<div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 text-center text-slate-500 text-xs">ยังไม่มีรายการอาหารในวันที่เลือก — เพิ่มจากฟอร์ม สแกนรูป หรือดึงจากคลังอาหารได้เลย</div>';

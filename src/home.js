@@ -19,8 +19,7 @@ export const HOME_WIDGET_DEFS = [
 
 const WIDGET_STORAGE_KEY = 'trackme_home_widgets:v1:';
 
-const DAILY_ENCOURAGEMENTS = [
-  'วันนี้ดูแลตัวเองได้ดีนะ',
+export const DAILY_ENCOURAGEMENTS = [
   'ค่อย ๆ ไปตามจังหวะของตัวเองก็พอ',
   'ใส่ใจตัวเองวันละนิดก็เก่งมากแล้ว',
   'ทุกก้าวเล็ก ๆ วันนี้มีความหมายเสมอ',
@@ -33,7 +32,22 @@ const DAILY_ENCOURAGEMENTS = [
   'พักเมื่อเหนื่อย แล้วค่อยเดินต่อนะ',
   'สุขภาพที่ดีเริ่มจากความใส่ใจในวันนี้',
   'ทำเท่าที่ไหว วันนี้คุณทำดีแล้ว',
-  'บันทึกเล็ก ๆ วันนี้คือของขวัญให้ตัวเองในวันหน้า'
+  'บันทึกเล็ก ๆ วันนี้คือของขวัญให้ตัวเองในวันหน้า',
+  'วันนี้ใจดีกับตัวเองอีกนิดนะ',
+  'เลือกสิ่งดี ๆ ให้ร่างกายทีละมื้อก็พอ',
+  'ไม่ว่าจะมากหรือน้อย แค่เริ่มดูแลตัวเองก็เก่งแล้ว',
+  'อย่าลืมดื่มน้ำและพักสายตาระหว่างวันนะ',
+  'ทุกวันที่ใส่ใจตัวเองคือกำไรของสุขภาพ',
+  'ความคืบหน้าเล็กน้อยทุกวันรวมกันเป็นผลลัพธ์ใหญ่',
+  'ฟังเสียงร่างกายของตัวเองให้มากขึ้นอีกนิดนะ',
+  'ขอให้วันนี้เป็นอีกวันที่เบาสบายและลงตัว',
+  'ไม่จำเป็นต้องเป๊ะทุกวัน แค่กลับมาดูแลตัวเองก็พอ',
+  'พลังบวกเล็ก ๆ สร้างวันดี ๆ ได้เสมอ',
+  'วันใหม่คือโอกาสดีที่จะดูแลตัวเองอีกครั้ง',
+  'ยิ้มให้ตัวเองหน่อย วันนี้คุณกำลังทำได้ดี',
+  'ก้าวไปข้างหน้าอย่างอ่อนโยนกับตัวเองนะ',
+  'ร่างกายแข็งแรงขึ้นจากความสม่ำเสมอของคุณเอง',
+  'วันนี้ดูแลตัวเองได้ดีนะ'
 ];
 
 let go = () => {};
@@ -133,13 +147,19 @@ function greeting() {
   return 'ราตรีสวัสดิ์';
 }
 
-function dailyEncouragementForDate(dateStr) {
-  let hash = 0;
+export function dailyEncouragementForDate(dateStr) {
   const s = String(dateStr || '');
+  let h = 2166136261;
   for (let i = 0; i < s.length; i += 1) {
-    hash = ((hash * 31) + s.charCodeAt(i)) >>> 0;
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-  return DAILY_ENCOURAGEMENTS[hash % DAILY_ENCOURAGEMENTS.length];
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return DAILY_ENCOURAGEMENTS[(h >>> 0) % DAILY_ENCOURAGEMENTS.length];
 }
 
 function dailyOverviewSubtitle(pct, hasFood, goal) {

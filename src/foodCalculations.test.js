@@ -8,6 +8,7 @@ import {
   foodLogQuantity,
   foodQuantityFromInput,
   hasFoodLibraryDefinitionChanged,
+  MEAL_PIE_PALETTE,
   riceProfileFromName,
   unitNutritionFor
 } from './foodCalculations.js';
@@ -137,6 +138,16 @@ describe('food log calculations', () => {
 
     const unrelated = buildFoodRecordUpdatesFromLibrary({ id: 'rec3', name: 'ข้าวสวย', quantity: 1, portionUnit: 'ทัพพี' }, next, prev);
     expect(unrelated).toBeNull();
+  });
+
+  it('uses distinct Cool Sky Blue & Navy colors with clear separation from white cards', () => {
+    expect(new Set(MEAL_PIE_PALETTE).size).toBe(MEAL_PIE_PALETTE.length);
+    for (const hex of MEAL_PIE_PALETTE) {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      expect(luminance).toBeLessThan(0.65);
+    }
   });
 });
 

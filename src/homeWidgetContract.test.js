@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOME_WIDGET_DEFS, HOME_WIDGET_IDS, getHomeWidgetConfig, saveHomeWidgetConfig } from './home.js';
+import { DAILY_ENCOURAGEMENTS, HOME_WIDGET_DEFS, HOME_WIDGET_IDS, dailyEncouragementForDate, getHomeWidgetConfig, saveHomeWidgetConfig } from './home.js';
 import { state } from './state.js';
 
 describe('home widget customization contract', () => {
@@ -103,5 +103,19 @@ describe('home widget customization contract', () => {
     values.set('trackme_home_widgets', JSON.stringify({ hidden: ['planner'] }));
     expect(getHomeWidgetConfig().hidden.has('planner')).toBe(false);
     expect(saveHomeWidgetConfig({ hidden: ['planner'] })).toBe(false);
+  });
+
+  it('rotates daily encouragement deterministically by date with varied positive phrases', () => {
+    expect(DAILY_ENCOURAGEMENTS.length).toBeGreaterThanOrEqual(20);
+    const sameDayA = dailyEncouragementForDate('2026-11-25');
+    const sameDayB = dailyEncouragementForDate('2026-11-25');
+    expect(sameDayA).toBe(sameDayB);
+    expect(DAILY_ENCOURAGEMENTS).toContain(sameDayA);
+
+    const weekPhrases = [];
+    for (let d = 20; d <= 29; d += 1) {
+      weekPhrases.push(dailyEncouragementForDate(`2026-11-${d}`));
+    }
+    expect(new Set(weekPhrases).size).toBeGreaterThanOrEqual(7);
   });
 });

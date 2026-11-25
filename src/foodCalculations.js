@@ -208,7 +208,7 @@ export function buildFoodRecordUpdatesFromLibrary(item, updatedFood, previousFoo
   return updates;
 }
 
-export const MEAL_PIE_PALETTE = ['#4A90D4', '#7CB8EC', '#A8D4F8', '#CBE5FC', '#F5B5C1', '#95BFE8', '#DDF0FE'];
+export const MEAL_PIE_PALETTE = ['#194971', '#4A90D4', '#2C6BA8', '#63A4DE', '#123552', '#5B9AD6', '#3B759F'];
 
 export function getMealPiePalette() {
   return MEAL_PIE_PALETTE;

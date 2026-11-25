@@ -435,9 +435,7 @@ export function bindChartInspector(container, {
       out.className = 'tm-chart-readout';
       out.innerHTML = `<span class="inline-flex items-start gap-1.5 font-semibold min-w-0 flex-1">${color ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background:${esc(color)}"></span>` : ''}<span class="tm-chart-readout-text">${esc(title)}</span></span>${sub ? `<span class="text-[11px] opacity-80 shrink-0">${esc(sub)}</span>` : ''}`;
     }
-    if (target.closest('.hx-ring, .tm-donut-legend')) {
-      showFloatingTip(container, target, pointerPos);
-    }
+    showFloatingTip(container, target, pointerPos);
     if (typeof onSelect === 'function') onSelect(target);
   };
 
@@ -475,6 +473,13 @@ export function bindChartInspector(container, {
     const target = e.target.closest('[data-chart-tip]');
     if (!target || !container.contains(target)) return;
     showTarget(target, Number.isFinite(e.clientX) ? { x: e.clientX, y: e.clientY } : null);
+  });
+  container.addEventListener('mouseout', e => {
+    const leftTip = e.target.closest('[data-chart-tip]');
+    if (!leftTip || !container.contains(leftTip)) return;
+    const enteredTip = e.relatedTarget?.closest?.('[data-chart-tip]');
+    if (enteredTip && container.contains(enteredTip)) return;
+    if (container.contains(e.relatedTarget)) showHint();
   });
   container.addEventListener('mouseleave', () => showHint());
   // คีย์บอร์ดบนเดสก์ท็อป: ไล่โฟกัสด้วย Tab แล้วเห็นค่าทันทีโดยไม่ต้องกด Enter ซ้ำ
