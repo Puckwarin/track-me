@@ -118,8 +118,48 @@
 .hx-macro-bar { display: block; height: .3rem; border-radius: 999px; background: rgb(255 255 255 / .68); overflow: hidden; margin-top: .15rem; }
 .hx-macro-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--bar); }
 
-/* Pinned nav shortcuts duplicate on home */
-#tab-home #home-shortcuts { display: none; }
+/* Pinned nav shortcuts on home */
+#tab-home #home-shortcuts.hidden { display: none; }
+#tab-home #home-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  padding: 0;
+}
+#tab-home #home-shortcuts > h2 {
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--hx-muted);
+  padding-inline: .15rem;
+}
+#tab-home .nav-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+}
+#tab-home .nav-shortcuts-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+#tab-home .nav-shortcuts-grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) {
+  #tab-home .nav-shortcuts-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #tab-home .nav-shortcuts-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+  #tab-home .nav-shortcuts-grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #tab-home .nav-shortcuts-grid[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+#tab-home .nav-shortcut {
+  border-color: var(--hx-line);
+  background: var(--hx-surface);
+  color: var(--hx-ink);
+  border-radius: 1.05rem;
+  box-shadow: 0 1px 2px rgb(25 73 113 / .04);
+}
+#tab-home .nav-shortcut:hover {
+  background: var(--hx-soft);
+  border-color: #99C3E4;
+}
+#tab-home .nav-shortcut-ico {
+  background: var(--hx-soft);
+  color: var(--hx-brand-strong);
+}
 
 /* Overall summary card — Horizontal full-width section below Daily Overview */
 #tab-home #summary-section > .card { background: var(--hx-surface) !important; border: 1px solid var(--hx-line) !important; border-radius: 1.45rem; box-shadow: none; padding: 1rem; }

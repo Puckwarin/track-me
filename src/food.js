@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, esc, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
+import { $, esc, isValidCalendarDate, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindChartInspector, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 import { buildMealDonutParts } from './donutChart.js';
@@ -155,7 +155,7 @@ export function mountFood(el) {
             <button id="f-hist-search" type="button" class="btn btn-ghost min-h-[44px] px-3.5 py-2 text-xs">${iconSvg('search', { size: 14 })} ประวัติอาหาร</button>
           </div>
           <div id="f-bulk-bar" class="hidden rounded-xl bg-slate-50 border border-slate-200 p-2.5 flex flex-wrap items-center gap-2 text-xs">
-            <label class="inline-flex items-center gap-2 min-h-[44px] px-1 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="w-4 h-4 accent-violet-500"> เลือกทั้งหมด</label>
+            <label class="inline-flex items-center gap-2 min-h-[44px] px-1 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="w-4 h-4 accent-brand"> เลือกทั้งหมด</label>
             <span class="text-slate-500">เลือกแล้ว <b id="f-sel-count">0</b></span>
             <select id="f-bulk-meal" class="input !w-auto min-h-[44px] !py-1.5 !px-2.5 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
             <button id="f-bulk-move" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs font-semibold" disabled>${iconSvg('swap', { size: 14 })} ย้ายไปมื้อนี้</button>
@@ -738,11 +738,12 @@ function saveFood() {
     return toast('กรุณาเลือกเมนูจากรายการแนะนำ รายการโปรด ค้นหาโภชนาการ หรือคลังอาหารก่อนบันทึก', 'err');
   }
   const cal = Number(base.calories);
+  const date = $('#f-date', root).value;
   const grossMode = Boolean(base?.edibleFraction && base?.gramsPerUnit > 0);
   const weighedGrams = grossMode ? numField(root, 'f-gross') : null;
   const ediblePercent = grossMode ? numField(root, 'f-edible') : null;
-  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : (formQty() ?? 1);
-  const validationError = validateFoodLog({ name, calories: cal, grossMode, weighedGrams, ediblePercent, quantity: qty });
+  const qty = grossMode ? weighedGrams * (ediblePercent / 100) / base.gramsPerUnit : formQty();
+  const validationError = validateFoodLog({ name, calories: cal, grossMode, weighedGrams, ediblePercent, quantity: qty, date });
   if (validationError) return toast(validationError, 'err');
   const m = v => (v == null ? 0 : round1(Number(v) * qty));
   const unitNutrition = {
@@ -754,7 +755,7 @@ function saveFood() {
     sodium: base.sodium ?? null
   };
   const rec = {
-    date: $('#f-date', root).value,
+    date,
     mealId: $('#f-meal', root).value,
     meal: $('#f-meal', root).selectedOptions[0]?.textContent || '',
     name: foodLogName(name), quantity: qty, unitNutrition,
@@ -1166,7 +1167,7 @@ function renderDay() {
       <section class="tm-meal-group${isCollapsed ? ' is-collapsed' : ''}" data-meal-drop="${esc(meal)}">
         <header class="tm-meal-group-head">
           <div class="flex items-center gap-1.5 min-w-0 flex-1">
-            <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-violet-500 w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
+            <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-brand w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
             <button type="button" data-meal-toggle="${esc(meal)}" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}รายการ${esc(meal)}" class="tm-meal-toggle-btn min-w-0 flex-1">
               <span class="inline-flex items-center gap-1.5 text-brand shrink-0">${iconSvg(mealIcon, { size: 16 })}</span>
               <span class="font-semibold text-sm text-slate-800 truncate">${esc(meal)}</span>
@@ -1201,7 +1202,7 @@ function renderDay() {
                 <div class="tm-swipe-card">
                   <div class="tm-food-row-main">
                     <span data-drag-handle draggable="true" class="tm-drag-handle" title="ลากเพื่อย้ายมื้อ" aria-label="ลาก ${esc(nameText)} เพื่อย้ายมื้อ">${iconSvg('drag', { size: 15 })}</span>
-                    <input type="checkbox" data-food-sel="${esc(i.id)}" class="accent-violet-500 w-4 h-4 shrink-0 mt-1 md:mt-0" aria-label="เลือก ${esc(nameText)}" ${selectedFoodIds.has(i.id) ? 'checked' : ''}>
+                    <input type="checkbox" data-food-sel="${esc(i.id)}" class="accent-brand w-4 h-4 shrink-0 mt-1 md:mt-0" aria-label="เลือก ${esc(nameText)}" ${selectedFoodIds.has(i.id) ? 'checked' : ''}>
                     <div class="min-w-0 flex-1">
                       <p class="text-sm font-semibold text-slate-800 truncate">${fav ? '<span class="text-amber-500 mr-1" aria-label="รายการโปรด">★</span>' : ''}${esc(nameText)}</p>
                       <p class="text-xs text-slate-500 truncate tabular-nums">${esc(portionText)} · <span class="hidden md:inline">${esc(macrosLine)}</span></p>
@@ -1506,7 +1507,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
         return `<div class="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3" data-bfs-row="${i}">
           <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
             <label class="inline-flex items-center gap-2 min-h-[44px] text-xs font-semibold text-slate-800 cursor-pointer min-w-0">
-              <input type="checkbox" class="bfs-chk w-4 h-4 accent-violet-500 shrink-0" checked>
+              <input type="checkbox" class="bfs-chk w-4 h-4 accent-brand shrink-0" checked>
               <span class="truncate">รูปที่ ${i + 1} (${esc(r.fileName)})</span>
             </label>
             <span class="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">${badgeText}</span>
@@ -1537,7 +1538,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
         </div>`;
       }).join('')}
     </div>
-    <label class="inline-flex items-center gap-2 min-h-[44px] text-xs text-slate-600 mt-3 cursor-pointer"><input id="bfs-save-lib" type="checkbox" class="w-4 h-4 accent-violet-500"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
+    <label class="inline-flex items-center gap-2 min-h-[44px] text-xs text-slate-600 mt-3 cursor-pointer"><input id="bfs-save-lib" type="checkbox" class="w-4 h-4 accent-brand"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
     <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-3">
       <button type="button" data-close class="btn btn-ghost min-h-[44px] justify-center">ยกเลิก</button>
       <button type="button" id="bfs-save" class="btn btn-primary min-h-[44px] justify-center">${iconSvg('check', { size: 15 })} บันทึก</button>
@@ -1549,7 +1550,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
     const mealSel = $('#bfs-meal', m.el);
     const mealId = mealSel.value;
     const meal = mealSel.selectedOptions[0]?.textContent || '';
-    if (!date || !mealId) return toast('เลือกวันที่และมื้ออาหารก่อนบันทึก', 'err');
+    if (!isValidCalendarDate(date) || !mealId) return toast('เลือกวันที่และมื้ออาหารให้ถูกต้องก่อนบันทึก', 'err');
 
     const rows = [...m.el.querySelectorAll('[data-bfs-row]')];
     const itemsToSave = [];
@@ -1562,7 +1563,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
       const portionUnit = row.querySelector('.bfs-unit').value.trim() || 'หน่วย';
       const calRaw = row.querySelector('.bfs-cal').value;
       const cal = Number(calRaw);
-      if (!name || !Number.isFinite(qty) || qty <= 0 || calRaw === '' || !Number.isFinite(cal) || cal < 0) {
+      if (!name || !Number.isFinite(qty) || qty <= 0 || qty >= 100000 || calRaw === '' || !Number.isFinite(cal) || cal < 0 || cal >= 100000) {
         return toast('ตรวจสอบชื่อ จำนวน และแคลอรี่ในรายการที่เลือกให้ถูกต้องก่อนบันทึก', 'err');
       }
       const pro = toNum(row.querySelector('.bfs-pro').value) ?? 0;
@@ -1570,6 +1571,9 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
       const fat = toNum(row.querySelector('.bfs-fat').value) ?? 0;
       const sugar = toNum(row.querySelector('.bfs-sugar').value);
       const sodium = toNum(row.querySelector('.bfs-sodium').value);
+      if (pro < 0 || pro >= 100000 || carb < 0 || carb >= 100000 || fat < 0 || fat >= 100000 || (sugar !== null && (sugar < 0 || sugar >= 100000)) || (sodium !== null && (sodium < 0 || sodium >= 100000))) {
+        return toast('ค่าสารอาหารต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป', 'err');
+      }
       const unitNutrition = {
         calories: cal,
         protein: pro,
@@ -1717,7 +1721,7 @@ export function openLibrary(onPick) {
     </div>
     <div id="lib-bulk" class="space-y-2 mb-3 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
       <div class="flex flex-wrap items-center gap-2">
-        <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer font-medium text-slate-700"><input id="lib-select-visible" type="checkbox" class="w-4 h-4 accent-violet-500"> เลือกทั้งหมดที่แสดง (<span id="lib-visible-count">0</span>)</label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer font-medium text-slate-700"><input id="lib-select-visible" type="checkbox" class="w-4 h-4 accent-brand"> เลือกทั้งหมดที่แสดง (<span id="lib-visible-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="lib-selected-count">0</b></span>
         <div class="flex flex-wrap items-center gap-1.5 ml-auto">
           <select id="lib-add-meal" class="input !w-auto min-w-[8rem] min-h-[44px] !py-1.5 !pl-3 !pr-8 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
@@ -1760,7 +1764,7 @@ export function openLibrary(onPick) {
       return `
       <div class="food-library-item rounded-xl border border-slate-200 bg-white p-3 space-y-2.5 md:space-y-0 md:rounded-none md:border-0 md:grid md:grid-cols-[auto_minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,1.25fr)_auto] md:items-center md:gap-3">
         <div class="flex items-start gap-2.5 min-w-0 md:contents">
-          <input type="checkbox" class="lib-select w-4 h-4 mt-1 md:mt-0 shrink-0 accent-violet-500" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>
+          <input type="checkbox" class="lib-select w-4 h-4 mt-1 md:mt-0 shrink-0 accent-brand" data-select="${esc(p.id)}" aria-label="เลือก ${esc(label(p))}" ${selected.has(p.id) ? 'checked' : ''}>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-slate-800 truncate">${p.favorite ? '<span class="text-amber-500 mr-1" aria-label="โปรด">★</span>' : ''}${esc(p.name)}</p>
             <p class="text-xs text-slate-500 md:hidden">${esc(brandAndCat)} · ${esc(p.unit || 'หน่วย')}</p>
@@ -1995,7 +1999,7 @@ function openQuickBulkFoodLog() {
     </div>
     <textarea id="qb-input" class="input min-h-36 font-mono text-xs" placeholder="วางรายการอาหารหลายบรรทัดที่นี่..." spellcheck="false"></textarea>
     <div id="qb-preview" class="mt-3 max-h-60 overflow-y-auto"></div>
-    <label class="flex items-center gap-2 text-xs text-slate-600 min-h-[44px] mt-2 cursor-pointer"><input id="qb-save-lib" type="checkbox" class="w-4 h-4 accent-violet-500"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
+    <label class="flex items-center gap-2 text-xs text-slate-600 min-h-[44px] mt-2 cursor-pointer"><input id="qb-save-lib" type="checkbox" class="w-4 h-4 accent-brand"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
     <div class="flex justify-end gap-2 mt-3">
       <button data-close type="button" class="btn btn-ghost min-h-[44px]">ยกเลิก</button>
       <button id="qb-save" type="button" class="btn btn-primary min-h-[44px]" disabled>บันทึกเข้ามื้ออาหาร</button>
@@ -2023,7 +2027,8 @@ function openQuickBulkFoodLog() {
     const mealSel = $('#qb-meal', m.el);
     const mealId = mealSel.value;
     const meal = mealSel.selectedOptions[0]?.textContent || '';
-    if (!date || !mealId || !parsed.items.length || parsed.errors.length) return;
+    if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
+    if (!mealId || !parsed.items.length || parsed.errors.length) return;
     const saveBtn = $('#qb-save', m.el);
     saveBtn.disabled = true;
     saveBtn.textContent = 'กำลังบันทึก…';

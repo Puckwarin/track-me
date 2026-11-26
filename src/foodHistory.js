@@ -101,7 +101,7 @@ export function openFoodHistorySearch() {
     const html = [`
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-xs text-slate-500">พบทั้งหมด <b class="text-slate-700">${rows.length}</b> รายการ${rows.length > 150 ? ' (แสดง 150 รายการล่าสุด)' : ''}</p>
-        ${sortedDates.length > 1 ? `<button type="button" data-fh-toggle-all-dates class="chip bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold min-h-[36px] px-3">${allDatesCollapsed ? 'กางทุกวัน' : 'หุบทุกวัน'}</button>` : ''}
+        ${sortedDates.length > 1 ? `<button type="button" data-fh-toggle-all-dates class="chip bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold min-h-[44px] px-3">${allDatesCollapsed ? 'กางทุกวัน' : 'หุบทุกวัน'}</button>` : ''}
       </div>`];
 
     for (const d of sortedDates) {

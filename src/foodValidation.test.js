@@ -14,5 +14,14 @@ describe('food validation', () => {
     expect(validateFoodPreset(preset)).toBeNull();
     expect(validateFoodPreset({ ...preset, ediblePercent: 0 })).toMatch('1–100%');
     expect(validateFoodPreset({ ...preset, confirmed: false })).toMatch('ตรวจสอบกับฉลาก');
+    expect(validateFoodPreset({ ...preset, protein: -2 })).toMatch('ตั้งแต่ 0');
+    expect(validateFoodPreset({ ...preset, gramsPerUnit: -10 })).toMatch('มากกว่า 0');
+  });
+
+  it('rejects negative calories, non-finite quantity, and invalid calendar dates', () => {
+    expect(validateFoodLog({ name: 'ข้าว', calories: -10, grossMode: false, quantity: 1 })).toMatch('แคลอรี่');
+    expect(validateFoodLog({ name: 'ข้าว', calories: 100, grossMode: false, quantity: Number.NaN })).toMatch('มากกว่า 0');
+    expect(validateFoodLog({ name: 'ข้าว', calories: 100, grossMode: false, quantity: 1, date: '2026-02-30' })).toMatch('วันที่');
+    expect(validateFoodLog({ name: 'ข้าว', calories: 100, grossMode: false, quantity: 1, date: '2026-11-15' })).toBeNull();
   });
 });

@@ -181,7 +181,7 @@ function renderHomeShortcuts() {
   const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
   section.classList.toggle('hidden', shortcuts.length === 0);
   section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
-  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
+  section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid" data-count="${shortcuts.length}">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
 
 function makeLazyFeature(loader, onMount, errorLabel) {
@@ -447,7 +447,7 @@ function openQuick(event) {
   quickTrigger = event?.currentTarget instanceof HTMLElement
     ? event.currentTarget
     : (document.activeElement instanceof HTMLElement ? document.activeElement : $('#btn-quick-add'));
-  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus}" class="cat-tile">${iconBubble(c.icon || c.key, { size: 22 })}<span>${c.label}</span></button>`).join('');
+  $('#quick-grid').innerHTML = CATEGORIES.map(c => `<button data-quick="${c.tab}" data-focus="${c.focus || ''}" class="cat-tile">${iconBubble(c.icon || c.key, { size: 22 })}<span>${c.label}</span></button>`).join('');
   sheet.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('is-open'));
   $('#btn-quick-add')?.setAttribute('aria-expanded', 'true');
@@ -834,17 +834,21 @@ $('#quick-close').addEventListener('click', closeQuick);
 $('#quick-sheet').addEventListener('click', e => {
   if (e.target.id === 'quick-sheet') return closeQuick();
   const b = e.target.closest('[data-quick]');
-  if (b) { closeQuick(); goTo(b.dataset.quick, b.dataset.focus); }
+  if (b) { closeQuick(); goTo(b.dataset.quick, b.dataset.focus || null); }
 });
 document.addEventListener('keydown', e => {
   const sheet = $('#quick-sheet');
-  if (sheet.classList.contains('hidden')) return;
+  if (!sheet || sheet.classList.contains('hidden')) return;
+  if (document.querySelector('.modal-backdrop, .tm-modal-backdrop')) return;
   if (e.key === 'Escape') {
     e.preventDefault();
     closeQuick();
   }
 });
-window.addEventListener('trackme:show-symptoms', () => showTab('symptoms', { preserveDate: true }));
+window.addEventListener('trackme:show-symptoms', async e => {
+  await showTab('symptoms', { preserveDate: true });
+  if (e.detail?.date) symptomsLoader.get()?.setDateOnly?.(e.detail.date, e.detail?.targetTab || null);
+});
 window.addEventListener('trackme:data-change', () => { remindLoader.get()?.renderRemind?.(); remindersLoader.get()?.renderReminders?.(); scheduleBellSync(); renderHome(); renderHomeShortcuts(); renderSummary(); });
 window.addEventListener('trackme:auth-change', () => {
   renderDesktopNav(document.documentElement.dataset.page || 'home');

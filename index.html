@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#EAF3FD">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Track Me">
@@ -228,7 +228,7 @@
           <span>อาหาร</span>
         </button>
         <button id="btn-quick-add" type="button" class="nav-plus nav-plus--logo" data-ph-icon="brand" data-ph-size="25" data-ph-class="nav-plus-logo-svg" aria-label="เปิดเมนูบันทึกข้อมูลด่วน" aria-haspopup="dialog" aria-expanded="false" aria-controls="quick-sheet"></button>
-        <button type="button" data-nav="workout" data-tab="workout" class="nav-item">
+        <button type="button" data-nav="health" class="nav-item">
           <span class="nav-ico" aria-hidden="true" data-ph-icon="workout" data-ph-size="20"></span>
           <span>ออกกำลัง</span>
         </button>
@@ -247,7 +247,17 @@
           <h2 id="quick-title" class="text-lg font-bold text-slate-800">วันนี้อยากบันทึกอะไรดี?</h2>
           <button id="quick-close" class="icon-btn" data-ph-icon="close" data-ph-size="18" aria-label="ปิด"></button>
         </div>
-        <div id="quick-grid" class="grid grid-cols-4 gap-3"></div>
+        <div id="quick-grid" class="grid grid-cols-3 gap-3"></div>
+        <button type="button" data-quick="overview" class="mt-3 w-full flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 min-h-[44px] text-left hover:bg-sky-soft/60 transition-colors">
+          <span class="flex items-center gap-2.5 min-w-0">
+            <span class="emoji-bubble icon-bubble emoji-sm !mr-0" aria-hidden="true" data-ph-icon="overview" data-ph-size="16"></span>
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold text-slate-800">ประวัติ &amp; รายงาน</span>
+              <span class="block text-[11px] text-slate-500">ดูกราฟภาพรวม สรุป และส่งออก PDF / CSV</span>
+            </span>
+          </span>
+          <span class="text-slate-400 shrink-0" aria-hidden="true" data-ph-icon="chevron-right" data-ph-size="16"></span>
+        </button>
       </div>
     </div>
 

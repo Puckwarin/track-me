@@ -212,4 +212,36 @@ describe('schema sanitizers', () => {
       vi.useRealTimers();
     }
   });
+
+  it('rejects unrecognized settings docs instead of fabricating profile defaults', () => {
+    expect(SANITIZERS.settings({})).toBeNull();
+    expect(SANITIZERS.settings({ id: 'unknown_cfg', foo: 'bar' })).toBeNull();
+    expect(SANITIZERS.settings({ kind: 'future_setting', value: 123 })).toBeNull();
+    expect(SANITIZERS.settings({ kind: 'future_setting', heightCm: 165 })).toBeNull();
+    expect(docIdFor('settings', { kind: 'future_setting' }, 'fallback')).toBe('fallback');
+    expect(SANITIZERS.settings({ id: 'profile', sex: 'female', heightCm: 162, weightKg: 54 })).toMatchObject({
+      sex: 'female',
+      heightCm: 162,
+      weightKg: 54
+    });
+  });
+
+  it('rejects impossible calendar dates and preserves high lab values like platelets', () => {
+    expect(SANITIZERS.food_records({ date: '2026-02-30', name: 'ข้าว', calories: 200 })).toBeNull();
+    expect(SANITIZERS.period_records({ start: '2026-02-29' })).toBeNull();
+    expect(SANITIZERS.symptom_records({ date: '2026-04-31' })).toBeNull();
+    expect(SANITIZERS.workout_records({ date: '2026-02-30', type: 'walk' })).toBeNull();
+    expect(SANITIZERS.expense_records({ date: '2026-02-30', amount: 100 })).toBeNull();
+
+    const plt = SANITIZERS.lab_records({
+      date: '2026-11-15',
+      name: 'Platelets',
+      value: 250000,
+      unit: '/µL',
+      refLow: 150000,
+      refHigh: 450000
+    });
+    expect(plt).toMatchObject({ name: 'Platelets', value: 250000, refLow: 150000, refHigh: 450000 });
+    expect(SANITIZERS.lab_records({ date: '2026-11-15', name: 'Platelets', value: -5 })).toBeNull();
+  });
 });

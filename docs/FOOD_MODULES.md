@@ -4,14 +4,14 @@ The food page remains available through `src/food.js`; existing imports such as 
 
 | Module | Responsibility |
 |---|---|
-| `src/food.js` | Page UI with Home-aligned `.hx-hero` summary (5 macros + DonutChart + responsive side-by-side `#f-advice`), date picker + `#f-week-strip`, `#f-fav-strip` quick favorites, smart quantity entry (`inferFoodInputMode`), separated barcode & nutrition-label scan buttons with temporary client-side image preview, mobile swipe / desktop `.tm-row-action-btn` inline actions / drag-and-drop food-log interactions, library modal (`openLibrary` with bulk add/category lock), and custom-food edit sync |
+| `src/food.js` | Page UI with Home-aligned `.hx-hero` summary (4 macros: Protein, Carbs, Fat, Sugar · Sodium + target-scaled DonutChart + responsive side-by-side `#f-advice`), date picker + `#f-week-strip` (`showArrows: false`), `#f-fav-strip` quick favorites, smart quantity entry (`inferFoodInputMode`), separated barcode & nutrition-label scan buttons with temporary client-side image preview, collapsible meal groups (`collapsedMeals`), mobile swipe / desktop `.tm-row-action-btn` inline actions / drag-and-drop food-log interactions, library modal (`openLibrary` with bulk add/category lock), and custom-food edit sync |
 | `src/foodConstants.js` | Built-in catalog, meal presentation constants, custom-food normalization, and preset selection |
-| `src/foodCalculations.js` | Portion labels, legacy quantity handling, per-unit nutrition, smart unit/gram auto-inference (`inferFoodInputMode`, `foodQuantityFromInput`), meal calorie pie data (`buildMealCaloriePieData` with protein), multi-factor advice (`buildFoodAdvice`), and custom-food sync helpers |
+| `src/foodCalculations.js` | Portion labels, legacy quantity handling, per-unit nutrition, smart unit/gram auto-inference (`inferFoodInputMode`, `foodQuantityFromInput`), meal calorie pie data (`buildMealCaloriePieData` with Cool Sky Blue & Navy `MEAL_PIE_PALETTE` and protein), multi-factor advice (`buildFoodAdvice`), and custom-food sync helpers |
 | `src/foodValidation.js` | Food-log and food-library form validation |
 | `src/foodService.js` | Firestore access for food records, history queries, and custom-food CRUD |
 | `src/foodParser.js` | Text/table parsing and food categorization |
-| `src/foodEditor.js` | Responsive 2-column custom-food editor and label-review modal with star favorite toggle (`#e-fav`), `"คาร์บ (g)"` label, and selective missing-field warnings |
-| `src/foodHistory.js` | Food-history search modal with `#fh-range`, scrollable `#fh-week-strip`, debounced auto-search, and grouped copy-meal / copy-item actions |
+| `src/foodEditor.js` | Responsive 2-column custom-food editor and label-review modal with star favorite toggle (`#e-fav`), `"คาร์บ (g)"` label, `accent-brand` confirmation checkbox, and selective missing-field warnings |
+| `src/foodHistory.js` | Food-history search modal with `#fh-range`, scrollable `#fh-week-strip`, debounced auto-search, collapsible day & meal groups (with collapse/expand all), and grouped copy-meal / copy-item actions |
 | `src/foodsearch.js` | External food search integrations with responsive 2-column results + portion calculator modal |
 | `src/nutrition.js` | Nutrition lookup and AI image/label analysis |
 

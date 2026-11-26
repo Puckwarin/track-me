@@ -3,6 +3,32 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v6.1.0] - 2026-11-26
+
+### Cross-Device UX/UI Polish (P1–P3), Validation & Schema Hardening (Set 1), CSS Layering/Touch Targets/Contrast (Set 2) & Modal/Calendar/Escape UX Fixes (Set 3)
+- **P1 — การนำทางบนมือถือ, ทางลัดหน้าหลัก & กฎแสดงคำแนะนำปัดซ้าย (`index.html`, `src/app.js`, `src/home.js`, `src/home.css`, `src/style.css`, `src/symptoms.js`, `src/expense.js`, `src/care.js`, `src/inventory.js`, `src/remindLog.js`, `src/workout.js`, `src/period.js`, `src/body.js`)**:
+  - **ทางเข้า `ประวัติ & รายงาน` บนมือถือ & Active State ของ `#bottom-nav`**: เพิ่มปุ่มทางลัด **`ประวัติ & รายงาน`** (`overview`) ใน `#quick-sheet` (เมนู `+`) และบนหน้าหลัก, พร้อมปรับปุ่ม **`ออกกำลัง`** บน `#bottom-nav` ให้ใช้ `data-nav="health"` (`data-tab="workout"`) เพื่อให้ปุ่มติดสถานะ `is-active` ต่อเนื่องเมื่อเปิด **ประจำเดือน**, **อาการ & ผิว** และ **น้ำหนัก** เช่นเดียวกับปุ่ม **ดูแล**
+  - **ทางลัดปักหมุดหน้าหลัก (`#home-shortcuts`)**: เปิดการแสดงผล `#home-shortcuts` ทั้งบน Desktop และ Mobile เมื่อผู้ใช้ตั้งค่าเลือกทางลัดไว้ และซ่อนเฉพาะเมื่อไม่ได้เลือกทางลัดใด ๆ
+  - **CSS Cascade ของ `.tm-swipe-hint` & Mobile Typography**: ย้าย `.tm-swipe-hint.hidden { display: none; }` ไว้หลัง `.tm-swipe-hint` เพื่อให้ซ่อนเมื่อไม่มีรายการและซ่อนอัตโนมัติที่ `>= 1024px`, ถอด `maximum-scale=1` ใน `index.html` เพื่อคง pinch-to-zoom, และปรับ `.input` เป็น `16px` (`2.75rem`) บนมือถือ / `0.875rem` บนคอมพิวเตอร์
+- **P2 — Touch Targets `>= 44px`, Responsive Grids & Form Accessibility (`src/expense.js`, `src/care.js`, `src/inventory.js`, `src/reports.js`, `src/hiwpinto.js`, `src/reminders.js`, `src/remindLog.js`, `src/foodHistory.js`, `src/workoutActive.js`, `src/period.js`, `src/body.js`, `src/symptoms.js`)**:
+  - ขยายความสูงและพื้นที่กดขั้นต่ำ `>= 44px` (`min-h-[44px]` / `min-w-[44px]`) ให้ปุ่ม ชิป ลิงก์ปิดแท็บ/Modal และตัวควบคุมแท็บย่อย, เพิ่ม `label[for]` ในหน้าการเงิน/ดูแล/ของใช้ และจัดสัดส่วนคอลัมน์บน Desktop (`lg:grid-cols-5`, `lg:grid-cols-2`) ให้ใช้พื้นที่สมดุล
+- **P3 — ฟอร์ม ผลตรวจ ตั้งค่า, สี Brand & Immediate Recovery Feedback (`src/lab.js`, `src/foodEditor.js`, `src/food.js`, `src/chatWidget.js`, `src/settings.js`, `src/profile.js`, `src/backup.js`, `src/workout.js`, `src/style.css`)**:
+  - เปลี่ยน checkbox ที่ยังเหลือคลาส `accent-violet-*` ใน `foodEditor.js`, `food.js` และ `chatWidget.js` เป็น `accent-brand` ภายใต้ชุดสี Pastel Blue-Primary เดียวกันทั้งแอป
+  - เพิ่ม `label[for]` / `aria-label`, ปรับปุ่ม ชิป และตัวเลือก Checkbox/Radio เป็น `>= 44px` ใน `lab.js` (รวมหน้าต่างตรวจค่าที่ AI อ่านได้, ชุดกรอกเร็ว และวางข้อความหลายบรรทัด), `settings.js`, `profile.js`, `backup.js` และ `workout.js` (พรีวิวนำเข้า + แถวท่าออกกำลังกาย) พร้อมเพิ่ม `.tm-swipe-hint` ใน `#lb-list` ของ `lab.js`
+  - **Immediate Optimistic Feedback สำหรับ "การฟื้นตัวในวันถัดไป" (`src/workout.js`, `src/style.css`)**: เพิ่ม `setRecoveryFeedback()`, `.pl-feedback-pill`, `.pl-feedback-flash`, สถานะ `savingRecoveryIds` และ `toast()` พร้อมอัปเดต DOM ทันทีและ rollback เมื่อ `updateDoc()` ล้มเหลว ทั้งในการ์ดประจำวันและในแท็บ **ประวัติ & แผน**
+- **ชุด 1 — Validation & `schema.js` Hardening (`src/schema.js`, `src/foodValidation.js`, `src/foodEditor.js`, `src/food.js`, `src/lab.js`, `src/profile.js`, `src/expense.js`, `src/care.js`, `src/inventory.js`, `src/workout.js`, `src/period.js`, `src/symptoms.js`, `src/body.js`, `src/remindLog.js`)**:
+  - ตรวจความถูกต้องของวันที่ตามปฏิทินจริง (`validCalendarDate` / `isValidCalendarDate`) และช่วงตัวเลข/จำนวนเงิน/สัดส่วน across `schema.js` (รวม `food_records`, `period_records`, `body_records`, `pet_*`, `lab_records`, `expense_records`, `settings` เช่น `planner`, `expense_*`, `assistant_note`, `user_feedback`, `profile`) และเสริมการตรวจสอบค่าก่อนบันทึกในฟอร์มทุกหมวด
+- **ชุด 2 — CSS Layering, Unified Navy Backdrops, Touch Targets `44px`, Contrast & Accessibility (`src/design-tokens.css`, `src/style.css`, `src/period.js`, `src/symptoms.js`, `src/expense.js`)**:
+  - รวม `.icon-btn` และลบกฎซ้ำใน `design-tokens.css`/`style.css`; ปรับ Backdrop `.tm-modal-backdrop`/`.tm-sheet-backdrop` เป็นโทน Navy `rgb(25 73 113 / ...)` และปรับ `.tm-select` chevron เป็น `#4A90D4`
+  - จัดเรียง `z-index` ให้ถูกต้อง (`.ai-chat-drawer` `75` < `.tm-chart-float-tip` `80` < `.modal-backdrop`/`.tm-modal-backdrop` `85` < `#app-lock` `120` < `.toast` `130`), จำกัด `.modal-box.is-flush` เฉพาะ `@media (min-width: 641px)` เพื่อคง `94dvh` บนมือถือ, และบังคับ `min-height: 44px` เป็นหน่วย `px` บน `<= 767px` ให้คงที่แม้ root `font-size` เป็น `14px`/`13.5px`
+  - เพิ่มคอนทราสต์ปฏิทินประจำเดือน (`.cal-period` `#5E1727` bold บน `#F898A4`, `.cal-period .cal-dot` `#5E1727`, และ `.cal-sel` `#194971`) และเพิ่ม `label[for]`/`aria-label` บนฟอร์มและ Modal ของ `period.js`, `symptoms.js` และ `expense.js`
+- **ชุด 3 — UX/Logic & Modal Fixes (`src/chatWidget.js`, `src/util.js`, `src/ui.js`, `src/app.js`, `src/period.js`, `src/symptoms.js`)**:
+  - แก้ `openNotesAndFeedbackModal()` ใน `src/chatWidget.js` จากการรับ object `{ el, close, box }` มาอ้างอิง DOM โดยตรงเป็นใช้ `modal.box` (พร้อม `onClose` ล้าง listener และเพิ่ม `aria-label` ทุกช่อง)
+  - ปรับ `Escape` handler ใน `util.js`, `ui.js`, `app.js` (`#quick-sheet`) และ `chatWidget.js` ให้ปิดเฉพาะ Modal บนสุด (`stopImmediatePropagation()`) ไม่ปิด Drawer หรือ Sheet ข้างใต้พร้อมกัน
+  - ปรับ `[data-c-clear-sel]` ใน `src/period.js` ให้รีเซ็ตวันที่ใน `symptoms.js` กลับเป็นวันนี้พร้อมกัน และแก้ `trackme:show-symptoms` ใน `src/symptoms.js` ให้สลับไปยังแท็บ `targetTab` ที่ส่งมา (`symptoms` หรือ `skin`) ได้ตรง
+- **อัปเดตเวอร์ชัน & เอกสารเป็น v6.1.0**: ซิงค์ `package.json`, `package-lock.json`, `src/version.js`, `README.md`, `CHANGELOG.md` และ `docs/*` โดยไม่เปลี่ยน `firestore.rules`
+
+---
 ## [v6.0.0] - 2026-11-24
 
 ### Workout UX Upgrade, Active Mode Enhancements, Session Evaluation, Next-Day Recovery & Complete Reporting

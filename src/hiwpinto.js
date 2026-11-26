@@ -3,6 +3,7 @@ import { userCol } from './firebase.js';
 import { state } from './state.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { openModal, toast, esc } from './util.js';
+import { iconSvg } from './icons.js';
 import { calculateRiceAdjustment, riceProfileFromName } from './foodCalculations.js';
 
 const MONTHS = { 'ม.ค.':0,'มกราคม':0,'ก.พ.':1,'กุมภาพันธ์':1,'มี.ค.':2,'มีนาคม':2,'เม.ย.':3,'เมษายน':3,'พ.ค.':4,'พฤษภาคม':4,'มิ.ย.':5,'มิถุนายน':5,'ก.ค.':6,'กรกฎาคม':6,'ส.ค.':7,'สิงหาคม':7,'ก.ย.':8,'กันยายน':8,'ต.ค.':9,'ตุลาคม':9,'พ.ย.':10,'พฤศจิกายน':10,'ธ.ค.':11,'ธันวาคม':11 };
@@ -80,7 +81,7 @@ export function parseHiwpintoExport(data, now = new Date()) {
 }
 const bookmarklet = `javascript:(()=>{const days=[...document.querySelectorAll('.menu-day')].map(d=>({dateText:d.querySelector('h6')?.innerText||'',items:[...d.querySelectorAll('li')].map(li=>{const s=li.querySelector('span'),meta=li.querySelector('.nutrition-meta');const name=[...(s?.childNodes||[])].filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ').trim();const t=meta?.innerText||'';const n={calories:t.match(/([\\d.]+)\\s*kcal/i)?.[1],protein:t.match(/P\\s*([\\d.]+)/i)?.[1],carbs:t.match(/C\\s*([\\d.]+)/i)?.[1],fat:t.match(/F\\s*([\\d.]+)/i)?.[1]};return name&&Object.values(n).every(v=>v!=null)?{name,nutrition:Object.fromEntries(Object.entries(n).map(([k,v])=>[k,Number(v)]))}:null}).filter(Boolean)}));navigator.clipboard.writeText(JSON.stringify({source:'hiwpinto',days})).then(()=>alert('คัดลอกเมนูที่มีโภชนาการแล้ว กลับไปวางใน Track Me')).catch(()=>alert('คัดลอกไม่ได้ กรุณาอนุญาต clipboard'));})()`;
 export function openHiwpintoSync() {
-  const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">Sync Data Hiwpinto</h3><button data-close class="text-slate-400">ปิด</button></div>
+  const m = openModal(`<div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800">Sync Data Hiwpinto</h3><button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-sm text-slate-600">แอปจะไม่เก็บรหัสผ่าน Hiwpinto ของคุณ ใช้งานง่าย ๆ ใน 2 ขั้นตอน: เปิดหน้าบิลสัปดาห์ถัดไปใน Hiwpinto แล้วกดปุ่ม Bookmark เพื่อดึงข้อมูล จากนั้นกลับมากดวางที่นี่</p>
     <a class="btn btn-soft inline-flex mt-2" href="https://hiwpinto.com/hippinto/customer-portal/" target="_blank" rel="noopener noreferrer">เปิด Hiwpinto</a>
     <div class="mt-3 rounded-xl bg-slate-50 p-3 text-sm"><h4 class="font-semibold">การตั้งค่า Bookmark ครั้งแรก</h4><p class="mt-1 text-slate-600">กด “คัดลอก Sync Helper” แล้วสร้าง Bookmark ชื่อ “Sync Hiwpinto” โดยวางโค้ดในช่อง URL ดูขั้นตอนละเอียดใน SETUP.md</p></div>

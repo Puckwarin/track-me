@@ -22,7 +22,7 @@ import {
 } from './workoutConstants.js';
 import { formatWorkoutTemplate, inferWorkoutType, parseWorkoutText, safeHttpUrl } from './workoutParser.js';
 import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
-import { $, $$, esc, fmtDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
+import { $, $$, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
@@ -97,8 +97,30 @@ let importTargetDate = '';
 let importTargetStatus = 'planned';
 let historyStatusFilter = 'all';
 let collapsedSections = { warmup: false, main: false, cooldown: false };
+let recoveryFeedback = '';
+let recoveryFeedbackId = '';
+let recoveryFeedbackTimer = 0;
+let flashRecoveryBox = false;
+const savingRecoveryIds = new Set();
 const manuallyEditedImageRows = new WeakSet();
 const manuallyEditedImportRows = new WeakSet();
+
+function setRecoveryFeedback(workoutId, message, { pulse = true } = {}) {
+  recoveryFeedback = String(message || '').trim();
+  recoveryFeedbackId = recoveryFeedback ? String(workoutId || '') : '';
+  flashRecoveryBox = Boolean(pulse && recoveryFeedback);
+  clearTimeout(recoveryFeedbackTimer);
+  if (recoveryFeedback && typeof window !== 'undefined') {
+    recoveryFeedbackTimer = window.setTimeout(() => {
+      recoveryFeedback = '';
+      recoveryFeedbackId = '';
+      root?.querySelectorAll('[data-w-recovery-feedback]').forEach(pill => {
+        pill.textContent = '';
+        pill.classList.add('hidden');
+      });
+    }, 2200);
+  }
+}
 
 function setWorkoutTab(tab, { reset = true } = {}) {
   if (!root) return;
@@ -185,6 +207,10 @@ async function copyTextSafe(text) {
 export function mountWorkout(el) {
   root = el;
   activeWorkoutTab = 'plan';
+  recoveryFeedback = '';
+  recoveryFeedbackId = '';
+  flashRecoveryBox = false;
+  clearTimeout(recoveryFeedbackTimer);
   const today = localDateStr();
   weekStart = mondayOf(today);
   stripScrollMode = 'center';
@@ -245,7 +271,7 @@ export function mountWorkout(el) {
           </div>
           <div class="flex items-center gap-1.5">
             <button type="button" id="w-import-sample" class="chip bg-white border border-slate-200 text-slate-600 text-[11px]">ใส่ตัวอย่าง</button>
-            <button type="button" id="w-import-close" class="text-slate-400 hover:text-slate-600 px-1.5" aria-label="ปิดหน้าต่างนำเข้า">${iconSvg('close', { size: 16 })}</button>
+            <button type="button" id="w-import-close" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิดหน้าต่างนำเข้า">${iconSvg('close', { size: 18 })}</button>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
@@ -304,10 +330,11 @@ export function mountWorkout(el) {
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2.5">
             <div><label class="lbl">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
             <div><label class="lbl">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
-            <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-700 w-full justify-center py-2 min-h-[38px]">ล้างตัวกรอง</button></div>
+            <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-700 w-full justify-center py-2 min-h-[44px]">ล้างตัวกรอง</button></div>
           </div>
         </details>
       </div>
+      <p id="w-history-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
       <div id="w-history" class="tm-swipe-list tm-swipe-list--cards"></div>
     </div>
   </div>
@@ -322,6 +349,7 @@ export function mountWorkout(el) {
           ${iconSvg('note', { size: 14 })} วางข้อความ / ตารางสร้าง Template
         </button>
       </div>
+      <p id="w-tpl-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
       <div id="w-tpl-list" class="tm-swipe-list tm-swipe-list--cards"></div>
     </div>
   </div>`;
@@ -613,29 +641,39 @@ function selectPlanDate(d, { scrollMode = 'preserve' } = {}) {
 
 async function saveNextDayRecovery(workoutId, recoveryId, recoveryDate) {
   if (guardPreviewWrite('การบันทึกการฟื้นตัวในวันถัดไป')) return;
+  if (savingRecoveryIds.has(workoutId)) return;
   const target = state.workouts.find(x => x.id === workoutId);
   if (!target) return;
   const nextVal = target.nextDayRecovery === recoveryId ? '' : recoveryId;
   const prevRec = target.nextDayRecovery || '';
   const prevDate = target.nextDayRecoveryDate || '';
   const nextDateVal = nextVal ? (recoveryDate || addDays(target.date || localDateStr(), 1)) : '';
+  const feedbackMsg = nextVal
+    ? `บันทึกการฟื้นตัว (${formatRecoveryLabel(nextVal)}) เข้าวันที่ ${fmtDate(target.date)} แล้ว`
+    : 'ล้างบันทึกการฟื้นตัวแล้ว';
   target.nextDayRecovery = nextVal || null;
   target.nextDayRecoveryDate = nextDateVal || null;
+  setRecoveryFeedback(workoutId, feedbackMsg);
   renderWeekStrip();
   renderHistory();
+  flashRecoveryBox = false;
+  toast(feedbackMsg);
+  savingRecoveryIds.add(workoutId);
   try {
     await updateDoc(userDoc(state.uid, 'workout_records', workoutId), {
       nextDayRecovery: nextVal || null,
       nextDayRecoveryDate: nextVal ? nextDateVal : null,
       updatedAt: new Date()
     });
-    toast(nextVal ? `บันทึกการฟื้นตัว (${formatRecoveryLabel(nextVal)}) เข้าวันที่ ${fmtDate(target.date)} แล้ว` : 'ล้างบันทึกการฟื้นตัวแล้ว');
   } catch (err) {
     target.nextDayRecovery = prevRec || null;
     target.nextDayRecoveryDate = prevDate || null;
+    setRecoveryFeedback('', '');
     renderWeekStrip();
     renderHistory();
     toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
+  } finally {
+    savingRecoveryIds.delete(workoutId);
   }
 }
 
@@ -834,6 +872,9 @@ async function saveEditedTemplate() {
   try {
     const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
     const durationMin = toNum($('#w-dur', root).value);
+    if (durationMin !== null && (durationMin < 0 || durationMin > 1440)) return toast('ระยะเวลาต้องอยู่ระหว่าง 0–1,440 นาที', 'err');
+    const badRow = findInvalidDraftRow(draft);
+    if (badRow) return toast(badRow, 'err');
     updateDoc(userDoc(state.uid, 'workout_templates', editingTemplateId), {
       name,
       ...(muscleGroup && { muscleGroup }),
@@ -1186,7 +1227,7 @@ function renderImportPreview() {
     return `<div class="rounded-xl bg-white border border-slate-200 p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
         <p class="text-xs font-bold text-slate-700 inline-flex items-center gap-1">${iconSvg(icon, { size: 14, className: 'text-brand' })}<span>${si + 1}. ${esc(title)}${sub}</span></p>
-        <button type="button" data-imp-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 !min-h-[34px] text-[11px]">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
+        <button type="button" data-imp-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-3 min-h-[44px] text-[11px]">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
       </div>
       ${rows.length ? `<div class="space-y-2">
         ${rows.map((r, idx) => `
@@ -1196,22 +1237,22 @@ function renderImportPreview() {
               <div class="min-w-0 flex-1 space-y-1.5">
                 <div class="flex items-center gap-1.5 min-w-0">
                   <span class="text-[11px] font-bold text-brand shrink-0 tabular-nums">${idx + 1}.</span>
-                  <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="name" list="w-names" class="input !py-1.5 text-xs font-semibold flex-1 min-w-0" placeholder="ชื่อท่า" value="${esc(r.name || '')}">
-                  <button type="button" data-imp-media="${k}:${idx}" class="chip bg-sky-soft text-blue-700 !py-1 !px-2 !min-h-[34px] text-[11px] shrink-0" title="ค้นหารูปอัตโนมัติ">${iconSvg('image', { size: 13 })} หาภาพ</button>
-                  <button type="button" data-imp-rm="${k}:${idx}" class="text-rose-400 hover:text-rose-600 min-w-[34px] min-h-[34px] flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 13 })}</button>
+                  <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="name" list="w-names" class="input !py-1.5 min-h-[44px] text-xs font-semibold flex-1 min-w-0" placeholder="ชื่อท่า" value="${esc(r.name || '')}">
+                  <button type="button" data-imp-media="${k}:${idx}" class="chip bg-sky-soft text-blue-700 !py-1 !px-2.5 min-h-[44px] text-[11px] shrink-0" title="ค้นหารูปอัตโนมัติ">${iconSvg('image', { size: 13 })} หาภาพ</button>
+                  <button type="button" data-imp-rm="${k}:${idx}" class="text-rose-400 hover:text-rose-600 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 13 })}</button>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
-                  <div><label class="lbl text-[10px]">น้ำหนัก (kg)</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input !py-1 text-xs" value="${r.weightKg ?? ''}" placeholder="-"></div>
-                  <div><label class="lbl text-[10px]">เซต</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="sets" type="number" inputmode="numeric" class="input !py-1 text-xs" value="${r.sets ?? 1}"></div>
-                  <div><label class="lbl text-[10px]">${repLabel(r.repUnit)}</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="reps" type="number" inputmode="numeric" class="input !py-1 text-xs" value="${r.reps ?? ''}"></div>
-                  <div><label class="lbl text-[10px]">หน่วย</label><select data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="repUnit" class="input !py-1 text-xs"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
-                  <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[32px] text-[11px] text-slate-600"><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="perSide" type="checkbox" class="accent-brand" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
+                  <div><label class="lbl text-[10px]">น้ำหนัก (kg)</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input !py-1 min-h-[44px] text-xs" value="${r.weightKg ?? ''}" placeholder="-"></div>
+                  <div><label class="lbl text-[10px]">เซต</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="sets" type="number" inputmode="numeric" class="input !py-1 min-h-[44px] text-xs" value="${r.sets ?? 1}"></div>
+                  <div><label class="lbl text-[10px]">${repLabel(r.repUnit)}</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="reps" type="number" inputmode="numeric" class="input !py-1 min-h-[44px] text-xs" value="${r.reps ?? ''}"></div>
+                  <div><label class="lbl text-[10px]">หน่วย</label><select data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="repUnit" class="input !py-1 min-h-[44px] text-xs"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
+                  <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[44px] text-[11px] text-slate-600 cursor-pointer"><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="perSide" type="checkbox" class="w-4 h-4 accent-brand shrink-0" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
                 </div>
               </div>
             </div>
             <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="note" class="input !py-1.5 text-xs" placeholder="คำอธิบายวิธีทำ / โน้ตสั้น ๆ" value="${esc(r.note || '')}">
             <details class="text-[11px] text-slate-500">
-              <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</summary>
+              <summary class="cursor-pointer min-h-[44px] flex items-center select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</summary>
               <div class="mt-1.5">
                 <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="imageUrl" type="url" class="input !py-1 text-xs" placeholder="URL รูป/GIF ประกอบท่า" value="${esc(r.imageUrl || '')}">
               </div>
@@ -1407,14 +1448,14 @@ function renderSections() {
     return `
     <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
-        <button type="button" data-sec-toggle="${k}" aria-expanded="${!isCollapsed}" class="flex items-center gap-1.5 text-left font-semibold text-slate-700 text-sm hover:text-brand-dark py-1 min-h-[36px] cursor-pointer min-w-0">
+        <button type="button" data-sec-toggle="${k}" aria-expanded="${!isCollapsed}" class="flex items-center gap-1.5 text-left font-semibold text-slate-700 text-sm hover:text-brand-dark py-1 min-h-[44px] cursor-pointer min-w-0">
           ${iconSvg(isCollapsed ? 'chevron-right' : 'chevron-down', { size: 15, className: 'text-slate-400 shrink-0' })}
           <span class="text-brand">${si + 1}.</span>
           ${iconSvg(icon, { size: 15, className: 'text-brand shrink-0' })}
           <span class="truncate">${title}</span>
           <span class="text-xs font-normal text-slate-500 tabular-nums shrink-0">(${rows.length} ท่า)</span>
         </button>
-        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-2.5 text-xs shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
+        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-3 min-h-[44px] text-xs shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
       </div>
       <div class="${isCollapsed ? 'hidden' : 'space-y-2.5'}">
       ${rows.length ? rows.map((r, i) => `
@@ -1423,23 +1464,23 @@ function renderSections() {
             ${renderImageFrame(r, 'w-16 h-16')}
             <div class="min-w-0 flex-1 space-y-2">
               <div class="flex gap-1.5 items-center">
-                <input data-sec="${k}" data-i="${i}" data-k="name" list="w-names" class="input font-semibold flex-1 min-w-0" placeholder="ชื่อท่า เช่น Goblet Squat" value="${esc(r.name)}">
-                <button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 !py-1.5 !px-2.5 shrink-0" title="ค้นหารูปท่านี้">${iconSvg('image', { size: 14 })}<span class="hidden sm:inline"> หาภาพ</span></button>
-                <button type="button" data-rm="${k}:${i}" class="text-rose-400 hover:text-rose-600 px-2 min-w-[40px] min-h-[40px] inline-flex items-center justify-center" aria-label="ลบท่า">${iconSvg('trash', { size: 14 })}</button>
+                <input data-sec="${k}" data-i="${i}" data-k="name" list="w-names" class="input min-h-[44px] font-semibold flex-1 min-w-0" placeholder="ชื่อท่า เช่น Goblet Squat" value="${esc(r.name)}">
+                <button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 !py-1.5 !px-3 min-h-[44px] shrink-0" title="ค้นหารูปท่านี้">${iconSvg('image', { size: 14 })}<span class="hidden sm:inline"> หาภาพ</span></button>
+                <button type="button" data-rm="${k}:${i}" class="text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg px-2 min-w-[44px] min-h-[44px] inline-flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 15 })}</button>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
-                <div><label class="lbl">น้ำหนัก (kg)</label><input data-sec="${k}" data-i="${i}" data-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input" value="${r.weightKg ?? ''}"></div>
-                <div><label class="lbl">เซต</label><input data-sec="${k}" data-i="${i}" data-k="sets" type="number" inputmode="numeric" class="input" value="${r.sets ?? ''}"></div>
-                <div><label class="lbl">${repLabel(r.repUnit)}</label><input data-sec="${k}" data-i="${i}" data-k="reps" type="number" inputmode="numeric" class="input" value="${r.reps ?? ''}"></div>
-                <div><label class="lbl">หน่วย</label><select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
-                <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[38px] text-xs text-slate-600"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" class="accent-brand" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
+                <div><label class="lbl">น้ำหนัก (kg)</label><input data-sec="${k}" data-i="${i}" data-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input min-h-[44px]" value="${r.weightKg ?? ''}"></div>
+                <div><label class="lbl">เซต</label><input data-sec="${k}" data-i="${i}" data-k="sets" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.sets ?? ''}"></div>
+                <div><label class="lbl">${repLabel(r.repUnit)}</label><input data-sec="${k}" data-i="${i}" data-k="reps" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.reps ?? ''}"></div>
+                <div><label class="lbl">หน่วย</label><select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input min-h-[44px]"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
+                <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[44px] text-xs text-slate-600 cursor-pointer"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" class="w-4 h-4 accent-brand shrink-0" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
               </div>
             </div>
           </div>
           <input data-sec="${k}" data-i="${i}" data-k="note" class="input text-xs" placeholder="คำอธิบายท่า / โน้ต เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
           ${renderRefBadge(r)}
           <details data-ref-box class="text-xs text-slate-500">
-            <summary class="cursor-pointer select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</summary>
+            <summary class="cursor-pointer min-h-[44px] flex items-center select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</summary>
             <div class="mt-1.5">
               <input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า (https://...)" value="${esc(r.imageUrl || '')}">
             </div>
@@ -1456,13 +1497,28 @@ const cleanRowsObject = obj => Object.fromEntries(['warmup', 'main', 'cooldown']
   imageUrl: safeHttpUrl(r.imageUrl).slice(0, 1000),
   ...(r.refTitle?.trim() && { refTitle: r.refTitle.trim().slice(0, 200) }),
   ...(safeHttpUrl(r.refUrl) && { refUrl: safeHttpUrl(r.refUrl).slice(0, 1000) }),
-  weightKg: r.weightKg ?? null,
+  weightKg: r.weightKg != null && Number.isFinite(r.weightKg) && r.weightKg >= 0 && r.weightKg < 100000 ? r.weightKg : null,
   perSide: !!r.perSide,
-  sets: Math.max(1, Math.round(r.sets || 1)),
-  reps: r.reps ?? null,
+  sets: Math.min(99, Math.max(1, Math.round(r.sets || 1))),
+  reps: r.reps != null && Number.isFinite(r.reps) && r.reps >= 0 && r.reps < 100000 ? r.reps : null,
   repUnit: r.repUnit || 'reps',
   note: (r.note || '').trim().slice(0, 400)
 }))]));
+
+const findInvalidDraftRow = obj => {
+  for (const k of ['warmup', 'main', 'cooldown']) {
+    for (const r of (obj?.[k] || [])) {
+      if (!r?.name?.trim()) continue;
+      if (r.weightKg != null && (!Number.isFinite(r.weightKg) || r.weightKg < 0 || r.weightKg >= 100000)) {
+        return `น้ำหนักของท่า "${r.name.trim()}" ต้องเป็นค่าตั้งแต่ 0 ขึ้นไป`;
+      }
+      if (r.reps != null && (!Number.isFinite(r.reps) || r.reps < 0 || r.reps >= 100000)) {
+        return `จำนวนครั้ง/เวลาของท่า "${r.name.trim()}" ต้องเป็นค่าตั้งแต่ 0 ขึ้นไป`;
+      }
+    }
+  }
+  return null;
+};
 
 const clean = () => cleanRowsObject(draft);
 
@@ -1516,6 +1572,12 @@ async function launchActiveWorkoutSession({ rows, sections, type, intensity, tit
 }
 
 async function startActiveWorkout() {
+  const date = $('#w-date', root).value || localDateStr();
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
+  const durInput = toNum($('#w-dur', root).value);
+  if (durInput !== null && (durInput < 0 || durInput > 1440)) return toast('ระยะเวลาต้องอยู่ระหว่าง 0–1,440 นาที', 'err');
+  const badRow = findInvalidDraftRow(draft);
+  if (badRow) return toast(badRow, 'err');
   const sections = clean(), rows = SECTIONS.flatMap(([section, sectionLabel]) => (sections[section] || []).map(r => ({ ...r, section, sectionLabel })));
   if (!rows.length) return toast('เพิ่มท่าอย่างน้อย 1 ท่าก่อนเริ่ม', 'err');
   await launchActiveWorkoutSession({
@@ -1525,8 +1587,8 @@ async function startActiveWorkout() {
     intensity: $('#w-int', root).value,
     title: $('#w-title', root).value.trim().slice(0, 100),
     muscleGroup: $('#w-muscle', root).value.trim().slice(0, 100),
-    durInput: toNum($('#w-dur', root).value),
-    date: $('#w-date', root).value || localDateStr(),
+    durInput,
+    date,
     baseNote: $('#w-note', root).value.trim(),
     recordId: editingId,
     onSaved: clearForm
@@ -1535,11 +1597,14 @@ async function startActiveWorkout() {
 
 async function save() {
   if (guardPreviewWrite('การบันทึกการออกกำลังกาย')) return;
-  const sections = clean(), count = Object.values(sections).reduce((a, r) => a + r.length, 0);
   const dur = toNum($('#w-dur', root).value);
+  if (dur !== null && (dur < 0 || dur > 1440)) return toast('ระยะเวลาต้องอยู่ระหว่าง 0–1,440 นาที', 'err');
+  const badRow = findInvalidDraftRow(draft);
+  if (badRow) return toast(badRow, 'err');
+  const sections = clean(), count = Object.values(sections).reduce((a, r) => a + r.length, 0);
   if (!count && !dur) return toast('เพิ่มท่าอย่างน้อย 1 ท่า หรือใส่ระยะเวลา (เช่น เดิน 30 นาที)', 'err');
   const date = $('#w-date', root).value;
-  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
   const type = $('#w-type', root).value;
   const status = $('#w-status', root).value === 'planned' ? 'planned' : 'done';
   const intensity = $('#w-int', root).value;
@@ -1590,6 +1655,9 @@ function saveTemplatePrompt() {
     if (!name) return toast('กรุณาตั้งชื่อเทมเพลต', 'err');
     const muscleGroup = $('#w-muscle', root).value.trim().slice(0, 100);
     const durationMin = toNum($('#w-dur', root).value);
+    if (durationMin !== null && (durationMin < 0 || durationMin > 1440)) return toast('ระยะเวลาต้องอยู่ระหว่าง 0–1,440 นาที', 'err');
+    const badRow = findInvalidDraftRow(draft);
+    if (badRow) return toast(badRow, 'err');
     try {
       addDoc(userCol(state.uid, 'workout_templates'), {
         name,
@@ -1675,8 +1743,8 @@ function renderWeekStrip() {
             ${notesText ? `<span class="text-slate-500 ml-1">${esc(notesText)}</span>` : ''}
           </div>
           <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-            ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[38px]">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
-            ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700 min-h-[38px]">${iconSvg('check', { size: 13 })} ทำเสร็จ</button>` : ''}
+            ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[44px]">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
+            ${w.status === 'planned' ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700 min-h-[44px]">${iconSvg('check', { size: 13 })} ทำเสร็จ</button>` : ''}
             <div class="tm-row-actions">
               <button type="button" data-edit-workout="${esc(w.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(titleLabel)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
               <button type="button" data-del="${esc(w.id)}" class="tm-row-action-btn is-del" aria-label="ลบ${w.status === 'planned' ? 'แผน' : 'บันทึก'} ${esc(titleLabel)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
@@ -1692,15 +1760,20 @@ function renderWeekStrip() {
   const recoveryEl = $('#w-nextday-recovery', root);
   if (recoveryEl) {
     const targets = getNextDayRecoveryTargets(state.workouts, selected, today);
+    const hasMatchFeedback = Boolean(recoveryFeedback && targets.some(w => w.id === recoveryFeedbackId));
+    const shouldFlash = flashRecoveryBox && hasMatchFeedback;
     if (targets.length) {
       const prevDate = addDays(selected, -1);
       recoveryEl.innerHTML = `
-        <div class="rounded-xl border border-slate-200 bg-slate-50/90 p-3 space-y-2">
-          <div class="flex flex-wrap items-baseline justify-between gap-1.5">
-            <h4 class="text-xs font-bold text-slate-800 inline-flex items-center gap-1.5">
-              ${iconSvg('heart', { size: 14, className: 'text-brand' })}
-              <span>การฟื้นตัวในวันถัดไป</span>
-            </h4>
+        <div class="rounded-xl border border-slate-200 bg-slate-50/90 p-3 space-y-2 ${shouldFlash ? 'pl-feedback-flash' : ''}">
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+              <h4 class="text-xs font-bold text-slate-800 inline-flex items-center gap-1.5">
+                ${iconSvg('heart', { size: 14, className: 'text-brand' })}
+                <span>การฟื้นตัวในวันถัดไป</span>
+              </h4>
+              <span data-w-recovery-feedback class="pl-feedback-pill ${hasMatchFeedback ? '' : 'hidden'}" role="status" aria-live="polite">${hasMatchFeedback ? esc(recoveryFeedback) : ''}</span>
+            </div>
             <span class="text-[11px] text-slate-500">เชื่อมข้อมูลเข้าวันที่ ${esc(fmtDate(prevDate))}</span>
           </div>
           ${targets.map(w => {
@@ -1710,7 +1783,7 @@ function renderWeekStrip() {
                 <p class="text-xs font-medium text-slate-700">${esc(titleLabel)}</p>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                   ${NEXT_DAY_RECOVERIES.map(opt => `
-                    <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(selected)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn justify-center !min-h-[36px] !py-1.5 text-xs ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
+                    <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(selected)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn justify-center !min-h-[44px] !py-1.5 text-xs ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
                       ${esc(opt.label)}
                     </button>`).join('')}
                 </div>
@@ -1732,6 +1805,7 @@ export function render() {
   const sortedTpl = state.templates.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
   $('#w-tpl', root).innerHTML = '<option value="">เลือกเทมเพลต…</option>' + sortedTpl.map(t => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(TYPES[t.type] || '')})</option>`).join('');
   const tplListEl = $('#w-tpl-list', root);
+  $('#w-tpl-swipe-hint', root)?.classList.toggle('hidden', !sortedTpl.length);
   tplListEl.innerHTML = sortedTpl.length
     ? sortedTpl.map(t => `
       <div class="tm-swipe-row">
@@ -1742,7 +1816,7 @@ export function render() {
         <div class="tm-swipe-card !flex-row justify-between items-center gap-2 text-sm !px-3 !py-2">
           <button type="button" data-tuse="${esc(t.id)}" class="text-left text-slate-700 hover:text-brand-dark truncate min-w-0 flex-1 min-h-[44px]">${esc(t.name)} <span class="text-xs text-slate-500">(${esc(TYPES[t.type] || '')}${t.muscleGroup ? ' · ' + esc(t.muscleGroup) : ''})</span></button>
           <div class="flex items-center gap-2 shrink-0 text-xs">
-            <button type="button" data-tstart="${esc(t.id)}" class="chip bg-sky-soft text-blue-700 min-h-[38px]">${iconSvg('play', { size: 12 })} เริ่ม</button>
+            <button type="button" data-tstart="${esc(t.id)}" class="chip bg-sky-soft text-blue-700 min-h-[44px]">${iconSvg('play', { size: 12 })} เริ่ม</button>
             <div class="tm-row-actions">
               <button type="button" data-tedit="${esc(t.id)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(t.name)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
               <button type="button" data-tdel="${esc(t.id)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(t.name)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
@@ -1813,6 +1887,10 @@ function renderHistory() {
     ? (a.date || '').localeCompare(b.date || '')
     : (b.date || '').localeCompare(a.date || ''));
   const rows = sorted.slice(0, filtering ? 50 : sorted.length);
+  const histEl = $('#w-history', root);
+  const openHistIds = new Set(
+    [...(histEl?.querySelectorAll('details[data-hist-id][open]') || [])].map(d => d.dataset.histId)
+  );
   const showAllHistory = filtering || Boolean($('#w-history-more', root)?.open);
 
   const renderedRows = rows.map(w => {
@@ -1859,21 +1937,26 @@ function renderHistory() {
     const ariaLabel = w.title || TYPES[w.type] || w.type;
     const nextDayDate = w.date ? addDays(w.date, 1) : '';
     const canLogNextDayRecovery = !isPlan && w.date && nextDayDate <= today;
+    const hasRecFeedback = Boolean(recoveryFeedback && w.id === recoveryFeedbackId);
+    const shouldFlashRec = flashRecoveryBox && hasRecFeedback;
     const recoveryPickerHtml = canLogNextDayRecovery ? `
-      <div class="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
-        <p class="text-[11px] font-semibold text-slate-600">การฟื้นตัวในวันถัดไป (${esc(fmtDate(nextDayDate))})</p>
+      <div class="mt-2 pt-2 border-t border-slate-100 space-y-1.5 rounded-lg ${shouldFlashRec ? 'pl-feedback-flash' : ''}">
+        <div class="flex flex-wrap items-center justify-between gap-1.5">
+          <p class="text-[11px] font-semibold text-slate-600">การฟื้นตัวในวันถัดไป (${esc(fmtDate(nextDayDate))})</p>
+          <span data-w-recovery-feedback class="pl-feedback-pill ${hasRecFeedback ? '' : 'hidden'}" role="status" aria-live="polite">${hasRecFeedback ? esc(recoveryFeedback) : ''}</span>
+        </div>
         <div class="flex flex-wrap gap-1.5">
           ${NEXT_DAY_RECOVERIES.map(opt => `
-            <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(nextDayDate)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn !min-h-[32px] !py-1 !px-2.5 text-[11px] ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
+            <button type="button" data-recovery-set="${esc(w.id)}:${opt.id}:${esc(nextDayDate)}" aria-pressed="${w.nextDayRecovery === opt.id}" class="wa-eval-btn !min-h-[44px] !py-1.5 !px-3 text-xs ${w.nextDayRecovery === opt.id ? 'is-active' : ''}">
               ${esc(opt.label)}
             </button>`).join('')}
         </div>
       </div>` : '';
     const quickBtnsHtml = (hasRows || isPlan || !isPlan) ? `
       <div class="flex flex-wrap gap-2 ${isPlan ? 'pt-1.5' : 'mt-2.5'}">
-        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
-        ${isPlan ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700">${iconSvg('check', { size: 13 })} ทำเสร็จแล้ว</button>` : ''}
-        ${!isPlan ? `<button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700">ทำซ้ำ</button>` : ''}
+        ${hasRows ? `<button type="button" data-start-workout="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[44px]">${iconSvg('play', { size: 12 })} เริ่มตามแผน</button>` : ''}
+        ${isPlan ? `<button type="button" data-done-workout="${esc(w.id)}" class="chip bg-ok-soft text-green-700 min-h-[44px]">${iconSvg('check', { size: 13 })} ทำเสร็จแล้ว</button>` : ''}
+        ${!isPlan ? `<button type="button" data-again="${esc(w.id)}" class="chip bg-sky-soft text-blue-700 min-h-[44px]">ทำซ้ำ</button>` : ''}
       </div>` : '';
 
     return `<div class="tm-swipe-row">
@@ -1883,7 +1966,7 @@ function renderHistory() {
       </div>
       <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
         <div class="flex items-start justify-between gap-2">
-          <details class="min-w-0 flex-1">
+          <details data-hist-id="${esc(w.id)}" ${openHistIds.has(w.id) ? 'open' : ''} class="min-w-0 flex-1">
             <summary class="cursor-pointer text-sm break-words tabular-nums py-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${totalMinutes ? ` · ${totalMinutes} นาที รวม` : ''}${intensityLabel ? ` · ความหนัก: ${esc(intensityLabel)}` : ''}${estKcal ? ` · ~${estKcal} kcal` : ''}${mainSets ? ` · ทำจริง ${mainSets} เซต` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
             <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${notesText ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(notesText)}</p>` : ''}${recoveryPickerHtml}${isPlan ? '' : quickBtnsHtml}</div>
           </details>
@@ -1898,7 +1981,7 @@ function renderHistory() {
   });
   const recentRows = showAllHistory ? renderedRows.join('') : renderedRows.slice(0, 5).join('');
   const olderRows = showAllHistory ? '' : renderedRows.slice(5).join('');
-  const histEl = $('#w-history', root);
+  $('#w-history-swipe-hint', root)?.classList.toggle('hidden', !rows.length);
   histEl.innerHTML = rows.length
     ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${olderRows}</div></details>` : ''}`
     : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;

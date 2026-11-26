@@ -130,7 +130,7 @@ export function mountBackup(el) {
   el.innerHTML = `
     <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('archive', { size: 17, className: 'text-brand shrink-0' })}<span>สำรอง & กู้คืนข้อมูล</span></h3>
     <p class="text-xs text-slate-500">ไฟล์สำรองเป็น JSON ไม่มี API Key ไม่มีรหัสผ่าน และ <b>ไม่รวม Token Push ของเครื่อง</b> แต่<b>มีข้อมูลสุขภาพส่วนบุคคล</b> โปรดเก็บรักษาให้ปลอดภัย</p>
-    <div class="flex flex-wrap gap-3 text-sm" id="bk-cols">${Object.entries(COLLECTION_LABELS).map(([k, t]) => `<label><input type="checkbox" value="${k}" checked> ${t}</label>`).join('')}</div>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm" id="bk-cols">${Object.entries(COLLECTION_LABELS).map(([k, t]) => `<label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer"><input type="checkbox" class="w-4 h-4 accent-brand shrink-0" value="${k}" checked><span>${t}</span></label>`).join('')}</div>
     <div class="flex flex-wrap gap-2">
       <button id="bk-export" class="btn btn-primary">${iconSvg('download', { size: 15 })} สำรองข้อมูล (JSON)</button>
       <label class="btn btn-soft cursor-pointer">${iconSvg('upload', { size: 15 })} เลือกไฟล์เพื่อกู้คืน<input id="bk-file" type="file" accept="application/json,.json" class="hidden"></label>
@@ -166,8 +166,8 @@ async function readFile(file, el) {
     box.innerHTML = `<p class="font-semibold">ไฟล์สำรองวันที่ ${esc(exportDate)} (v${esc(version)})</p>
       <table class="text-xs"><tbody>${Object.entries(plan).filter(([, l]) => l.length).map(([c, l]) => `<tr><td class="pr-4">${COLLECTION_LABELS[c]}</td><td class="pr-4">ทั้งหมด ${l.length}</td><td class="pr-4 text-green-700">ใหม่ ${l.filter(r => !r.exists).length}</td><td class="text-amber-700">มีอยู่แล้ว ${l.filter(r => r.exists).length}</td></tr>`).join('') || '<tr><td>ไม่พบข้อมูลที่นำเข้าได้</td></tr>'}</tbody></table>
       ${bad ? `<p class="text-xs text-amber-700">ข้าม ${bad} รายการที่รูปแบบไม่ถูกต้อง</p>` : ''}
-      <label class="block text-xs"><input type="radio" name="bk-mode" value="skip" checked> เพิ่มเฉพาะรายการใหม่ (แนะนำ — ไม่ทับของเดิม)</label>
-      <label class="block text-xs"><input type="radio" name="bk-mode" value="overwrite"> เขียนทับรายการที่มีอยู่ด้วยข้อมูลในไฟล์</label>
+      <label class="flex items-center gap-2 min-h-[44px] text-xs cursor-pointer"><input type="radio" class="w-4 h-4 accent-brand shrink-0" name="bk-mode" value="skip" checked><span>เพิ่มเฉพาะรายการใหม่ (แนะนำ — ไม่ทับของเดิม)</span></label>
+      <label class="flex items-center gap-2 min-h-[44px] text-xs cursor-pointer"><input type="radio" class="w-4 h-4 accent-brand shrink-0" name="bk-mode" value="overwrite"><span>เขียนทับรายการที่มีอยู่ด้วยข้อมูลในไฟล์</span></label>
       <p class="text-xs text-slate-500">จะนำเข้าเฉพาะหมวดที่ติ๊กไว้ด้านบน</p>
       <button id="bk-go" class="btn btn-primary">เริ่มกู้คืน</button>`;
     $('#bk-go', box).addEventListener('click', () => restore(el, box));

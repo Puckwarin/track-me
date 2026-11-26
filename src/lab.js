@@ -1,7 +1,7 @@
 import { addDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, isDateStr, toNum, toast, openModal } from './util.js';
+import { $, esc, fmtDate, localDateStr, isValidCalendarDate, toNum, toast, openModal } from './util.js';
 import { readLabReportFromPhoto, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './labTemplates.js';
 import { iconSvg } from './icons.js';
@@ -57,19 +57,19 @@ export function mountLab(el) {
       <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 space-y-1.5">
         <p class="text-[11px] font-semibold text-slate-600">กรอกเร็วเป็นชุด (0 โทเค็น · ไม่ใช้ AI):</p>
         <div class="flex flex-wrap gap-1.5">
-          ${LAB_PANEL_TEMPLATES.map(p => `<button type="button" data-lab-panel="${esc(p.id)}" class="chip bg-white border border-slate-200 hover:bg-lav-soft text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
-          <button type="button" id="lb-bulk-paste" class="chip bg-lav-soft text-brand-dark text-[11px]">${iconSvg('note', { size: 13 })} วางหลายบรรทัด</button>
+          ${LAB_PANEL_TEMPLATES.map(p => `<button type="button" data-lab-panel="${esc(p.id)}" class="chip min-h-[44px] bg-white border border-slate-200 hover:bg-lav-soft text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
+          <button type="button" id="lb-bulk-paste" class="chip min-h-[44px] bg-lav-soft text-brand-dark text-[11px]">${iconSvg('note', { size: 13 })} วางหลายบรรทัด</button>
         </div>
       </div>
-      <div><label class="lbl">วันที่ตรวจ</label><input id="lb-date" type="date" class="input"></div>
-      <div><label class="lbl">รายการตรวจ (เลือกจากรายการหรือพิมพ์เอง)</label><input id="lb-name" list="lb-names" class="input" placeholder="เช่น BUN, Creatinine, HCT"><datalist id="lb-names">${LAB_PRESETS.map(p => `<option value="${esc(p[0])}">`).join('')}</datalist></div>
+      <div><label class="lbl" for="lb-date">วันที่ตรวจ</label><input id="lb-date" type="date" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="lb-name">รายการตรวจ (เลือกจากรายการหรือพิมพ์เอง)</label><input id="lb-name" list="lb-names" class="input min-h-[44px]" placeholder="เช่น BUN, Creatinine, HCT"><datalist id="lb-names">${LAB_PRESETS.map(p => `<option value="${esc(p[0])}">`).join('')}</datalist></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="lbl">ผลที่ได้</label><input id="lb-value" type="number" step="any" inputmode="decimal" class="input"></div>
-        <div><label class="lbl">หน่วย</label><input id="lb-unit" class="input" placeholder="mg/dL"></div>
-        <div><label class="lbl">ค่าอ้างอิง ต่ำสุด</label><input id="lb-low" type="number" step="any" inputmode="decimal" class="input"></div>
-        <div><label class="lbl">ค่าอ้างอิง สูงสุด</label><input id="lb-high" type="number" step="any" inputmode="decimal" class="input"></div>
+        <div><label class="lbl" for="lb-value">ผลที่ได้</label><input id="lb-value" type="number" step="any" inputmode="decimal" class="input min-h-[44px]"></div>
+        <div><label class="lbl" for="lb-unit">หน่วย</label><input id="lb-unit" class="input min-h-[44px]" placeholder="mg/dL"></div>
+        <div><label class="lbl" for="lb-low">ค่าอ้างอิง ต่ำสุด</label><input id="lb-low" type="number" step="any" inputmode="decimal" class="input min-h-[44px]"></div>
+        <div><label class="lbl" for="lb-high">ค่าอ้างอิง สูงสุด</label><input id="lb-high" type="number" step="any" inputmode="decimal" class="input min-h-[44px]"></div>
       </div>
-      <div><label class="lbl">คลินิก/โรงพยาบาล · หมายเหตุ</label><input id="lb-note" class="input" placeholder="ไม่บังคับ"></div>
+      <div><label class="lbl" for="lb-note">คลินิก/โรงพยาบาล · หมายเหตุ</label><input id="lb-note" class="input min-h-[44px]" placeholder="ไม่บังคับ"></div>
       <p class="text-[11px] text-slate-500">ค่าอ้างอิงที่เติมให้เป็นค่าทั่วไปเท่านั้น — แก้ตามใบผลตรวจจริงทุกครั้ง ผลสูง/ต่ำเป็นการเทียบตัวเลข ควรให้สัตวแพทย์หรือแพทย์แปลผล</p>
       <button id="lb-save" class="btn btn-primary w-full justify-center">${iconSvg('plus', { size: 15 })} บันทึกผล</button>
     </div>
@@ -77,18 +77,18 @@ export function mountLab(el) {
   <div class="lg:col-span-2 space-y-4">
     <div class="card !p-3 space-y-2.5">
       <div class="flex flex-wrap items-center gap-2">
-        <input id="lb-search" class="input flex-1 min-w-[160px]" placeholder="🔍 ค้นหารายการผลตรวจ">
-        <select id="lb-filter" class="input !w-auto">
+        <input id="lb-search" class="input min-h-[44px] flex-1 min-w-[160px]" aria-label="ค้นหารายการผลตรวจ" placeholder="🔍 ค้นหารายการผลตรวจ">
+        <select id="lb-filter" class="input min-h-[44px] !w-auto" aria-label="กรองผลตรวจ">
           <option value="all">ผลตรวจทั้งหมด</option>
           <option value="abnormal">⚠️ เฉพาะค่าผิดปกติ (สูง/ต่ำ)</option>
         </select>
       </div>
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="text-slate-500">ช่วงวันที่:</span>
-        <input id="lb-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
+        <input id="lb-from" type="date" class="input min-h-[44px] !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
         <span class="text-slate-500">–</span>
-        <input id="lb-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
-        <button id="lb-clear" type="button" class="chip bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
+        <input id="lb-to" type="date" class="input min-h-[44px] !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
+        <button id="lb-clear" type="button" class="chip min-h-[44px] bg-slate-100 text-slate-600 hidden">ล้างตัวกรอง</button>
       </div>
     </div>
     <div id="lb-list" class="space-y-3"></div>
@@ -157,7 +157,7 @@ async function onScanLabPhoto(e) {
     const labNames = [];
     for (const r of results) {
       const res = r.data;
-      if (!detectedDate && isDateStr(res?.date)) detectedDate = res.date;
+      if (!detectedDate && isValidCalendarDate(res?.date)) detectedDate = res.date;
       if (res?.labName && !labNames.includes(res.labName.trim())) labNames.push(res.labName.trim());
       for (const it of res?.items || []) {
         if (it && it.name && typeof it.value === 'number' && Number.isFinite(it.value)) {
@@ -183,56 +183,65 @@ async function onScanLabPhoto(e) {
       <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3">โปรดเทียบตัวเลขและค่าอ้างอิงกับใบผลตรวจจริงก่อนกดบันทึก</p>
       ${errors.length ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 mb-3">${errors.map(x => `<p>• ${esc(x.fileName)}: ${esc(x.message)}</p>`).join('')}</div>` : ''}
       <div class="grid grid-cols-2 gap-2 mb-3">
-        <div><label class="lbl">วันที่ตรวจ</label><input id="lbs-date" type="date" class="input" value="${esc(defaultDate)}"></div>
-        <div><label class="lbl">คลินิก/หมายเหตุรวม</label><input id="lbs-note" class="input" value="${esc(labName)}" placeholder="ไม่บังคับ"></div>
+        <div><label class="lbl" for="lbs-date">วันที่ตรวจ</label><input id="lbs-date" type="date" class="input min-h-[44px]" value="${esc(defaultDate)}"></div>
+        <div><label class="lbl" for="lbs-note">คลินิก/หมายเหตุรวม</label><input id="lbs-note" class="input min-h-[44px]" value="${esc(labName)}" placeholder="ไม่บังคับ"></div>
       </div>
       <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
         ${items.map((it, i) => `
           <div class="rounded-xl border border-slate-200 p-2.5 space-y-2 bg-slate-50/70" data-lbs-row="${i}">
             <div class="flex items-center gap-2">
-              <input type="checkbox" class="lbs-check" data-i="${i}" checked>
-              <input class="input !py-1.5 text-sm font-semibold" data-f="name" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
+              <label class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] shrink-0 cursor-pointer" aria-label="เลือกรายการที่ ${i + 1}"><input type="checkbox" class="lbs-check w-4 h-4 accent-brand" data-i="${i}" checked></label>
+              <input class="input !py-1.5 text-sm font-semibold min-h-[44px]" data-f="name" aria-label="ชื่อรายการที่ ${i + 1}" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
               ${files.length > 1 ? `<span class="text-[10px] text-slate-500 shrink-0">${esc(it.fileName)}</span>` : ''}
             </div>
             <div class="grid grid-cols-4 gap-1.5 text-xs">
-              <div><label class="lbl">ค่า</label><input type="number" step="any" class="input !py-1" data-f="value" value="${it.value ?? ''}"></div>
-              <div><label class="lbl">หน่วย</label><input class="input !py-1" data-f="unit" value="${esc(it.unit || '')}"></div>
-              <div><label class="lbl">ต่ำสุด</label><input type="number" step="any" class="input !py-1" data-f="refLow" value="${it.refLow ?? ''}"></div>
-              <div><label class="lbl">สูงสุด</label><input type="number" step="any" class="input !py-1" data-f="refHigh" value="${it.refHigh ?? ''}"></div>
+              <div><label class="lbl">ค่า</label><input type="number" step="any" class="input !py-1 min-h-[44px]" data-f="value" aria-label="ค่า ${esc(it.name || '')}" value="${it.value ?? ''}"></div>
+              <div><label class="lbl">หน่วย</label><input class="input !py-1 min-h-[44px]" data-f="unit" aria-label="หน่วย ${esc(it.name || '')}" value="${esc(it.unit || '')}"></div>
+              <div><label class="lbl">ต่ำสุด</label><input type="number" step="any" class="input !py-1 min-h-[44px]" data-f="refLow" aria-label="ค่าต่ำสุด ${esc(it.name || '')}" value="${it.refLow ?? ''}"></div>
+              <div><label class="lbl">สูงสุด</label><input type="number" step="any" class="input !py-1 min-h-[44px]" data-f="refHigh" aria-label="ค่าสูงสุด ${esc(it.name || '')}" value="${it.refHigh ?? ''}"></div>
             </div>
           </div>`).join('')}
       </div>
       <div class="flex justify-end gap-2 mt-4">
-        <button data-close class="btn btn-ghost">ยกเลิก</button>
-        <button id="lbs-save" class="btn btn-primary">บันทึกที่เลือก</button>
+        <button data-close class="btn btn-ghost min-h-[44px]">ยกเลิก</button>
+        <button id="lbs-save" class="btn btn-primary min-h-[44px]">บันทึกที่เลือก</button>
       </div>`, { wide: true });
 
     $('#lbs-save', m.el).addEventListener('click', async () => {
       if (guardPreviewWrite('การบันทึกผลตรวจจากรูปภาพ')) return;
       const date = $('#lbs-date', m.el).value;
       const globalNote = $('#lbs-note', m.el).value.trim();
-      if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
+      if (!isValidCalendarDate(date)) return toast('กรุณาระบุวันที่ตรวจให้ถูกต้อง', 'err');
+      const LAB_MAX = 10000000;
       const rowsToSave = [];
-      m.el.querySelectorAll('[data-lbs-row]').forEach(rowEl => {
+      for (const rowEl of m.el.querySelectorAll('[data-lbs-row]')) {
         const chk = rowEl.querySelector('.lbs-check');
-        if (!chk?.checked) return;
+        if (!chk?.checked) continue;
         const val = key => rowEl.querySelector(`[data-f="${key}"]`).value;
         const name = val('name').trim();
-        const value = toNum(val('value'));
-        if (!name || value === null) return;
+        const rawValue = val('value').trim();
+        const value = toNum(rawValue);
+        if (!name || rawValue === '' || value === null) continue;
+        if (value < 0 || value > LAB_MAX) return toast(`ค่าผลตรวจ "${name}" ต้องอยู่ระหว่าง 0 – 10,000,000`, 'err');
         const refLow = toNum(val('refLow'));
         const refHigh = toNum(val('refHigh'));
+        if ((refLow !== null && (refLow < 0 || refLow > LAB_MAX)) || (refHigh !== null && (refHigh < 0 || refHigh > LAB_MAX))) {
+          return toast(`ค่าอ้างอิงของ "${name}" ต้องอยู่ระหว่าง 0 – 10,000,000`, 'err');
+        }
+        if (refLow !== null && refHigh !== null && refLow > refHigh) {
+          return toast(`ค่าอ้างอิงต่ำสุดของ "${name}" ต้องไม่มากกว่าสูงสุด`, 'err');
+        }
         rowsToSave.push({
           date,
           name: name.slice(0, 80),
           value,
           unit: val('unit').trim().slice(0, 20),
-          refLow: refLow !== null && refHigh !== null && refLow > refHigh ? null : refLow,
-          refHigh: refLow !== null && refHigh !== null && refLow > refHigh ? null : refHigh,
+          refLow,
+          refHigh,
           note: (items[+rowEl.dataset.lbsRow]?.note || globalNote || '').slice(0, 200),
           createdAt: new Date()
         });
-      });
+      }
       if (!rowsToSave.length) return toast('เลือกรายการที่มีชื่อและตัวเลขอย่างน้อย 1 รายการ', 'err');
       const btn = $('#lbs-save', m.el);
       btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
@@ -268,54 +277,63 @@ function openLabBatchModal(initialRows, titleText = 'กรอกผลตรว
     <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">${esc(titleText)}</h3><button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-3">กรอกเฉพาะรายการที่มีผลตรวจ (รายการที่เว้นว่างจะไม่ถูกบันทึก) — ค่าอ้างอิงดึงจากใบล่าสุดหรือค่าทั่วไป</p>
     <div class="grid grid-cols-2 gap-2 mb-3">
-      <div><label class="lbl">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input" value="${esc(defaultDate)}"></div>
-      <div><label class="lbl">คลินิก/หมายเหตุรวม</label><input id="lbb-note" class="input" value="${esc(defaultNote)}" placeholder="ไม่บังคับ"></div>
+      <div><label class="lbl" for="lbb-date">วันที่ตรวจ</label><input id="lbb-date" type="date" class="input min-h-[44px]" value="${esc(defaultDate)}"></div>
+      <div><label class="lbl" for="lbb-note">คลินิก/หมายเหตุรวม</label><input id="lbb-note" class="input min-h-[44px]" value="${esc(defaultNote)}" placeholder="ไม่บังคับ"></div>
     </div>
     <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
       ${initialRows.map((it, i) => `
         <div class="rounded-xl border border-slate-200 p-2.5 space-y-2 bg-slate-50/70" data-lbb-row="${i}">
           <div class="flex items-center gap-2">
-            <input type="checkbox" class="lbb-check" checked>
-            <input class="input !py-1.5 text-sm font-semibold" data-f="name" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
+            <label class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] shrink-0 cursor-pointer" aria-label="เลือกรายการที่ ${i + 1}"><input type="checkbox" class="lbb-check w-4 h-4 accent-brand" checked></label>
+            <input class="input !py-1.5 text-sm font-semibold min-h-[44px]" data-f="name" aria-label="ชื่อรายการที่ ${i + 1}" value="${esc(it.name || '')}" placeholder="ชื่อรายการ">
           </div>
           <div class="grid grid-cols-4 gap-1.5 text-xs">
-            <div><label class="lbl">ผล *</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="value" value="${it.value ?? ''}" placeholder="ตัวเลข"></div>
-            <div><label class="lbl">หน่วย</label><input class="input !py-1" data-f="unit" value="${esc(it.unit || '')}"></div>
-            <div><label class="lbl">ต่ำสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="refLow" value="${it.refLow ?? ''}"></div>
-            <div><label class="lbl">สูงสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1" data-f="refHigh" value="${it.refHigh ?? ''}"></div>
+            <div><label class="lbl">ผล *</label><input type="number" step="any" inputmode="decimal" class="input !py-1 min-h-[44px]" data-f="value" aria-label="ผล ${esc(it.name || '')}" value="${it.value ?? ''}" placeholder="ตัวเลข"></div>
+            <div><label class="lbl">หน่วย</label><input class="input !py-1 min-h-[44px]" data-f="unit" aria-label="หน่วย ${esc(it.name || '')}" value="${esc(it.unit || '')}"></div>
+            <div><label class="lbl">ต่ำสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1 min-h-[44px]" data-f="refLow" aria-label="ต่ำสุด ${esc(it.name || '')}" value="${it.refLow ?? ''}"></div>
+            <div><label class="lbl">สูงสุด</label><input type="number" step="any" inputmode="decimal" class="input !py-1 min-h-[44px]" data-f="refHigh" aria-label="สูงสุด ${esc(it.name || '')}" value="${it.refHigh ?? ''}"></div>
           </div>
         </div>`).join('')}
     </div>
     <div class="flex justify-end gap-2 mt-4">
-      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="lbb-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button>
+      <button type="button" data-close class="btn btn-ghost min-h-[44px]">ยกเลิก</button>
+      <button type="button" id="lbb-save" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} บันทึก</button>
     </div>`, { wide: true });
 
   $('#lbb-save', m.el).addEventListener('click', () => {
     if (guardPreviewWrite('การบันทึกผลตรวจเป็นชุด')) return;
     const date = $('#lbb-date', m.el).value;
     const note = $('#lbb-note', m.el).value.trim().slice(0, 200);
-    if (!date) return toast('กรุณาระบุวันที่ตรวจ', 'err');
+    if (!isValidCalendarDate(date)) return toast('กรุณาระบุวันที่ตรวจให้ถูกต้อง', 'err');
+    const LAB_MAX = 10000000;
     const rowsToSave = [];
-    m.el.querySelectorAll('[data-lbb-row]').forEach(rowEl => {
-      if (!rowEl.querySelector('.lbb-check')?.checked) return;
+    for (const rowEl of m.el.querySelectorAll('[data-lbb-row]')) {
+      if (!rowEl.querySelector('.lbb-check')?.checked) continue;
       const val = k => rowEl.querySelector(`[data-f="${k}"]`).value;
       const name = val('name').trim();
-      const value = toNum(val('value'));
-      if (!name || value === null) return;
+      const rawValue = val('value').trim();
+      const value = toNum(rawValue);
+      if (!name || rawValue === '' || value === null) continue;
+      if (value < 0 || value > LAB_MAX) return toast(`ค่าผลตรวจ "${name}" ต้องอยู่ระหว่าง 0 – 10,000,000`, 'err');
       const refLow = toNum(val('refLow'));
       const refHigh = toNum(val('refHigh'));
+      if ((refLow !== null && (refLow < 0 || refLow > LAB_MAX)) || (refHigh !== null && (refHigh < 0 || refHigh > LAB_MAX))) {
+        return toast(`ค่าอ้างอิงของ "${name}" ต้องอยู่ระหว่าง 0 – 10,000,000`, 'err');
+      }
+      if (refLow !== null && refHigh !== null && refLow > refHigh) {
+        return toast(`ค่าอ้างอิงต่ำสุดของ "${name}" ต้องไม่มากกว่าสูงสุด`, 'err');
+      }
       rowsToSave.push({
         date,
         name: name.slice(0, 80),
         value,
         unit: val('unit').trim().slice(0, 20),
-        refLow: refLow !== null && refHigh !== null && refLow > refHigh ? null : refLow,
-        refHigh: refLow !== null && refHigh !== null && refLow > refHigh ? null : refHigh,
+        refLow,
+        refHigh,
         note,
         createdAt: new Date()
       });
-    });
+    }
     if (!rowsToSave.length) return toast('กรอกตัวเลขผลตรวจอย่างน้อย 1 รายการก่อนบันทึก', 'err');
     const btn = $('#lbb-save', m.el);
     btn.disabled = true;
@@ -351,14 +369,14 @@ function openLabPasteModal() {
     <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-slate-800">📝 วางข้อความผลแล็บหลายบรรทัด (0 โทเค็น)</h3><button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 mb-2">วางผลแล็บ 1 บรรทัดต่อ 1 รายการ (รองรับ copy จาก Excel/Google Sheets, แยกด้วยวรรค/Tab/: และช่วงอ้างอิงท้ายบรรทัด)</p>
     <div class="flex items-center justify-between mb-1">
-      <label class="lbl !mb-0">ข้อความผลแล็บ</label>
-      <button type="button" id="lbp-sample" class="text-xs text-brand underline">ใส่ตัวอย่าง</button>
+      <label class="lbl !mb-0" for="lbp-text">ข้อความผลแล็บ</label>
+      <button type="button" id="lbp-sample" class="text-xs text-brand underline min-h-[44px] px-2 inline-flex items-center">ใส่ตัวอย่าง</button>
     </div>
     <textarea id="lbp-text" rows="5" class="input font-mono text-xs" placeholder="BUN 18 mg/dL (7-27)&#10;Creatinine: 1.2 mg/dL"></textarea>
     <div id="lbp-preview" class="mt-3 max-h-48 overflow-y-auto text-xs"></div>
     <div class="flex justify-end gap-2 mt-4">
-      <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="lbp-next" class="btn btn-primary" disabled>ตรวจสอบและบันทึก</button>
+      <button type="button" data-close class="btn btn-ghost min-h-[44px]">ยกเลิก</button>
+      <button type="button" id="lbp-next" class="btn btn-primary min-h-[44px]" disabled>ตรวจสอบและบันทึก</button>
     </div>`, { wide: true });
 
   let parsed = { items: [], errors: [] };
@@ -401,8 +419,13 @@ export function resetLabToToday() {
 function save() {
   if (guardPreviewWrite('การบันทึกผลตรวจ')) return;
   const name = $('#lb-name', root).value.trim(), value = toNum($('#lb-value', root).value), date = $('#lb-date', root).value;
-  if (!name || value === null || !date) return toast('กรอกวันที่ รายการตรวจ และผลที่ได้', 'err');
+  if (!name || value === null || !isValidCalendarDate(date)) return toast('กรอกวันที่ รายการตรวจ และผลที่ได้ให้ถูกต้อง', 'err');
+  const LAB_MAX = 10000000;
+  if (value < 0 || value > LAB_MAX) return toast('ค่าผลตรวจต้องอยู่ระหว่าง 0 – 10,000,000', 'err');
   const low = toNum($('#lb-low', root).value), high = toNum($('#lb-high', root).value);
+  if ((low !== null && (low < 0 || low > LAB_MAX)) || (high !== null && (high < 0 || high > LAB_MAX))) {
+    return toast('ค่าอ้างอิงต้องอยู่ระหว่าง 0 – 10,000,000', 'err');
+  }
   if (low !== null && high !== null && low > high) return toast('ค่าอ้างอิงต่ำสุดต้องไม่มากกว่าสูงสุด', 'err');
   addDoc(userCol(state.uid, 'lab_records'), { date, name: name.slice(0, 80), value, unit: $('#lb-unit', root).value.trim().slice(0, 20), refLow: low, refHigh: high, note: $('#lb-note', root).value.trim().slice(0, 200), createdAt: new Date() })
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
@@ -462,13 +485,13 @@ export function render() {
 
   const hasAny = (state.labs || []).length > 0;
   const listEl = $('#lb-list', root);
-  listEl.innerHTML = cards.length ? cards.map(rows => {
+  listEl.innerHTML = cards.length ? `<p class="tm-swipe-hint">ปัดซ้ายที่รายการเพื่อลบ</p>` + cards.map(rows => {
     const last = rows[rows.length - 1], f = labFlag(last), prev = rows[rows.length - 2];
     const arrow = prev ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : '';
     const displayRows = mode === 'abnormal'
       ? rows.slice().reverse().filter(r => { const rf = labFlag(r); return rf === 'low' || rf === 'high'; })
       : rows.slice().reverse();
-    return `<div class="card !p-3" data-lab-card><details ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
+    return `<div class="card !p-3" data-lab-card><details ${mode === 'abnormal' ? 'open' : ''}><summary class="cursor-pointer min-h-[44px] flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0"><p class="font-semibold text-slate-800">${esc(last.name)}</p><p class="text-xs text-slate-500 tabular-nums">ล่าสุด ${esc(fmtDate(last.date))} · อ้างอิง ${esc(refText(last))}</p></div>
       <div class="flex items-center gap-3 tabular-nums">${spark(rows)}<div class="text-right"><p class="text-lg font-bold">${esc(last.value)} <span class="text-xs font-normal text-slate-500">${esc(last.unit)}</span> <span class="text-sm text-slate-500">${arrow}</span></p>${f ? `<span class="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold ${FLAG[f][1]}">${FLAG[f][0]}</span>` : ''}</div></div></summary>
       <div class="mt-3 tm-swipe-list text-sm tabular-nums">${displayRows.map(r => `

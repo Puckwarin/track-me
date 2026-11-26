@@ -10,7 +10,7 @@ Track Me เป็นเว็บแอปแบบ client-side สำหรั�
 
 - **Vite** สำหรับ development server, production bundling และ environment variables ที่ขึ้นต้นด้วย `VITE_`
 - **Vanilla JavaScript** แยกโมดูลตามฟีเจอร์และใช้ DOM APIs โดยตรง
-- **Tailwind CSS 4**, `src/design-tokens.css` และ `src/style.css` สำหรับ responsive styling และ Warm Wellness palette ชุดเดียวผ่าน semantic tokens (ไม่มีตัวเลือกธีม); ใช้ `@fontsource/prompt` และชุดไอคอน **Phosphor Duotone** (`@phosphor-icons/core` ใน `src/icons.js` แบบ tree-shaken inline SVG) ทั่วทั้งแอป พร้อมแสดงเวอร์ชันจาก `src/version.js`
+- **Tailwind CSS 4**, `src/design-tokens.css` และ `src/style.css` สำหรับ responsive styling และ Pastel Blue-Primary palette ชุดเดียวผ่าน semantic tokens (ไม่มีตัวเลือกธีม); ใช้ `@fontsource/prompt` และชุดไอคอน **Phosphor Regular** (`@phosphor-icons/core` ใน `src/icons.js` แบบ tree-shaken inline SVG) ทั่วทั้งแอป พร้อมแสดงเวอร์ชันจาก `src/version.js`
 - **Firebase Web SDK** สำหรับ Google Authentication และ Firestore
 - **Firestore persistent local cache** สำหรับข้อมูลที่เคยโหลดและการเขียนที่รอซิงค์; มี memory-cache fallback หากเปิด persistent cache ไม่ได้
 - **vite-plugin-pwa / Workbox** สำหรับสร้าง Service Worker, auto-update และ precache

@@ -6,11 +6,11 @@
 
 Production Rules อนุญาต read/delete เฉพาะเจ้าของใน collection ที่รู้จัก; create/update เฉพาะเจ้าของ, จำกัดเอกสารไม่เกิน 30 fields และตรวจชนิดข้อมูลของ common fields ระดับบนสุด เช่น วันที่/ชื่อ/หมวด/สถานะ, timestamp/string สำหรับเวลา, ตัวเลข, boolean และ map `uid` ถ้ามีต้องตรงกับ UID ใน path.
 
-กฎนี้ไม่ใช่ allowlist ของทุกฟิลด์, ไม่ตรวจ required fields หรือโครงสร้างภายในของ map/list อย่างครบถ้วน และไม่ใช่การตรวจความถูกต้องเชิงธุรกิจ; `src/schema.js` sanitize ตอน import/restore/migration. `runtime_error_logs` มีกฎแยกที่ตรวจ field allowlist, category/source/code และเวลา; client สร้างได้อย่างเดียว.
+กฎนี้ไม่ใช่ allowlist ของทุกฟิลด์, ไม่ตรวจ required fields หรือโครงสร้างภายในของ map/list อย่างครบถ้วน และไม่ใช่การตรวจความถูกต้องเชิงธุรกิจ; `src/schema.js` sanitize และตรวจความถูกต้องของวันที่ตามปฏิทินจริง (`validCalendarDate`), ช่วงตัวเลข/จำนวนเงิน และโครงสร้างฟิลด์ตอน import/restore/migration. `runtime_error_logs` มีกฎแยกที่ตรวจ field allowlist, category/source/code และเวลา; client สร้างได้อย่างเดียว.
 
 ## Collections และ field types
 
-วันที่ที่ใช้ค้นหา/เป็น document ID เก็บเป็น string รูปแบบ `YYYY-MM-DD`; `createdAt`/`updatedAt` ส่วนใหญ่เป็น Firestore Timestamp (Rules รองรับ string สำหรับข้อมูลเดิมบางส่วน) ตัวเลขเป็น `number`/integer ตามความหมาย, ค่าที่ไม่ได้ระบุอาจเป็น `null` หรือไม่มี field. ตารางแสดงฟิลด์หลัก ไม่ใช่ allowlist ครบทุกฟิลด์; sanitizer ของ collection ใน `src/schema.js` เป็นรายละเอียดสำรอง/กู้คืนที่แน่นอนกว่า.
+วันที่ที่ใช้ค้นหา/เป็น document ID เก็บเป็น string รูปแบบ `YYYY-MM-DD` (และตรวจด้วย `isValidCalendarDate` / `validCalendarDate` ใน `src/schema.js` รวมถึงแผน/สถานะ/วันย้ายใน `settings`); `createdAt`/`updatedAt` ส่วนใหญ่เป็น Firestore Timestamp (Rules รองรับ string สำหรับข้อมูลเดิมบางส่วน) ตัวเลขเป็น `number`/integer ตามความหมาย, ค่าที่ไม่ได้ระบุอาจเป็น `null` หรือไม่มี field. ตารางแสดงฟิลด์หลัก ไม่ใช่ allowlist ครบทุกฟิลด์; sanitizer ของ collection ใน `src/schema.js` เป็นรายละเอียดสำรอง/กู้คืนที่แน่นอนกว่า.
 
 | Collection | Fields หลักและชนิด | รูปแบบเอกสาร/หมายเหตุ |
 |---|---|---|

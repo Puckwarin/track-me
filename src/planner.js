@@ -977,7 +977,7 @@ export function renderPlanner() {
         </div>
         <div class="pl-card-actions">
           ${weekNavBarHtml({ isToday: selectedDate === today, todayAttrs: 'data-pl-week-today', showArrows: false })}
-          <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[40px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
+          <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[44px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
         </div>
       </div>
       <button type="button" data-pl-collapse class="pl-collapse-btn" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 16 })}</button>
@@ -987,7 +987,7 @@ export function renderPlanner() {
       ${mobileStripHtml}
       ${!weekTotal ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
         <span class="min-w-0">เพิ่มงานวางแผนในสัปดาห์นี้ได้ทันที</span>
-        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[36px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
+        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[44px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
       </div>` : ''}
       <div class="pl-day-panel ${shouldFlash ? 'pl-feedback-flash' : ''} rounded-2xl border border-slate-200/80 bg-slate-50/45 p-2.5 sm:p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
@@ -1178,7 +1178,7 @@ function openRoutinesModal(opts = {}) {
         <div class="flex flex-wrap items-center justify-between gap-1.5">
           <label class="lbl !mb-0">วันในสัปดาห์ *</label>
           <div class="flex flex-wrap gap-1.5" id="rt-day-presets">
-            ${DAY_PRESETS.map(p => `<button type="button" data-rt-days="${p.key}" class="px-2.5 py-1.5 min-h-[36px] rounded-lg border text-[11px] font-semibold transition">${p.label}</button>`).join('')}
+            ${DAY_PRESETS.map(p => `<button type="button" data-rt-days="${p.key}" class="px-2.5 py-1.5 min-h-[44px] rounded-lg border text-[11px] font-semibold transition">${p.label}</button>`).join('')}
           </div>
         </div>
         <div id="rt-days" class="grid grid-cols-7 gap-1"></div>
@@ -1202,7 +1202,7 @@ function openRoutinesModal(opts = {}) {
     const activePreset = matchingDayPreset(pickedDays);
     m.el.querySelectorAll('[data-rt-days]').forEach(btn => {
       const active = btn.dataset.rtDays === activePreset;
-      btn.className = `px-2.5 py-1.5 min-h-[36px] rounded-lg border text-[11px] font-semibold transition ${
+      btn.className = `px-2.5 py-1.5 min-h-[44px] rounded-lg border text-[11px] font-semibold transition ${
         active
           ? 'bg-brand text-white border-brand'
           : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'

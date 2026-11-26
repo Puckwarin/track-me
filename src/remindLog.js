@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, addDays, daysBetween, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, daysBetween, toast } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './periodStats.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
 import { iconSvg } from './icons.js';
@@ -116,11 +116,11 @@ export function mountRemind(el) {
         <div class="space-y-1.5">
           <p class="text-[11px] text-slate-500">ตัวอย่างกดลองใช้ได้:</p>
           <div class="flex flex-wrap gap-1.5">
-            ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="min-h-[36px] text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-2.5 py-1.5 text-slate-700 transition">${esc(ex)}</button>`).join('')}
+            ${SMART_EXAMPLES.map((ex, i) => `<button type="button" data-rm-ex="${i}" class="min-h-[44px] text-left text-[11px] rounded-xl bg-slate-100 hover:bg-lav-soft px-3 py-1.5 text-slate-700 transition">${esc(ex)}</button>`).join('')}
           </div>
           <p class="text-[11px] text-slate-500 pt-0.5">ตัวช่วยต่อท้ายแพตเทิร์น (0 โทเค็น):</p>
           <div class="flex flex-wrap gap-1.5">
-            ${REMINDER_PATTERN_CHIPS.map(([lbl, token]) => `<button type="button" data-rm-token="${esc(token)}" class="min-h-[34px] text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-lav-soft px-2.5 py-1 text-slate-700 transition">${esc(lbl)}</button>`).join('')}
+            ${REMINDER_PATTERN_CHIPS.map(([lbl, token]) => `<button type="button" data-rm-token="${esc(token)}" class="min-h-[44px] text-[11px] rounded-xl border border-slate-200 bg-white hover:bg-lav-soft px-3 py-1 text-slate-700 transition">${esc(lbl)}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -148,25 +148,28 @@ export function mountRemind(el) {
     <section class="card space-y-4 lg:col-span-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('planner', { size: 17, className: 'text-brand' })}<span>รายการที่บันทึกไว้</span></h3>
-        <label class="text-xs text-slate-600 flex items-center gap-1.5 cursor-pointer"><input id="rm-show-done" type="checkbox"> แสดงที่ทำเสร็จแล้ว</label>
+        <label class="text-xs text-slate-600 flex items-center gap-1.5 cursor-pointer min-h-[44px]"><input id="rm-show-done" type="checkbox"> แสดงที่ทำเสร็จแล้ว</label>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <input id="rm-search" class="input" placeholder="🔍 ค้นหารายการ...">
         <select id="rm-filter" class="input"><option value="">ทุกหมวดหมู่</option>${KINDS.map(([v]) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>
       </div>
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <span class="text-slate-500">ช่วงวันครบกำหนด:</span>
-        <input id="rm-from" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
-        <span class="text-slate-500">–</span>
-        <input id="rm-to" type="date" class="input !w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
-        <button id="rm-clear-filter" type="button" class="chip min-h-[34px] bg-slate-100 text-slate-700 hidden">ล้างตัวกรอง</button>
+      <div class="space-y-1.5 text-xs">
+        <span class="block text-slate-500">ช่วงวันครบกำหนด:</span>
+        <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex sm:flex-wrap items-center gap-2">
+          <input id="rm-from" type="date" class="input w-full sm:!w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
+          <span class="text-slate-500 text-center">–</span>
+          <input id="rm-to" type="date" class="input w-full sm:!w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
+          <button id="rm-clear-filter" type="button" class="chip min-h-[44px] col-span-3 sm:col-span-1 justify-center bg-slate-100 text-slate-700 hidden">ล้างตัวกรอง</button>
+        </div>
       </div>
       <div id="rm-bulk" class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
-        <label class="flex items-center gap-1.5 cursor-pointer min-h-[36px]"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
+        <label class="flex items-center gap-1.5 cursor-pointer min-h-[44px]"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="rm-sel-count">0</b></span>
         <select id="rm-bulk-remind" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        <button id="rm-bulk-apply" type="button" class="chip min-h-[36px] bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
+        <button id="rm-bulk-apply" type="button" class="chip min-h-[44px] bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
       </div>
+      <p id="rm-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
       <div id="rm-list" class="tm-swipe-list tm-swipe-list--cards"></div>
     </section>
   </div>`;
@@ -308,10 +311,13 @@ async function saveForm() {
   const title = (manualOverrides['rm-ov-title'] || '').trim() || d.title || rawText.slice(0, 80);
   const today = localDateStr();
   const nextDate = manualOverrides['rm-ov-next'] || d.nextDate || today;
+  if (!isValidCalendarDate(nextDate)) return toast('กรุณาระบุวันที่แจ้งเตือนให้ถูกต้อง', 'err');
   const dueTime = (manualOverrides['rm-ov-time'] || d.dueTime || '').trim() || null;
+  if (dueTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(dueTime)) return toast('กรุณาระบุเวลาแจ้งเตือนในรูปแบบ HH:MM', 'err');
   const remindDays = (manualOverrides['rm-ov-remind'] !== undefined && manualOverrides['rm-ov-remind'] !== '')
     ? Number(manualOverrides['rm-ov-remind'])
     : (d.remindDays ?? 7);
+  if (!Number.isFinite(remindDays) || remindDays < -1 || remindDays > 365) return toast('จำนวนวันแจ้งเตือนล่วงหน้าไม่ถูกต้อง', 'err');
   const note = (manualOverrides['rm-ov-note'] !== undefined ? manualOverrides['rm-ov-note'] : (d.note || '')).trim();
 
   const isPet = kind === 'สัตว์เลี้ยง';
@@ -520,6 +526,7 @@ export function renderRemind() {
       : 'ไม่พบบันทึกแจ้งเตือนที่ตรงกับเงื่อนไขการค้นหาหรือช่วงวันที่';
 
   const listEl = $r('#rm-list');
+  $r('#rm-swipe-hint')?.classList.toggle('hidden', !rows.length);
   listEl.innerHTML = rows.length ? rows.map(x => {
     const due = x.nextDate;
     const diff = due ? daysBetween(today, due) : null;
@@ -558,7 +565,7 @@ export function renderRemind() {
             <select data-rm-remind="${esc(x.uidKey)}" class="input !w-auto !py-1 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
-            <button data-done="${esc(x.uidKey)}" class="chip min-h-[38px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
+            <button data-done="${esc(x.uidKey)}" class="chip min-h-[44px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>
             <div class="tm-row-actions">
               <button type="button" data-edit="${esc(x.uidKey)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(x.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
               <button type="button" data-del="${esc(x.uidKey)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(x.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>

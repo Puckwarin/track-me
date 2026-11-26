@@ -56,16 +56,16 @@ export function mountProfile(el) {
   root.innerHTML = `
     <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('target', { size: 17, className: 'text-brand shrink-0' })}<span>เป้าหมายพลังงาน (BMI / TDEE)</span></h3>
     <div class="grid grid-cols-2 gap-3">
-      <div><label class="lbl">เพศ (ใช้ในสูตร BMR)</label><select id="pf-sex" class="input"><option value="female">หญิง</option><option value="male">ชาย</option></select></div>
-      <div><label class="lbl">ปีเกิด (ค.ศ.)</label><input id="pf-birth" type="number" inputmode="numeric" placeholder="เช่น 1995" class="input"></div>
-      <div><label class="lbl">ส่วนสูง (ซม.)</label><input id="pf-height" type="number" inputmode="decimal" class="input"></div>
-      <div><label class="lbl">น้ำหนัก (กก.)</label><input id="pf-weight" type="number" inputmode="decimal" class="input"><p id="pf-wnote" class="text-[11px] text-slate-400 mt-0.5"></p></div>
-      <div class="col-span-2"><label class="lbl">ระดับกิจกรรม</label><select id="pf-act" class="input">${ACTIVITY.map(a => `<option value="${a[0]}">${a[1]}</option>`).join('')}</select></div>
-      <div class="col-span-2"><label class="lbl">เป้าหมาย</label><select id="pf-goal" class="input">${GOAL_PRESETS.map(g => `<option value="${g[0]}">${g[1]}</option>`).join('')}<option value="custom">กำหนดส่วนต่างเอง</option></select></div>
-      <div><label class="lbl">ส่วนต่างจาก TDEE (kcal/วัน)</label><input id="pf-adj" type="number" inputmode="numeric" class="input"></div>
-      <div><label class="lbl">หรือตั้งแคลอรี่เป้าหมายเอง</label><input id="pf-kcal" type="number" inputmode="numeric" placeholder="เว้นว่าง = คำนวณให้" class="input"></div>
-      <div><label class="lbl">โปรตีน (g ต่อ กก.) · ขั้นต่ำ ${PROTEIN_MIN}</label><input id="pf-prot" type="number" step="0.1" min="${PROTEIN_MIN}" max="${PROTEIN_MAX}" inputmode="decimal" class="input"></div>
-      <div><label class="lbl">ไขมัน (% ของพลังงาน) · ขั้นต่ำ ${FAT_MIN}</label><input id="pf-fat" type="number" min="${FAT_MIN}" max="${FAT_MAX}" inputmode="numeric" class="input"></div>
+      <div><label class="lbl" for="pf-sex">เพศ (ใช้ในสูตร BMR)</label><select id="pf-sex" class="input min-h-[44px]"><option value="female">หญิง</option><option value="male">ชาย</option></select></div>
+      <div><label class="lbl" for="pf-birth">ปีเกิด (ค.ศ.)</label><input id="pf-birth" type="number" inputmode="numeric" placeholder="เช่น 1995" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="pf-height">ส่วนสูง (ซม.)</label><input id="pf-height" type="number" inputmode="decimal" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="pf-weight">น้ำหนัก (กก.)</label><input id="pf-weight" type="number" inputmode="decimal" class="input min-h-[44px]"><p id="pf-wnote" class="text-[11px] text-slate-400 mt-0.5"></p></div>
+      <div class="col-span-2"><label class="lbl" for="pf-act">ระดับกิจกรรม</label><select id="pf-act" class="input min-h-[44px]">${ACTIVITY.map(a => `<option value="${a[0]}">${a[1]}</option>`).join('')}</select></div>
+      <div class="col-span-2"><label class="lbl" for="pf-goal">เป้าหมาย</label><select id="pf-goal" class="input min-h-[44px]">${GOAL_PRESETS.map(g => `<option value="${g[0]}">${g[1]}</option>`).join('')}<option value="custom">กำหนดส่วนต่างเอง</option></select></div>
+      <div><label class="lbl" for="pf-adj">ส่วนต่างจาก TDEE (kcal/วัน)</label><input id="pf-adj" type="number" inputmode="numeric" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="pf-kcal">หรือตั้งแคลอรี่เป้าหมายเอง</label><input id="pf-kcal" type="number" inputmode="numeric" placeholder="เว้นว่าง = คำนวณให้" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="pf-prot">โปรตีน (g ต่อ กก.) · ขั้นต่ำ ${PROTEIN_MIN}</label><input id="pf-prot" type="number" step="0.1" min="${PROTEIN_MIN}" max="${PROTEIN_MAX}" inputmode="decimal" class="input min-h-[44px]"></div>
+      <div><label class="lbl" for="pf-fat">ไขมัน (% ของพลังงาน) · ขั้นต่ำ ${FAT_MIN}</label><input id="pf-fat" type="number" min="${FAT_MIN}" max="${FAT_MAX}" inputmode="numeric" class="input min-h-[44px]"></div>
       <p id="pf-macro-hint" class="col-span-2 text-[11px] text-slate-500"></p>
     </div>
     <div id="pf-result" class="rounded-xl bg-white border border-slate-100 p-3 text-sm space-y-1"></div>
@@ -74,7 +74,7 @@ export function mountProfile(el) {
     <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('food', { size: 17, className: 'text-brand shrink-0' })}<span>มื้ออาหารของฉัน</span></h3>
     <p class="text-xs text-slate-500">เพิ่ม/ลด/เปลี่ยนชื่อมื้อได้ (เช่น มื้อสาย มื้อบ่าย) — หน้าอาหารจะแสดงกราฟพลังงานที่กินแต่ละมื้อเปรียบเทียบกันเอง</p>
     <div id="pf-meals" class="space-y-2"></div>
-    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip bg-lav-soft text-brand-dark">${iconSvg('plus', { size: 13 })} เพิ่มมื้อ</button></div>
+    <div class="flex items-center justify-between text-xs"><button id="pf-add-meal" class="chip min-h-[44px] bg-lav-soft text-brand-dark">${iconSvg('plus', { size: 13 })} เพิ่มมื้อ</button></div>
     <div class="flex justify-end"><button id="pf-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกการตั้งค่า</button></div>`;
   root.addEventListener('input', e => { dirty = true; if (e.target.closest('#pf-meals')) readMeals(); preview(); });
   root.addEventListener('change', e => {
@@ -196,6 +196,22 @@ function save() {
   readMeals();
   if (!enforceMinimums(true)) return;
   const p = draft();
+  const maxBirthYear = new Date().getFullYear();
+  if (p.birthYear !== null && (!Number.isInteger(p.birthYear) || p.birthYear < 1900 || p.birthYear > maxBirthYear)) {
+    return toast(`ปีเกิดต้องเป็น ค.ศ. ระหว่าง 1900 – ${maxBirthYear}`, 'err');
+  }
+  if (p.heightCm !== null && (p.heightCm <= 0 || p.heightCm > 300)) {
+    return toast('ส่วนสูงต้องอยู่ระหว่าง 1 – 300 ซม.', 'err');
+  }
+  if (p.weightKg !== null && (p.weightKg <= 0 || p.weightKg > 500)) {
+    return toast('น้ำหนักต้องอยู่ระหว่าง 1 – 500 กก.', 'err');
+  }
+  if (!Number.isFinite(p.adjust) || Math.abs(p.adjust) > 1500) {
+    return toast('ส่วนต่างจาก TDEE ต้องอยู่ระหว่าง -1,500 ถึง +1,500 kcal', 'err');
+  }
+  if (p.kcalOverride !== null && (p.kcalOverride <= 0 || p.kcalOverride > 20000)) {
+    return toast('แคลอรี่เป้าหมายต้องอยู่ระหว่าง 1 – 20,000 kcal', 'err');
+  }
   if (!meals.every(m => String(m.name).trim())) return toast('ตั้งชื่อมื้อให้ครบ', 'err');
   const nextMeals = meals.map(m => ({ id: m.id, name: String(m.name).trim() }));
   const renamedPairs = nextMeals

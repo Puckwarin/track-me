@@ -1,7 +1,7 @@
 import { addDoc, deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isDateStr, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
@@ -93,6 +93,7 @@ export function mountBody(el) {
       <div class="card space-y-3">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-brand' })}<span>ประวัติน้ำหนัก & สัดส่วน</span></h3>
         <div id="b-history-wrap">
+          <p id="b-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อลบ</p>
           <div id="b-mobile-list" class="lg:hidden tm-swipe-list tm-swipe-list--cards tabular-nums"></div>
           <div class="hidden lg:block overflow-x-auto"><table class="w-full text-left text-sm">
             <thead class="bg-slate-50 text-slate-600"><tr><th class="p-3">วันที่</th><th class="p-3 text-right">น้ำหนัก</th><th class="p-3 text-right">อก</th><th class="p-3 text-right">เอว</th><th class="p-3 text-right">สะโพก</th><th class="p-3 text-right">แขน</th><th class="p-3 text-right">ขา</th><th class="p-3 text-center">ลบ</th></tr></thead>
@@ -132,6 +133,7 @@ export function mountBody(el) {
 
         <div class="border-t border-slate-100 pt-3 space-y-2">
           <h3 class="text-sm font-bold text-slate-700">ประวัติการนอน & ก้าวเดินล่าสุด</h3>
+          <p id="bz-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
           <div id="bz-list" class="tm-swipe-list tm-swipe-list--cards"></div>
         </div>
       </div>
@@ -452,6 +454,7 @@ function renderSleepStepsList(desc) {
   const listEl = $('#bz-list', root);
   if (!listEl) return;
   const rows = desc.filter(hasSleepOrSteps).slice(0, 20);
+  $('#bz-swipe-hint', root)?.classList.toggle('hidden', !rows.length);
   if (!rows.length) {
     listEl.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีบันทึกการนอนหรือก้าวเดิน (นำเข้า Zepp CSV หรือกด "กรอกเอง" ได้เลย)</p>';
     return;
@@ -537,6 +540,7 @@ export function render() {
   }).join('') : '<tr><td colspan="8" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลน้ำหนักหรือสัดส่วน</td></tr>';
 
   const mobileList = $('#b-mobile-list', root);
+  $('#b-swipe-hint', root)?.classList.toggle('hidden', !rowsWithMeta.length);
   if (mobileList) {
     const partBadges = r => [
       ['อก', r.bust],
@@ -601,7 +605,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   }
   const items = records.map(r => ({
     checked: true,
-    date: isDateStr(r.date) ? r.date : localDateStr(),
+    date: isValidCalendarDate(r.date) ? r.date : localDateStr(),
     sleepHours: resolvedSleepHours(r),
     sleepMinutes: r.sleepMinutes ?? null,
     deepSleepMin: r.deepSleepMin ?? null,
@@ -669,13 +673,13 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
   });
   box.querySelectorAll('[data-zp-date]').forEach(inp => {
     inp.addEventListener('change', () => {
-      if (isDateStr(inp.value)) items[Number(inp.dataset.zpDate)].date = inp.value;
+      if (isValidCalendarDate(inp.value)) items[Number(inp.dataset.zpDate)].date = inp.value;
     });
   });
 
   $('#zp-confirm', box)?.addEventListener('click', async () => {
     if (guardPreviewWrite('การนำเข้าข้อมูลจาก Zepp')) return;
-    const picked = items.filter(x => x.checked && isDateStr(x.date));
+    const picked = items.filter(x => x.checked && isValidCalendarDate(x.date));
     if (!picked.length || !state.uid) return;
     const confirmBtn = $('#zp-confirm', box);
     confirmBtn.disabled = true;
@@ -730,7 +734,7 @@ async function handleCsvImport(e) {
 
 
 function openSleepStepsModal(prefill = null) {
-  const initDate = isDateStr(prefill?.date) ? prefill.date : localDateStr();
+  const initDate = isValidCalendarDate(prefill?.date) ? prefill.date : localDateStr();
   const findByDate = d => (state.body || []).find(b => b.id === 'zepp_' + d);
   const initialRec = prefill || findByDate(initDate) || null;
   const initHours = resolvedSleepHours(initialRec);
@@ -809,10 +813,13 @@ function saveSleepSteps(container = root, onDone = null) {
   const wakeTime = ($('#bz-wake', container).value || '').trim();
   const note = ($('#bz-note', container).value || '').trim();
 
-  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
   if (sleepHours === null && steps === null) return toast('กรุณากรอกชั่วโมงนอน หรือจำนวนก้าวอย่างน้อย 1 อย่าง', 'err');
   if (sleepHours !== null && (sleepHours <= 0 || sleepHours > 24)) return toast('ชั่วโมงนอนต้องอยู่ระหว่าง 0.1–24 ชม.', 'err');
   if (steps !== null && (steps < 0 || steps > 200000)) return toast('จำนวนก้าวไม่สมเหตุสมผล', 'err');
+  const isTimeStr = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  if (bedTime && !isTimeStr(bedTime)) return toast('กรุณาระบุเวลาเข้านอนในรูปแบบ HH:MM', 'err');
+  if (wakeTime && !isTimeStr(wakeTime)) return toast('กรุณาระบุเวลาตื่นนอนในรูปแบบ HH:MM', 'err');
 
   const docId = 'zepp_' + date;
   const existing = state.body.find(b => b.id === docId);
@@ -838,7 +845,7 @@ function save() {
   if (guardPreviewWrite('การบันทึกน้ำหนักและสัดส่วน')) return;
   const date = $('#b-date', root).value;
   const rec = { weight: numField(root, 'b-weight'), bust: numField(root, 'b-bust'), waist: numField(root, 'b-waist'), hip: numField(root, 'b-hip'), arm: numField(root, 'b-arm'), thigh: numField(root, 'b-thigh') };
-  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
   if (Object.values(rec).every(v => v === null)) return toast('กรุณากรอกอย่างน้อย 1 ค่า', 'err');
   for (const [k, v] of Object.entries(rec)) if (v !== null && (v <= 0 || v > 400)) return toast('ค่าไม่สมเหตุสมผล: ' + k, 'err');
   addDoc(userCol(state.uid, 'body_records'), { date, ...rec, note: $('#b-note', root).value.trim(), createdAt: new Date() }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));

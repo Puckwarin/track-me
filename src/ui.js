@@ -208,7 +208,10 @@ export function openModal(innerHtml, { size = '', flush = false, staticBackdrop 
   let closed = false;
   const onKey = e => {
     if (e.key === 'Escape' && closeOnEscape) {
+      const modals = document.querySelectorAll('.modal-backdrop, .tm-modal-backdrop');
+      if (modals.length && modals[modals.length - 1] !== el) return;
       e.preventDefault();
+      e.stopImmediatePropagation();
       close();
     }
   };

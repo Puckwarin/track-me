@@ -1,7 +1,7 @@
 import { setDoc, deleteDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, addDays, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, toast } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows } from './ui.js';
@@ -54,6 +54,7 @@ function syncChoices() {
 
 let root;
 let activeSymptomsTab = 'symptoms';
+let pendingSelectedDate = null;
 
 export function setSymptomsTab(tab) {
   if (!root) return;
@@ -77,7 +78,7 @@ export function mountSymptoms(el) {
         <p class="text-xs text-slate-500 mt-0.5">บันทึกได้ทุกวัน — เลือกวันเดียวกันเพื่อจดทั้งอาการทั่วไปและอาการผิว</p>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">วันที่</label>
+        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700" for="s-date">วันที่</label>
         <div class="flex-1 min-w-0">
           <input type="date" id="s-date" class="input" min="${addDays(localDateStr(), -399)}" max="${localDateStr()}">
           <p class="text-[11px] text-slate-500 mt-1">แตะวันที่ในปฏิทินหน้าประจำเดือนเพื่อเลือกก็ได้</p>
@@ -89,43 +90,56 @@ export function mountSymptoms(el) {
       </div>
     </div>
 
-    <div id="sx-panel-symptoms" class="card space-y-4 lg:col-span-3">
-      <div class="rounded-2xl border border-slate-200 bg-white px-3 divide-y divide-slate-100">
-        ${SYMPTOMS.map(([k, t]) => sliderRow(t, 's-' + k, SEVERITY)).join('')}
-        ${sliderRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['', '1', '2', '3', '4', '5'])}
-        ${sliderRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['', '1', '2', '3', '4', '5'])}
+    <div id="sx-panel-symptoms" class="lg:col-span-3 grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+      <div class="card space-y-4 lg:col-span-3">
+        <div class="rounded-2xl border border-slate-200 bg-white px-3.5 py-1 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
+          ${SYMPTOMS.map(([k, t]) => sliderRow(t, 's-' + k, SEVERITY)).join('')}
+          ${sliderRow('อารมณ์', 's-mood', ['ไม่ระบุ', ...MOODS.slice(1)], ['', '1', '2', '3', '4', '5'])}
+          ${sliderRow('ความเครียด', 's-stress', ['ไม่ระบุ', ...STRESS.slice(1)], ['', '1', '2', '3', '4', '5'])}
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <label class="w-full sm:w-28 shrink-0 text-sm font-medium text-slate-700" for="s-note">หมายเหตุ</label>
+          <input id="s-note" class="input flex-1" placeholder="เช่น กินยาแก้ปวด, นอนน้อย">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
+          <button id="s-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการ</button>
+        </div>
       </div>
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700">หมายเหตุ</label>
-        <input id="s-note" class="input flex-1" placeholder="เช่น กินยาแก้ปวด, นอนน้อย">
+      <div class="card space-y-2.5 lg:col-span-2">
+        <h4 class="text-sm font-bold text-slate-800">บันทึกล่าสุด</h4>
+        <p id="s-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
+        <div id="s-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
       </div>
-      <div class="flex justify-end gap-2">
-        <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
-        <button id="s-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการ</button>
-      </div>
-      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกล่าสุด</h4><div id="s-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div></div>
     </div>
 
-    <section id="sx-panel-skin" class="card space-y-4 lg:col-span-3 hidden">
-      <header>
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
-        <p class="text-xs text-slate-500">ติดตามอาการระคายเคืองและผลลัพธ์ต่อผิวตามวันที่เลือกด้านบน</p>
-      </header>
-      <div class="rounded-2xl border border-slate-200 bg-white px-3 divide-y divide-slate-100">
-        ${SKIN_FIELDS.map(([k, t]) => sliderRow(t, 'skin-' + k, SEVERITY)).join('')}
+    <section id="sx-panel-skin" class="lg:col-span-3 grid grid-cols-1 lg:grid-cols-5 gap-6 items-start hidden">
+      <div class="card space-y-4 lg:col-span-3">
+        <header>
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('smile', { size: 18, className: 'text-rose-500' })}<span>บันทึกผิวรายวัน</span></h3>
+          <p class="text-xs text-slate-500">ติดตามอาการระคายเคืองและผลลัพธ์ต่อผิวตามวันที่เลือกด้านบน</p>
+        </header>
+        <div class="rounded-2xl border border-slate-200 bg-white px-3.5 py-1 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
+          ${SKIN_FIELDS.map(([k, t]) => sliderRow(t, 'skin-' + k, SEVERITY)).join('')}
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+          <label class="w-full sm:w-28 shrink-0 text-sm font-medium text-slate-700 sm:pt-2" for="skin-result">ผลลัพธ์ต่อผิว</label>
+          <textarea id="skin-result" class="input flex-1" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
+          <button id="skin-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการผิว</button>
+        </div>
       </div>
-      <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
-        <label class="w-full sm:w-32 shrink-0 text-sm font-medium text-slate-700 sm:pt-2">ผลลัพธ์ต่อผิว</label>
-        <textarea id="skin-result" class="input flex-1" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
+      <div class="card space-y-2.5 lg:col-span-2">
+        <h4 class="text-sm font-bold text-slate-800">บันทึกผิวล่าสุด</h4>
+        <p id="skin-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
+        <div id="skin-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
       </div>
-      <div class="flex justify-end gap-2">
-        <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
-        <button id="skin-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการผิว</button>
-      </div>
-      <div><h4 class="text-xs font-bold text-slate-500 mb-2">บันทึกผิวล่าสุด</h4><div id="skin-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div></div>
     </section>`;
 
-  $('#s-date', root).value = localDateStr();
+  $('#s-date', root).value = pendingSelectedDate || localDateStr();
+  pendingSelectedDate = null;
   root.addEventListener('input', e => {
     const range = e.target.closest('[data-slider-for]');
     if (!range) return;
@@ -152,15 +166,18 @@ export function mountSymptoms(el) {
       syncChoices();
     }
   });
-  window.addEventListener('trackme:show-symptoms', () => {
-    if (root?.isConnected) setSymptomsTab('symptoms');
+  window.addEventListener('trackme:show-symptoms', e => {
+    if (root?.isConnected) setSymptomsTab(e.detail?.targetTab === 'skin' ? 'skin' : 'symptoms');
   });
   window.addEventListener('trackme:focus', e => {
     if (!root?.isConnected || e.detail?.tab !== 'symptoms') return;
     const fid = String(e.detail?.focusId || '');
     setSymptomsTab(fid.startsWith('skin-') ? 'skin' : 'symptoms');
   });
-  $('#s-date', root).addEventListener('change', loadForm);
+  $('#s-date', root).addEventListener('change', () => {
+    loadForm();
+    window.dispatchEvent(new CustomEvent('trackme:symptom-date-change', { detail: { date: $('#s-date', root).value } }));
+  });
   $('#s-save', root).addEventListener('click', save);
   $('#s-del', root).addEventListener('click', del);
   $('#skin-save', root).addEventListener('click', saveSkin);
@@ -189,16 +206,33 @@ export function mountSymptoms(el) {
   loadForm();
 }
 
-export function selectDate(d, targetTab = 'symptoms') {
+export function setDateOnly(d, targetTab = null) {
+  pendingSelectedDate = d || null;
   if (!root) return;
+  const dateEl = $('#s-date', root);
+  if (dateEl && d) dateEl.value = d;
+  pendingSelectedDate = null;
+  loadForm();
+  if (targetTab) setSymptomsTab(targetTab);
+}
+
+export function selectDate(d, targetTab = 'symptoms') {
+  pendingSelectedDate = d || null;
+  if (!root) {
+    window.dispatchEvent(new CustomEvent('trackme:show-symptoms', { detail: { date: d, targetTab } }));
+    return;
+  }
   $('#s-date', root).value = d;
+  pendingSelectedDate = null;
   loadForm();
   setSymptomsTab(targetTab);
-  window.dispatchEvent(new Event('trackme:show-symptoms'));
+  window.dispatchEvent(new CustomEvent('trackme:show-symptoms', { detail: { date: d, targetTab } }));
+  window.dispatchEvent(new CustomEvent('trackme:symptom-date-change', { detail: { date: d } }));
   setTimeout(() => root.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
 }
 
 export function resetSymptomsToToday() {
+  pendingSelectedDate = null;
   if (!root) return;
   const today = localDateStr();
   const dateEl = $('#s-date', root);
@@ -208,6 +242,7 @@ export function resetSymptomsToToday() {
     dateEl.value = today;
   }
   loadForm();
+  window.dispatchEvent(new CustomEvent('trackme:symptom-date-change', { detail: { date: '' } }));
 }
 
 const get = date => state.symptoms.find(s => s.id === date);
@@ -238,6 +273,7 @@ function loadSkinForm() {
 export function renderList() {
   if (!root) return;
   const rows = state.symptoms.slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
+  $('#s-swipe-hint', root)?.classList.toggle('hidden', !rows.length);
   const sListEl = $('#s-list', root);
   sListEl.innerHTML = rows.length ? rows.map(r => {
     const sx = SYMPTOMS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
@@ -265,6 +301,7 @@ export function renderList() {
 export function renderSkinList() {
   if (!root) return;
   const rows = (state.skinRecords || []).slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10);
+  $('#skin-swipe-hint', root)?.classList.toggle('hidden', !rows.length);
   const skinListEl = $('#skin-list', root);
   skinListEl.innerHTML = rows.length ? rows.map(r => {
     const signs = SKIN_FIELDS.filter(([k]) => r.symptoms?.[k] > 0).map(([k, t]) => `${t} (${SEVERITY[r.symptoms[k]]})`).join(', ');
@@ -291,7 +328,7 @@ export function renderSkinList() {
 function save() {
   if (guardPreviewWrite('การบันทึกอาการรายวัน')) return;
   const date = $('#s-date', root).value;
-  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
   const symptoms = {};
   SYMPTOMS.forEach(([k]) => { symptoms[k] = +$('#s-' + k, root).value; });
   const num = id => { const v = $('#' + id, root).value; return v === '' ? null : +v; };
@@ -310,7 +347,7 @@ function del() {
 function saveSkin() {
   if (guardPreviewWrite('การบันทึกอาการผิว')) return;
   const date = $('#s-date', root).value;
-  if (!date) return toast('กรุณาเลือกวันที่', 'err');
+  if (!isValidCalendarDate(date)) return toast('กรุณาเลือกวันที่ให้ถูกต้อง', 'err');
   const symptoms = Object.fromEntries(SKIN_FIELDS.map(([k]) => [k, +$('#skin-' + k, root).value]));
   setDoc(userDoc(state.uid, 'skin_records', date), { date, symptoms, result: $('#skin-result', root).value.trim(), updatedAt: new Date() })
     .then(() => toast('บันทึกอาการผิวแล้ว')).catch(e => toast('บันทึกอาการผิวไม่สำเร็จ: ' + e.message, 'err'));

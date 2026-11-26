@@ -121,7 +121,7 @@ export function openModal(innerHtml, { wide = false, size = '', flush = false, s
   const extraClass = boxClass ? ` ${boxClass}` : '';
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const el = document.createElement('div');
-  el.className = 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4';
+  el.className = 'modal-backdrop fixed inset-0 z-[85] flex items-center justify-center p-4';
   el.innerHTML = `<div class="modal-box bg-white w-full ${widthClass} ${bodyClass}${extraClass}" role="dialog" aria-modal="true">${innerHtml}</div>`;
   const box = el.firstElementChild;
   const heading = box.querySelector('h1, h2, h3, h4, h5, h6');
@@ -137,7 +137,10 @@ export function openModal(innerHtml, { wide = false, size = '', flush = false, s
   let closed = false;
   const onKey = e => {
     if (e.key === 'Escape' && closeOnEscape) {
+      const modals = document.querySelectorAll('.modal-backdrop, .tm-modal-backdrop');
+      if (modals.length && modals[modals.length - 1] !== el) return;
       e.preventDefault();
+      e.stopImmediatePropagation();
       close();
     }
   };

@@ -82,7 +82,7 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
         <div class="grid grid-cols-2 gap-2.5">
           ${EDIT_FIELDS.slice(4).map(([k, t]) => `<div><label class="lbl" for="e-${k}">${t}</label><input id="e-${k}" type="number" min="0" step="0.1" inputmode="decimal" class="input min-h-[44px] ${warn(k)}" value="${v[k] ?? ''}" placeholder="ไม่ระบุ"></div>`).join('')}
         </div>
-        ${scan ? `<label class="flex items-start gap-2.5 min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700 cursor-pointer"><input id="e-confirm" type="checkbox" class="mt-0.5 w-4 h-4 accent-violet-500 shrink-0"><span>ฉันตรวจตัวเลขพลังงานและสารอาหารกับฉลากจริงแล้ว และถูกต้อง</span></label>` : ''}
+        ${scan ? `<label class="flex items-start gap-2.5 min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700 cursor-pointer"><input id="e-confirm" type="checkbox" class="mt-0.5 w-4 h-4 accent-brand shrink-0"><span>ฉันตรวจตัวเลขพลังงานและสารอาหารกับฉลากจริงแล้ว และถูกต้อง</span></label>` : ''}
       </section>
     </div>
     <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
@@ -115,8 +115,11 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   $('#e-save', m.el).addEventListener('click', () => {
     const name = g('name').value.trim(), unit = g('unit').value.trim(), cal = toNum(g('calories').value);
     const gramsPerUnit = toNum(g('grams').value);
+    const protein = toNum(g('protein').value), carbs = toNum(g('carbs').value), fat = toNum(g('fat').value);
+    const sugar = toNum(g('sugar').value), sodium = toNum(g('sodium').value);
     const validationError = validateFoodPreset({
       name, unit, calories: cal, ediblePercent: null, gramsPerUnit,
+      protein, carbs, fat, sugar, sodium,
       confirmed: !scan || $('#e-confirm', m.el).checked
     });
     if (validationError) return toast(validationError, 'err');

@@ -49,19 +49,21 @@ export function mountReport(el) {
         <div><label class="lbl">ถึงวันที่</label><input type="date" id="r-to" class="input"></div>
         <div class="col-span-2"><label class="lbl">ชื่อบนรายงาน</label><input id="r-name" class="input" placeholder="ไม่บังคับ"></div>
       </div>
-      <div class="flex flex-wrap gap-4 text-sm">
-        <label><input type="checkbox" id="r-inc-period" checked> ประจำเดือน</label>
-        <label><input type="checkbox" id="r-inc-sym" checked> อาการรายวัน</label>
-        <label><input type="checkbox" id="r-inc-body" checked> น้ำหนัก/สัดส่วน</label>
-        <label><input type="checkbox" id="r-inc-food" checked> อาหาร/สารอาหาร</label>
-        <label><input type="checkbox" id="r-inc-workout" checked> ออกกำลังกาย</label>
-        <label><input type="checkbox" id="r-inc-lab" checked> ผลตรวจ</label>
+      <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 text-xs sm:text-sm">
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-period" class="accent-brand" checked> <span>ประจำเดือน</span></label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-sym" class="accent-brand" checked> <span>อาการรายวัน</span></label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-body" class="accent-brand" checked> <span>น้ำหนัก/สัดส่วน</span></label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-food" class="accent-brand" checked> <span>อาหาร/สารอาหาร</span></label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-workout" class="accent-brand" checked> <span>ออกกำลังกาย</span></label>
+        <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-lab" class="accent-brand" checked> <span>ผลตรวจ</span></label>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button id="r-gen" class="btn btn-primary">${iconSvg('report', { size: 15 })} สร้างรายงาน</button>
         <button id="r-print" class="btn btn-soft" disabled>${iconSvg('printer', { size: 15 })} พิมพ์ / บันทึกเป็น PDF</button>
-        <select id="r-csv-kind" class="input !w-auto"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
-        <button id="r-csv" class="btn btn-ghost">${iconSvg('csv', { size: 15 })} ดาวน์โหลด CSV</button>
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+          <select id="r-csv-kind" class="input flex-1 sm:flex-none sm:!w-auto" aria-label="หมวดข้อมูลส่งออก CSV"><option value="period">CSV: ประจำเดือน</option><option value="symptoms">CSV: อาการ</option><option value="body">CSV: น้ำหนัก/สัดส่วน</option><option value="food">CSV: อาหาร</option><option value="workout">CSV: ออกกำลังกาย</option><option value="lab">CSV: ผลตรวจ</option></select>
+          <button id="r-csv" class="btn btn-ghost shrink-0">${iconSvg('csv', { size: 15 })} ดาวน์โหลด CSV</button>
+        </div>
       </div>
       <p class="text-xs text-slate-500">PDF: กด "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์ของเบราว์เซอร์ (รองรับภาษาไทย ไม่ต้องติดตั้งอะไรเพิ่ม) · CSV เปิดด้วย Excel ได้</p>
     </div>

@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, daysBetween, addDays, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, daysBetween, addDays, toast } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows } from './ui.js';
@@ -9,7 +9,7 @@ import { periodStats, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPerio
 
 export { periodStats, REMIND_OPTIONS, remindLabel, getPeriodRemindDays, setPeriodRemindDays };
 
-let root, activePeriodTab = 'main', cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+let root, activePeriodTab = 'main', selectedCalDate = '', cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
 function setPeriodTab(tab) {
   if (!root) return;
@@ -40,10 +40,10 @@ export function mountPeriod(el) {
     <div class="card space-y-4 lg:col-span-2">
       <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('period', { size: 19, className: 'text-pink-500' })}<span>บันทึกรอบเดือน</span></h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label class="lbl">วันแรกที่มา *</label><input type="date" id="p-start" class="input"></div>
-        <div><label class="lbl">วันสุดท้าย (เว้นว่างได้ถ้ายังไม่หมด)</label><input type="date" id="p-end" class="input"></div>
-        <div><label class="lbl">ปริมาณ</label><select id="p-flow" class="input"><option value="">ไม่ระบุ</option><option>น้อย</option><option>ปานกลาง</option><option>มาก</option></select></div>
-        <div><label class="lbl">หมายเหตุ</label><input id="p-note" class="input" placeholder="เช่น มาช้ากว่าปกติ"></div>
+        <div><label class="lbl" for="p-start">วันแรกที่มา *</label><input type="date" id="p-start" class="input"></div>
+        <div><label class="lbl" for="p-end">วันสุดท้าย (เว้นว่างได้ถ้ายังไม่หมด)</label><input type="date" id="p-end" class="input"></div>
+        <div><label class="lbl" for="p-flow">ปริมาณ</label><select id="p-flow" class="input"><option value="">ไม่ระบุ</option><option>น้อย</option><option>ปานกลาง</option><option>มาก</option></select></div>
+        <div><label class="lbl" for="p-note">หมายเหตุ</label><input id="p-note" class="input" placeholder="เช่น มาช้ากว่าปกติ"></div>
       </div>
       <div class="flex justify-end"><button id="p-save" class="btn btn-pink">${iconSvg('plus', { size: 15 })} บันทึกรอบเดือน</button></div>
     </div>
@@ -61,6 +61,7 @@ export function mountPeriod(el) {
         <span><span class="inline-block w-3 h-3 rounded border border-dashed border-pink-400 bg-pink-50 align-middle"></span> คาดการณ์ (ค่าประมาณ)</span>
         <span><span class="inline-block w-2 h-2 rounded-full bg-slate-700 align-middle"></span> มีบันทึกอาการ</span>
       </div>
+      <div id="c-selected-bar" class="hidden rounded-2xl border border-sky-200 bg-sky-soft/70 p-3 flex flex-wrap items-center justify-between gap-2"></div>
     </div>
   </div>
 
@@ -74,6 +75,7 @@ export function mountPeriod(el) {
     <div class="card space-y-3 lg:col-span-2">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('list', { size: 17, className: 'text-pink-500' })}<span>ประวัติประจำเดือน</span></h3>
       <div id="p-history-wrap">
+        <p id="p-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อลบ</p>
         <div id="p-mobile-list" class="lg:hidden tm-swipe-list tm-swipe-list--cards tabular-nums"></div>
         <div class="hidden lg:block overflow-x-auto"><table class="w-full text-left text-sm">
           <thead class="bg-slate-100 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
@@ -110,12 +112,33 @@ export function mountPeriod(el) {
     }
   });
   cGrid.addEventListener('pointercancel', () => { calSwipe = null; });
+  window.addEventListener('trackme:symptom-date-change', e => {
+    if (!root?.isConnected) return;
+    selectedCalDate = e.detail?.date || '';
+    renderCalendar();
+    renderSelectedBar();
+  });
   cGrid.addEventListener('click', e => {
     const d = e.target.closest('[data-d]');
     if (d && d.dataset.d <= localDateStr()) {
-      document.querySelectorAll('.cal-sel').forEach(x => x.classList.remove('cal-sel'));
-      d.classList.add('cal-sel');
-      void import('./symptoms.js').then(m => m.selectDate(d.dataset.d));
+      const ds = d.dataset.d;
+      selectedCalDate = ds;
+      renderCalendar();
+      renderSelectedBar();
+      void import('./symptoms.js').then(m => m.setDateOnly?.(ds));
+      toast(`เลือกวันที่ ${fmtDate(ds)} สำหรับอาการ & ผิวแล้ว`);
+    }
+  });
+  $('#c-selected-bar', root)?.addEventListener('click', e => {
+    if (e.target.closest('[data-c-go-symptoms]') && selectedCalDate) {
+      window.dispatchEvent(new CustomEvent('trackme:show-symptoms', { detail: { date: selectedCalDate } }));
+      return;
+    }
+    if (e.target.closest('[data-c-clear-sel]')) {
+      selectedCalDate = '';
+      void import('./symptoms.js').then(m => m.resetSymptomsToToday?.());
+      renderCalendar();
+      renderSelectedBar();
     }
   });
   $('#p-history-wrap', root).addEventListener('click', e => {
@@ -137,10 +160,13 @@ export function mountPeriod(el) {
 
 export function resetPeriodToToday() {
   const now = new Date();
+  const today = localDateStr(now);
   cal = { y: now.getFullYear(), m: now.getMonth() };
+  const symDate = document.getElementById('s-date')?.value || '';
+  selectedCalDate = symDate && symDate !== today ? symDate : '';
   if (!root) return;
   const startEl = $('#p-start', root);
-  if (startEl) startEl.value = localDateStr();
+  if (startEl) startEl.value = today;
   render();
 }
 
@@ -161,13 +187,51 @@ function predictedDays() {
   return set;
 }
 
+function getSelectedCalendarDate() {
+  const today = localDateStr();
+  const symDate = document.getElementById('s-date')?.value || '';
+  return selectedCalDate || (symDate && symDate !== today ? symDate : '');
+}
+
+function renderSelectedBar() {
+  if (!root) return;
+  const bar = $('#c-selected-bar', root);
+  if (!bar) return;
+  const sel = getSelectedCalendarDate();
+  if (!sel) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  const hasSx = (state.symptoms || []).some(s => s.id === sel);
+  const hasSkin = (state.skinRecords || []).some(s => s.id === sel);
+  const statusText = hasSx || hasSkin
+    ? [hasSx ? 'มีบันทึกอาการ' : '', hasSkin ? 'มีบันทึกผิว' : ''].filter(Boolean).join(' · ')
+    : 'ยังไม่มีบันทึกอาการ/ผิววันนี้';
+  bar.classList.remove('hidden');
+  bar.innerHTML = `
+    <div class="min-w-0 flex-1 space-y-0.5">
+      <p class="text-xs font-bold text-slate-800">วันที่เลือก: ${esc(fmtDate(sel))}</p>
+      <p class="text-[11px] text-slate-600">${esc(statusText)}</p>
+    </div>
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button type="button" data-c-go-symptoms class="btn btn-primary !min-h-[44px] !py-1.5 !px-3 text-xs">
+        <span>เปิดอาการ &amp; ผิว</span>
+        ${iconSvg('chevron-right', { size: 14 })}
+      </button>
+      <button type="button" data-c-clear-sel class="icon-btn !w-[44px] !h-[44px]" aria-label="ล้างวันที่เลือก" title="ล้างวันที่เลือก">
+        ${iconSvg('close', { size: 15 })}
+      </button>
+    </div>`;
+}
+
 export function renderCalendar() {
   if (!root) return;
   const first = new Date(cal.y, cal.m, 1);
   $('#c-title', root).textContent = first.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   const pd = periodDays(), pr = predictedDays(), today = localDateStr();
   const sym = new Set(state.symptoms.map(s => s.id));
-  const sel = $('#s-date', root)?.value;
+  const sel = getSelectedCalendarDate();
   const days = new Date(cal.y, cal.m + 1, 0).getDate();
   let html = '<div></div>'.repeat(first.getDay());
   for (let d = 1; d <= days; d++) {
@@ -180,6 +244,7 @@ export function renderCalendar() {
     html += `<button type="button" class="${cls}" data-d="${ds}" aria-label="${esc(fmtDate(ds))}${stateLabel}"${disabledAttr}>${d}${sym.has(ds) ? '<span class="cal-dot"></span>' : ''}</button>`;
   }
   $('#c-grid', root).innerHTML = html;
+  renderSelectedBar();
 }
 
 export function render() {
@@ -195,6 +260,7 @@ export function render() {
   }).join('') : '<tr><td colspan="6" class="p-5 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</td></tr>';
 
   const mobileList = $('#p-mobile-list', root);
+  $('#p-swipe-hint', root)?.classList.toggle('hidden', !desc.length);
   if (mobileList) {
     mobileList.innerHTML = desc.length ? desc.map((p, i) => {
       const older = desc[i + 1];
@@ -214,7 +280,7 @@ export function render() {
               </div>
               <p class="text-[11px] text-slate-500">${esc([dur, cycle, meta].filter(Boolean).join(' · '))}</p>
             </div>
-            ${!p.end ? `<button type="button" data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700 shrink-0 min-h-[38px]">หมดวันนี้</button>` : ''}
+            ${!p.end ? `<button type="button" data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700 shrink-0 min-h-[44px]">หมดวันนี้</button>` : ''}
           </div>
         </div>`;
     }).join('') : '<p class="py-4 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</p>';
@@ -235,7 +301,8 @@ export function render() {
 function save() {
   if (guardPreviewWrite('การบันทึกรอบเดือน')) return;
   const start = $('#p-start', root).value, end = $('#p-end', root).value;
-  if (!start) return toast('กรุณาเลือกวันแรกที่ประจำเดือนมา', 'err');
+  if (!isValidCalendarDate(start)) return toast('กรุณาเลือกวันแรกที่ประจำเดือนมาให้ถูกต้อง', 'err');
+  if (end && !isValidCalendarDate(end)) return toast('กรุณาเลือกวันสุดท้ายให้ถูกต้อง', 'err');
   if (end && end < start) return toast('วันสุดท้ายต้องไม่ก่อนวันแรก', 'err');
   if (state.period.some(p => p.start === start) && !confirm('มีบันทึกที่เริ่มวันเดียวกันอยู่แล้ว ต้องการเพิ่มซ้ำหรือไม่?')) return;
   addDoc(userCol(state.uid, 'period_records'), { start, end: end || null, flow: $('#p-flow', root).value, note: $('#p-note', root).value.trim(), createdAt: new Date() })

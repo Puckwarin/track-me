@@ -42,14 +42,43 @@ window.addEventListener('appinstalled', () => {
 export function mountSettings(el) {
   el.innerHTML = `
   <div class="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="card space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('user', { size: 18, className: 'text-brand' })}<span>บัญชี</span></h3>
-        <span class="tm-app-version-pill" aria-label="เวอร์ชันเว็บแอป">${APP_VERSION_LABEL}</span>
+    <div class="card flex flex-col justify-between gap-3">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('user', { size: 18, className: 'text-brand' })}<span>บัญชี</span></h3>
+          <span class="tm-app-version-pill" aria-label="เวอร์ชันเว็บแอป">${APP_VERSION_LABEL}</span>
+        </div>
+        <p id="st-user" class="text-sm text-slate-600"></p>
       </div>
-      <p id="st-user" class="text-sm text-slate-600"></p>
-      <button id="st-out" class="btn btn-ghost">ออกจากระบบ</button>
+      <div><button id="st-out" class="btn btn-ghost">ออกจากระบบ</button></div>
     </div>
+
+    <div class="card space-y-3">
+      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lock', { size: 18, className: 'text-brand' })}<span>ล็อกแอปด้วย PIN</span></h3>
+      <p class="text-xs text-slate-500">ใช้ PIN 4 หลักล็อกหน้าจอเมื่อให้คนอื่นยืมมือถือ · PIN เก็บเฉพาะอุปกรณ์นี้ และไม่ได้เข้ารหัสข้อมูลในบัญชี</p>
+      <div class="grid grid-cols-2 gap-2"><input id="st-pin" type="password" inputmode="numeric" maxlength="4" class="input min-h-[44px] text-center tracking-[.4em]" aria-label="PIN 4 หลัก" placeholder="PIN 4 หลัก"><input id="st-pin-confirm" type="password" inputmode="numeric" maxlength="4" class="input min-h-[44px] text-center tracking-[.4em]" aria-label="ยืนยัน PIN 4 หลัก" placeholder="ยืนยัน PIN"></div>
+      <div class="flex flex-wrap gap-2"><button id="st-pin-save" class="btn btn-primary">ตั้ง / เปลี่ยน PIN</button><button id="st-lock-now" class="btn btn-soft">ล็อกตอนนี้</button><button id="st-pin-remove" class="btn btn-ghost">ปิด PIN</button></div>
+      <p id="st-pin-state" class="text-xs text-slate-500"></p>
+    </div>
+
+    <section class="card space-y-3 lg:col-span-2" aria-labelledby="st-profile-title">
+      <header class="flex items-start justify-between gap-3">
+        <div>
+          <h3 id="st-profile-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('target', { size: 18, className: 'text-brand' })}<span>เป้าหมายพลังงาน &amp; มื้ออาหาร</span></h3>
+          <p class="text-xs text-slate-500 mt-0.5">คำนวณ BMI / BMR / TDEE และกำหนดมื้ออาหารของฉัน</p>
+        </div>
+        <button type="button" class="pl-collapse-btn" data-st-collapse="profile" aria-expanded="true" aria-controls="st-profile" aria-label="หุบเป้าหมายพลังงานและมื้ออาหาร" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
+      </header>
+      <div class="space-y-3" id="st-profile"></div>
+    </section>
+
+    <section class="card space-y-4 lg:col-span-2" id="st-home-widget-settings" aria-labelledby="st-home-widget-title">
+      <header class="flex items-start justify-between gap-3">
+        <h3 id="st-home-widget-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('more', { size: 18, className: 'text-brand' })}<span>ปรับแต่งหน้าแรก</span></h3>
+        <button type="button" class="pl-collapse-btn" data-st-collapse="home-widgets" aria-expanded="true" aria-controls="st-home-widget-controls" aria-label="หุบปรับแต่งหน้าแรก" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
+      </header>
+      <div id="st-home-widget-controls"></div>
+    </section>
 
     <section class="card space-y-4 lg:col-span-2" id="st-nav-customize" aria-labelledby="st-nav-title">
       <header class="flex items-start justify-between gap-3">
@@ -68,48 +97,21 @@ export function mountSettings(el) {
       </div>
     </section>
 
-    <section class="card space-y-4 lg:col-span-2" id="st-home-widget-settings" aria-labelledby="st-home-widget-title">
-      <header class="flex items-start justify-between gap-3">
-        <h3 id="st-home-widget-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('more', { size: 18, className: 'text-brand' })}<span>ปรับแต่งหน้าแรก</span></h3>
-        <button type="button" class="pl-collapse-btn" data-st-collapse="home-widgets" aria-expanded="true" aria-controls="st-home-widget-controls" aria-label="หุบปรับแต่งหน้าแรก" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
-      </header>
-      <div id="st-home-widget-controls"></div>
-    </section>
-
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lock', { size: 18, className: 'text-brand' })}<span>ล็อกแอปด้วย PIN</span></h3>
-      <p class="text-xs text-slate-500">ใช้ PIN 4 หลักล็อกหน้าจอเมื่อให้คนอื่นยืมมือถือ · PIN เก็บเฉพาะอุปกรณ์นี้ และไม่ได้เข้ารหัสข้อมูลในบัญชี</p>
-      <div class="grid grid-cols-2 gap-2"><input id="st-pin" type="password" inputmode="numeric" maxlength="4" class="input text-center tracking-[.4em]" placeholder="PIN 4 หลัก"><input id="st-pin-confirm" type="password" inputmode="numeric" maxlength="4" class="input text-center tracking-[.4em]" placeholder="ยืนยัน PIN"></div>
-      <div class="flex flex-wrap gap-2"><button id="st-pin-save" class="btn btn-primary">ตั้ง / เปลี่ยน PIN</button><button id="st-lock-now" class="btn btn-soft">ล็อกตอนนี้</button><button id="st-pin-remove" class="btn btn-ghost">ปิด PIN</button></div>
-      <p id="st-pin-state" class="text-xs text-slate-500"></p>
-    </div>
-
-    <section class="card space-y-3 lg:col-span-2" aria-labelledby="st-profile-title">
-      <header class="flex items-start justify-between gap-3">
-        <div>
-          <h3 id="st-profile-title" class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('target', { size: 18, className: 'text-brand' })}<span>เป้าหมายพลังงาน &amp; มื้ออาหาร</span></h3>
-          <p class="text-xs text-slate-500 mt-0.5">คำนวณ BMI / BMR / TDEE และกำหนดมื้ออาหารของฉัน</p>
-        </div>
-        <button type="button" class="pl-collapse-btn" data-st-collapse="profile" aria-expanded="true" aria-controls="st-profile" aria-label="หุบเป้าหมายพลังงานและมื้ออาหาร" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
-      </header>
-      <div class="space-y-3" id="st-profile"></div>
-    </section>
-
     <div id="st-push-card" class="card space-y-3">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('notifications', { size: 18, className: 'text-brand' })}<span>การแจ้งเตือน</span></h3>
       <p class="text-xs text-slate-500">รับการแจ้งเตือน Planner, ตารางนัด และรอบเดือนทุกวันเวลา 12:15 น. แม้ไม่ได้เปิดแอปค้างไว้</p>
-      <label class="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-slate-700 cursor-pointer">
-        <input type="checkbox" id="st-push-hide-details" class="mt-0.5">
+      <label class="flex items-start gap-2.5 min-h-[44px] rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-slate-700 cursor-pointer">
+        <input type="checkbox" id="st-push-hide-details" class="mt-0.5 w-4 h-4 accent-brand shrink-0">
         <span><b>ซ่อนรายละเอียดส่วนตัวบนหน้าจอล็อก (แนะนำ)</b><br><span class="text-[11px] text-slate-500">แสดงเฉพาะจำนวนรายการรวมบนแจ้งเตือน เพื่อไม่ให้ข้อมูลรอบเดือน สุขภาพ หรือนัดหมายแสดงบนหน้าจอล็อก</span></span>
       </label>
       <div id="st-ios-guide" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
         <b>สำหรับ iPhone / iPad (iOS 16.4+):</b> กรุณากดปุ่ม <b>แชร์ (Share)</b> → <b>เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)</b> แล้วเปิดแอปจากไอคอนบนหน้าจอก่อนจึงจะกดเปิดรับการแจ้งเตือนได้
       </div>
       <div id="st-vapid-wrap" class="hidden space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-        <label class="lbl !mb-0">VAPID Public Key (ใส่กรณีไม่ได้ตั้งใน GitHub Secrets)</label>
+        <label class="lbl !mb-0" for="st-vapid">VAPID Public Key (ใส่กรณีไม่ได้ตั้งใน GitHub Secrets)</label>
         <div class="flex gap-2">
-          <input id="st-vapid" class="input text-xs flex-1" placeholder="วาง VAPID Public Key ที่สร้างจาก web-push">
-          <button type="button" id="st-vapid-save" class="btn btn-soft text-xs whitespace-nowrap">บันทึกคีย์</button>
+          <input id="st-vapid" class="input min-h-[44px] text-xs flex-1" placeholder="วาง VAPID Public Key ที่สร้างจาก web-push">
+          <button type="button" id="st-vapid-save" class="btn btn-soft min-h-[44px] text-xs whitespace-nowrap">บันทึกคีย์</button>
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -122,15 +124,19 @@ export function mountSettings(el) {
     </div>
 
     <div class="card space-y-3" id="st-backup"></div>
-    <div class="card space-y-3">
-      <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('note', { size: 18, className: 'text-brand' })}<span>โน้ตผู้ช่วย &amp; ส่ง Feedback</span></h3>
-      <p class="text-xs text-slate-500">ดู แก้ไข หรือลบโน้ตที่ผู้ช่วย Track Me จดไว้ และส่งความคิดเห็นหรือแจ้งปัญหาเพื่อพัฒนาแอปต่อ</p>
-      <p id="st-nf-summary" class="text-xs text-slate-600"></p>
-      <div class="flex flex-wrap gap-2">
+
+    <div class="card lg:col-span-2 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div class="space-y-1.5 min-w-0">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('note', { size: 18, className: 'text-brand' })}<span>โน้ตผู้ช่วย &amp; ส่ง Feedback</span></h3>
+        <p class="text-xs text-slate-500">ดู แก้ไข หรือลบโน้ตที่ผู้ช่วย Track Me จดไว้ และส่งความคิดเห็นหรือแจ้งปัญหาเพื่อพัฒนาแอปต่อ</p>
+        <p id="st-nf-summary" class="text-xs text-slate-600"></p>
+      </div>
+      <div class="flex flex-wrap gap-2 shrink-0">
         <button type="button" id="st-open-notes" class="btn btn-soft text-xs">${iconSvg('note', { size: 14 })} ดูโน้ตทั้งหมด</button>
         <button type="button" id="st-open-feedback" class="btn btn-primary text-xs">${iconSvg('chat', { size: 14 })} ส่ง Feedback แอป</button>
       </div>
     </div>
+
     <div class="card space-y-3 lg:col-span-2" id="st-api-keys">
       <header class="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -140,13 +146,13 @@ export function mountSettings(el) {
         <span id="st-keys-summary" class="text-xs text-slate-600 tabular-nums"></span>
       </header>
       <details id="st-keys-details" class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-        <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">เปิดดู / ตั้งค่า API Keys (Gemini, Groq, OpenRouter, USDA)</summary>
+        <summary class="cursor-pointer min-h-[44px] flex items-center text-xs font-semibold text-slate-700 select-none">เปิดดู / ตั้งค่า API Keys (Gemini, Groq, OpenRouter, USDA)</summary>
         <div class="mt-3 space-y-3">
-          <section class="rounded-xl border border-[#E4E8F3] bg-[#FFF9E6] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 15, className: 'text-slate-800' })}<span>Gemini</span></h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · ค้นหาโมเดลที่บัญชีรองรับและสลับอัตโนมัติ (timeout 35 วิ)</p><input type="password" id="st-key" class="input" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
-          <section class="rounded-xl border border-[#D0DBF7] bg-[#D0DBF7]/35 p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">Groq AI (สำรอง)</h4><p class="text-xs text-slate-500">ระบบค้นหารุ่นข้อความ/ภาพที่บัญชีใช้งานได้ แล้วใช้เป็นแหล่งสำรองถัดจาก Gemini</p><input type="password" id="st-groq" class="input" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
-          <section class="rounded-xl border border-slate-200 bg-white p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">OpenRouter AI (สำรองแบบเลือกโมเดลฟรี)</h4><p class="text-xs text-slate-500">ระบบค้นหาโมเดลฟรีที่รองรับเครื่องมืออัตโนมัติ · ขอคีย์ได้ที่ <a class="underline" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></p><input type="password" id="st-openrouter" class="input" placeholder="OpenRouter API Key (ไม่บังคับ)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button><button id="st-openrouter-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-openrouter-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#E4E8F3] bg-[#FFF9E6] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 15, className: 'text-slate-800' })}<span>Gemini</span></h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · ค้นหาโมเดลที่บัญชีรองรับและสลับอัตโนมัติ (timeout 35 วิ)</p><input type="password" id="st-key" class="input min-h-[44px]" aria-label="Gemini API Key" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#D0DBF7] bg-[#D0DBF7]/35 p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">Groq AI (สำรอง)</h4><p class="text-xs text-slate-500">ระบบค้นหารุ่นข้อความ/ภาพที่บัญชีใช้งานได้ แล้วใช้เป็นแหล่งสำรองถัดจาก Gemini</p><input type="password" id="st-groq" class="input min-h-[44px]" aria-label="Groq API Key" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-slate-200 bg-white p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">OpenRouter AI (สำรองแบบเลือกโมเดลฟรี)</h4><p class="text-xs text-slate-500">ระบบค้นหาโมเดลฟรีที่รองรับเครื่องมืออัตโนมัติ · ขอคีย์ได้ที่ <a class="underline" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></p><input type="password" id="st-openrouter" class="input min-h-[44px]" aria-label="OpenRouter API Key" placeholder="OpenRouter API Key (ไม่บังคับ)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button><button id="st-openrouter-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-openrouter-status" class="text-xs text-slate-500"></p></section>
           <p class="text-xs text-slate-600">ลำดับสำรอง AI: Gemini → Groq → OpenRouter (เลือกเฉพาะโมเดลฟรี) · ค้นหาโภชนาการ: คลังในเครื่อง → USDA → Open Food Facts → AI · งานอ่านฉลากใช้ OCR ในเครื่องเมื่อโควตา AI เต็ม</p>
-          <section class="rounded-xl border border-[#D7EBF6] bg-[#E3F1FB] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('database', { size: 15, className: 'text-slate-800' })}<span>USDA FoodData Central</span></h4><p class="text-xs text-slate-500">ค้นหาได้ทันทีด้วย DEMO_KEY; ใส่ API Key ฟรีของตัวเองเพื่อเพิ่มโควตาได้ที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input" placeholder="USDA API Key (เว้นว่างเพื่อใช้ DEMO_KEY)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#D7EBF6] bg-[#E3F1FB] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('database', { size: 15, className: 'text-slate-800' })}<span>USDA FoodData Central</span></h4><p class="text-xs text-slate-500">ค้นหาได้ทันทีด้วย DEMO_KEY; ใส่ API Key ฟรีของตัวเองเพื่อเพิ่มโควตาได้ที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input min-h-[44px]" aria-label="USDA API Key" placeholder="USDA API Key (เว้นว่างเพื่อใช้ DEMO_KEY)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
           <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · OpenRouter ใช้เฉพาะโมเดลฟรี · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
         </div>
       </details>

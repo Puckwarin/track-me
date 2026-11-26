@@ -1,4 +1,4 @@
-# Project Setup — ตั้งค่า Track Me v5.10.0
+# Project Setup — ตั้งค่า Track Me v6.1.0
 
 เอกสารนี้ใช้สำหรับติดตั้งครั้งแรกหรือย้ายไปยัง Firebase/GitHub project ใหม่ หากใช้งาน Track Me production อยู่แล้ว ให้อ่านหัวข้ออัปเดตและคีย์เสริมด้านล่างก่อนทำซ้ำ การใช้บริการฟรีมีโควตาและข้อจำกัดตามผู้ให้บริการ; ไม่ต้องใส่บัตรเพื่อใช้ GitHub Pages และ Firebase Spark แต่ API ภายนอกอาจจำกัดคำขอหรือขัดข้องชั่วคราว
 
@@ -294,6 +294,13 @@ v1.3 เพิ่ม collections สำหรับฟีเจอร์ให�
 3. ไปที่ **IAM & Admin → Service Accounts** → สร้าง Service Account ใหม่ (เช่น `trackme-daily-push`) แล้วผูกเฉพาะ **Custom Role** ข้างต้น → สร้าง Key JSON ใหม่ไปอัปเดตใน GitHub Secret `FIREBASE_SERVICE_ACCOUNT` (และลบ Key เก่าออก)
 
 ---
+
+## อัปเดต v6.1.0 (UX/UI Cross-Device, Touch Targets `>= 44px`, Z-Index/Escape Layering & Schema/Input Hardening)
+
+- **การนำทางบนมือถือ, ทางลัดหน้าหลัก & Grid ตั้งค่า (`index.html`, `src/app.js`, `src/home.js`, `src/home.css`, `src/settings.js`, `src/period.js`, `src/symptoms.js`)**: เพิ่มทางลัด **`ประวัติ & รายงาน`** (`overview`) ใน `#quick-sheet` (เมนู `+`) และบนหน้าหลัก, ปรับปุ่ม **`ออกกำลัง`** บน `#bottom-nav` ให้ใช้ `data-nav="health"` เพื่อติดสถานะ `is-active` ครอบคลุมทุกแท็บสุขภาพ, เปิด `#home-shortcuts` ทั้งบนคอมพิวเตอร์และมือถือเมื่อผู้ใช้เลือกทางลัดไว้, แก้ปุ่มล้างวันที่ในปฏิทินประจำเดือน (`[data-c-clear-sel]`) ให้รีเซ็ตวันที่ฝั่งอาการด้วย และรักษา `targetTab` (`symptoms` / `skin`) เมื่อกดลิงก์เปิดแท็บจากปฏิทิน
+- **CSS Layering, Touch Targets `44px` & Accessibility (`src/design-tokens.css`, `src/style.css`, `src/util.js`, `src/ui.js`, `src/chatWidget.js`, `src/expense.js`)**: ปรับชั้น `z-index` (`.ai-chat-drawer` `75` < `.tm-chart-float-tip` `80` < `.modal-backdrop`/`.tm-modal-backdrop` `85` < `#app-lock` `120` < `.toast` `130`), ป้องกันการกด `Escape` ปิด Modal แล้วทะลุไปปิด Drawer/Quick Sheet ด้านล่าง, แก้ `openNotesAndFeedbackModal()` ใน `src/chatWidget.js` ให้อ่าน `modal.box`, บังคับพื้นที่กด `44px` (`px`) บนมือถือ `<= 767px`, ปรับคอนทราสต์ปฏิทินประจำเดือน (`.cal-period` `#5E1727` และ `.cal-sel` `#194971`), ใช้ Backdrop โทน Navy `rgb(25 73 113 / ...)` เดียวกันทั้งแอป, ถอด `maximum-scale=1` ใน viewport พร้อมปรับฟอนต์ `.input` เป็น `16px` บนมือถือ / `0.875rem` บนคอมพิวเตอร์ และเพิ่ม `label[for]`/`aria-label` ทั่วหน้าต่างย่อย
+- **Schema & Input Validation (`src/schema.js` และฟอร์มบันทึกทุกหมวด) + Immediate Recovery Feedback (`src/workout.js`)**: ตรวจปฏิทินจริง (`validCalendarDate`), ขีดจำกัดตัวเลข/เงิน/วันเวลา และป้องกันการกรอกค่าผิดรูปก่อนเขียน Firestore พร้อมแสดง feedback และ `toast()` ทันทีในหัวข้อ **การฟื้นตัวในวันถัดไป** ก่อน `await updateDoc(...)`
+- **ไม่ต้องอัปเดต Firestore Rules หรือย้ายข้อมูล**: การเปลี่ยนแปลงทั้งหมดใช้โครงสร้าง collection และกฎใน `firestore.rules` เดิม
 
 ## อัปเดต v5.10.0 (4 กล่องมาโคร น้ำตาล · โซเดียม, หน้าอาหารกระชับ, Modals แพลนเนอร์ & ขนาดช่องกรอก/Dropdown เท่าปุ่ม)
 

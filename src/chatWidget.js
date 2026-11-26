@@ -304,16 +304,16 @@ function ensureShell() {
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0">
-          <button id="ai-chat-notes-btn" type="button" class="icon-btn !w-10 !h-10 text-xs" title="โน้ตที่จดไว้ & ส่ง Feedback" aria-label="โน้ตที่จดไว้และส่ง Feedback">
+          <button id="ai-chat-notes-btn" type="button" class="icon-btn !w-11 !h-11 text-xs" title="โน้ตที่จดไว้ & ส่ง Feedback" aria-label="โน้ตที่จดไว้และส่ง Feedback">
             ${iconSvg('note', { size: 16 })}
           </button>
-          <button id="ai-chat-role-toggle" type="button" class="icon-btn !w-10 !h-10 text-xs" title="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-label="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-expanded="false">
+          <button id="ai-chat-role-toggle" type="button" class="icon-btn !w-11 !h-11 text-xs" title="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-label="ตั้งค่าคำสั่งบทบาทเพิ่มเติม" aria-expanded="false">
             ${iconSvg('sliders', { size: 16 })}
           </button>
-          <button id="ai-chat-clear" type="button" class="icon-btn !w-10 !h-10 text-xs" title="เริ่มบทสนทนาใหม่" aria-label="เริ่มบทสนทนาใหม่">
+          <button id="ai-chat-clear" type="button" class="icon-btn !w-11 !h-11 text-xs" title="เริ่มบทสนทนาใหม่" aria-label="เริ่มบทสนทนาใหม่">
             ${iconSvg('rotate-right', { size: 16 })}
           </button>
-          <button id="ai-chat-close" type="button" class="icon-btn !w-10 !h-10" aria-label="ปิดหน้าต่างแชท">
+          <button id="ai-chat-close" type="button" class="icon-btn !w-11 !h-11" aria-label="ปิดหน้าต่างแชท">
             ${iconSvg('close', { size: 18 })}
           </button>
         </div>
@@ -323,22 +323,22 @@ function ensureShell() {
 
       <div id="ai-chat-role-panel" class="ai-chat-role-panel hidden">
         <p id="ai-chat-role-desc" class="text-[11px] font-medium text-slate-600"></p>
-        <label class="flex items-center gap-2 text-[11px] font-medium text-slate-700 mt-2 cursor-pointer">
-          <input id="ai-chat-prefer-local" type="checkbox" class="accent-violet-600">
+        <label class="flex items-center gap-2 min-h-[44px] text-[11px] font-medium text-slate-700 mt-1 cursor-pointer">
+          <input id="ai-chat-prefer-local" type="checkbox" class="w-4 h-4 accent-brand shrink-0">
           <span>ใช้แพตเทิร์นในเครื่องก่อนเรียก AI (ประหยัด 0 โทเค็นสำหรับจดและเช็กสรุป)</span>
         </label>
         <label for="ai-chat-custom-input" class="block text-[11px] font-semibold text-slate-700 mt-2">คำสั่งบุคลิกหรือหัวข้อเฉพาะสำหรับโหมด AI (ไม่บังคับ)</label>
         <textarea id="ai-chat-custom-input" rows="2" maxlength="500" class="input text-xs mt-1 w-full resize-none" placeholder="เช่น ตอบแบบเพื่อนสนิท เป็นกันเอง, ช่วยฝึกคุยภาษาอังกฤษพร้อมคำแปล, โฟกัสอาหารคลีน"></textarea>
         <div class="flex items-center justify-end gap-1.5 mt-1.5">
-          <button id="ai-chat-custom-clear" type="button" class="btn btn-ghost !py-1 !px-2.5 !min-h-8 text-xs">ล้าง</button>
-          <button id="ai-chat-custom-save" type="button" class="btn btn-primary !py-1 !px-3 !min-h-8 text-xs">บันทึกคำสั่ง</button>
+          <button id="ai-chat-custom-clear" type="button" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs">ล้าง</button>
+          <button id="ai-chat-custom-save" type="button" class="btn btn-primary !py-1.5 !px-3.5 min-h-[44px] text-xs">บันทึกคำสั่ง</button>
         </div>
       </div>
 
       <div id="ai-chat-nokey" class="hidden mx-3 mt-2 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2">
         <p class="font-semibold">ยังไม่ได้ตั้งค่า AI API Key</p>
         <p class="text-amber-800">จดและเช็กข้อมูลได้ทันที หรือใส่คีย์ในตั้งค่าเพื่อคุยถาม-ตอบอิสระ</p>
-        <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 !min-h-9 text-xs">ไปหน้าตั้งค่า</button>
+        <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 min-h-[44px] text-xs">ไปหน้าตั้งค่า</button>
       </div>
 
       <div id="ai-chat-messages" class="ai-chat-messages" aria-live="polite"></div>
@@ -422,8 +422,8 @@ function renderMessages() {
             </div>
             <div class="mt-2 flex flex-wrap justify-end gap-1.5">
               ${a.status === 'pending' ? `
-                <button type="button" data-confirm-msg="${msgIdx}" data-confirm-idx="${aIdx}" class="btn btn-primary !py-1.5 !px-3 !min-h-9 text-xs">✅ ยืนยันบันทึก</button>
-                <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost !py-1.5 !px-3 !min-h-9 text-xs text-rose-600">❌ ยกเลิก</button>
+                <button type="button" data-confirm-msg="${msgIdx}" data-confirm-idx="${aIdx}" class="btn btn-primary !py-1.5 !px-3 min-h-[44px] text-xs">✅ ยืนยันบันทึก</button>
+                <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">❌ ยกเลิก</button>
               ` : a.status === 'confirmed'
                 ? '<span class="text-[11px] text-green-700 font-semibold">✅ บันทึกแล้ว</span>'
                 : a.status === 'pending_sync'
@@ -437,8 +437,8 @@ function renderMessages() {
         `).join('')}
         ${stillPendingCount > 1 ? `
           <div class="flex flex-wrap justify-end gap-1.5 pt-1">
-            <button type="button" data-confirm-all-msg="${msgIdx}" class="btn btn-primary !py-1.5 !px-3.5 !min-h-9 text-xs">✅ ยืนยันทั้งหมด (${stillPendingCount})</button>
-            <button type="button" data-cancel-all-msg="${msgIdx}" class="btn btn-ghost !py-1.5 !px-3 !min-h-9 text-xs text-rose-600">ยกเลิกทั้งหมด</button>
+            <button type="button" data-confirm-all-msg="${msgIdx}" class="btn btn-primary !py-1.5 !px-3.5 min-h-[44px] text-xs">✅ ยืนยันทั้งหมด (${stillPendingCount})</button>
+            <button type="button" data-cancel-all-msg="${msgIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">ยกเลิกทั้งหมด</button>
           </div>
         ` : ''}
       </div>
@@ -471,7 +471,7 @@ function renderMessages() {
           <div class="mt-2 flex justify-end">
             ${r.undone
               ? `<span class="text-[11px] ${r.undoStatus === 'pending_sync' ? 'text-amber-700' : 'text-slate-500'} font-medium">${r.undoStatus === 'pending_sync' ? '⏳ ส่งคำขอยกเลิกไว้ในคิวออฟไลน์แล้ว…' : 'ยกเลิก/ลบรายการนี้แล้ว'}</span>`
-              : `<button type="button" data-undo-msg="${msgIdx}" data-undo-rec="${rIdx}" class="btn btn-ghost !py-1 !px-3 !min-h-9 text-xs text-rose-600">ยกเลิก/ลบรายการนี้</button>`
+              : `<button type="button" data-undo-msg="${msgIdx}" data-undo-rec="${rIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">ยกเลิก/ลบรายการนี้</button>`
             }
           </div>
         ` : ''}
@@ -939,7 +939,9 @@ export function mountChatWidget(goTo) {
   });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && isOpen) setOpen(false);
+    if (e.key === 'Escape' && isOpen && !document.querySelector('.modal-backdrop, .tm-modal-backdrop')) {
+      setOpen(false);
+    }
   });
 }
 
@@ -959,25 +961,31 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
   let editNoteId = null;
   let fbRating = 5;
 
-  const box = openModal(`
+  let boxEl = null;
+  const onNotesChange = () => { if (boxEl?.isConnected) renderModal(); };
+  const modal = openModal(`
     <div class="flex justify-between items-center mb-3">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('note', { size: 17, className: 'text-brand' })}<span>โน้ตผู้ช่วย &amp; Feedback</span></h3>
-      <button type="button" data-close class="icon-btn !w-9 !h-9 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="flex gap-2 mb-3">
-      <button type="button" id="nf-tab-notes" class="chip text-xs"></button>
-      <button type="button" id="nf-tab-feedback" class="chip text-xs"></button>
+      <button type="button" id="nf-tab-notes" class="chip min-h-[44px] text-xs"></button>
+      <button type="button" id="nf-tab-feedback" class="chip min-h-[44px] text-xs"></button>
     </div>
     <div id="nf-body" class="space-y-3"></div>
-  `);
+  `, {
+    onClose: () => window.removeEventListener('trackme:notes-change', onNotesChange)
+  });
+  const box = modal.box;
+  boxEl = box;
 
   const renderModal = () => {
     if (!box.isConnected) return;
     const notes = state.assistantNotes || [];
     const feedbacks = state.userFeedback || [];
-    $('#nf-tab-notes', box).className = `chip text-xs ${tab === 'notes' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
+    $('#nf-tab-notes', box).className = `chip min-h-[44px] text-xs ${tab === 'notes' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
     $('#nf-tab-notes', box).textContent = `📝 โน้ต (${notes.length})`;
-    $('#nf-tab-feedback', box).className = `chip text-xs ${tab === 'feedback' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
+    $('#nf-tab-feedback', box).className = `chip min-h-[44px] text-xs ${tab === 'feedback' ? 'bg-brand text-white font-semibold' : 'bg-slate-100 text-slate-600'}`;
     $('#nf-tab-feedback', box).textContent = `💬 ส่ง Feedback (${feedbacks.length})`;
 
     const body = $('#nf-body', box);
@@ -996,18 +1004,18 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
         <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
           <p class="text-xs font-semibold text-slate-700">${editing ? '✏️ แก้ไขโน้ต' : '➕ จดโน้ตใหม่'} <span class="font-normal text-slate-500">(หรือพิมพ์สั่งในแชท "จดโน้ตว่า..." ได้เลย)</span></p>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <input id="nf-n-title" class="input text-xs sm:col-span-2" maxlength="120" placeholder="หัวข้อโน้ต" value="${esc(editing?.name || editing?.title || '')}">
-            <select id="nf-n-cat" class="input text-xs">
+            <input id="nf-n-title" class="input text-xs sm:col-span-2" maxlength="120" aria-label="หัวข้อโน้ต" placeholder="หัวข้อโน้ต" value="${esc(editing?.name || editing?.title || '')}">
+            <select id="nf-n-cat" class="input text-xs" aria-label="หมวดหมู่โน้ต">
               ${NOTE_CATS.map(c => `<option value="${esc(c)}" ${(editing?.category || 'ทั่วไป') === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
             </select>
           </div>
-          <textarea id="nf-n-content" rows="2" maxlength="1200" class="input text-xs w-full" placeholder="รายละเอียดโน้ตที่ต้องการจำ…">${esc(editing?.note || editing?.content || '')}</textarea>
+          <textarea id="nf-n-content" rows="2" maxlength="1200" class="input text-xs w-full" aria-label="รายละเอียดโน้ต" placeholder="รายละเอียดโน้ตที่ต้องการจำ…">${esc(editing?.note || editing?.content || '')}</textarea>
           <div class="flex justify-end gap-2">
             ${editing ? '<button type="button" id="nf-n-cancel" class="btn btn-ghost text-xs !py-1.5">ยกเลิก</button>' : ''}
             <button type="button" id="nf-n-save" class="btn btn-primary text-xs !py-1.5">${editing ? 'บันทึกการแก้ไข' : 'บันทึกโน้ต'}</button>
           </div>
         </div>
-        <input id="nf-search" class="input text-xs" placeholder="🔍 ค้นหาโน้ต..." value="${esc(searchQuery)}">
+        <input id="nf-search" class="input text-xs" aria-label="ค้นหาโน้ต" placeholder="🔍 ค้นหาโน้ต..." value="${esc(searchQuery)}">
         <div class="space-y-2 max-h-64 overflow-y-auto pr-0.5">
           ${filtered.length ? filtered.map(n => `
             <div class="rounded-xl border border-slate-100 bg-white p-2.5 text-xs space-y-1">
@@ -1018,8 +1026,8 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${n.date ? `<span class="text-[11px] text-slate-400 ml-1">${esc(fmtDate(n.date))}</span>` : ''}
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
-                  <button type="button" data-note-edit="${esc(n.id)}" class="text-slate-400 hover:text-brand p-1" aria-label="แก้ไข">${iconSvg('edit', { size: 14 })}</button>
-                  <button type="button" data-note-del="${esc(n.id)}" class="text-rose-400 hover:text-rose-600 p-1" aria-label="ลบ">${iconSvg('trash', { size: 14 })}</button>
+                  <button type="button" data-note-edit="${esc(n.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-brand hover:bg-slate-100" aria-label="แก้ไข">${iconSvg('edit', { size: 15 })}</button>
+                  <button type="button" data-note-del="${esc(n.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
                 </div>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(n.note || n.content || '')}</p>
@@ -1095,16 +1103,16 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
         <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
           <p class="text-xs font-semibold text-slate-700">ส่งความคิดเห็น / แจ้งปัญหาให้ Track Me <span class="font-normal text-slate-500">(เก็บไว้ดูย้อนหลังและใช้ปรับปรุงแอป)</span></p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <select id="nf-fb-cat" class="input text-xs">
+            <select id="nf-fb-cat" class="input text-xs" aria-label="หมวดหมู่ Feedback">
               ${FB_CATS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}
             </select>
-            <input id="nf-fb-ctx" class="input text-xs" maxlength="80" placeholder="หน้าที่ใช้งาน (เช่น แชท AI, ออกกำลังกาย)">
+            <input id="nf-fb-ctx" class="input text-xs" maxlength="80" aria-label="หน้าที่ใช้งาน" placeholder="หน้าที่ใช้งาน (เช่น แชท AI, ออกกำลังกาย)">
           </div>
-          <div class="flex items-center gap-1.5 text-xs">
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
             <span class="text-slate-600">คะแนนความพึงพอใจ:</span>
-            ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-fb-rate="${n}" class="px-2 py-1 rounded-lg border text-xs ${fbRating === n ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}">⭐ ${n}</button>`).join('')}
+            ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-fb-rate="${n}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center px-2.5 py-1 rounded-xl border text-xs ${fbRating === n ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}">⭐ ${n}</button>`).join('')}
           </div>
-          <textarea id="nf-fb-msg" rows="3" maxlength="1200" class="input text-xs w-full" placeholder="เล่าปัญหาที่พบ ฟีเจอร์ที่อยากได้ หรือความประทับใจ…"></textarea>
+          <textarea id="nf-fb-msg" rows="3" maxlength="1200" class="input text-xs w-full" aria-label="ข้อความ Feedback" placeholder="เล่าปัญหาที่พบ ฟีเจอร์ที่อยากได้ หรือความประทับใจ…"></textarea>
           <div class="flex justify-end">
             <button type="button" id="nf-fb-save" class="btn btn-primary text-xs !py-1.5">ส่ง Feedback</button>
           </div>
@@ -1119,7 +1127,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${f.type ? `<span class="text-[11px] text-slate-500 ml-1">· ${esc(f.type)}</span>` : ''}
                   ${f.date ? `<span class="text-[11px] text-slate-400 ml-1">(${esc(fmtDate(f.date))})</span>` : ''}
                 </div>
-                <button type="button" data-fb-del="${esc(f.id)}" class="text-rose-400 hover:text-rose-600 p-1 shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 14 })}</button>
+                <button type="button" data-fb-del="${esc(f.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(f.note || '')}</p>
             </div>
@@ -1132,7 +1140,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
           fbRating = Number(btn.dataset.fbRate) || 5;
           body.querySelectorAll('[data-fb-rate]').forEach(b => {
             const on = Number(b.dataset.fbRate) === fbRating;
-            b.className = `px-2 py-1 rounded-lg border text-xs ${on ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}`;
+            b.className = `min-w-[44px] min-h-[44px] inline-flex items-center justify-center px-2.5 py-1 rounded-xl border text-xs ${on ? 'bg-amber-100 border-amber-400 font-bold text-amber-800' : 'bg-white border-slate-200 text-slate-500'}`;
           });
         });
       });
@@ -1188,7 +1196,6 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
 
   $('#nf-tab-notes', box).addEventListener('click', () => { tab = 'notes'; renderModal(); });
   $('#nf-tab-feedback', box).addEventListener('click', () => { tab = 'feedback'; renderModal(); });
-  const onNotesChange = () => { if (box.isConnected) renderModal(); };
   window.addEventListener('trackme:notes-change', onNotesChange);
   renderModal();
 }

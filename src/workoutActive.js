@@ -301,7 +301,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
             <button type="button" id="active-rest-stop" class="wa-rest-btn hidden">หยุด</button>
           </div>
           <div class="flex items-center gap-2.5 ml-auto">
-            <button type="button" id="wa-toggle-done-cards" class="hidden chip bg-slate-100 text-slate-700 hover:bg-slate-200 !min-h-[36px] text-xs lg:text-sm"></button>
+            <button type="button" id="wa-toggle-done-cards" class="hidden chip bg-slate-100 text-slate-700 hover:bg-slate-200 !min-h-[44px] text-xs lg:text-sm"></button>
             <span id="active-rest-time" class="wa-rest-time text-sm lg:text-base font-bold tabular-nums whitespace-nowrap"></span>
           </div>
         </div>
@@ -767,7 +767,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         `<div class="space-y-3">
           <div class="flex items-center justify-between gap-2">
             <h4 class="font-bold text-slate-800 break-words min-w-0">${esc(zoomBtn.dataset.zoomName || 'ภาพประกอบท่า')}</h4>
-            <button type="button" data-close class="btn btn-ghost !py-1.5 !px-3 !min-h-[40px] text-xs shrink-0">ปิด</button>
+            <button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
           </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-2 flex items-center justify-center max-h-[68vh] overflow-hidden">
             <img src="${esc(zoomBtn.dataset.zoomImg)}" alt="${esc(zoomBtn.dataset.zoomName || '')}" referrerpolicy="no-referrer" class="max-h-[64vh] w-auto object-contain rounded-xl">
