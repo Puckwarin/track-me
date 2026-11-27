@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state, on, emit } from './state.js';
-import { $, esc, isValidCalendarDate, localDateStr, numField, round1, toast, openModal, toNum } from './util.js';
+import { $, esc, isValidCalendarDate, localDateStr, numField, round1, toast, openModal, toNum, confirmDialog } from './util.js';
 import { iconSvg } from './icons.js';
 import { animateNumberTicker, bindChartInspector, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 import { buildMealDonutParts } from './donutChart.js';
@@ -45,6 +45,11 @@ let stripScrollMode = 'center';
 const selectedFoodIds = new Set();
 const collapsedMeals = new Set();
 const num = v => (typeof v === 'number' ? v : 0);
+const defaultQtyFor = preset => {
+  if (!preset) return 1;
+  const initialMode = defaultFoodInputMode(preset);
+  return preset.defaultQuantity ?? (canWeigh(preset) && initialMode === 'grams' ? preset.gramsPerUnit : 1);
+};
 
 export function mountFood(el) {
   if (lastTrackedUid !== state.uid) collapsedMeals.clear();
@@ -145,7 +150,7 @@ export function mountFood(el) {
           </div>
 
           <div class="pt-1">
-            <button id="f-save" type="button" class="btn btn-primary w-full min-h-[44px] justify-center">${iconSvg('plus', { size: 15 })} บันทึก</button>
+            <button id="f-save" type="button" class="btn btn-primary w-full min-h-[44px] justify-center">${iconSvg('check', { size: 15 })} บันทึก</button>
           </div>
         </div>
 
@@ -157,7 +162,7 @@ export function mountFood(el) {
           <div id="f-bulk-bar" class="hidden rounded-xl bg-slate-50 border border-slate-200 p-2.5 flex flex-wrap items-center gap-2 text-xs">
             <label class="inline-flex items-center gap-2 min-h-[44px] px-1 cursor-pointer font-medium text-slate-700"><input id="f-sel-all" type="checkbox" class="w-4 h-4 accent-brand"> เลือกทั้งหมด</label>
             <span class="text-slate-500">เลือกแล้ว <b id="f-sel-count">0</b></span>
-            <select id="f-bulk-meal" class="input !w-auto min-h-[44px] !py-1.5 !px-2.5 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
+            <select id="f-bulk-meal" class="input !w-auto min-h-[44px] !px-2.5 text-xs ml-auto" aria-label="มื้อปลายทาง"></select>
             <button id="f-bulk-move" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs font-semibold" disabled>${iconSvg('swap', { size: 14 })} ย้ายไปมื้อนี้</button>
           </div>
           <div id="f-drag-targets" class="tm-drag-drop-bar hidden" aria-label="วางเพื่อย้ายไปมื้ออื่น"></div>
@@ -201,7 +206,15 @@ export function mountFood(el) {
     const picked = favs[Number(btn.dataset.favIdx)];
     if (picked) applyPreset(picked, true);
   });
-  $('#f-qty', root).addEventListener('input', updateFoodPreview);
+  const qtyEl = $('#f-qty', root);
+  qtyEl.addEventListener('input', updateFoodPreview);
+  qtyEl.addEventListener('blur', () => {
+    if (base?.edibleFraction && base?.gramsPerUnit > 0) return;
+    if (!qtyEl.value.trim()) {
+      qtyEl.value = defaultQtyFor(base);
+      updateFoodPreview();
+    }
+  });
   const focusMealLogForm = mealName => {
     const mealSel = $('#f-meal', root);
     if (mealSel && mealName) {
@@ -256,7 +269,7 @@ export function mountFood(el) {
     else selectedFoodIds.delete(chk.dataset.foodSel);
     renderDay();
   });
-  $('#f-body', root).addEventListener('click', e => {
+  $('#f-body', root).addEventListener('click', async e => {
     const toggleMeal = e.target.closest('[data-meal-toggle]');
     if (toggleMeal) {
       const mealName = toggleMeal.dataset.mealToggle;
@@ -275,10 +288,28 @@ export function mountFood(el) {
     const edit = e.target.closest('[data-edit-log]');
     if (edit) return editFoodQuantity(edit.dataset.editLog);
     const b = e.target.closest('[data-del]');
-    if (b && confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) {
-      selectedFoodIds.delete(b.dataset.del);
-      deleteFoodRecord(state.uid, b.dataset.del).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
+    if (b) {
+      const delId = b.dataset.del;
+      const ok = await confirmDialog({
+        title: 'ลบรายการอาหาร?',
+        message: 'ต้องการลบรายการนี้ใช่หรือไม่?',
+        confirmText: 'ลบรายการ',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      selectedFoodIds.delete(delId);
+      deleteFoodRecord(state.uid, delId).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
     }
+  });
+  $('#f-body', root).addEventListener('keydown', e => {
+    const toggleRow = e.target.closest('[data-meal-toggle][role="button"]');
+    if (!toggleRow || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    const mealName = toggleRow.dataset.mealToggle;
+    if (collapsedMeals.has(mealName)) collapsedMeals.delete(mealName);
+    else collapsedMeals.add(mealName);
+    renderDay();
   });
   setupFoodBodyGestures();
   lastTrackedUid = state.uid;
@@ -315,23 +346,23 @@ function openHiwpintoCalculator(saved = null) {
   const missingOriginalNutrition = Boolean(saved) && ['shopCalories', 'shopProtein', 'shopCarbs', 'shopFat']
     .some(key => !Number.isFinite(meta[key]));
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คำนวณเมนู Hiwpinto / อาหารคลีน</h3><button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">คำนวณเมนู Hiwpinto / อาหารคลีน</h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-600 mb-3">คำนวณข้าวที่ต้องเพิ่มจากคาร์บของร้านและโปรไฟล์ข้าวที่เลือก ค่าประมาณอาจรวมคาร์บจากซอส ผัก หรือการหมักด้วย</p>
     ${missingOriginalNutrition ? '<p class="text-sm text-amber-900 bg-amber-50 rounded-lg p-2 mb-3">รายการเก่านี้ไม่มีโภชนาการจากร้านแยกครบ กรุณาตรวจสอบและกรอกค่าต้นฉบับจากร้านก่อนบันทึก เพื่อป้องกันการคำนวณซ้ำ</p>' : ''}
-    ${!saved ? `<label class="lbl">ลองเติมตัวอย่างที่ให้มา</label><select id="hp-sample" class="input mb-3"><option value="">กรอกข้อมูลเอง</option>${HIWPINTO_SAMPLES.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('')}</select>` : ''}
+    ${!saved ? `<label class="lbl" for="hp-sample">ลองเติมตัวอย่างที่ให้มา</label><select id="hp-sample" class="input mb-3"><option value="">กรอกข้อมูลเอง</option>${HIWPINTO_SAMPLES.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('')}</select>` : ''}
     <div class="space-y-3">
-      <div><label class="lbl">ชื่อเมนู *</label><input id="hp-name" class="input" value="${esc(initialName)}" placeholder="ระบุชื่อเมนูและตัวเลือกในวงเล็บ"></div>
+      <div><label class="lbl" for="hp-name">ชื่อเมนู *</label><input id="hp-name" class="input" value="${esc(initialName)}" placeholder="ระบุชื่อเมนูและตัวเลือกในวงเล็บ"></div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        ${[['calories','kcal'],['protein','P (g)'],['carbs','C (g)'],['fat','F (g)']].map(([k,t])=>`<div><label class="lbl">${t} จากร้าน *</label><input id="hp-shop-${k}" type="number" min="0" step="0.1" class="input" value="${shop[k] ?? ''}"></div>`).join('')}
+        ${[['calories','kcal'],['protein','P (g)'],['carbs','C (g)'],['fat','F (g)']].map(([k,t])=>`<div><label class="lbl" for="hp-shop-${k}">${t} จากร้าน *</label><input id="hp-shop-${k}" type="number" min="0" step="0.1" class="input" value="${shop[k] ?? ''}"></div>`).join('')}
       </div>
       <label class="flex items-start gap-2 rounded-lg bg-slate-50 p-2 text-sm"><input id="hp-has-rice" type="checkbox" class="mt-1" ${saved ? (meta.includedRice ? 'checked' : '') : (detected.included ? 'checked' : '')}> ค่าจากร้านรวมข้าวอยู่แล้ว (ตรวจวงเล็บท้ายสุดของชื่อเมนู)</label>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="lbl">ชนิดข้าว</label><select id="hp-rice-type" class="input"><option value="white">ข้าวขาว/ข้าวไรซ์</option><option value="brown">ข้าวไรซ์/ข้าวกล้อง (โปรไฟล์เดิม)</option><option value="riceberry">ข้าวไรซ์เบอร์รี่ (ค่าอ้างอิงชั่วคราว)</option></select></div>
-        <div><label class="lbl">ข้าวที่ต้องการคำนวณ</label><select id="hp-rice-g" class="input"><option value="180" ${saved ? (meta.riceGrams === 180 || !meta.riceGrams ? 'selected' : '') : 'selected'}>180 กรัม (มาตรฐาน)</option><option value="140" ${saved && meta.riceGrams === 140 ? 'selected' : ''}>140 กรัม</option></select></div>
+        <div><label class="lbl" for="hp-rice-type">ชนิดข้าว</label><select id="hp-rice-type" class="input"><option value="white">ข้าวขาว/ข้าวไรซ์</option><option value="brown">ข้าวไรซ์/ข้าวกล้อง (โปรไฟล์เดิม)</option><option value="riceberry">ข้าวไรซ์เบอร์รี่ (ค่าอ้างอิงชั่วคราว)</option></select></div>
+        <div><label class="lbl" for="hp-rice-g">ข้าวที่ต้องการคำนวณ</label><select id="hp-rice-g" class="input"><option value="180" ${saved ? (meta.riceGrams === 180 || !meta.riceGrams ? 'selected' : '') : 'selected'}>180 กรัม (มาตรฐาน)</option><option value="140" ${saved && meta.riceGrams === 140 ? 'selected' : ''}>140 กรัม</option></select></div>
       </div>
       <div id="hp-side-wrap"><label class="lbl" for="hp-side-carb">คาร์บจากกับข้าวที่ทราบ (ไม่บังคับ, g)</label><input id="hp-side-carb" type="number" min="0" step="0.5" class="input" value="${meta.sideCarbs ?? ''}" placeholder="ถ้าระบุ ระบบจะหักจากคาร์บที่ใช้ประมาณข้าว"><p class="text-xs text-slate-500 mt-1">ถ้าไม่ระบุ จะใช้คาร์บรวมจากร้านประมาณน้ำหนักข้าว และผลอาจคลาดเคลื่อนเพราะคาร์บอาจมาจากซอส ผัก หรือการหมักด้วย</p></div>
       <div id="hp-result" class="rounded-xl bg-slate-50 p-3 text-sm" aria-live="polite"></div>
-      <div class="flex justify-end gap-2"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="hp-save" class="btn btn-primary" disabled>${saved ? 'บันทึก' : 'บันทึกเมนู'}</button></div>
+      <div class="flex justify-end gap-2"><button data-close type="button" class="btn btn-ghost">ยกเลิก</button><button id="hp-save" type="button" class="btn btn-primary" disabled>${iconSvg('save', { size: 15 })} ${saved ? 'บันทึก' : 'บันทึกเมนู'}</button></div>
     </div>`, { wide: true });
 
   const $m = s => $(s, m.el);
@@ -434,6 +465,11 @@ export function watchDay() {
 export function resetFoodToToday() {
   if (!root) return;
   const dateEl = $('#f-date', root);
+  const qtyEl = $('#f-qty', root);
+  if (qtyEl && !qtyEl.value.trim()) {
+    qtyEl.value = defaultQtyFor(base);
+    updateFoodPreview();
+  }
   const today = localDateStr();
   stripScrollMode = 'center';
   if (dateEl && dateEl.value !== today) {
@@ -643,15 +679,20 @@ function refreshDatalist() {
 function pickByLabel(v) {
   const p = getPresets().find(x => label(x) === v);
   if (p) applyPreset(p, false);
-  else { base = null; syncFoodWeightForm(); updateFoodPreview(); }
+  else {
+    base = null;
+    const qtyEl = $('#f-qty', root);
+    if (qtyEl && (!v.trim() || !qtyEl.value.trim())) qtyEl.value = 1;
+    syncFoodWeightForm();
+    updateFoodPreview();
+  }
 }
 
 function applyPreset(p, setName = true, preserveEnteredAmount = false) {
   base = p;
   if (setName) $('#f-name', root).value = label(p);
-  const initialMode = defaultFoodInputMode(p);
   if (!preserveEnteredAmount || !$('#f-qty', root).value) {
-    $('#f-qty', root).value = p.defaultQuantity ?? (canWeigh(p) && initialMode === 'grams' ? p.gramsPerUnit : 1);
+    $('#f-qty', root).value = defaultQtyFor(p);
   }
   if (p.edibleFraction && p.gramsPerUnit > 0) {
     if (!preserveEnteredAmount || !$('#f-gross', root).value) {
@@ -1084,13 +1125,13 @@ function editFoodQuantity(id) {
   const inferredGrams = item.gramsPerUnit > 0 ? item.gramsPerUnit : (getPresets().find(p => p.name === foodLogName(item.name))?.gramsPerUnit || gramsInUnit(item.portionUnit));
   const unitG = !isGross && !isGrams && inferredGrams > 0 ? inferredGrams : 1;   // กรัมต่อหน่วย: ถ้ามี ให้แก้เป็นกรัมได้
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800">แก้จำนวนอาหาร</h3><button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800">แก้จำนวนอาหาร</h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-sm font-semibold text-slate-700 mb-3">${esc(foodLogName(item.name))}</p>
-    <label class="lbl">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams || unitG > 1 ? (unitG > 1 ? 'น้ำหนักที่กิน (กรัม)' : 'ปริมาณ (กรัม)') : 'จำนวน (หน่วยเดิม)'}</label>
+    <label class="lbl" for="fl-amount">${isGross ? 'น้ำหนักที่ชั่งรวม (g)' : isGrams || unitG > 1 ? (unitG > 1 ? 'น้ำหนักที่กิน (กรัม)' : 'ปริมาณ (กรัม)') : 'จำนวน (หน่วยเดิม)'}</label>
     <input id="fl-amount" type="number" min="0.01" step="${isGross||isGrams||unitG > 1 ? '1' : '0.01'}" inputmode="decimal" class="input min-h-[44px]" value="${isGross ? item.weighedGrams : unitG > 1 ? round1(currentQuantity * unitG) : currentQuantity}">
-    ${isGross ? `<label class="lbl mt-3">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]" value="${Math.round(item.edibleFraction * 100)}">` : ''}
+    ${isGross ? `<label class="lbl mt-3" for="fl-edible">สัดส่วนที่กินได้โดยประมาณ (%)</label><input id="fl-edible" type="number" min="1" max="100" step="1" inputmode="decimal" class="input min-h-[44px]" value="${Math.round(item.edibleFraction * 100)}">` : ''}
     <p id="fl-estimate" class="mt-2 text-sm text-slate-600 tabular-nums" aria-live="polite"></p>
-    <div class="flex justify-end gap-2 mt-4"><button data-close type="button" class="btn btn-ghost min-h-[44px]">ยกเลิก</button><button id="fl-save" type="button" class="btn btn-primary min-h-[44px]">บันทึกจำนวน</button></div>`);
+    <div class="flex justify-end gap-2 mt-4"><button data-close type="button" class="btn btn-ghost min-h-[44px]">ยกเลิก</button><button id="fl-save" type="button" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} บันทึกจำนวน</button></div>`);
   const updateEstimate = () => {
     const grams = toNum($('#fl-amount', m.el).value) || 0;
     const percent = isGross ? (toNum($('#fl-edible', m.el).value) || 0) : null;
@@ -1166,16 +1207,23 @@ function renderDay() {
     return `
       <section class="tm-meal-group${isCollapsed ? ' is-collapsed' : ''}" data-meal-drop="${esc(meal)}">
         <header class="tm-meal-group-head">
-          <div class="flex items-center gap-1.5 min-w-0 flex-1">
-            <input type="checkbox" data-meal-sel="${esc(meal)}" class="accent-brand w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
-            <button type="button" data-meal-toggle="${esc(meal)}" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}รายการ${esc(meal)}" class="tm-meal-toggle-btn min-w-0 flex-1">
-              <span class="inline-flex items-center gap-1.5 text-brand shrink-0">${iconSvg(mealIcon, { size: 16 })}</span>
-              <span class="font-semibold text-sm text-slate-800 truncate">${esc(meal)}</span>
-              <span class="text-xs text-slate-500 tabular-nums truncate">${rows.length} รายการ · <b class="text-slate-700">${Math.round(mealCalories)} kcal</b> · <span class="font-semibold text-slate-700">P ${round1(mealProtein)}g</span><span class="hidden sm:inline"> · C ${round1(mealCarbs)}g · F ${round1(mealFat)}g</span></span>
-              <span class="tm-meal-chevron shrink-0 ml-auto" aria-hidden="true">${iconSvg(isCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
-            </button>
+          <div class="tm-meal-head-left">
+            <input type="checkbox" data-meal-sel="${esc(meal)}" class="tm-meal-head-checkbox accent-brand w-4 h-4 shrink-0" aria-label="เลือกทั้งหมดใน${esc(meal)}" ${allMealSelected ? 'checked' : ''}>
+            <div class="tm-meal-head-info" data-meal-toggle="${esc(meal)}" role="button" tabindex="0" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}รายการ${esc(meal)}">
+              <div class="tm-meal-head-title-row">
+                <span class="inline-flex items-center text-brand shrink-0">${iconSvg(mealIcon, { size: 16 })}</span>
+                <span class="font-semibold text-sm text-slate-800 truncate">${esc(meal)}</span>
+                <span class="text-xs text-slate-500 tabular-nums shrink-0">${rows.length} รายการ</span>
+              </div>
+              <p class="tm-meal-head-stats tabular-nums">
+                <b class="text-slate-700">${Math.round(mealCalories)} kcal</b> · <span class="font-semibold text-slate-700">P ${round1(mealProtein)}g</span><span class="hidden sm:inline"> · C ${round1(mealCarbs)}g · F ${round1(mealFat)}g</span>
+              </p>
+            </div>
           </div>
-          <button type="button" data-add-meal="${esc(meal)}" class="tm-meal-add-btn shrink-0" aria-label="เพิ่มอาหารใน${esc(meal)}">${iconSvg('plus', { size: 13 })}<span>เพิ่ม</span></button>
+          <div class="tm-meal-head-actions">
+            <button type="button" data-add-meal="${esc(meal)}" class="tm-meal-add-btn" aria-label="เพิ่มอาหารใน${esc(meal)}">${iconSvg('plus', { size: 13 })}<span>เพิ่ม</span></button>
+            <button type="button" data-meal-toggle="${esc(meal)}" class="pl-collapse-btn" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}รายการ${esc(meal)}" title="${isCollapsed ? 'กาง' : 'หุบ'}">${iconSvg(isCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 })}</button>
+          </div>
         </header>
         ${isCollapsed ? '' : `<div class="tm-swipe-list">
           ${rows.map(i => {
@@ -1490,7 +1538,7 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-2">
       <h3 class="font-bold text-lg text-slate-800">ตรวจสอบผลสแกน (${results.length} รูป)</h3>
-      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ✓ ประมวลผลเสร็จสิ้น ${results.length} รายการ${errors.length ? ` · ไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บรูปภาพลงระบบ · ตรวจสอบและแก้ไขได้ก่อนบันทึก)
@@ -1521,17 +1569,17 @@ function openBatchFoodScanModal(results, errors, onCleanup = null) {
             <div class="min-w-0 space-y-2.5">
               ${d.notes ? `<p class="text-[11px] text-slate-500 bg-slate-50 rounded-lg px-2.5 py-1.5">${esc(d.notes)}</p>` : ''}
               <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                <div class="sm:col-span-2"><label class="lbl">ชื่อเมนู *</label><input class="input bfs-name text-xs font-semibold min-h-[44px]" value="${esc(d.name || '')}"></div>
-                <div><label class="lbl">จำนวน</label><input type="number" step="0.1" min="0.1" class="input bfs-qty text-xs min-h-[44px]" value="1"></div>
-                <div><label class="lbl">หน่วย</label><input class="input bfs-unit text-xs min-h-[44px]" value="${esc(d.unit || 'หน่วย')}"></div>
+                <div class="sm:col-span-2"><label class="lbl" for="bfs-name-${i}">ชื่อเมนู *</label><input id="bfs-name-${i}" class="input bfs-name text-xs font-semibold min-h-[44px]" value="${esc(d.name || '')}"></div>
+                <div><label class="lbl" for="bfs-qty-${i}">จำนวน</label><input id="bfs-qty-${i}" type="number" step="0.1" min="0.1" class="input bfs-qty text-xs min-h-[44px]" value="1"></div>
+                <div><label class="lbl" for="bfs-unit-${i}">หน่วย</label><input id="bfs-unit-${i}" class="input bfs-unit text-xs min-h-[44px]" value="${esc(d.unit || 'หน่วย')}"></div>
               </div>
               <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-2.5 grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
-                <div><label class="lbl">kcal *</label><input type="number" min="0" step="1" class="input bfs-cal min-h-[44px]" value="${esc(d.calories)}"></div>
-                <div><label class="lbl">P (g)</label><input type="number" min="0" step="0.1" class="input bfs-pro min-h-[44px]" value="${esc(d.protein)}"></div>
-                <div><label class="lbl">C (g)</label><input type="number" min="0" step="0.1" class="input bfs-carb min-h-[44px]" value="${esc(d.carbs)}"></div>
-                <div><label class="lbl">F (g)</label><input type="number" min="0" step="0.1" class="input bfs-fat min-h-[44px]" value="${esc(d.fat)}"></div>
-                <div><label class="lbl">น้ำตาล (g)</label><input type="number" min="0" step="0.1" class="input bfs-sugar min-h-[44px]" value="${esc(d.sugar)}"></div>
-                <div><label class="lbl">โซเดียม (mg)</label><input type="number" min="0" step="1" class="input bfs-sodium min-h-[44px]" value="${esc(d.sodium)}"></div>
+                <div><label class="lbl" for="bfs-cal-${i}">kcal *</label><input id="bfs-cal-${i}" type="number" min="0" step="1" class="input bfs-cal min-h-[44px]" value="${esc(d.calories)}"></div>
+                <div><label class="lbl" for="bfs-pro-${i}">P (g)</label><input id="bfs-pro-${i}" type="number" min="0" step="0.1" class="input bfs-pro min-h-[44px]" value="${esc(d.protein)}"></div>
+                <div><label class="lbl" for="bfs-carb-${i}">C (g)</label><input id="bfs-carb-${i}" type="number" min="0" step="0.1" class="input bfs-carb min-h-[44px]" value="${esc(d.carbs)}"></div>
+                <div><label class="lbl" for="bfs-fat-${i}">F (g)</label><input id="bfs-fat-${i}" type="number" min="0" step="0.1" class="input bfs-fat min-h-[44px]" value="${esc(d.fat)}"></div>
+                <div><label class="lbl" for="bfs-sugar-${i}">น้ำตาล (g)</label><input id="bfs-sugar-${i}" type="number" min="0" step="0.1" class="input bfs-sugar min-h-[44px]" value="${esc(d.sugar)}"></div>
+                <div><label class="lbl" for="bfs-sodium-${i}">โซเดียม (mg)</label><input id="bfs-sodium-${i}" type="number" min="0" step="1" class="input bfs-sodium min-h-[44px]" value="${esc(d.sodium)}"></div>
               </div>
             </div>
           </div>
@@ -1712,7 +1760,7 @@ export function openLibrary(onPick) {
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-3">
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('book', { size: 18, className: 'text-brand' })}<span>คลังอาหารของฉัน</span></h3>
-      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="flex flex-col sm:flex-row gap-2 mb-3">
       <input id="lib-q" class="input min-h-[44px] flex-1" placeholder="ค้นหาชื่อเมนูหรือยี่ห้อ...">
@@ -1724,12 +1772,12 @@ export function openLibrary(onPick) {
         <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer font-medium text-slate-700"><input id="lib-select-visible" type="checkbox" class="w-4 h-4 accent-brand"> เลือกทั้งหมดที่แสดง (<span id="lib-visible-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="lib-selected-count">0</b></span>
         <div class="flex flex-wrap items-center gap-1.5 ml-auto">
-          <select id="lib-add-meal" class="input !w-auto min-w-[8rem] min-h-[44px] !py-1.5 !pl-3 !pr-8 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+          <select id="lib-add-meal" class="input !w-auto min-w-[8rem] min-h-[44px] !pl-3 !pr-8 text-xs" aria-label="มื้ออาหารที่จะเพิ่ม">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
           <button id="lib-add-to-meal" type="button" class="btn btn-primary min-h-[44px] px-3 py-1.5 text-xs font-semibold" disabled>${iconSvg('plus', { size: 13 })} เพิ่มลงมื้อ</button>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
-        <select id="lib-bulk-category" class="input !w-auto min-w-36 min-h-[44px] !py-1.5 !pr-8 text-xs"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+        <select id="lib-bulk-category" class="input !w-auto min-w-36 min-h-[44px] !pr-8 text-xs" aria-label="เลือกหมวดหมู่ใหม่สำหรับเมนูที่เลือก"><option value="">เปลี่ยนหมวดหมู่ (เมนูของฉัน)</option>${categoryNames.map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <button id="lib-change-category" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs" disabled>แก้หมวดหมู่</button>
         <button id="lib-delete-selected" type="button" class="btn btn-ghost min-h-[44px] px-3 py-1.5 text-xs text-rose-700" disabled>ลบที่เลือก</button>
       </div>
@@ -1853,7 +1901,14 @@ export function openLibrary(onPick) {
     if (guardPreviewWrite('การเปลี่ยนหมวดหมู่หลายรายการ')) return;
     const category = $('#lib-bulk-category', m.el).value, foods = state.customFoods.filter(f => selected.has(f.id));
     if (!category || !foods.length) return;
-    if (!confirm(`เปลี่ยนหมวดหมู่ของ ${foods.length} เมนูที่เลือกเป็น “${category}” หรือไม่?`)) return;
+    const ok = await confirmDialog({
+      title: 'เปลี่ยนหมวดหมู่หลายรายการ?',
+      message: `เปลี่ยนหมวดหมู่ของ ${foods.length} เมนูที่เลือกเป็น “${category}” หรือไม่?`,
+      confirmText: 'เปลี่ยนหมวดหมู่',
+      cancelText: 'ยกเลิก',
+      danger: false
+    });
+    if (!ok) return;
     try {
       const commits = [];
       for (let i = 0; i < foods.length; i += 450) {
@@ -1879,7 +1934,14 @@ export function openLibrary(onPick) {
     if (!foods.length) return;
     const names = foods.slice(0, 5).map(f => `• ${f.name}`).join('\n');
     const more = foods.length > 5 ? `\nและอีก ${foods.length - 5} เมนู` : '';
-    if (!confirm(`ลบเมนูที่เลือก ${foods.length} รายการออกจากคลังถาวร?\n\n${names}${more}`)) return;
+    const ok = await confirmDialog({
+      title: 'ลบเมนูที่เลือกออกจากคลัง?',
+      message: `ลบเมนูที่เลือก ${foods.length} รายการออกจากคลังถาวร?\n\n${names}${more}`,
+      confirmText: 'ลบเมนูที่เลือก',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
     try {
       const commits = [];
       for (let i = 0; i < foods.length; i += 450) {
@@ -1907,7 +1969,7 @@ export function openLibrary(onPick) {
     input.checked ? selected.add(input.dataset.select) : selected.delete(input.dataset.select);
     render();
   });
-  m.el.addEventListener('click', e => {
+  m.el.addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
     const list = visibleItems();
     if (b.dataset.pick !== undefined) { onPick(list[+b.dataset.pick]); m.close(); }
@@ -1923,9 +1985,18 @@ export function openLibrary(onPick) {
     }
     else if (b.dataset.edit) openFoodEditor({ id: b.dataset.edit, prefill: state.customFoods.find(f => f.id === b.dataset.edit) });
     else if (b.dataset.fav) { const f = state.customFoods.find(x => x.id === b.dataset.fav); updateCustomFood(state.uid, f.id, { favorite: !f.favorite }); }
-    else if (b.dataset.rm && confirm('ลบเมนูนี้ออกจากคลัง?')) {
-      selected.delete(b.dataset.rm);
-      deleteCustomFood(state.uid, b.dataset.rm)
+    else if (b.dataset.rm) {
+      const rmId = b.dataset.rm;
+      const ok = await confirmDialog({
+        title: 'ลบเมนูออกจากคลัง?',
+        message: 'ลบเมนูนี้ออกจากคลัง?',
+        confirmText: 'ลบเมนู',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      selected.delete(rmId);
+      deleteCustomFood(state.uid, rmId)
         .then(render)
         .catch(err => toast('ลบเมนูไม่สำเร็จ: ' + err.message, 'err'));
     }
@@ -1982,10 +2053,10 @@ function openQuickBulkFoodLog() {
   ].join('\n');
 
   const m = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('zap', { size: 17, className: 'text-brand' })}<span>เพิ่มอาหารหลายเมนูพร้อมกัน</span></h3><button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5">${iconSvg('zap', { size: 17, className: 'text-brand' })}<span>เพิ่มอาหารหลายเมนูพร้อมกัน</span></h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-      <div><label class="lbl">วันที่บันทึก</label><input id="qb-date" type="date" class="input min-h-[44px]" value="${esc(defaultDate)}"></div>
-      <div><label class="lbl">มื้ออาหาร</label><select id="qb-meal" class="input min-h-[44px]">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+      <div><label class="lbl" for="qb-date">วันที่บันทึก</label><input id="qb-date" type="date" class="input min-h-[44px]" value="${esc(defaultDate)}"></div>
+      <div><label class="lbl" for="qb-meal">มื้ออาหาร</label><select id="qb-meal" class="input min-h-[44px]">${meals.map(x => `<option value="${esc(x.id)}" ${x.id === currentMealId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
     </div>
     <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs text-slate-600 mb-2 space-y-1">
       <p class="font-semibold text-slate-700">วาง 1 บรรทัดต่อ 1 เมนู (แปลงทันทีในเครื่อง ไม่เรียก AI):</p>
@@ -1994,7 +2065,7 @@ function openQuickBulkFoodLog() {
       <p class="text-[11px] text-slate-500">รองรับคัดลอกจากตาราง Excel/Google Sheets (5 หรือ 7 คอลัมน์), ทศนิยม (0.5 จาน, 1.5 ทัพพี, 200 กรัม), ไม่มีหน่วย, P17g C32g F10g และค่ามาโครขาดเป็น 0</p>
     </div>
     <div class="flex items-center justify-between mb-1">
-      <label class="lbl !mb-0">ข้อความรายการอาหาร</label>
+      <label class="lbl !mb-0" for="qb-input">ข้อความรายการอาหาร</label>
       <button id="qb-sample" type="button" class="text-xs text-brand font-semibold underline min-h-[44px] px-2 inline-flex items-center">ใส่ตัวอย่าง</button>
     </div>
     <textarea id="qb-input" class="input min-h-36 font-mono text-xs" placeholder="วางรายการอาหารหลายบรรทัดที่นี่..." spellcheck="false"></textarea>
@@ -2002,7 +2073,7 @@ function openQuickBulkFoodLog() {
     <label class="flex items-center gap-2 text-xs text-slate-600 min-h-[44px] mt-2 cursor-pointer"><input id="qb-save-lib" type="checkbox" class="w-4 h-4 accent-brand"> บันทึกเมนูที่ยังไม่มีเข้า "คลังอาหารของฉัน" ด้วย</label>
     <div class="flex justify-end gap-2 mt-3">
       <button data-close type="button" class="btn btn-ghost min-h-[44px]">ยกเลิก</button>
-      <button id="qb-save" type="button" class="btn btn-primary min-h-[44px]" disabled>บันทึกเข้ามื้ออาหาร</button>
+      <button id="qb-save" type="button" class="btn btn-primary min-h-[44px]" disabled>${iconSvg('check', { size: 15 })} บันทึกเข้ามื้ออาหาร</button>
     </div>
   `, { wide: true });
 
@@ -2012,7 +2083,7 @@ function openQuickBulkFoodLog() {
     renderFoodBulkPreview($('#qb-preview', m.el), parsed);
     const saveBtn = $('#qb-save', m.el);
     saveBtn.disabled = parsed.items.length === 0 || parsed.errors.length > 0;
-    saveBtn.textContent = parsed.items.length ? `บันทึก ${parsed.items.length} รายการเข้ามื้อ` : 'บันทึกเข้ามื้ออาหาร';
+    saveBtn.innerHTML = `${iconSvg('check', { size: 15 })} ${parsed.items.length ? `บันทึก ${parsed.items.length} รายการเข้ามื้อ` : 'บันทึกเข้ามื้ออาหาร'}`;
   };
   $('#qb-input', m.el).addEventListener('input', updatePreview);
   $('#qb-sample', m.el).addEventListener('click', () => {
@@ -2079,7 +2150,7 @@ function openQuickBulkFoodLog() {
       toast(`บันทึก ${parsed.items.length} เมนูลง${meal}แล้ว${addedToLib ? ` · เพิ่มเข้าคลัง ${addedToLib} เมนู` : ''}`);
     } catch (error) {
       saveBtn.disabled = false;
-      saveBtn.textContent = `บันทึก ${parsed.items.length} รายการเข้ามื้อ`;
+      saveBtn.innerHTML = `${iconSvg('check', { size: 15 })} บันทึก ${parsed.items.length} รายการเข้ามื้อ`;
       toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
     }
   });

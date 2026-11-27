@@ -2,9 +2,9 @@
 import { deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, round1, toCsv, downloadFile, toast, openModal } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, round1, toCsv, downloadFile, toast, openModal, confirmDialog } from './util.js';
 import { iconSvg } from './icons.js';
-import { animateNumberTicker, bindSwipeRows } from './ui.js';
+import { animateNumberTicker, bindSwipeRows, detailsToggleHtml } from './ui.js';
 import { guardPreviewWrite, isPreviewMode } from './preview.js';
 import { parseStatementText } from './statementParser.js';
 import {
@@ -232,7 +232,7 @@ export function mountExpense(el) {
     </div>
     <div class="flex items-center gap-2 shrink-0">
       <label class="text-xs text-slate-500" for="ex-month">เดือน</label>
-      <input id="ex-month" type="month" class="input !w-auto !py-1.5 text-xs">
+      <input id="ex-month" type="month" class="input !w-auto text-xs">
     </div>
   </div>
 
@@ -260,8 +260,8 @@ export function mountExpense(el) {
           <div><label class="lbl" for="ex-date">วันที่ *</label><input id="ex-date" type="date" class="input"></div>
           <div><label class="lbl" for="ex-time">เวลา</label><input id="ex-time" type="time" class="input"></div>
         </div>
-        <details id="ex-optional-fields" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
-          <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ตัวเลือกเพิ่มเติม · ร้านค้าและหมายเหตุ</summary>
+        <details id="ex-optional-fields" class="tm-details rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <summary class="tm-details-summary cursor-pointer text-xs font-semibold text-slate-700 select-none"><span>ตัวเลือกเพิ่มเติม · ร้านค้าและหมายเหตุ</span>${detailsToggleHtml({ compact: true })}</summary>
           <div class="mt-3 space-y-3">
             <div><label class="lbl" for="ex-merchant">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="ex-merchant" class="input" placeholder="เช่น 7-Eleven, ค่าอาหาร, เงินเดือน"></div>
             <div><label class="lbl" for="ex-note">หมายเหตุ</label><input id="ex-note" class="input" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"></div>
@@ -270,7 +270,7 @@ export function mountExpense(el) {
       </div>
 
       <div class="flex flex-wrap justify-end gap-2">
-        <button type="button" id="ex-cancel" class="btn btn-ghost hidden">ยกเลิก</button>
+        <button type="button" id="ex-cancel" class="btn btn-ghost hidden">${iconSvg('close', { size: 15 })} ยกเลิก</button>
         <button type="button" id="ex-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button>
       </div>
     </section>
@@ -289,15 +289,15 @@ export function mountExpense(el) {
           <p id="ex-ocr-status" class="hidden text-xs font-medium" aria-live="polite"></p>
         </div>
 
-        <details id="ex-statement-box" class="rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3">
-          <summary class="cursor-pointer flex items-center justify-between gap-2 text-sm font-semibold text-slate-800 select-none">
-            <span>นำเข้า Statement (วางข้อความ)</span>
-            <span class="text-[11px] font-normal text-green-700">ประมวลผลในเครื่อง</span>
+        <details id="ex-statement-box" class="tm-details rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 p-3">
+          <summary class="tm-details-summary cursor-pointer text-sm font-semibold text-slate-800 select-none">
+            <span class="min-w-0 flex-1">นำเข้า Statement (วางข้อความ) <span class="text-[11px] font-normal text-green-700 ml-1">ประมวลผลในเครื่อง</span></span>
+            ${detailsToggleHtml({ compact: true })}
           </summary>
           <div class="mt-2.5 space-y-2">
             <p class="text-xs text-slate-500">คัดลอกข้อความหลายบรรทัดจาก PDF Statement แล้ววางที่นี่ ข้อมูลยอดคงเหลือและเลขบัญชีจะไม่ถูกนำไปบันทึก</p>
             <textarea id="ex-statement-text" rows="5" class="input w-full text-xs" placeholder="วางข้อความ Statement ที่นี่..."></textarea>
-            <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !px-3 text-xs min-h-[44px]">อ่าน Statement</button></div>
+            <div class="flex flex-wrap items-center justify-between gap-2"><p id="ex-statement-status" class="text-xs text-slate-500" aria-live="polite"></p><button type="button" id="ex-statement-parse" class="btn btn-primary !px-3 text-xs min-h-[44px]">${iconSvg('list-checks', { size: 14 })} อ่าน Statement</button></div>
           </div>
         </details>
       </section>
@@ -306,8 +306,8 @@ export function mountExpense(el) {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-bold text-slate-800">กล่องรอตรวจ Statement <span id="ex-pending-count" class="text-xs text-slate-500"></span></h3>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="ex-pending-clear" class="btn btn-ghost !px-3 text-xs text-rose-600 min-h-[44px]">ล้างรายการ</button>
-            <button type="button" id="ex-pending-import" class="btn btn-primary text-xs min-h-[44px]">นำเข้าที่เลือก</button>
+            <button type="button" id="ex-pending-clear" class="btn btn-ghost !px-3 text-xs text-rose-600 min-h-[44px]">${iconSvg('eraser', { size: 14 })} ล้างรายการ</button>
+            <button type="button" id="ex-pending-import" class="btn btn-primary text-xs min-h-[44px]">${iconSvg('check', { size: 14 })} นำเข้าที่เลือก</button>
           </div>
         </div>
         <div id="ex-pending-list" class="space-y-2"></div>
@@ -323,7 +323,7 @@ export function mountExpense(el) {
       <div id="ex-summary" class="grid grid-cols-3 gap-2.5"></div>
       <div id="ex-breakdown" class="space-y-1.5 pt-1"></div>
       <div class="border-t border-slate-100 pt-3 space-y-2">
-        <div class="flex items-center justify-between gap-2"><h4 class="text-sm font-bold text-slate-700">งบรายจ่ายตามหมวด</h4><button type="button" id="ex-budget-edit" class="btn btn-soft !px-3 text-xs min-h-[44px]">ตั้งงบ</button></div>
+        <div class="flex items-center justify-between gap-2"><h4 class="text-sm font-bold text-slate-700">งบรายจ่ายตามหมวด</h4><button type="button" id="ex-budget-edit" class="btn btn-soft !px-3 text-xs min-h-[44px]">${iconSvg('sliders', { size: 14 })} ตั้งงบ</button></div>
         <div id="ex-budget-list" class="space-y-2"></div>
       </div>
     </section>
@@ -331,7 +331,7 @@ export function mountExpense(el) {
     <section class="card space-y-3">
       <div class="flex items-center justify-between gap-2">
         <div><h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('repeat', { size: 17, className: 'text-brand' })}<span>รายจ่ายประจำ</span></h3><p class="text-xs text-slate-500">ถึงกำหนดแล้วจะรอให้คุณยืนยันก่อนบันทึก</p></div>
-        <button type="button" id="ex-recurring-add" class="btn btn-primary !px-3 text-xs min-h-[44px]">เพิ่มรายการ</button>
+        <button type="button" id="ex-recurring-add" class="btn btn-primary !px-3 text-xs min-h-[44px]">${iconSvg('plus', { size: 14 })} เพิ่มรายการ</button>
       </div>
       <div id="ex-recurring-list" class="space-y-2"></div>
     </section>
@@ -347,7 +347,7 @@ export function mountExpense(el) {
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <input id="ex-search" class="input text-xs" aria-label="ค้นหาร้านค้าหรือหมายเหตุ" placeholder="🔍 ค้นหาร้านค้า / โน้ต">
+        <input id="ex-search" class="input text-xs" aria-label="ค้นหาร้านค้าหรือหมายเหตุ" placeholder="ค้นหาร้านค้า / โน้ต">
         <select id="ex-filter-type" class="input text-xs" aria-label="กรองตามประเภท">
           <option value="all">ทุกประเภท</option>
           <option value="expense">เฉพาะรายจ่าย</option>
@@ -421,14 +421,30 @@ export function mountExpense(el) {
     const recurringDelete = e.target.closest('[data-recurring-delete]');
     if (recurringDelete) {
       const plan = recurringExpenses.find(item => item.planId === recurringDelete.dataset.recurringDelete);
-      if (plan && confirm(`ลบรายการประจำ “${plan.merchant}” หรือไม่? รายการที่บันทึกไปแล้วจะไม่ถูกลบ`)) deleteRecurringPlan(plan);
+      if (plan) {
+        const ok = await confirmDialog({
+          title: 'ลบรายการประจำ?',
+          message: `ลบรายการประจำ “${plan.merchant}” หรือไม่? รายการที่บันทึกไปแล้วจะไม่ถูกลบ`,
+          confirmText: 'ลบรายการประจำ',
+          cancelText: 'ยกเลิก',
+          danger: true
+        });
+        if (ok) deleteRecurringPlan(plan);
+      }
       return;
     }
     const recurringRecord = e.target.closest('[data-recurring-record]');
     if (recurringRecord) {
       const plan = recurringExpenses.find(item => item.planId === recurringRecord.dataset.recurringRecord);
-      if (plan && confirm(`ยืนยันบันทึกรายจ่าย “${plan.merchant}” จำนวน ${fmtMoney(plan.amount)} ฿ สำหรับวันที่ ${fmtDate(plan.nextDate)} หรือไม่?`)) {
-        recordRecurringExpense(plan);
+      if (plan) {
+        const ok = await confirmDialog({
+          title: 'ยืนยันบันทึกรายจ่ายประจำ?',
+          message: `ยืนยันบันทึกรายจ่าย “${plan.merchant}” จำนวน ${fmtMoney(plan.amount)} ฿ สำหรับวันที่ ${fmtDate(plan.nextDate)} หรือไม่?`,
+          confirmText: 'บันทึกรายจ่าย',
+          cancelText: 'ยกเลิก',
+          danger: false
+        });
+        if (ok) recordRecurringExpense(plan);
       }
       return;
     }
@@ -452,7 +468,15 @@ export function mountExpense(el) {
       if (guardPreviewWrite('การลบรายรับ-รายจ่าย')) return;
       const id = delBtn.dataset.exDel;
       const hit = (state.expenses || []).find(x => x.id === id);
-      if (!hit || !confirm(`ลบรายการ “${hit.merchant || hit.category} (${fmtMoney(hit.amount)} ฿)” ?`)) return;
+      if (!hit) return;
+      const ok = await confirmDialog({
+        title: 'ลบรายการรายรับ-รายจ่าย?',
+        message: `ลบรายการ “${hit.merchant || hit.category} (${fmtMoney(hit.amount)} ฿)” ?`,
+        confirmText: 'ลบรายการ',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
       try {
         const deleted = await deleteTransactionRecord(hit.id, hit.date);
         if (!deleted) return;
@@ -689,7 +713,7 @@ function openBatchSlipsConfirmModal(results) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ตรวจสอบสลิปหลายใบ (${okItems.length} ใบ)</span></h3>
-      <button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ประมวลผล OCR บนเครื่องเสร็จสิ้น ${okItems.length} ใบ และล้างรูปภาพออกจากหน่วยความจำแล้ว
@@ -714,7 +738,7 @@ function openBatchSlipsConfirmModal(results) {
             <input class="input ms-merchant text-xs" aria-label="ผู้รับเงินหรือร้านค้า" value="${esc(parsed.merchant || '')}" placeholder="ผู้รับเงิน / ร้านค้า">
             <input class="input ms-note text-xs" aria-label="หมายเหตุ" value="${esc(parsed.note || '')}" placeholder="หมายเหตุ (ไม่บังคับ)">
           </div>
-          ${parsed.rawText ? `<details class="text-[11px] text-slate-500"><summary class="cursor-pointer">ดูข้อความ OCR</summary><pre class="mt-1 whitespace-pre-wrap max-h-24 overflow-y-auto">${esc(parsed.rawText)}</pre></details>` : ''}
+          ${parsed.rawText ? `<details class="tm-details text-[11px] text-slate-500"><summary class="tm-details-summary cursor-pointer"><span>ดูข้อความ OCR</span>${detailsToggleHtml({ compact: true })}</summary><pre class="mt-1 whitespace-pre-wrap max-h-24 overflow-y-auto">${esc(parsed.rawText)}</pre></details>` : ''}
         </div>`).join('')}
     </div>
     <div class="flex justify-end gap-2 mt-4">
@@ -776,7 +800,7 @@ export function openSlipConfirmModal(parsed) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('report', { size: 17, className: 'text-brand' })}<span>ตรวจสอบสลิปก่อนบันทึก</span></h3>
-      <button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-800 bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ประมวลผล OCR บนเครื่องของคุณเท่านั้น และล้างรูปภาพออกจากหน่วยความจำแล้ว — บันทึกเฉพาะข้อความ/ตัวเลขเป็น <b>รายจ่าย (Expense)</b>
@@ -804,8 +828,8 @@ export function openSlipConfirmModal(parsed) {
         <label class="lbl" for="sl-note">หมายเหตุ / บันทึกช่วยจำ</label>
         <input id="sl-note" class="input" value="${esc(parsed.note || '')}" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)">
       </div>
-      ${parsed.rawText ? `<details class="rounded-xl bg-slate-50 border border-slate-200 p-2 text-xs">
-        <summary class="cursor-pointer text-slate-600 font-medium">ดูข้อความที่อ่านได้จากสลิป (OCR)</summary>
+      ${parsed.rawText ? `<details class="tm-details rounded-xl bg-slate-50 border border-slate-200 p-2 text-xs">
+        <summary class="tm-details-summary cursor-pointer text-slate-600 font-medium"><span>ดูข้อความที่อ่านได้จากสลิป (OCR)</span>${detailsToggleHtml({ compact: true })}</summary>
         <pre class="mt-2 whitespace-pre-wrap text-[11px] text-slate-500 max-h-32 overflow-y-auto">${esc(parsed.rawText)}</pre>
       </details>` : ''}
       <div class="flex justify-end gap-2 pt-1">
@@ -946,15 +970,15 @@ function renderPendingStatement() {
             (item.duplicate ? '<p class="text-xs font-semibold text-amber-700">⚠️ อาจซ้ำกับรายการเดิม</p>' : '') +
           '</div>' +
         '</div>' +
-        '<button type="button" data-pending-remove="' + esc(item.id) + '" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0" aria-label="ลบรายการนี้ออกจากกล่องรอตรวจ">' + iconSvg('close', { size: 16 }) + '</button>' +
+        '<button type="button" data-pending-remove="' + esc(item.id) + '" class="tm-row-action-btn is-del shrink-0" aria-label="ลบรายการนี้ออกจากกล่องรอตรวจ">' + iconSvg('close', { size: 15 }) + '</button>' +
       '</div>' +
       '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' +
-        '<div><label class="lbl !mb-0.5 text-[11px]" for="pending-merchant-' + esc(item.id) + '">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="pending-merchant-' + esc(item.id) + '" type="text" data-pending-merchant maxlength="120" class="input !py-1.5 text-xs font-semibold" value="' + esc(item.merchant || '') + '" placeholder="แก้ชื่อร้านค้า/ที่มาให้จำง่าย"></div>' +
-        '<div><label class="lbl !mb-0.5 text-[11px]" for="pending-cat-' + esc(item.id) + '">หมวดหมู่</label><select id="pending-cat-' + esc(item.id) + '" data-pending-category class="input !py-1.5 text-xs">' +
+        '<div><label class="lbl !mb-0.5 text-[11px]" for="pending-merchant-' + esc(item.id) + '">ผู้รับเงิน / ร้านค้า / ที่มา</label><input id="pending-merchant-' + esc(item.id) + '" type="text" data-pending-merchant maxlength="120" class="input text-xs font-semibold" value="' + esc(item.merchant || '') + '" placeholder="แก้ชื่อร้านค้า/ที่มาให้จำง่าย"></div>' +
+        '<div><label class="lbl !mb-0.5 text-[11px]" for="pending-cat-' + esc(item.id) + '">หมวดหมู่</label><select id="pending-cat-' + esc(item.id) + '" data-pending-category class="input text-xs">' +
           cats.map(c => '<option value="' + esc(c) + '"' + (c === item.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
         '</select></div>' +
       '</div>' +
-      '<div><input type="text" data-pending-note aria-label="หมายเหตุเพิ่มเติม" maxlength="200" class="input !py-1.5 text-xs" value="' + esc(item.note || '') + '" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"></div>' +
+      '<div><input type="text" data-pending-note aria-label="หมายเหตุเพิ่มเติม" maxlength="200" class="input text-xs" value="' + esc(item.note || '') + '" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"></div>' +
     '</article>';
   }).join('');
 }
@@ -1016,10 +1040,10 @@ function openExpenseBudgetEditor() {
     <div><label class="lbl" for="ex-budget-${index}">${CAT_ICONS[category] || '💸'} ${esc(category)}</label>
       <input id="ex-budget-${index}" type="number" min="0" max="100000000" step="0.01" inputmode="decimal" class="input" value="${expenseBudgets[category] ?? ''}" placeholder="ไม่ตั้งงบ"></div>`).join('');
   const modal = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตั้งงบรายเดือน</h3><button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">ตั้งงบรายเดือน</h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <p class="text-xs text-slate-500 mb-3">งบใช้กับเดือนที่เลือกในหน้ารายจ่าย และจะแจ้งเตือนเมื่อใช้ถึง 80% หรือเกินงบ</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${fields}</div>
-    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="ex-budget-save" class="btn btn-primary">บันทึกงบ</button></div>`, { wide: true });
+    <div class="flex justify-end gap-2 mt-4"><button data-close type="button" class="btn btn-ghost">${iconSvg('close', { size: 15 })} ยกเลิก</button><button id="ex-budget-save" type="button" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกงบ</button></div>`, { wide: true });
 
   $('#ex-budget-save', modal.el).addEventListener('click', () => {
     if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
@@ -1074,7 +1098,7 @@ function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {
     `<option value="${esc(category)}"${category === plan?.category ? ' selected' : ''}>${esc(category)}</option>`
   ).join('');
   const modal = openModal(`
-    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${isEdit ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">${isEdit ? 'แก้ไขรายการประจำ' : 'เพิ่มรายการประจำ'}</h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <div class="space-y-3">
       <div><label class="lbl" for="ex-recurring-merchant">ร้านค้า / รายการ *</label><input id="ex-recurring-merchant" class="input" maxlength="120" value="${esc(plan?.merchant || '')}" placeholder="เช่น ค่าเช่าบ้าน"></div>
       <div class="grid grid-cols-2 gap-2"><div><label class="lbl" for="ex-recurring-amount">จำนวนเงิน (บาท) *</label><input id="ex-recurring-amount" type="number" min="0" max="100000000" step="0.01" class="input" value="${plan?.amount ?? ''}"></div>
@@ -1083,7 +1107,7 @@ function openRecurringEditor(plan = null, { isEdit = Boolean(plan?.planId) } = {
       <div><label class="lbl" for="ex-recurring-date">วันครบกำหนดถัดไป</label><input id="ex-recurring-date" type="date" class="input" value="${esc(plan?.nextDate || localDateStr())}"></div></div>
       <div><label class="lbl" for="ex-recurring-note">หมายเหตุ (ไม่บังคับ)</label><input id="ex-recurring-note" maxlength="200" class="input" value="${esc(plan?.note || '')}"></div>
     </div>
-    <div class="flex justify-end gap-2 mt-4"><button data-close class="btn btn-ghost">ยกเลิก</button><button id="ex-recurring-save" class="btn btn-primary">บันทึกรายการ</button></div>`);
+    <div class="flex justify-end gap-2 mt-4"><button data-close type="button" class="btn btn-ghost">${iconSvg('close', { size: 15 })} ยกเลิก</button><button id="ex-recurring-save" type="button" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกรายการ</button></div>`);
 
   $('#ex-recurring-save', modal.el).addEventListener('click', () => {
     if (!state.uid) return toast('กรุณาเข้าสู่ระบบก่อน', 'err');
@@ -1279,7 +1303,7 @@ export function renderExpense() {
               ${due ? '<p class="text-xs font-semibold text-amber-800">ถึงกำหนด — รอการยืนยัน</p>' : ''}
             </div>
             <div class="flex flex-wrap items-center gap-2 shrink-0">
-              ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !px-3 text-xs min-h-[44px]">บันทึกรายจ่าย</button>` : ''}
+              ${due ? `<button type="button" data-recurring-record="${esc(plan.planId)}" class="btn btn-primary !px-3 text-xs min-h-[44px]">${iconSvg('check', { size: 14 })} บันทึกรายจ่าย</button>` : ''}
               <div class="tm-row-actions">
                 <button type="button" data-recurring-edit="${esc(plan.planId)}" class="tm-row-action-btn" aria-label="แก้ไข ${esc(plan.merchant)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
                 <button type="button" data-recurring-delete="${esc(plan.planId)}" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(plan.merchant)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>
@@ -1303,7 +1327,7 @@ export function renderExpense() {
               </div>
               <p class="text-[11px] text-slate-500">เฉลี่ย ~<b>${fmtMoney(cand.avgAmount)} ฿/เดือน</b>${cand.isVariable ? ` (${fmtMoney(cand.minAmount)}–${fmtMoney(cand.maxAmount)} ฿)` : ''} · พบ ${cand.monthsCount} เดือน (${esc(cand.months.slice(-3).join(', '))}) · คาดรอบถัดไป ${esc(fmtDate(cand.predictedNextDate))}</p>
             </div>
-            <button type="button" data-recurring-adopt="${idx}" class="btn btn-soft !px-3 text-xs min-h-[44px] shrink-0">+ ตั้งเป็นประจำ</button>
+            <button type="button" data-recurring-adopt="${idx}" class="btn btn-soft !px-3 text-xs min-h-[44px] shrink-0">${iconSvg('plus', { size: 14 })} ตั้งเป็นประจำ</button>
           </article>`).join('')}
       </div>`
     : (!recurringExpenses.length ? '<p class="text-xs text-slate-500">ยังไม่มีรายการประจำ (เมื่อมีรายจ่ายร้านเดิมซ้ำตั้งแต่ 2 เดือนขึ้นไป ระบบจะวิเคราะห์มาให้ที่นี่)</p>' : '');
@@ -1371,7 +1395,7 @@ export function renderExpense() {
   const listEl = $r('#ex-list');
   $r('#ex-swipe-hint')?.classList.toggle('hidden', !sorted.length);
   listEl.innerHTML = sorted.length
-    ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${older.length})</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${older.map(renderExpenseRow).join('')}</div></details>` : ''}`
+    ? `${recent.map(renderExpenseRow).join('')}${older.length ? `<details id="ex-history-more" class="tm-details rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="tm-details-summary cursor-pointer text-xs font-semibold text-slate-700 select-none"><span>ดูรายการเก่าทั้งหมด (${older.length})</span>${detailsToggleHtml({ compact: true })}</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${older.map(renderExpenseRow).join('')}</div></details>` : ''}`
     : `<p class="text-xs text-slate-500 text-center py-6">${hasMonthItems ? 'ไม่มีรายการที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีรายการรับ-จ่ายในเดือนนี้'}</p>`;
   bindSwipeRows(listEl);
 }

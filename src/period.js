@@ -1,7 +1,7 @@
 import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, daysBetween, addDays, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, daysBetween, addDays, toast, confirmDialog } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows } from './ui.js';
@@ -45,14 +45,14 @@ export function mountPeriod(el) {
         <div><label class="lbl" for="p-flow">ปริมาณ</label><select id="p-flow" class="input"><option value="">ไม่ระบุ</option><option>น้อย</option><option>ปานกลาง</option><option>มาก</option></select></div>
         <div><label class="lbl" for="p-note">หมายเหตุ</label><input id="p-note" class="input" placeholder="เช่น มาช้ากว่าปกติ"></div>
       </div>
-      <div class="flex justify-end"><button id="p-save" class="btn btn-pink">${iconSvg('plus', { size: 15 })} บันทึกรอบเดือน</button></div>
+      <div class="flex justify-end"><button id="p-save" class="btn btn-pink">${iconSvg('check', { size: 15 })} บันทึกรอบเดือน</button></div>
     </div>
 
     <div class="card space-y-3 lg:col-span-1">
       <div class="flex items-center justify-between gap-2">
-        <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน">${iconSvg('chevron-left', { size: 17 })}</button>
+        <button id="c-prev" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนก่อน">${iconSvg('chevron-left', { size: 16 })}</button>
         <h3 id="c-title" class="font-bold text-slate-800 text-center"></h3>
-        <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป">${iconSvg('chevron-right', { size: 17 })}</button>
+        <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป">${iconSvg('chevron-right', { size: 16 })}</button>
       </div>
       <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 font-medium">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
       <div id="c-grid" class="grid grid-cols-7 gap-1 tabular-nums"></div>
@@ -141,7 +141,7 @@ export function mountPeriod(el) {
       renderSelectedBar();
     }
   });
-  $('#p-history-wrap', root).addEventListener('click', e => {
+  $('#p-history-wrap', root).addEventListener('click', async e => {
     const end = e.target.closest('[data-end]'), del = e.target.closest('[data-del]');
     if (end) {
       if (guardPreviewWrite('การอัปเดตวันสิ้นสุดรอบเดือน')) return;
@@ -151,7 +151,16 @@ export function mountPeriod(el) {
     }
     if (del) {
       if (guardPreviewWrite('การลบบันทึกรอบเดือน')) return;
-      if (confirm('ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'period_records', del.dataset.del)).catch(err => toast(err.message, 'err'));
+      const delId = del.dataset.del;
+      const ok = await confirmDialog({
+        title: 'ลบบันทึกประจำเดือน?',
+        message: 'ต้องการลบบันทึกประจำเดือนนี้ใช่หรือไม่?',
+        confirmText: 'ลบบันทึก',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      deleteDoc(userDoc(state.uid, 'period_records', delId)).catch(err => toast(err.message, 'err'));
     }
   });
   setPeriodTab('main');
@@ -215,12 +224,12 @@ function renderSelectedBar() {
       <p class="text-[11px] text-slate-600">${esc(statusText)}</p>
     </div>
     <div class="flex items-center gap-1.5 shrink-0">
-      <button type="button" data-c-go-symptoms class="btn btn-primary !min-h-[44px] !py-1.5 !px-3 text-xs">
+      <button type="button" data-c-go-symptoms class="btn btn-primary btn-sm min-h-[44px]">
         <span>เปิดอาการ &amp; ผิว</span>
         ${iconSvg('chevron-right', { size: 14 })}
       </button>
-      <button type="button" data-c-clear-sel class="icon-btn !w-[44px] !h-[44px]" aria-label="ล้างวันที่เลือก" title="ล้างวันที่เลือก">
-        ${iconSvg('close', { size: 15 })}
+      <button type="button" data-c-clear-sel class="tm-modal-close shrink-0" aria-label="ล้างวันที่เลือก" title="ล้างวันที่เลือก">
+        ${iconSvg('close', { size: 16 })}
       </button>
     </div>`;
 }
@@ -298,14 +307,24 @@ export function render() {
   renderCalendar();
 }
 
-function save() {
+async function save() {
   if (guardPreviewWrite('การบันทึกรอบเดือน')) return;
   const start = $('#p-start', root).value, end = $('#p-end', root).value;
+  const flow = $('#p-flow', root).value, note = $('#p-note', root).value.trim();
   if (!isValidCalendarDate(start)) return toast('กรุณาเลือกวันแรกที่ประจำเดือนมาให้ถูกต้อง', 'err');
   if (end && !isValidCalendarDate(end)) return toast('กรุณาเลือกวันสุดท้ายให้ถูกต้อง', 'err');
   if (end && end < start) return toast('วันสุดท้ายต้องไม่ก่อนวันแรก', 'err');
-  if (state.period.some(p => p.start === start) && !confirm('มีบันทึกที่เริ่มวันเดียวกันอยู่แล้ว ต้องการเพิ่มซ้ำหรือไม่?')) return;
-  addDoc(userCol(state.uid, 'period_records'), { start, end: end || null, flow: $('#p-flow', root).value, note: $('#p-note', root).value.trim(), createdAt: new Date() })
+  if (state.period.some(p => p.start === start)) {
+    const ok = await confirmDialog({
+      title: 'มีบันทึกที่เริ่มวันเดียวกันอยู่แล้ว',
+      message: 'มีบันทึกที่เริ่มวันเดียวกันอยู่แล้ว ต้องการเพิ่มซ้ำหรือไม่?',
+      confirmText: 'เพิ่มซ้ำ',
+      cancelText: 'ยกเลิก',
+      danger: false
+    });
+    if (!ok) return;
+  }
+  addDoc(userCol(state.uid, 'period_records'), { start, end: end || null, flow, note, createdAt: new Date() })
     .catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   ['p-end', 'p-note'].forEach(id => { $('#' + id, root).value = ''; });
   $('#p-flow', root).value = '';

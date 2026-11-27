@@ -45,9 +45,9 @@ export function mountReport(el) {
     <div class="card space-y-4 no-print">
       <h3 class="text-lg font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('file-heart', { size: 19, className: 'text-brand' })}<span>รายงานสุขภาพ (Health Report)</span></h3>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div><label class="lbl">ตั้งแต่วันที่</label><input type="date" id="r-from" class="input"></div>
-        <div><label class="lbl">ถึงวันที่</label><input type="date" id="r-to" class="input"></div>
-        <div class="col-span-2"><label class="lbl">ชื่อบนรายงาน</label><input id="r-name" class="input" placeholder="ไม่บังคับ"></div>
+        <div><label class="lbl" for="r-from">ตั้งแต่วันที่</label><input type="date" id="r-from" class="input"></div>
+        <div><label class="lbl" for="r-to">ถึงวันที่</label><input type="date" id="r-to" class="input"></div>
+        <div class="col-span-2"><label class="lbl" for="r-name">ชื่อบนรายงาน</label><input id="r-name" class="input" placeholder="ไม่บังคับ"></div>
       </div>
       <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 text-xs sm:text-sm">
         <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-sky-soft/40 cursor-pointer font-medium text-slate-700"><input type="checkbox" id="r-inc-period" class="accent-brand" checked> <span>ประจำเดือน</span></label>

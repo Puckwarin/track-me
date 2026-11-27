@@ -39,6 +39,12 @@ function weekdayIdx(dateStr) {
   return (parseLocal(dateStr).getDay() + 6) % 7; // 0 = จ ... 6 = อา
 }
 
+export function shiftDateByWeeks(dateStr, deltaWeeks = 0) {
+  const base = isDateStr(dateStr) ? dateStr : localDateStr();
+  const delta = Number(deltaWeeks) || 0;
+  return delta ? addDays(base, delta * 7) : base;
+}
+
 export function weekCodeForDate(dateStr, altAnchor = DEFAULT_ALT_ANCHOR) {
   const anchorMon = mondayOf(isDateStr(altAnchor) ? altAnchor : DEFAULT_ALT_ANCHOR);
   const targetMon = mondayOf(dateStr);
@@ -680,7 +686,26 @@ export function mountPlanner(el, navigate) {
   if (!boundContainers.has(root)) {
     boundContainers.add(root);
 
+    const shiftWeekBy = delta => {
+      if (!delta) return;
+      selectedDate = shiftDateByWeeks(selectedDate, delta);
+      stripScrollMode = 'smooth';
+      const msg = formatPlannerToast('week-shift', {
+        weekMonday: mondayOf(selectedDate),
+        delta
+      });
+      setPlannerFeedback(msg);
+      toast(msg);
+      renderPlanner();
+    };
+
     root.addEventListener('click', async e => {
+      const shiftBtn = e.target.closest('[data-pl-week-shift]');
+      if (shiftBtn) {
+        shiftWeekBy(Number(shiftBtn.dataset.plWeekShift) || 0);
+        return;
+      }
+
       if (e.target.closest('[data-pl-week-today]')) {
         selectedDate = localDateStr();
         stripScrollMode = 'smooth';
@@ -822,6 +847,20 @@ export function mountPlanner(el, navigate) {
         await rescheduleTask(kind, fromDate, id, toDate);
       }
     });
+
+    let lastWheelShiftAt = 0;
+    root.addEventListener('wheel', e => {
+      if (dragPayload) return;
+      if (!e.target.closest('.pl-week-board')) return;
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      if (absX < 28 || absX <= absY * 1.5) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelShiftAt < 450) return;
+      lastWheelShiftAt = now;
+      shiftWeekBy(e.deltaX > 0 ? 1 : -1);
+    }, { passive: false });
   }
 
   renderPlanner();
@@ -976,18 +1015,24 @@ export function renderPlanner() {
           <p class="text-[11px] sm:text-xs text-slate-500 tabular-nums">สัปดาห์ ${esc(weekRangeLabel(weekMonday))} · เสร็จแล้ว ${weekDone}/${weekTotal} งาน</p>
         </div>
         <div class="pl-card-actions">
-          ${weekNavBarHtml({ isToday: selectedDate === today, todayAttrs: 'data-pl-week-today', showArrows: false })}
+          ${weekNavBarHtml({
+            isToday: selectedDate === today,
+            prevAttrs: 'data-pl-week-shift="-1"',
+            todayAttrs: 'data-pl-week-today',
+            nextAttrs: 'data-pl-week-shift="1"',
+            showArrows: true
+          })}
           <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[44px] bg-brand text-white font-semibold">${iconSvg('plus', { size: 14 })} เพิ่มงาน</button>
         </div>
       </div>
-      <button type="button" data-pl-collapse class="pl-collapse-btn" aria-label="ย่อ Weekly Planner" title="ย่อ">${iconSvg('chevron-up', { size: 16 })}</button>
+      <button type="button" data-pl-collapse class="pl-collapse-btn" aria-expanded="true" aria-label="หุบ Weekly Planner" title="หุบ">${iconSvg('chevron-up', { size: 16 })}</button>
     </div>
 
     <div class="pl-mobile-view space-y-2.5">
       ${mobileStripHtml}
       ${!weekTotal ? `<div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
         <span class="min-w-0">เพิ่มงานวางแผนในสัปดาห์นี้ได้ทันที</span>
-        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[44px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">+ เพิ่มงาน</button>
+        <button type="button" data-pl-quick-add="${esc(selectedDate)}" class="chip min-h-[44px] bg-white border border-amber-300 text-amber-900 font-semibold shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มงาน</button>
       </div>` : ''}
       <div class="pl-day-panel ${shouldFlash ? 'pl-feedback-flash' : ''} rounded-2xl border border-slate-200/80 bg-slate-50/45 p-2.5 sm:p-3 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 tabular-nums">
@@ -999,9 +1044,9 @@ export function renderPlanner() {
     </div>
 
     <div class="pl-desktop-view space-y-2">
-      <div class="flex items-center justify-between text-xs text-slate-500">
-        <span>ลากงานข้ามวันเพื่อย้ายตาราง หรือกดปุ่ม <b>ย้าย</b> เพื่อเลือกวันโดยไม่ต้องลาก</span>
-        <span class="tabular-nums">วันที่เลือก: <b class="text-slate-700">${esc(fmtDate(selectedDate))}</b></span>
+      <div class="flex items-center justify-between gap-2 text-xs text-slate-500">
+        <span>ลากงานข้ามวันเพื่อย้ายตาราง กด <b>ย้าย</b> หรือใช้ปุ่มลูกศร <b>&lt; / &gt;</b> เพื่อดูสัปดาห์อื่น</span>
+        <span class="tabular-nums shrink-0">${weekMonday === mondayOf(today) ? '<span class="px-1.5 py-0.5 rounded bg-sky-soft text-brand-dark font-semibold mr-1.5">สัปดาห์นี้</span>' : '<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 font-semibold mr-1.5">สัปดาห์อื่น</span>'}วันที่เลือก: <b class="text-slate-700">${esc(fmtDate(selectedDate))}</b></span>
       </div>
       ${renderDesktopBoardHtml(weekDays, today)}
       ${renderDayReminderBanner(selectedDate)}
@@ -1043,7 +1088,7 @@ function openRescheduleModal(kind, fromDate, id) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-3 gap-2">
       <h3 class="font-bold text-base sm:text-lg text-slate-800 inline-flex items-center gap-2 min-w-0">${iconSvg('swap', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & ย้ายวัน</span></h3>
-      <button data-close type="button" class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
 
     <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 space-y-1.5 mb-4">
@@ -1069,8 +1114,8 @@ function openRescheduleModal(kind, fromDate, id) {
         <button type="button" id="pl-modal-toggle" class="btn btn-ghost min-h-[44px] text-xs">${item.done ? 'ยังไม่ทำ' : 'ทำเสร็จ'}</button>
         <div class="flex flex-wrap gap-2">
           ${kind === 'routine'
-            ? `<button type="button" id="pl-modal-edit" class="tm-food-action-btn" aria-label="แก้ไข ${esc(item.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
-               <button type="button" id="pl-modal-skip" class="tm-food-action-btn is-del" aria-label="ลบ ${esc(item.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>`
+            ? `<button type="button" id="pl-modal-edit" class="tm-row-action-btn" aria-label="แก้ไข ${esc(item.title)}">${iconSvg('edit-square', { size: 15 })}<span>แก้ไข</span></button>
+               <button type="button" id="pl-modal-skip" class="tm-row-action-btn is-del" aria-label="ลบ ${esc(item.title)}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button>`
             : `<button type="button" id="pl-modal-workout" class="btn btn-sky min-h-[44px] text-xs">ดูแผนในหน้าออกกำลังกาย</button>`}
         </div>
       </div>
@@ -1158,7 +1203,7 @@ function openRoutinesModal(opts = {}) {
   const m = openModal(`
     <div class="flex justify-between items-center mb-2 gap-2">
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-1.5 min-w-0">${iconSvg('planner', { size: 18, className: 'text-brand shrink-0' })}<span class="truncate">จัดการ & แก้ไข</span></h3>
-      <button data-close type="button" class="min-w-[44px] min-h-[44px] rounded-xl text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-slate-500 mb-3">ผูกเฉพาะสัปดาห์ <b class="text-slate-700">${esc(weekRangeLabel(weekMonday))}</b> (จันทร์–อาทิตย์) ไม่กระทบสัปดาห์อื่น</p>
 

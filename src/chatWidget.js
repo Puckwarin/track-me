@@ -1,7 +1,7 @@
 import { deleteDoc, setDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, localDateStr, openModal, toast, trapFocus } from './util.js';
+import { $, esc, fmtDate, localDateStr, openModal, toast, trapFocus, confirmDialog } from './util.js';
 import { getGeminiKey, getGroqKey, getOpenRouterKey, explainGeminiError } from './nutrition.js';
 import { CHAT_ROLES, LOCAL_ROLE, LOCAL_HELP_TEXT, getAnyChatRole } from './services/chatRoles.js';
 import { iconSvg } from './icons.js';
@@ -330,15 +330,15 @@ function ensureShell() {
         <label for="ai-chat-custom-input" class="block text-[11px] font-semibold text-slate-700 mt-2">คำสั่งบุคลิกหรือหัวข้อเฉพาะสำหรับโหมด AI (ไม่บังคับ)</label>
         <textarea id="ai-chat-custom-input" rows="2" maxlength="500" class="input text-xs mt-1 w-full resize-none" placeholder="เช่น ตอบแบบเพื่อนสนิท เป็นกันเอง, ช่วยฝึกคุยภาษาอังกฤษพร้อมคำแปล, โฟกัสอาหารคลีน"></textarea>
         <div class="flex items-center justify-end gap-1.5 mt-1.5">
-          <button id="ai-chat-custom-clear" type="button" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs">ล้าง</button>
-          <button id="ai-chat-custom-save" type="button" class="btn btn-primary !py-1.5 !px-3.5 min-h-[44px] text-xs">บันทึกคำสั่ง</button>
+          <button id="ai-chat-custom-clear" type="button" class="btn btn-ghost btn-sm min-h-[44px]">ล้าง</button>
+          <button id="ai-chat-custom-save" type="button" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('save', { size: 14 })} บันทึกคำสั่ง</button>
         </div>
       </div>
 
       <div id="ai-chat-nokey" class="hidden mx-3 mt-2 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-2">
         <p class="font-semibold">ยังไม่ได้ตั้งค่า AI API Key</p>
         <p class="text-amber-800">จดและเช็กข้อมูลได้ทันที หรือใส่คีย์ในตั้งค่าเพื่อคุยถาม-ตอบอิสระ</p>
-        <button id="ai-chat-go-settings" type="button" class="btn btn-soft !py-1.5 !px-3 min-h-[44px] text-xs">ไปหน้าตั้งค่า</button>
+        <button id="ai-chat-go-settings" type="button" class="btn btn-soft btn-sm min-h-[44px]">ไปหน้าตั้งค่า</button>
       </div>
 
       <div id="ai-chat-messages" class="ai-chat-messages" aria-live="polite"></div>
@@ -422,8 +422,8 @@ function renderMessages() {
             </div>
             <div class="mt-2 flex flex-wrap justify-end gap-1.5">
               ${a.status === 'pending' ? `
-                <button type="button" data-confirm-msg="${msgIdx}" data-confirm-idx="${aIdx}" class="btn btn-primary !py-1.5 !px-3 min-h-[44px] text-xs">✅ ยืนยันบันทึก</button>
-                <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">❌ ยกเลิก</button>
+                <button type="button" data-confirm-msg="${msgIdx}" data-confirm-idx="${aIdx}" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('check', { size: 14 })} ยืนยันบันทึก</button>
+                <button type="button" data-cancel-msg="${msgIdx}" data-cancel-idx="${aIdx}" class="btn btn-ghost btn-sm min-h-[44px] text-rose-600">${iconSvg('close', { size: 13 })} ยกเลิก</button>
               ` : a.status === 'confirmed'
                 ? '<span class="text-[11px] text-green-700 font-semibold">✅ บันทึกแล้ว</span>'
                 : a.status === 'pending_sync'
@@ -437,8 +437,8 @@ function renderMessages() {
         `).join('')}
         ${stillPendingCount > 1 ? `
           <div class="flex flex-wrap justify-end gap-1.5 pt-1">
-            <button type="button" data-confirm-all-msg="${msgIdx}" class="btn btn-primary !py-1.5 !px-3.5 min-h-[44px] text-xs">✅ ยืนยันทั้งหมด (${stillPendingCount})</button>
-            <button type="button" data-cancel-all-msg="${msgIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">ยกเลิกทั้งหมด</button>
+            <button type="button" data-confirm-all-msg="${msgIdx}" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('check', { size: 14 })} ยืนยันทั้งหมด (${stillPendingCount})</button>
+            <button type="button" data-cancel-all-msg="${msgIdx}" class="btn btn-ghost btn-sm min-h-[44px] text-rose-600">ยกเลิกทั้งหมด</button>
           </div>
         ` : ''}
       </div>
@@ -471,7 +471,7 @@ function renderMessages() {
           <div class="mt-2 flex justify-end">
             ${r.undone
               ? `<span class="text-[11px] ${r.undoStatus === 'pending_sync' ? 'text-amber-700' : 'text-slate-500'} font-medium">${r.undoStatus === 'pending_sync' ? '⏳ ส่งคำขอยกเลิกไว้ในคิวออฟไลน์แล้ว…' : 'ยกเลิก/ลบรายการนี้แล้ว'}</span>`
-              : `<button type="button" data-undo-msg="${msgIdx}" data-undo-rec="${rIdx}" class="btn btn-ghost !py-1.5 !px-3 min-h-[44px] text-xs text-rose-600">ยกเลิก/ลบรายการนี้</button>`
+              : `<button type="button" data-undo-msg="${msgIdx}" data-undo-rec="${rIdx}" class="btn btn-ghost btn-sm min-h-[44px] text-rose-600">ยกเลิก/ลบรายการนี้</button>`
             }
           </div>
         ` : ''}
@@ -795,7 +795,7 @@ export function mountChatWidget(goTo) {
         if (out.status === 'failed' || (!out.ok && !out.pendingSync)) {
           toast('บันทึกไม่สำเร็จ: ' + (out.error || 'เกิดข้อผิดพลาด'), 'err');
           confirmBtn.disabled = false;
-          confirmBtn.textContent = '✅ ยืนยันบันทึก';
+          confirmBtn.innerHTML = `${iconSvg('check', { size: 14 })} ยืนยันบันทึก`;
           return;
         }
         action.status = out.status === 'pending_sync' ? 'pending_sync' : 'confirmed';
@@ -812,7 +812,7 @@ export function mountChatWidget(goTo) {
       } catch (err) {
         toast('บันทึกไม่สำเร็จ: ' + err.message, 'err');
         confirmBtn.disabled = false;
-        confirmBtn.textContent = '✅ ยืนยันบันทึก';
+        confirmBtn.innerHTML = `${iconSvg('check', { size: 14 })} ยืนยันบันทึก`;
       }
       return;
     }
@@ -966,7 +966,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
   const modal = openModal(`
     <div class="flex justify-between items-center mb-3">
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('note', { size: 17, className: 'text-brand' })}<span>โน้ตผู้ช่วย &amp; Feedback</span></h3>
-      <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button type="button" data-close class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="flex gap-2 mb-3">
       <button type="button" id="nf-tab-notes" class="chip min-h-[44px] text-xs"></button>
@@ -1011,11 +1011,11 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
           </div>
           <textarea id="nf-n-content" rows="2" maxlength="1200" class="input text-xs w-full" aria-label="รายละเอียดโน้ต" placeholder="รายละเอียดโน้ตที่ต้องการจำ…">${esc(editing?.note || editing?.content || '')}</textarea>
           <div class="flex justify-end gap-2">
-            ${editing ? '<button type="button" id="nf-n-cancel" class="btn btn-ghost text-xs !py-1.5">ยกเลิก</button>' : ''}
-            <button type="button" id="nf-n-save" class="btn btn-primary text-xs !py-1.5">${editing ? 'บันทึกการแก้ไข' : 'บันทึกโน้ต'}</button>
+            ${editing ? `<button type="button" id="nf-n-cancel" class="btn btn-ghost btn-sm min-h-[44px]">${iconSvg('close', { size: 14 })} ยกเลิก</button>` : ''}
+            <button type="button" id="nf-n-save" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('save', { size: 14 })} ${editing ? 'บันทึกการแก้ไข' : 'บันทึกโน้ต'}</button>
           </div>
         </div>
-        <input id="nf-search" class="input text-xs" aria-label="ค้นหาโน้ต" placeholder="🔍 ค้นหาโน้ต..." value="${esc(searchQuery)}">
+        <input id="nf-search" class="input text-xs" aria-label="ค้นหาโน้ต" placeholder="ค้นหาโน้ต..." value="${esc(searchQuery)}">
         <div class="space-y-2 max-h-64 overflow-y-auto pr-0.5">
           ${filtered.length ? filtered.map(n => `
             <div class="rounded-xl border border-slate-100 bg-white p-2.5 text-xs space-y-1">
@@ -1026,8 +1026,8 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${n.date ? `<span class="text-[11px] text-slate-400 ml-1">${esc(fmtDate(n.date))}</span>` : ''}
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
-                  <button type="button" data-note-edit="${esc(n.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-brand hover:bg-slate-100" aria-label="แก้ไข">${iconSvg('edit', { size: 15 })}</button>
-                  <button type="button" data-note-del="${esc(n.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
+                  <button type="button" data-note-edit="${esc(n.id)}" class="tm-row-action-btn" aria-label="แก้ไข">${iconSvg('edit-square', { size: 15 })}</button>
+                  <button type="button" data-note-del="${esc(n.id)}" class="tm-row-action-btn is-del" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
                 </div>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(n.note || n.content || '')}</p>
@@ -1084,7 +1084,14 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       body.querySelectorAll('[data-note-del]').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (guardPreviewWrite('การลบโน้ต')) return;
-          if (!confirm('ต้องการลบโน้ตนี้?')) return;
+          const ok = await confirmDialog({
+            title: 'ลบโน้ต?',
+            message: 'ต้องการลบโน้ตนี้?',
+            confirmText: 'ลบโน้ต',
+            cancelText: 'ยกเลิก',
+            danger: true
+          });
+          if (!ok) return;
           const id = btn.dataset.noteDel;
           try {
             await deleteDoc(userDoc(state.uid, 'settings', id));
@@ -1114,7 +1121,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
           </div>
           <textarea id="nf-fb-msg" rows="3" maxlength="1200" class="input text-xs w-full" aria-label="ข้อความ Feedback" placeholder="เล่าปัญหาที่พบ ฟีเจอร์ที่อยากได้ หรือความประทับใจ…"></textarea>
           <div class="flex justify-end">
-            <button type="button" id="nf-fb-save" class="btn btn-primary text-xs !py-1.5">ส่ง Feedback</button>
+            <button type="button" id="nf-fb-save" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('send', { size: 14 })} ส่ง Feedback</button>
           </div>
         </div>
         <div class="space-y-2 max-h-56 overflow-y-auto pr-0.5">
@@ -1127,7 +1134,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
                   ${f.type ? `<span class="text-[11px] text-slate-500 ml-1">· ${esc(f.type)}</span>` : ''}
                   ${f.date ? `<span class="text-[11px] text-slate-400 ml-1">(${esc(fmtDate(f.date))})</span>` : ''}
                 </div>
-                <button type="button" data-fb-del="${esc(f.id)}" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
+                <button type="button" data-fb-del="${esc(f.id)}" class="tm-row-action-btn is-del shrink-0" aria-label="ลบ">${iconSvg('trash', { size: 15 })}</button>
               </div>
               <p class="text-slate-600 whitespace-pre-wrap break-words">${esc(f.note || '')}</p>
             </div>
@@ -1178,7 +1185,14 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
       body.querySelectorAll('[data-fb-del]').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (guardPreviewWrite('การลบ Feedback')) return;
-          if (!confirm('ต้องการลบ Feedback นี้?')) return;
+          const ok = await confirmDialog({
+            title: 'ลบ Feedback?',
+            message: 'ต้องการลบ Feedback นี้?',
+            confirmText: 'ลบ Feedback',
+            cancelText: 'ยกเลิก',
+            danger: true
+          });
+          if (!ok) return;
           const id = btn.dataset.fbDel;
           try {
             await deleteDoc(userDoc(state.uid, 'settings', id));

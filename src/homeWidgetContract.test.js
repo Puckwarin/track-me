@@ -29,8 +29,10 @@ describe('home widget customization contract', () => {
 
   it('exposes stable widget IDs and definitions matching all slots', () => {
     expect(HOME_WIDGET_IDS).toEqual([
+      'shortcuts',
       'planner',
-      'daily-overview'
+      'daily-overview',
+      'summary'
     ]);
     expect(HOME_WIDGET_DEFS.map(def => def.id)).toEqual(HOME_WIDGET_IDS);
   });
@@ -52,7 +54,9 @@ describe('home widget customization contract', () => {
     const cfg = getHomeWidgetConfig();
     expect(cfg.order).toEqual([
       'daily-overview',
-      'planner'
+      'shortcuts',
+      'planner',
+      'summary'
     ]);
     expect([...cfg.hidden]).toEqual(['planner']);
     expect(cfg.pinnedShortcuts).toEqual(['food', 'expense']);
@@ -89,7 +93,7 @@ describe('home widget customization contract', () => {
     })).toBe(true);
 
     expect(JSON.parse(values.get('trackme_home_widgets:v1:user-a'))).toEqual({
-      order: ['daily-overview', 'planner'],
+      order: ['daily-overview', 'shortcuts', 'planner', 'summary'],
       hidden: ['planner'],
       pinnedShortcuts: ['food']
     });

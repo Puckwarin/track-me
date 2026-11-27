@@ -308,7 +308,7 @@ export function openFoodSearch({ localFoods = null, initialQuery = '', onUse, on
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-3">
       <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('search', { size: 18, className: 'text-brand' })}<span>ค้นหาโภชนาการ</span></h3>
-      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="flex flex-col sm:flex-row gap-2">
       <input id="os-q" class="input w-full flex-1 min-h-[44px]" placeholder="พิมพ์ชื่ออาหาร หรือเลขบาร์โค้ด" value="${esc(initialQuery)}" enterkeyhint="search" aria-label="ค้นหาชื่ออาหารหรือเลขบาร์โค้ด">

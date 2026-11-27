@@ -25,7 +25,7 @@ import { WORKOUT_PRESET_TEMPLATES } from './workoutPresets.js';
 import { $, $$, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, toNum, toast, openModal, confirmDialog, mondayOf } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindSwipeRows, buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
+import { bindSwipeRows, buildWeekStripRange, centerStripPill, detailsToggleHtml, weekNavBarHtml } from './ui.js';
 
 export { TYPES, SECTIONS, repLabel, INTENSITY } from './workoutConstants.js';
 
@@ -244,11 +244,11 @@ export function mountWorkout(el) {
       <div id="w-tpl-edit-bar" class="hidden rounded-xl border border-slate-200 bg-[#E9F1FC] p-3 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-semibold text-brand-dark inline-flex items-center gap-1">${iconSvg('edit-square', { size: 14 })}<span>กำลังแก้ไขเทมเพลต:</span></span>
-          <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต">
+          <input id="w-tpl-edit-name" class="input !w-auto flex-1 min-w-[160px]" placeholder="ชื่อเทมเพลต" aria-label="ชื่อเทมเพลต">
         </div>
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" id="w-tpl-edit-cancel" class="btn bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 font-semibold !py-1.5 !px-3 text-xs mr-auto">ยกเลิก</button>
-          <button type="button" id="w-tpl-edit-save" class="btn btn-primary !py-1.5 !px-3 text-xs ml-auto">${iconSvg('save', { size: 14 })} บันทึกเทมเพลต</button>
+          <button type="button" id="w-tpl-edit-cancel" class="btn btn-ghost btn-sm min-h-[44px] mr-auto">${iconSvg('close', { size: 14 })} ยกเลิก</button>
+          <button type="button" id="w-tpl-edit-save" class="btn btn-primary btn-sm min-h-[44px] ml-auto">${iconSvg('save', { size: 14 })} บันทึกเทมเพลต</button>
         </div>
       </div>
 
@@ -271,39 +271,39 @@ export function mountWorkout(el) {
           </div>
           <div class="flex items-center gap-1.5">
             <button type="button" id="w-import-sample" class="chip bg-white border border-slate-200 text-slate-600 text-[11px]">ใส่ตัวอย่าง</button>
-            <button type="button" id="w-import-close" class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิดหน้าต่างนำเข้า">${iconSvg('close', { size: 18 })}</button>
+            <button type="button" id="w-import-close" class="tm-modal-close shrink-0" aria-label="ปิดหน้าต่างนำเข้า">${iconSvg('close', { size: 18 })}</button>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
           <span class="text-[11px] font-medium text-slate-500">เทมเพลตสำเร็จรูป (0 โทเค็น):</span>
           ${WORKOUT_PRESET_TEMPLATES.map((p, i) => `<button type="button" data-w-preset="${i}" class="chip bg-white border border-slate-200 hover:border-brand/50 hover:bg-lav-soft/60 text-slate-700 text-[11px]">${p.icon} ${esc(p.label)}</button>`).join('')}
         </div>
-        <textarea id="w-import-text" rows="7" class="input text-xs leading-relaxed font-sans" placeholder="วางข้อความดิบหรือตารางออกกำลังกายที่นี่... เช่น&#10;Day A — Lower Body&#10;ขาและสะโพก&#10;ประมาณ 20–30 นาที&#10;Warm-up&#10;https://...&#10;March in Place&#10;60 วินาที&#10;เดินยกเข่าสลับซ้ายขวา..."></textarea>
+        <textarea id="w-import-text" rows="7" class="input text-xs leading-relaxed font-sans" aria-label="ข้อความดิบหรือตารางออกกำลังกาย" placeholder="วางข้อความดิบหรือตารางออกกำลังกายที่นี่... เช่น&#10;Day A — Lower Body&#10;ขาและสะโพก&#10;ประมาณ 20–30 นาที&#10;Warm-up&#10;https://...&#10;March in Place&#10;60 วินาที&#10;เดินยกเข่าสลับซ้ายขวา..."></textarea>
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" id="w-import-clear" class="btn btn-ghost !py-1.5 !px-3 text-xs">ล้างข้อความ</button>
+          <button type="button" id="w-import-clear" class="btn btn-ghost btn-sm min-h-[44px]">ล้างข้อความ</button>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="w-import-ai" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('sparkles', { size: 14 })} ให้ AI ช่วยจัดโครงสร้าง</button>
-            <button type="button" id="w-import-parse" class="btn btn-primary !py-2 !px-4 text-xs">${iconSvg('list-checks', { size: 14 })} แปลงเป็น Template</button>
+            <button type="button" id="w-import-ai" class="btn btn-soft btn-sm min-h-[44px]">${iconSvg('sparkles', { size: 14 })} ให้ AI ช่วยจัดโครงสร้าง</button>
+            <button type="button" id="w-import-parse" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('list-checks', { size: 14 })} แปลงเป็น Template</button>
           </div>
         </div>
         <div id="w-import-preview" class="hidden space-y-3 pt-2 border-t border-brand/20"></div>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div><label class="lbl">วันที่</label><input type="date" id="w-date" class="input"></div>
-        <div><label class="lbl">สถานะ</label><select id="w-status" class="input"><option value="done">ทำจริงแล้ว</option><option value="planned">วางแผนไว้</option></select></div>
-        <div><label class="lbl">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
-        <div><label class="lbl">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
-        <div><label class="lbl">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
-        <div><label class="lbl">เริ่มจากเทมเพลต</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
-        <div class="col-span-2 sm:col-span-2"><label class="lbl">ชื่อโปรแกรม (ไม่บังคับ)</label><input id="w-title" class="input" placeholder="เช่น Day A — Lower Body"></div>
-        <div class="col-span-2 sm:col-span-1"><label class="lbl">กลุ่มกล้ามเนื้อ</label><input id="w-muscle" class="input" placeholder="เช่น ขาและสะโพก"></div>
+        <div><label class="lbl" for="w-date">วันที่</label><input type="date" id="w-date" class="input"></div>
+        <div><label class="lbl" for="w-status">สถานะ</label><select id="w-status" class="input"><option value="done">ทำจริงแล้ว</option><option value="planned">วางแผนไว้</option></select></div>
+        <div><label class="lbl" for="w-type">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
+        <div><label class="lbl" for="w-dur">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
+        <div><label class="lbl" for="w-int">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
+        <div><label class="lbl" for="w-tpl">เริ่มจากเทมเพลต</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
+        <div class="col-span-2 sm:col-span-2"><label class="lbl" for="w-title">ชื่อโปรแกรม (ไม่บังคับ)</label><input id="w-title" class="input" placeholder="เช่น Day A — Lower Body"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="lbl" for="w-muscle">กลุ่มกล้ามเนื้อ</label><input id="w-muscle" class="input" placeholder="เช่น ขาและสะโพก"></div>
       </div>
       <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
       <div id="w-sections" class="space-y-5"></div>
-      <div><label class="lbl">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
+      <div><label class="lbl" for="w-note">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <button type="button" id="w-edit-cancel" class="btn bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 font-semibold hidden mr-auto">ยกเลิกการแก้ไข</button>
+        <button type="button" id="w-edit-cancel" class="btn btn-ghost hidden mr-auto">${iconSvg('close', { size: 15 })} ยกเลิกการแก้ไข</button>
         <div class="flex flex-wrap justify-end gap-2 ml-auto">
           <button type="button" id="w-copy-tpl" class="btn btn-ghost">${iconSvg('copy', { size: 15 })} คัดลอก Template</button>
           <button type="button" id="w-active" class="btn btn-soft">${iconSvg('play', { size: 15 })} เริ่มตามแผน</button>
@@ -324,12 +324,12 @@ export function mountWorkout(el) {
         <button type="button" role="tab" aria-selected="false" data-hstatus="done" class="tm-seg-btn">ทำแล้ว</button>
       </div>
       <div class="space-y-2">
-        <input id="w-hist-q" class="input text-xs" placeholder="ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต">
-        <details class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
-          <summary class="cursor-pointer text-xs font-medium text-slate-600 select-none">กรองตามช่วงวันที่</summary>
+        <input id="w-hist-q" class="input text-xs" placeholder="ค้นหาชื่อท่าออกกำลังกาย / ประเภท / โน้ต" aria-label="ค้นหาประวัติการออกกำลังกาย">
+        <details class="tm-details rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <summary class="tm-details-summary cursor-pointer text-xs font-medium text-slate-600 select-none"><span>กรองตามช่วงวันที่</span>${detailsToggleHtml({ compact: true })}</summary>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2.5">
-            <div><label class="lbl">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
-            <div><label class="lbl">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
+            <div><label class="lbl" for="w-hist-from">ตั้งแต่</label><input type="date" id="w-hist-from" class="input text-xs"></div>
+            <div><label class="lbl" for="w-hist-to">ถึง</label><input type="date" id="w-hist-to" class="input text-xs"></div>
             <div class="flex items-end"><button type="button" id="w-hist-clear" class="chip bg-slate-100 text-slate-700 w-full justify-center py-2 min-h-[44px]">ล้างตัวกรอง</button></div>
           </div>
         </details>
@@ -384,6 +384,17 @@ export function mountWorkout(el) {
 
   $('#w-sections', root).addEventListener('input', onInput);
   $('#w-sections', root).addEventListener('change', onInput);
+  $('#w-sections', root).addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const toggle = e.target.closest('[data-sec-toggle][role="button"]');
+    if (!toggle) return;
+    e.preventDefault();
+    const k = toggle.dataset.secToggle;
+    if (k && Object.hasOwn(collapsedSections, k)) {
+      collapsedSections[k] = !collapsedSections[k];
+      renderSections();
+    }
+  });
   $('#w-sections', root).addEventListener('click', e => {
     const toggle = e.target.closest('[data-sec-toggle]');
     if (toggle) {
@@ -1237,24 +1248,24 @@ function renderImportPreview() {
               <div class="min-w-0 flex-1 space-y-1.5">
                 <div class="flex items-center gap-1.5 min-w-0">
                   <span class="text-[11px] font-bold text-brand shrink-0 tabular-nums">${idx + 1}.</span>
-                  <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="name" list="w-names" class="input !py-1.5 min-h-[44px] text-xs font-semibold flex-1 min-w-0" placeholder="ชื่อท่า" value="${esc(r.name || '')}">
+                  <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="name" list="w-names" class="input min-h-[44px] text-xs font-semibold flex-1 min-w-0" placeholder="ชื่อท่า" aria-label="ชื่อท่า ${idx + 1}" value="${esc(r.name || '')}">
                   <button type="button" data-imp-media="${k}:${idx}" class="chip bg-sky-soft text-blue-700 !py-1 !px-2.5 min-h-[44px] text-[11px] shrink-0" title="ค้นหารูปอัตโนมัติ">${iconSvg('image', { size: 13 })} หาภาพ</button>
-                  <button type="button" data-imp-rm="${k}:${idx}" class="text-rose-400 hover:text-rose-600 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 13 })}</button>
+                  <button type="button" data-imp-rm="${k}:${idx}" class="tm-row-action-btn is-del shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 15 })}</button>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
-                  <div><label class="lbl text-[10px]">น้ำหนัก (kg)</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input !py-1 min-h-[44px] text-xs" value="${r.weightKg ?? ''}" placeholder="-"></div>
-                  <div><label class="lbl text-[10px]">เซต</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="sets" type="number" inputmode="numeric" class="input !py-1 min-h-[44px] text-xs" value="${r.sets ?? 1}"></div>
-                  <div><label class="lbl text-[10px]">${repLabel(r.repUnit)}</label><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="reps" type="number" inputmode="numeric" class="input !py-1 min-h-[44px] text-xs" value="${r.reps ?? ''}"></div>
-                  <div><label class="lbl text-[10px]">หน่วย</label><select data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="repUnit" class="input !py-1 min-h-[44px] text-xs"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
+                  <div><label class="lbl text-[10px]" for="w-imp-${k}-${idx}-weight">น้ำหนัก (kg)</label><input id="w-imp-${k}-${idx}-weight" data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input min-h-[44px] text-xs" value="${r.weightKg ?? ''}" placeholder="-"></div>
+                  <div><label class="lbl text-[10px]" for="w-imp-${k}-${idx}-sets">เซต</label><input id="w-imp-${k}-${idx}-sets" data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="sets" type="number" inputmode="numeric" class="input min-h-[44px] text-xs" value="${r.sets ?? 1}"></div>
+                  <div><label class="lbl text-[10px]" for="w-imp-${k}-${idx}-reps">${repLabel(r.repUnit)}</label><input id="w-imp-${k}-${idx}-reps" data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="reps" type="number" inputmode="numeric" class="input min-h-[44px] text-xs" value="${r.reps ?? ''}"></div>
+                  <div><label class="lbl text-[10px]" for="w-imp-${k}-${idx}-repUnit">หน่วย</label><select id="w-imp-${k}-${idx}-repUnit" data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="repUnit" class="input min-h-[44px] text-xs"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
                   <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[44px] text-[11px] text-slate-600 cursor-pointer"><input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="perSide" type="checkbox" class="w-4 h-4 accent-brand shrink-0" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
                 </div>
               </div>
             </div>
-            <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="note" class="input !py-1.5 text-xs" placeholder="คำอธิบายวิธีทำ / โน้ตสั้น ๆ" value="${esc(r.note || '')}">
-            <details class="text-[11px] text-slate-500">
-              <summary class="cursor-pointer min-h-[44px] flex items-center select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</summary>
+            <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="note" class="input text-xs" placeholder="คำอธิบายวิธีทำ / โน้ตสั้น ๆ" aria-label="คำอธิบายวิธีทำ / โน้ตท่า ${idx + 1}" value="${esc(r.note || '')}">
+            <details class="tm-details text-[11px] text-slate-500">
+              <summary class="tm-details-summary cursor-pointer min-h-[44px] flex items-center gap-1.5 select-none hover:text-slate-700"><span class="inline-flex items-center gap-1.5 min-w-0">${iconSvg('image', { size: 14, className: 'text-brand shrink-0' })}<span>ลิงก์รูป/GIF ประกอบท่า${r.autoFilled ? ' <span class="text-amber-700">(เติมค่าเริ่มต้นอัตโนมัติ)</span>' : ''}</span></span>${detailsToggleHtml({ compact: true })}</summary>
               <div class="mt-1.5">
-                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="imageUrl" type="url" class="input !py-1 text-xs" placeholder="URL รูป/GIF ประกอบท่า" value="${esc(r.imageUrl || '')}">
+                <input data-imp-sec="${k}" data-imp-i="${idx}" data-imp-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า" aria-label="URL รูป/GIF ประกอบท่า ${idx + 1}" value="${esc(r.imageUrl || '')}">
               </div>
             </details>
           </div>`).join('')}
@@ -1271,13 +1282,13 @@ function renderImportPreview() {
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl bg-white border border-slate-200 p-2.5 text-xs">
-        <div class="col-span-2 sm:col-span-2"><label class="lbl text-[10px]">ชื่อโปรแกรม</label><input data-imp-meta="programName" class="input !py-1.5 text-xs" value="${esc(parsed.programName || '')}" placeholder="เช่น Day A — Lower Body"></div>
-        <div><label class="lbl text-[10px]">ประเภท</label><select data-imp-meta="suggestedType" class="input !py-1.5 text-xs">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}" ${parsed.suggestedType === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-        <div><label class="lbl text-[10px]">กลุ่มกล้ามเนื้อ</label><input data-imp-meta="muscleGroup" class="input !py-1.5 text-xs" value="${esc(parsed.muscleGroup || '')}" placeholder="เช่น ขาและสะโพก"></div>
-        <div><label class="lbl text-[10px]">เวลา (นาที)</label><input data-imp-meta="durationMin" type="number" inputmode="numeric" class="input !py-1.5 text-xs" value="${parsed.durationMin ?? ''}" placeholder="25"></div>
+        <div class="col-span-2 sm:col-span-2"><label class="lbl text-[10px]" for="w-imp-program">ชื่อโปรแกรม</label><input id="w-imp-program" data-imp-meta="programName" class="input text-xs" value="${esc(parsed.programName || '')}" placeholder="เช่น Day A — Lower Body"></div>
+        <div><label class="lbl text-[10px]" for="w-imp-type">ประเภท</label><select id="w-imp-type" data-imp-meta="suggestedType" class="input text-xs">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}" ${parsed.suggestedType === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div><label class="lbl text-[10px]" for="w-imp-muscle">กลุ่มกล้ามเนื้อ</label><input id="w-imp-muscle" data-imp-meta="muscleGroup" class="input text-xs" value="${esc(parsed.muscleGroup || '')}" placeholder="เช่น ขาและสะโพก"></div>
+        <div><label class="lbl text-[10px]" for="w-imp-dur">เวลา (นาที)</label><input id="w-imp-dur" data-imp-meta="durationMin" type="number" inputmode="numeric" class="input text-xs" value="${parsed.durationMin ?? ''}" placeholder="25"></div>
         <div class="grid grid-cols-2 gap-1.5 col-span-2 sm:col-span-1">
-          <div><label class="lbl text-[10px]">วันที่</label><input data-imp-meta="targetDate" type="date" class="input !py-1.5 text-xs" value="${esc(targetDate)}"></div>
-          <div><label class="lbl text-[10px]">สถานะ</label><select id="w-imp-status" data-imp-meta="targetStatus" class="input !py-1.5 text-xs"><option value="planned" ${importTargetStatus === 'planned' ? 'selected' : ''}>วางแผนไว้</option><option value="done" ${importTargetStatus === 'done' ? 'selected' : ''}>ทำจริงแล้ว</option></select></div>
+          <div><label class="lbl text-[10px]" for="w-imp-date">วันที่</label><input id="w-imp-date" data-imp-meta="targetDate" type="date" class="input text-xs" value="${esc(targetDate)}"></div>
+          <div><label class="lbl text-[10px]" for="w-imp-status">สถานะ</label><select id="w-imp-status" data-imp-meta="targetStatus" class="input text-xs"><option value="planned" ${importTargetStatus === 'planned' ? 'selected' : ''}>วางแผนไว้</option><option value="done" ${importTargetStatus === 'done' ? 'selected' : ''}>ทำจริงแล้ว</option></select></div>
         </div>
       </div>
 
@@ -1285,13 +1296,13 @@ function renderImportPreview() {
 
       <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
         <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" id="w-import-copy" class="btn btn-ghost !py-2 !px-3 text-xs">${iconSvg('copy', { size: 14 })} คัดลอก Template</button>
-          <button type="button" id="w-import-apply" class="btn btn-ghost !py-2 !px-3 text-xs">ส่งลงฟอร์มด้านล่าง</button>
+          <button type="button" id="w-import-copy" class="btn btn-ghost btn-sm min-h-[44px]">${iconSvg('copy', { size: 14 })} คัดลอก Template</button>
+          <button type="button" id="w-import-apply" class="btn btn-ghost btn-sm min-h-[44px]">ส่งลงฟอร์มด้านล่าง</button>
         </div>
         <div class="flex flex-wrap items-center gap-2 ml-auto">
-          <button type="button" id="w-import-save-tpl" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('bookmark', { size: 14 })} บันทึกเป็นเทมเพลต</button>
-          <button type="button" id="w-import-save-rec" class="btn btn-soft !py-2 !px-3.5 text-xs">${iconSvg('planner', { size: 14 })} บันทึกแผน/ผล</button>
-          <button type="button" id="w-import-start" class="btn btn-primary !py-2 !px-4 text-xs">${iconSvg('play', { size: 14 })} เริ่มตามแผนทันที</button>
+          <button type="button" id="w-import-save-tpl" class="btn btn-soft btn-sm min-h-[44px]">${iconSvg('bookmark', { size: 14 })} บันทึกเป็นเทมเพลต</button>
+          <button type="button" id="w-import-save-rec" class="btn btn-soft btn-sm min-h-[44px]">${iconSvg('planner', { size: 14 })} บันทึกแผน/ผล</button>
+          <button type="button" id="w-import-start" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('play', { size: 14 })} เริ่มตามแผนทันที</button>
         </div>
       </div>
     </div>`;
@@ -1387,8 +1398,8 @@ function saveImportAsTemplate() {
     <div class="space-y-3">
       <input id="wt-imp-name" class="input" placeholder="เช่น Day A — Lower Body">
       <div class="flex justify-end gap-2">
-        <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-        <button type="button" id="wt-imp-ok" class="btn btn-primary">บันทึก</button>
+        <button type="button" data-close class="btn btn-ghost">${iconSvg('close', { size: 15 })} ยกเลิก</button>
+        <button type="button" id="wt-imp-ok" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึก</button>
       </div>
     </div>`);
   const inp = $('#wt-imp-name', el);
@@ -1448,14 +1459,16 @@ function renderSections() {
     return `
     <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
-        <button type="button" data-sec-toggle="${k}" aria-expanded="${!isCollapsed}" class="flex items-center gap-1.5 text-left font-semibold text-slate-700 text-sm hover:text-brand-dark py-1 min-h-[44px] cursor-pointer min-w-0">
-          ${iconSvg(isCollapsed ? 'chevron-right' : 'chevron-down', { size: 15, className: 'text-slate-400 shrink-0' })}
+        <div data-sec-toggle="${k}" role="button" tabindex="0" aria-expanded="${!isCollapsed}" class="flex items-center gap-1.5 text-left font-semibold text-slate-700 text-sm hover:text-brand-dark py-1 min-h-[44px] cursor-pointer min-w-0 flex-1 select-none">
           <span class="text-brand">${si + 1}.</span>
           ${iconSvg(icon, { size: 15, className: 'text-brand shrink-0' })}
           <span class="truncate">${title}</span>
           <span class="text-xs font-normal text-slate-500 tabular-nums shrink-0">(${rows.length} ท่า)</span>
-        </button>
-        <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-3 min-h-[44px] text-xs shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" data-add="${k}" class="chip bg-lav-soft text-brand-dark !py-1 !px-3 min-h-[44px] text-xs shrink-0">${iconSvg('plus', { size: 13 })} เพิ่มท่า</button>
+          <button type="button" data-sec-toggle="${k}" aria-expanded="${!isCollapsed}" aria-label="${isCollapsed ? 'กาง' : 'หุบ'}${title}" title="${isCollapsed ? 'กาง' : 'หุบ'}" class="pl-collapse-btn shrink-0">${iconSvg(isCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 })}</button>
+        </div>
       </div>
       <div class="${isCollapsed ? 'hidden' : 'space-y-2.5'}">
       ${rows.length ? rows.map((r, i) => `
@@ -1464,25 +1477,25 @@ function renderSections() {
             ${renderImageFrame(r, 'w-16 h-16')}
             <div class="min-w-0 flex-1 space-y-2">
               <div class="flex gap-1.5 items-center">
-                <input data-sec="${k}" data-i="${i}" data-k="name" list="w-names" class="input min-h-[44px] font-semibold flex-1 min-w-0" placeholder="ชื่อท่า เช่น Goblet Squat" value="${esc(r.name)}">
+                <input data-sec="${k}" data-i="${i}" data-k="name" list="w-names" class="input min-h-[44px] font-semibold flex-1 min-w-0" placeholder="ชื่อท่า เช่น Goblet Squat" aria-label="ชื่อท่า ${i + 1} (${title})" value="${esc(r.name)}">
                 <button type="button" data-media="${k}:${i}" class="chip bg-sky-soft text-blue-700 !py-1.5 !px-3 min-h-[44px] shrink-0" title="ค้นหารูปท่านี้">${iconSvg('image', { size: 14 })}<span class="hidden sm:inline"> หาภาพ</span></button>
-                <button type="button" data-rm="${k}:${i}" class="text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg px-2 min-w-[44px] min-h-[44px] inline-flex items-center justify-center shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 15 })}</button>
+                <button type="button" data-rm="${k}:${i}" class="tm-row-action-btn is-del shrink-0" aria-label="ลบท่า">${iconSvg('trash', { size: 15 })}</button>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
-                <div><label class="lbl">น้ำหนัก (kg)</label><input data-sec="${k}" data-i="${i}" data-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input min-h-[44px]" value="${r.weightKg ?? ''}"></div>
-                <div><label class="lbl">เซต</label><input data-sec="${k}" data-i="${i}" data-k="sets" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.sets ?? ''}"></div>
-                <div><label class="lbl">${repLabel(r.repUnit)}</label><input data-sec="${k}" data-i="${i}" data-k="reps" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.reps ?? ''}"></div>
-                <div><label class="lbl">หน่วย</label><select data-sec="${k}" data-i="${i}" data-k="repUnit" class="input min-h-[44px]"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
+                <div><label class="lbl" for="w-${k}-${i}-weightKg">น้ำหนัก (kg)</label><input id="w-${k}-${i}-weightKg" data-sec="${k}" data-i="${i}" data-k="weightKg" type="number" step="0.5" inputmode="decimal" class="input min-h-[44px]" value="${r.weightKg ?? ''}"></div>
+                <div><label class="lbl" for="w-${k}-${i}-sets">เซต</label><input id="w-${k}-${i}-sets" data-sec="${k}" data-i="${i}" data-k="sets" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.sets ?? ''}"></div>
+                <div><label class="lbl" for="w-${k}-${i}-reps">${repLabel(r.repUnit)}</label><input id="w-${k}-${i}-reps" data-sec="${k}" data-i="${i}" data-k="reps" type="number" inputmode="numeric" class="input min-h-[44px]" value="${r.reps ?? ''}"></div>
+                <div><label class="lbl" for="w-${k}-${i}-repUnit">หน่วย</label><select id="w-${k}-${i}-repUnit" data-sec="${k}" data-i="${i}" data-k="repUnit" class="input min-h-[44px]"><option value="reps" ${r.repUnit === 'reps' ? 'selected' : ''}>ครั้ง</option><option value="sec" ${r.repUnit === 'sec' ? 'selected' : ''}>วินาที</option><option value="min" ${r.repUnit === 'min' ? 'selected' : ''}>นาที</option></select></div>
                 <label class="col-span-2 sm:col-span-1 flex items-center gap-1.5 min-h-[44px] text-xs text-slate-600 cursor-pointer"><input data-sec="${k}" data-i="${i}" data-k="perSide" type="checkbox" class="w-4 h-4 accent-brand shrink-0" ${r.perSide ? 'checked' : ''}> ต่อข้าง</label>
               </div>
             </div>
           </div>
-          <input data-sec="${k}" data-i="${i}" data-k="note" class="input text-xs" placeholder="คำอธิบายท่า / โน้ต เช่น เน้นควบคุมการย่อตัว" value="${esc(r.note)}">
+          <input data-sec="${k}" data-i="${i}" data-k="note" class="input text-xs" placeholder="คำอธิบายท่า / โน้ต เช่น เน้นควบคุมการย่อตัว" aria-label="คำอธิบายท่า ${i + 1} (${title})" value="${esc(r.note)}">
           ${renderRefBadge(r)}
-          <details data-ref-box class="text-xs text-slate-500">
-            <summary class="cursor-pointer min-h-[44px] flex items-center select-none hover:text-slate-700">🖼️ ลิงก์รูป/GIF ประกอบท่า (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</summary>
+          <details data-ref-box class="tm-details text-xs text-slate-500">
+            <summary class="tm-details-summary cursor-pointer min-h-[44px] flex items-center gap-1.5 select-none hover:text-slate-700"><span class="inline-flex items-center gap-1.5 min-w-0">${iconSvg('image', { size: 14, className: 'text-brand shrink-0' })}<span>ลิงก์รูป/GIF ประกอบท่า (ไม่บังคับ)${r.imageHint ? ` · <span class="text-amber-700">รอลิงก์เต็ม (${esc(r.imageHint)})</span>` : ''}</span></span>${detailsToggleHtml({ compact: true })}</summary>
             <div class="mt-1.5">
-              <input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า (https://...)" value="${esc(r.imageUrl || '')}">
+              <input data-sec="${k}" data-i="${i}" data-k="imageUrl" type="url" class="input text-xs" placeholder="URL รูป/GIF ประกอบท่า (https://...)" aria-label="URL รูป/GIF ประกอบท่า ${i + 1} (${title})" value="${esc(r.imageUrl || '')}">
             </div>
           </details>
           <p data-hint class="text-[11px] text-slate-500">${esc(lastHint(r.name))}</p>
@@ -1642,10 +1655,10 @@ function saveTemplatePrompt() {
   const { el, close } = openModal(`
     <h3 class="font-bold text-slate-800 mb-3 inline-flex items-center gap-1.5">${iconSvg('bookmark', { size: 16, className: 'text-brand' })}<span>บันทึกเป็นเทมเพลตใหม่</span></h3>
     <div class="space-y-3">
-      <div><label class="lbl">ชื่อเทมเพลต</label><input id="wt-name" class="input" value="${esc($('#w-title', root).value.trim())}" placeholder="เช่น Day A — Lower Body"></div>
+      <div><label class="lbl" for="wt-name">ชื่อเทมเพลต</label><input id="wt-name" class="input" value="${esc($('#w-title', root).value.trim())}" placeholder="เช่น Day A — Lower Body"></div>
       <div class="flex justify-end gap-2">
-        <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-        <button type="button" id="wt-ok" class="btn btn-primary">บันทึก</button>
+        <button type="button" data-close class="btn btn-ghost">${iconSvg('close', { size: 15 })} ยกเลิก</button>
+        <button type="button" id="wt-ok" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึก</button>
       </div>
     </div>`);
   const inp = $('#wt-name', el);
@@ -1966,8 +1979,8 @@ function renderHistory() {
       </div>
       <div class="tm-swipe-card tm-swipe-card--stack !p-2.5">
         <div class="flex items-start justify-between gap-2">
-          <details data-hist-id="${esc(w.id)}" ${openHistIds.has(w.id) ? 'open' : ''} class="min-w-0 flex-1">
-            <summary class="cursor-pointer text-sm break-words tabular-nums py-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${totalMinutes ? ` · ${totalMinutes} นาที รวม` : ''}${intensityLabel ? ` · ความหนัก: ${esc(intensityLabel)}` : ''}${estKcal ? ` · ~${estKcal} kcal` : ''}${mainSets ? ` · ทำจริง ${mainSets} เซต` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</summary>
+          <details data-hist-id="${esc(w.id)}" ${openHistIds.has(w.id) ? 'open' : ''} class="tm-details min-w-0 flex-1">
+            <summary class="tm-details-summary cursor-pointer text-sm break-words tabular-nums py-1"><span class="min-w-0 flex-1">${statusPrefix}<b>${esc(fmtDate(w.date))}</b> · ${titleStr}${w.muscleGroup ? ` · <span class="text-xs text-brand-dark">${esc(w.muscleGroup)}</span>` : ''}${totalMinutes ? ` · ${totalMinutes} นาที รวม` : ''}${intensityLabel ? ` · ความหนัก: ${esc(intensityLabel)}` : ''}${estKcal ? ` · ~${estKcal} kcal` : ''}${mainSets ? ` · ทำจริง ${mainSets} เซต` : ''}${sessionEval ? ` · <span class="text-xs text-brand-dark">${esc(sessionEval)}</span>` : ''}</span>${detailsToggleHtml({ compact: true })}</summary>
             <div class="mt-1.5">${detail || '<p class="text-xs text-slate-500">ไม่มีรายการท่า</p>'}${notesText ? `<p class="text-xs mt-1.5 text-slate-600 break-words">โน้ต: ${esc(notesText)}</p>` : ''}${recoveryPickerHtml}${isPlan ? '' : quickBtnsHtml}</div>
           </details>
           <div class="tm-row-actions">
@@ -1983,7 +1996,7 @@ function renderHistory() {
   const olderRows = showAllHistory ? '' : renderedRows.slice(5).join('');
   $('#w-history-swipe-hint', root)?.classList.toggle('hidden', !rows.length);
   histEl.innerHTML = rows.length
-    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ดูรายการเก่าทั้งหมด (${rows.length - 5})</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${olderRows}</div></details>` : ''}`
+    ? `${recentRows}${olderRows ? `<details id="w-history-more" class="tm-details rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2"><summary class="tm-details-summary cursor-pointer text-xs font-semibold text-slate-700 select-none"><span>ดูรายการเก่าทั้งหมด (${rows.length - 5})</span>${detailsToggleHtml({ compact: true })}</summary><div class="mt-2 tm-swipe-list tm-swipe-list--cards">${olderRows}</div></details>` : ''}`
     : `<p class="text-xs text-slate-500 py-2">${filtering ? (historyStatusFilter === 'planned' ? 'ยังไม่มีแผนที่วางไว้' : 'ไม่พบบันทึกที่ตรงกับคำค้นหา/ช่วงวันที่') : 'ยังไม่มีบันทึกการออกกำลังกาย'}</p>`;
   bindSwipeRows(histEl);
 }

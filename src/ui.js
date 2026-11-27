@@ -3,7 +3,7 @@
    Team 1: Design System & Shared UI Components
    ============================================================ */
 
-import { esc, trapFocus, addDays, isDateStr, localDateStr, mondayOf } from './util.js';
+import { esc, trapFocus, addDays, isDateStr, localDateStr, mondayOf, toast as sharedToast } from './util.js';
 import { iconSvg } from './icons.js';
 
 function renderIcon(icon, size = 16) {
@@ -275,12 +275,12 @@ export function openBottomSheet(innerHtml) {
 
 /* ---- Toast ---- */
 export function toast(message, kind = 'ok') {
-  const el = document.createElement('div');
-  const bgClass = kind === 'err' ? 'tm-chip-error' : (kind === 'warn' ? 'tm-chip-warning' : 'tm-chip-success');
-  el.className = `fixed left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-full text-sm shadow-lg max-w-[90vw] text-center ${bgClass}`;
-  el.textContent = message;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+  return sharedToast(message, kind);
+}
+
+/* ---- Collapsible Details Toggle ---- */
+export function detailsToggleHtml({ compact = false } = {}) {
+  return `<span class="tm-details-state${compact ? ' is-compact' : ''} shrink-0" aria-hidden="true"><span class="tm-details-label-open">หุบ</span><span class="tm-details-label-closed">กาง</span><span class="tm-details-ico-open">${iconSvg('chevron-up', { size: compact ? 14 : 15 })}</span><span class="tm-details-ico-closed">${iconSvg('chevron-down', { size: compact ? 14 : 15 })}</span></span>`;
 }
 
 /* ---- Chart Container ---- */

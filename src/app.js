@@ -10,6 +10,7 @@ import './style.css';
 import './design-tokens.css';
 import './home.css';
 import { registerSW } from 'virtual:pwa-register';
+import { initPwaInstall } from './pwaInstall.js';
 import { doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
 
 import { db, userCol, userDoc } from './firebase.js';
@@ -24,7 +25,7 @@ import { isPreviewMode, getPreviewCollection, getPreviewFoodByDate } from './pre
 import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { iconSvg, iconBubble } from './icons.js';
-import { mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
+import { getHomeWidgetConfig, mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
 import { getPeriodRemindDays } from './periodStats.js';
 import { createOnboardingProgressStore, shouldShowOnboarding } from './onboardingState.js';
 import { refreshProfile } from './profile.js';
@@ -43,6 +44,7 @@ setRuntimeErrorSink((uid, reports) => {
 });
 initRuntimeErrorMonitoring();
 registerSW({ immediate: true });
+initPwaInstall();
 document.querySelectorAll('.tm-app-version').forEach(el => {
   el.textContent = APP_VERSION_LABEL;
 });
@@ -170,16 +172,24 @@ function renderSubnav(group, name) {
 function renderHomeShortcuts() {
   const home = $('#tab-home');
   if (!home) return;
+  const widgets = $('#home-widgets', home);
   let section = $('#home-shortcuts', home);
   if (!section) {
     section = document.createElement('section');
     section.id = 'home-shortcuts';
     section.className = 'nav-shortcuts';
-    const anchor = $('#home-head', home) || $('#home-today', home);
-    anchor?.insertAdjacentElement(anchor.id === 'home-head' ? 'afterend' : 'afterbegin', section);
+    if (widgets) {
+      widgets.prepend(section);
+    } else {
+      const anchor = $('#home-head', home) || $('#home-today', home);
+      anchor?.insertAdjacentElement(anchor.id === 'home-head' ? 'afterend' : 'afterbegin', section);
+    }
+  } else if (widgets && section.parentElement !== widgets) {
+    widgets.prepend(section);
   }
   const shortcuts = getHomeShortcuts(readNavigationPreferences(state.uid));
-  section.classList.toggle('hidden', shortcuts.length === 0);
+  const hideShortcuts = shortcuts.length === 0 || getHomeWidgetConfig().hidden.has('shortcuts');
+  section.classList.toggle('hidden', hideShortcuts);
   section.setAttribute('aria-label', 'ทางลัดที่ปักหมุด');
   section.innerHTML = shortcuts.length ? `<h2>ทางลัดที่ปักหมุด</h2><div class="nav-shortcuts-grid" data-count="${shortcuts.length}">${shortcuts.map(item => `<button type="button" data-go="${item.tab}" class="nav-shortcut"><span class="nav-shortcut-ico" aria-hidden="true">${iconSvg(item.icon || item.tab, { size: 16 })}</span><span>${item.label}</span></button>`).join('')}</div>` : '';
 }
@@ -370,7 +380,7 @@ export function showTab(name, { preserveDate = false } = {}) {
   renderSubnav(group, lastSub[group]);
   let pending = Promise.resolve();
   if (!preserveDate && name === 'home') resetHomePlannerToToday();
-  if (name === 'home') { renderHome(); renderHomeShortcuts(); }
+  if (name === 'home') { renderHomeShortcuts(); renderHome(); }
   if (name === 'food') pending = foodLoader.ensure().then(m => { if (!preserveDate) m?.resetFoodToToday?.(); });
   if (name === 'overview' || name === 'weekly') {
     pending = overviewLoader.ensure().then(async m => {
@@ -529,6 +539,7 @@ function mountAll() {
   mounted = true;
   mountHome(goTo);
   renderHomeShortcuts();
+  renderHome();
   mountChatFab();
 }
 
@@ -856,6 +867,7 @@ window.addEventListener('trackme:auth-change', () => {
 window.addEventListener('trackme:navigation-change', () => {
   const page = document.documentElement.dataset.page || 'home';
   renderHomeShortcuts();
+  renderHome();
   renderDesktopNav(page);
   renderSubnav(groupOf(page), lastSub[groupOf(page)] || page);
 });

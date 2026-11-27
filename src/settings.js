@@ -1,6 +1,7 @@
-import { $, toast } from './util.js';
+import { $, toast, confirmDialog } from './util.js';
 import { APP_VERSION_LABEL } from './version.js';
 import { iconSvg } from './icons.js';
+import { detailsToggleHtml } from './ui.js';
 import {
   getGeminiKey, setGeminiKey, getGroqKey, setGroqKey, getOpenRouterKey, setOpenRouterKey,
   testGeminiConnection, testGroqConnection, testOpenRouterConnection, explainGeminiError
@@ -27,17 +28,7 @@ import {
   disablePushForThisDevice,
   sendTestLocalNotification
 } from './push.js';
-
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  window.dispatchEvent(new Event('trackme:install-ready'));
-});
-window.addEventListener('appinstalled', () => {
-  deferredInstallPrompt = null;
-  window.dispatchEvent(new Event('trackme:install-ready'));
-});
+import { getPwaInstallState, triggerPwaInstall } from './pwaInstall.js';
 
 export function mountSettings(el) {
   el.innerHTML = `
@@ -57,7 +48,7 @@ export function mountSettings(el) {
       <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('lock', { size: 18, className: 'text-brand' })}<span>ล็อกแอปด้วย PIN</span></h3>
       <p class="text-xs text-slate-500">ใช้ PIN 4 หลักล็อกหน้าจอเมื่อให้คนอื่นยืมมือถือ · PIN เก็บเฉพาะอุปกรณ์นี้ และไม่ได้เข้ารหัสข้อมูลในบัญชี</p>
       <div class="grid grid-cols-2 gap-2"><input id="st-pin" type="password" inputmode="numeric" maxlength="4" class="input min-h-[44px] text-center tracking-[.4em]" aria-label="PIN 4 หลัก" placeholder="PIN 4 หลัก"><input id="st-pin-confirm" type="password" inputmode="numeric" maxlength="4" class="input min-h-[44px] text-center tracking-[.4em]" aria-label="ยืนยัน PIN 4 หลัก" placeholder="ยืนยัน PIN"></div>
-      <div class="flex flex-wrap gap-2"><button id="st-pin-save" class="btn btn-primary">ตั้ง / เปลี่ยน PIN</button><button id="st-lock-now" class="btn btn-soft">ล็อกตอนนี้</button><button id="st-pin-remove" class="btn btn-ghost">ปิด PIN</button></div>
+      <div class="flex flex-wrap gap-2"><button id="st-pin-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} ตั้ง / เปลี่ยน PIN</button><button id="st-lock-now" class="btn btn-soft">${iconSvg('lock', { size: 15 })} ล็อกตอนนี้</button><button id="st-pin-remove" class="btn btn-ghost">${iconSvg('close', { size: 15 })} ปิด PIN</button></div>
       <p id="st-pin-state" class="text-xs text-slate-500"></p>
     </div>
 
@@ -111,16 +102,17 @@ export function mountSettings(el) {
         <label class="lbl !mb-0" for="st-vapid">VAPID Public Key (ใส่กรณีไม่ได้ตั้งใน GitHub Secrets)</label>
         <div class="flex gap-2">
           <input id="st-vapid" class="input min-h-[44px] text-xs flex-1" placeholder="วาง VAPID Public Key ที่สร้างจาก web-push">
-          <button type="button" id="st-vapid-save" class="btn btn-soft min-h-[44px] text-xs whitespace-nowrap">บันทึกคีย์</button>
+          <button type="button" id="st-vapid-save" class="btn btn-soft btn-sm min-h-[44px] whitespace-nowrap">${iconSvg('save', { size: 14 })} บันทึกคีย์</button>
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
         <button type="button" id="st-push-enable" class="btn btn-primary">${iconSvg('notifications', { size: 15 })} เปิดรับการแจ้งเตือน</button>
-        <button type="button" id="st-push-disable" class="btn btn-ghost hidden">ปิดเครื่องนี้</button>
-        <button type="button" id="st-push-test" class="btn btn-soft">ทดสอบแจ้งเตือน</button>
-        <button type="button" id="st-pwa-install" class="btn btn-soft hidden">${iconSvg('smartphone', { size: 15 })} ติดตั้งเป็นแอป</button>
+        <button type="button" id="st-push-disable" class="btn btn-ghost hidden">${iconSvg('close', { size: 15 })} ปิดเครื่องนี้</button>
+        <button type="button" id="st-push-test" class="btn btn-soft">${iconSvg('notifications', { size: 15 })} ทดสอบแจ้งเตือน</button>
+        <button type="button" id="st-pwa-install" class="btn btn-soft">${iconSvg('smartphone', { size: 15 })} <span>ติดตั้งเป็นแอป</span></button>
       </div>
       <p id="st-notif-state" class="text-xs text-slate-500"></p>
+      <p id="st-pwa-state" class="text-xs text-slate-500"></p>
     </div>
 
     <div class="card space-y-3" id="st-backup"></div>
@@ -132,8 +124,8 @@ export function mountSettings(el) {
         <p id="st-nf-summary" class="text-xs text-slate-600"></p>
       </div>
       <div class="flex flex-wrap gap-2 shrink-0">
-        <button type="button" id="st-open-notes" class="btn btn-soft text-xs">${iconSvg('note', { size: 14 })} ดูโน้ตทั้งหมด</button>
-        <button type="button" id="st-open-feedback" class="btn btn-primary text-xs">${iconSvg('chat', { size: 14 })} ส่ง Feedback แอป</button>
+        <button type="button" id="st-open-notes" class="btn btn-soft btn-sm min-h-[44px]">${iconSvg('note', { size: 14 })} ดูโน้ตทั้งหมด</button>
+        <button type="button" id="st-open-feedback" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('chat', { size: 14 })} ส่ง Feedback แอป</button>
       </div>
     </div>
 
@@ -145,14 +137,14 @@ export function mountSettings(el) {
         </div>
         <span id="st-keys-summary" class="text-xs text-slate-600 tabular-nums"></span>
       </header>
-      <details id="st-keys-details" class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-        <summary class="cursor-pointer min-h-[44px] flex items-center text-xs font-semibold text-slate-700 select-none">เปิดดู / ตั้งค่า API Keys (Gemini, Groq, OpenRouter, USDA)</summary>
+      <details id="st-keys-details" class="tm-details rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+        <summary class="tm-details-summary cursor-pointer min-h-[44px] text-xs font-semibold text-slate-700 select-none"><span>เปิดดู / ตั้งค่า API Keys (Gemini, Groq, OpenRouter, USDA)</span>${detailsToggleHtml({ compact: true })}</summary>
         <div class="mt-3 space-y-3">
-          <section class="rounded-xl border border-[#E4E8F3] bg-[#FFF9E6] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 15, className: 'text-slate-800' })}<span>Gemini</span></h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · ค้นหาโมเดลที่บัญชีรองรับและสลับอัตโนมัติ (timeout 35 วิ)</p><input type="password" id="st-key" class="input min-h-[44px]" aria-label="Gemini API Key" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
-          <section class="rounded-xl border border-[#D0DBF7] bg-[#D0DBF7]/35 p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">Groq AI (สำรอง)</h4><p class="text-xs text-slate-500">ระบบค้นหารุ่นข้อความ/ภาพที่บัญชีใช้งานได้ แล้วใช้เป็นแหล่งสำรองถัดจาก Gemini</p><input type="password" id="st-groq" class="input min-h-[44px]" aria-label="Groq API Key" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
-          <section class="rounded-xl border border-slate-200 bg-white p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">OpenRouter AI (สำรองแบบเลือกโมเดลฟรี)</h4><p class="text-xs text-slate-500">ระบบค้นหาโมเดลฟรีที่รองรับเครื่องมืออัตโนมัติ · ขอคีย์ได้ที่ <a class="underline" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></p><input type="password" id="st-openrouter" class="input min-h-[44px]" aria-label="OpenRouter API Key" placeholder="OpenRouter API Key (ไม่บังคับ)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-openrouter-save" class="btn btn-primary">บันทึกคีย์ OpenRouter</button><button id="st-openrouter-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-openrouter-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#E4E8F3] bg-[#FFF9E6] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('wand', { size: 15, className: 'text-slate-800' })}<span>Gemini</span></h4><p class="text-xs text-slate-500">ใช้ถ่ายรูปอาหาร/ฉลาก สแกนซองอาหารสัตว์เลี้ยง อ่านผลตรวจ และประมาณโภชนาการ · ค้นหาโมเดลที่บัญชีรองรับและสลับอัตโนมัติ (timeout 35 วิ)</p><input type="password" id="st-key" class="input min-h-[44px]" aria-label="Gemini API Key" placeholder="Gemini API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-key-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกคีย์ Gemini</button><button id="st-key-test" class="btn btn-soft">${iconSvg('zap', { size: 15 })} ทดสอบการเชื่อมต่อ</button></div><p id="st-key-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#D0DBF7] bg-[#D0DBF7]/35 p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">Groq AI (สำรอง)</h4><p class="text-xs text-slate-500">ระบบค้นหารุ่นข้อความ/ภาพที่บัญชีใช้งานได้ แล้วใช้เป็นแหล่งสำรองถัดจาก Gemini</p><input type="password" id="st-groq" class="input min-h-[44px]" aria-label="Groq API Key" placeholder="Groq API Key" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-groq-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกคีย์ Groq</button><button id="st-groq-test" class="btn btn-soft">${iconSvg('zap', { size: 15 })} ทดสอบการเชื่อมต่อ</button></div><p id="st-groq-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-slate-200 bg-white p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800">OpenRouter AI (สำรองแบบเลือกโมเดลฟรี)</h4><p class="text-xs text-slate-500">ระบบค้นหาโมเดลฟรีที่รองรับเครื่องมืออัตโนมัติ · ขอคีย์ได้ที่ <a class="underline" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a></p><input type="password" id="st-openrouter" class="input min-h-[44px]" aria-label="OpenRouter API Key" placeholder="OpenRouter API Key (ไม่บังคับ)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-openrouter-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกคีย์ OpenRouter</button><button id="st-openrouter-test" class="btn btn-soft">${iconSvg('zap', { size: 15 })} ทดสอบการเชื่อมต่อ</button></div><p id="st-openrouter-status" class="text-xs text-slate-500"></p></section>
           <p class="text-xs text-slate-600">ลำดับสำรอง AI: Gemini → Groq → OpenRouter (เลือกเฉพาะโมเดลฟรี) · ค้นหาโภชนาการ: คลังในเครื่อง → USDA → Open Food Facts → AI · งานอ่านฉลากใช้ OCR ในเครื่องเมื่อโควตา AI เต็ม</p>
-          <section class="rounded-xl border border-[#D7EBF6] bg-[#E3F1FB] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('database', { size: 15, className: 'text-slate-800' })}<span>USDA FoodData Central</span></h4><p class="text-xs text-slate-500">ค้นหาได้ทันทีด้วย DEMO_KEY; ใส่ API Key ฟรีของตัวเองเพื่อเพิ่มโควตาได้ที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input min-h-[44px]" aria-label="USDA API Key" placeholder="USDA API Key (เว้นว่างเพื่อใช้ DEMO_KEY)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
+          <section class="rounded-xl border border-[#D7EBF6] bg-[#E3F1FB] p-3 space-y-2"><h4 class="font-semibold text-sm text-slate-800 inline-flex items-center gap-1.5">${iconSvg('database', { size: 15, className: 'text-slate-800' })}<span>USDA FoodData Central</span></h4><p class="text-xs text-slate-500">ค้นหาได้ทันทีด้วย DEMO_KEY; ใส่ API Key ฟรีของตัวเองเพื่อเพิ่มโควตาได้ที่ <a class="underline" href="https://fdc.nal.usda.gov/api-key-signup/" target="_blank" rel="noopener noreferrer">fdc.nal.usda.gov</a></p><input type="password" id="st-usda" class="input min-h-[44px]" aria-label="USDA API Key" placeholder="USDA API Key (เว้นว่างเพื่อใช้ DEMO_KEY)" autocomplete="off"><div class="flex flex-wrap gap-2"><button id="st-usda-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึกคีย์ USDA</button><button id="st-usda-test" class="btn btn-soft">${iconSvg('zap', { size: 15 })} ทดสอบการเชื่อมต่อ</button></div><p id="st-usda-status" class="text-xs text-slate-500"></p></section>
           <p class="text-xs text-slate-500">Google Search เปิดแยกเป็นลิงก์; Google Custom Search API ปิดรับผู้ใช้ใหม่. ChatGPT API ไม่รวมในแผน ChatGPT ฟรีและอาจมีค่าใช้จ่าย จึงไม่เรียกจากแอปนี้ · OpenRouter ใช้เฉพาะโมเดลฟรี · ไม่มีการสร้างหรือใส่คีย์ให้แทน</p>
         </div>
       </details>
@@ -262,19 +254,31 @@ export function mountSettings(el) {
     catch (error) { toast('ตั้ง PIN ไม่สำเร็จ: ' + error.message, 'err'); }
   });
   $('#st-lock-now', el).addEventListener('click', lockCurrentApp);
-  $('#st-pin-remove', el).addEventListener('click', () => {
+  $('#st-pin-remove', el).addEventListener('click', async () => {
     if (guardPreviewWrite('การปิด PIN ')) return;
-    if (confirm('ปิด PIN บนอุปกรณ์นี้?')) { removeDevicePin(state.uid); updatePinState(); toast('ปิด PIN แล้ว'); }
+    const ok = await confirmDialog({
+      title: 'ปิด PIN บนอุปกรณ์นี้?',
+      message: 'ปิด PIN บนอุปกรณ์นี้?',
+      confirmText: 'ปิด PIN',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    removeDevicePin(state.uid);
+    updatePinState();
+    toast('ปิด PIN แล้ว');
   });
   updatePinState();
   el.querySelectorAll('[data-st-collapse]').forEach(btn => {
     const targetId = btn.getAttribute('aria-controls');
     const targetEl = targetId ? $('#' + targetId, el) : null;
     if (!targetEl) return;
+    const baseLabel = (btn.getAttribute('aria-label') || '').replace(/^(หุบ|กาง)/, '') || 'ส่วนนี้';
     btn.addEventListener('click', () => {
       const nextCollapsed = !targetEl.classList.contains('hidden');
       targetEl.classList.toggle('hidden', nextCollapsed);
       btn.setAttribute('aria-expanded', String(!nextCollapsed));
+      btn.setAttribute('aria-label', `${nextCollapsed ? 'กาง' : 'หุบ'}${baseLabel}`);
       btn.title = nextCollapsed ? 'กาง' : 'หุบ';
       btn.innerHTML = iconSvg(nextCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 });
     });
@@ -287,17 +291,30 @@ export function mountSettings(el) {
   const vapidInput = $('#st-vapid', el);
   const iosGuide = $('#st-ios-guide', el);
   const installBtn = $('#st-pwa-install', el);
+  const pwaStateEl = $('#st-pwa-state', el);
 
   const updateInstallBtn = () => {
     if (!installBtn?.isConnected) return;
-    installBtn.classList.toggle('hidden', !deferredInstallPrompt || isStandalonePwa());
+    const pwa = getPwaInstallState();
+    installBtn.classList.toggle('hidden', !pwa.showButton);
+    installBtn.classList.toggle('btn-primary', pwa.canPrompt);
+    installBtn.classList.toggle('btn-soft', !pwa.canPrompt);
+    installBtn.innerHTML = `${iconSvg('smartphone', { size: 15 })} <span>${pwa.buttonLabel}</span>`;
+    if (pwaStateEl?.isConnected) {
+      pwaStateEl.textContent = pwa.statusText;
+      pwaStateEl.className = pwa.alreadyInstalled
+        ? 'text-xs text-green-700 font-medium'
+        : 'text-xs text-slate-500';
+    }
   };
   installBtn.addEventListener('click', async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    try { await deferredInstallPrompt.userChoice; } catch (e) {}
-    deferredInstallPrompt = null;
-    updateInstallBtn();
+    installBtn.disabled = true;
+    try {
+      await triggerPwaInstall();
+    } finally {
+      installBtn.disabled = false;
+      updateInstallBtn();
+    }
   });
   window.addEventListener('trackme:install-ready', updateInstallBtn);
   updateInstallBtn();

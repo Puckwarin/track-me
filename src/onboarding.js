@@ -134,7 +134,7 @@ function render() {
       <div><label class="lbl" for="onb-ai-key">API Key</label><input id="onb-ai-key" class="input" type="password" autocomplete="off" placeholder="วาง API Key ที่สร้างด้วยตนเอง"></div>
       <p class="text-xs text-slate-500">ขอคีย์ได้ที่ <a id="onb-ai-link" class="underline" target="_blank" rel="noopener noreferrer"></a> คีย์เก็บในเบราว์เซอร์อุปกรณ์นี้เท่านั้น ไม่ซิงค์และไม่อยู่ในไฟล์สำรอง</p>
       <p class="text-xs text-amber-700">โควตาและเงื่อนไขอาจเปลี่ยนแปลง ผู้ให้บริการบางรายอาจคิดค่าใช้จ่ายเมื่อเกินโควตาฟรี โปรดตรวจนโยบายและราคาเองก่อนใช้งาน การทดสอบจะเรียก API เมื่อกดปุ่มเท่านั้น</p>
-      <div class="flex flex-wrap gap-2"><button id="onb-ai-save" class="btn btn-soft">บันทึกคีย์</button><button id="onb-ai-test" class="btn btn-primary">ทดสอบคีย์</button></div>
+      <div class="flex flex-wrap gap-2"><button id="onb-ai-save" class="btn btn-soft">${iconSvg('save', { size: 15 })} บันทึกคีย์</button><button id="onb-ai-test" class="btn btn-primary">${iconSvg('zap', { size: 15 })} ทดสอบคีย์</button></div>
       <p id="onb-ai-status" class="text-xs text-slate-500" aria-live="polite"></p>
     </div>`,
     `<div class="space-y-4">
@@ -165,7 +165,7 @@ function render() {
         <button id="onb-back" type="button" class="btn btn-ghost" ${currentStep === 1 ? 'disabled' : ''}>ย้อนกลับ</button>
         <div class="ml-auto flex flex-wrap justify-end gap-2">
           ${currentStep > 1 && currentStep < ONBOARDING_STEP_COUNT ? '<button id="onb-skip" type="button" class="btn btn-ghost">ข้ามขั้นตอนนี้</button>' : ''}
-          <button id="onb-next" type="button" class="btn btn-primary">${currentStep === ONBOARDING_STEP_COUNT ? 'เริ่มใช้งาน' : 'ถัดไป'}</button>
+          <button id="onb-next" type="button" class="btn btn-primary">${currentStep === ONBOARDING_STEP_COUNT ? `${iconSvg('check', { size: 15 })} เริ่มใช้งาน` : `ถัดไป ${iconSvg('arrow-right', { size: 15 })}`}</button>
         </div>
       </div>
     </section>

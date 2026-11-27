@@ -2,7 +2,7 @@ import { getDocs, writeBatch } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { guardPreviewWrite } from './preview.js';
-import { $, esc, localDateStr, downloadFile, toast } from './util.js';
+import { $, esc, localDateStr, downloadFile, toast, confirmDialog } from './util.js';
 import { SANITIZERS, COLLECTION_LABELS, docIdFor, isSensitivePushSettingsDoc, isLegacyExpenseMonthDoc } from './schema.js';
 import { iconSvg } from './icons.js';
 
@@ -169,7 +169,7 @@ async function readFile(file, el) {
       <label class="flex items-center gap-2 min-h-[44px] text-xs cursor-pointer"><input type="radio" class="w-4 h-4 accent-brand shrink-0" name="bk-mode" value="skip" checked><span>เพิ่มเฉพาะรายการใหม่ (แนะนำ — ไม่ทับของเดิม)</span></label>
       <label class="flex items-center gap-2 min-h-[44px] text-xs cursor-pointer"><input type="radio" class="w-4 h-4 accent-brand shrink-0" name="bk-mode" value="overwrite"><span>เขียนทับรายการที่มีอยู่ด้วยข้อมูลในไฟล์</span></label>
       <p class="text-xs text-slate-500">จะนำเข้าเฉพาะหมวดที่ติ๊กไว้ด้านบน</p>
-      <button id="bk-go" class="btn btn-primary">เริ่มกู้คืน</button>`;
+      <button id="bk-go" class="btn btn-primary">${iconSvg('upload', { size: 15 })} เริ่มกู้คืน</button>`;
     $('#bk-go', box).addEventListener('click', () => restore(el, box));
   } catch (e) { parsed = null; box.innerHTML = `<p class="text-rose-600">${esc(e.message)}</p>`; }
 }
@@ -180,7 +180,14 @@ async function restore(el, box) {
   const cols = selected(el);
   const rows = filterRestoreRows(parsed, cols, mode);
   if (!rows.length) return toast('ไม่มีรายการที่ต้องนำเข้า');
-  if (!confirm(`นำเข้า ${rows.length} รายการ${mode === 'overwrite' ? ' (รวมเขียนทับของเดิม)' : ''} ยืนยันหรือไม่?`)) return;
+  const ok = await confirmDialog({
+    title: 'ยืนยันการกู้คืนข้อมูล?',
+    message: `นำเข้า ${rows.length} รายการ${mode === 'overwrite' ? ' (รวมเขียนทับของเดิม)' : ''} ยืนยันหรือไม่?`,
+    confirmText: mode === 'overwrite' ? 'กู้คืนและเขียนทับ' : 'เริ่มกู้คืน',
+    cancelText: 'ยกเลิก',
+    danger: mode === 'overwrite'
+  });
+  if (!ok) return;
   try {
     await commitRestoreRows(state.uid, rows);
     toast(`กู้คืนสำเร็จ ${rows.length} รายการ`);

@@ -6,6 +6,7 @@ import {
   matchingDayPreset,
   moveRoutineOccurrence,
   routineAppliesToDate,
+  shiftDateByWeeks,
   skipRoutineOccurrence,
   validateRoutineDraft
 } from './planner.js';
@@ -135,5 +136,11 @@ describe('planner routine emoji and frequent-recent helpers', () => {
     expect(skipped.planner.moves).toEqual([]);
     expect(skipped.planner.skips).toEqual([{ routineId: 'r1', date: '2026-11-23' }]);
     expect(skipped.planner.doneMap['2026-11-24']).toBeUndefined();
+  });
+
+  it('shifts dates cleanly by whole weeks across month boundaries for desktop planner navigation', () => {
+    expect(shiftDateByWeeks('2026-11-26', -1)).toBe('2026-11-19');
+    expect(shiftDateByWeeks('2026-11-26', 1)).toBe('2026-12-03');
+    expect(shiftDateByWeeks('2026-11-26', 0)).toBe('2026-11-26');
   });
 });

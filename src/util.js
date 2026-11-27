@@ -75,12 +75,70 @@ export const csvCell = v => {
 // BOM ให้ Excel อ่านภาษาไทย (UTF-8) ถูกต้อง
 export function toCsv(rows) { return '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'); }
 
+const TOAST_DURATION_MS = 3200;
+const TOAST_MAX_VISIBLE = 4;
+const TOAST_STACK_GAP = 8;
+const liveToasts = [];
+const toastTimers = new WeakMap();
+
+function pruneLiveToasts() {
+  for (let i = liveToasts.length - 1; i >= 0; i--) {
+    const node = liveToasts[i];
+    if (!node || node._tmDismissed || node.isConnected === false) {
+      const tid = toastTimers.get(node);
+      if (tid) clearTimeout(tid);
+      toastTimers.delete(node);
+      liveToasts.splice(i, 1);
+    }
+  }
+}
+
+function reflowToasts() {
+  pruneLiveToasts();
+  let offset = 0;
+  for (let i = liveToasts.length - 1; i >= 0; i--) {
+    const node = liveToasts[i];
+    if (node.style?.setProperty) node.style.setProperty('--toast-offset', `${offset}px`);
+    if (node.dataset) node.dataset.toastIndex = String(liveToasts.length - 1 - i);
+    const rectH = typeof node.getBoundingClientRect === 'function'
+      ? Number(node.getBoundingClientRect()?.height) || 0
+      : 0;
+    const height = Number(node.offsetHeight) || rectH || 44;
+    offset += Math.round(height) + TOAST_STACK_GAP;
+  }
+}
+
+function dismissToast(el, { skipReflow = false } = {}) {
+  if (!el || el._tmDismissed) return;
+  el._tmDismissed = true;
+  const tid = toastTimers.get(el);
+  if (tid) clearTimeout(tid);
+  toastTimers.delete(el);
+  const idx = liveToasts.indexOf(el);
+  if (idx >= 0) liveToasts.splice(idx, 1);
+  if (typeof el.remove === 'function') el.remove();
+  if (!skipReflow) reflowToasts();
+}
+
 export function toast(msg, kind = 'ok') {
+  pruneLiveToasts();
+  while (liveToasts.length >= TOAST_MAX_VISIBLE) {
+    dismissToast(liveToasts[0], { skipReflow: true });
+  }
   const el = document.createElement('div');
-  el.className = `toast fixed left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-full text-sm shadow-lg max-w-[90vw] text-center ${kind === 'err' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white'}`;
+  const toneClass = kind === 'err'
+    ? 'bg-rose-600 text-white'
+    : (kind === 'warn' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-white');
+  el.className = `toast fixed left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-full text-sm shadow-lg max-w-[90vw] text-center ${toneClass}`;
+  el.setAttribute('data-tm-toast', '');
+  el.setAttribute('role', kind === 'err' ? 'alert' : 'status');
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+  liveToasts.push(el);
+  reflowToasts();
+  const timerId = setTimeout(() => dismissToast(el), TOAST_DURATION_MS);
+  toastTimers.set(el, timerId);
+  return el;
 }
 
 export function trapFocus(el, { autoFocus = true } = {}) {
@@ -184,7 +242,7 @@ export function confirmDialog({
       <div class="space-y-4">
         <div class="space-y-1.5">
           <h3 class="text-base font-bold text-slate-800">${esc(title)}</h3>
-          ${message ? `<p class="text-sm text-slate-600 leading-relaxed break-words">${esc(message)}</p>` : ''}
+          ${message ? `<p class="text-sm text-slate-600 leading-relaxed break-words whitespace-pre-line">${esc(message)}</p>` : ''}
         </div>
         <div class="flex flex-wrap justify-end gap-2 pt-1">
           <button type="button" data-confirm-no class="btn btn-ghost min-h-[44px]">${esc(cancelText)}</button>

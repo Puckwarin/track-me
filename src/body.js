@@ -1,7 +1,7 @@
 import { addDoc, deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, parseLocal, numField, openModal, round1, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, parseLocal, numField, openModal, round1, toast, confirmDialog } from './util.js';
 import { parseZeppCsv, mergeZeppDayRecords } from './zeppParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
@@ -77,17 +77,17 @@ export function mountBody(el) {
       <div class="card space-y-4">
         <h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('body', { size: 19, className: 'text-brand' })}<span>บันทึกน้ำหนัก & สัดส่วน</span></h2>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div><label class="lbl">วันที่</label><input type="date" id="b-date" class="input"></div>
-          <div><label class="lbl">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
-          <div><label class="lbl">รอบอก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-bust" class="input"></div>
-          <div><label class="lbl">รอบเอว (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-waist" class="input"></div>
-          <div><label class="lbl">รอบสะโพก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-hip" class="input"></div>
-          <div><label class="lbl">รอบแขน (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-arm" class="input"></div>
-          <div><label class="lbl">รอบขา (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-thigh" class="input"></div>
-          <div class="sm:col-span-2"><label class="lbl">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
+          <div><label class="lbl" for="b-date">วันที่</label><input type="date" id="b-date" class="input"></div>
+          <div><label class="lbl" for="b-weight">น้ำหนัก (กก.)</label><input type="number" step="0.1" inputmode="decimal" id="b-weight" class="input"></div>
+          <div><label class="lbl" for="b-bust">รอบอก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-bust" class="input"></div>
+          <div><label class="lbl" for="b-waist">รอบเอว (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-waist" class="input"></div>
+          <div><label class="lbl" for="b-hip">รอบสะโพก (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-hip" class="input"></div>
+          <div><label class="lbl" for="b-arm">รอบแขน (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-arm" class="input"></div>
+          <div><label class="lbl" for="b-thigh">รอบขา (ซม.)</label><input type="number" step="0.1" inputmode="decimal" id="b-thigh" class="input"></div>
+          <div class="sm:col-span-2"><label class="lbl" for="b-note">หมายเหตุ</label><input id="b-note" class="input" placeholder="ไม่บังคับ"></div>
         </div>
         <p class="text-xs text-slate-500">กรอกเฉพาะค่าที่วัดได้ในวันนั้น เช่น ชั่งน้ำหนักอย่างเดียวก็ได้</p>
-        <div class="flex justify-end"><button id="b-save" class="btn btn-sky">${iconSvg('plus', { size: 15 })} บันทึก</button></div>
+        <div class="flex justify-end"><button id="b-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button></div>
       </div>
 
       <div class="card space-y-3">
@@ -177,13 +177,22 @@ export function mountBody(el) {
     activeSleepStepsMetric = b.dataset.ssMetric;
     renderSleepStepsChart();
   });
-  $('#b-history-wrap', root).addEventListener('click', e => {
+  $('#b-history-wrap', root).addEventListener('click', async e => {
     const b = e.target.closest('[data-del]');
     if (!b) return;
     if (guardPreviewWrite('การลบข้อมูลสัดส่วน')) return;
-    if (confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.del)).catch(err => toast(err.message, 'err'));
+    const delId = b.dataset.del;
+    const ok = await confirmDialog({
+      title: 'ลบข้อมูลน้ำหนักและสัดส่วน?',
+      message: 'ต้องการลบรายการนี้ใช่หรือไม่?',
+      confirmText: 'ลบรายการ',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    deleteDoc(userDoc(state.uid, 'body_records', delId)).catch(err => toast(err.message, 'err'));
   });
-  $('#bz-list', root).addEventListener('click', e => {
+  $('#bz-list', root).addEventListener('click', async e => {
     const editBtn = e.target.closest('[data-ss-edit]');
     if (editBtn) {
       const rec = (state.body || []).find(x => x.id === editBtn.dataset.ssEdit);
@@ -193,7 +202,16 @@ export function mountBody(el) {
     const b = e.target.closest('[data-ss-del]');
     if (!b) return;
     if (guardPreviewWrite('การลบข้อมูลการนอน/ก้าวเดิน')) return;
-    if (confirm('ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?')) deleteDoc(userDoc(state.uid, 'body_records', b.dataset.ssDel)).catch(err => toast(err.message, 'err'));
+    const delId = b.dataset.ssDel;
+    const ok = await confirmDialog({
+      title: 'ลบข้อมูลการนอน/ก้าวเดิน?',
+      message: 'ต้องการลบข้อมูลการนอน/ก้าวเดินวันนี้ใช่หรือไม่?',
+      confirmText: 'ลบข้อมูล',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    deleteDoc(userDoc(state.uid, 'body_records', delId)).catch(err => toast(err.message, 'err'));
   });
   setBodyTab('body');
   render();
@@ -624,7 +642,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
     <div id="zepp-preview-box">
       <div class="flex justify-between items-center mb-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('upload', { size: 17, className: 'text-brand' })}<span>ตรวจสอบข้อมูลก่อนนำเข้า (${items.length} วัน)</span></h3>
-        <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+        <button type="button" data-close class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <p class="text-xs text-slate-500 mb-3">ติ๊กเลือกวันและตรวจดูตัวเลข (ถ้ามีข้อมูล Zepp ของวันนั้นอยู่แล้ว ระบบจะรวม/อัปเดตให้อัตโนมัติ)</p>
       <div class="space-y-2 max-h-72 overflow-y-auto pr-0.5">
@@ -633,7 +651,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
             <input type="checkbox" data-zp-chk="${idx}" class="mt-0.5" checked>
             <div class="flex-1 min-w-0 space-y-1">
               <div class="flex flex-wrap items-center gap-2">
-                <input type="date" data-zp-date="${idx}" value="${esc(it.date)}" class="input !py-1 !px-2 text-xs w-auto">
+                <input type="date" data-zp-date="${idx}" aria-label="วันที่สำหรับข้อมูลวันที่ ${idx + 1}" value="${esc(it.date)}" class="input !px-2 text-xs w-auto">
                 <span class="text-[11px] text-slate-500">· ${esc(sourceBadgeLabel(it.source))}</span>
               </div>
               <div class="flex flex-wrap gap-3 text-slate-700 tabular-nums">
@@ -648,7 +666,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
       </div>
       <div class="flex justify-end gap-2 mt-4">
         <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
-        <button type="button" id="zp-confirm" class="btn btn-primary text-xs">ยืนยันนำเข้า (${items.length})</button>
+        <button type="button" id="zp-confirm" class="btn btn-primary text-xs">${iconSvg('check', { size: 15 })} ยืนยันนำเข้า (${items.length})</button>
       </div>
     </div>
   `);
@@ -660,7 +678,7 @@ function openZeppImportPreviewModal(records, defaultSource = 'zepp_csv') {
     const count = items.filter(x => x.checked).length;
     const btn = $('#zp-confirm', box);
     if (btn) {
-      btn.textContent = `ยืนยันนำเข้า (${count})`;
+      btn.innerHTML = `${iconSvg('check', { size: 15 })} ยืนยันนำเข้า (${count})`;
       btn.disabled = count === 0;
     }
   };
@@ -743,7 +761,7 @@ function openSleepStepsModal(prefill = null) {
     <div id="bz-manual-box" class="space-y-4">
       <div class="flex items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('sleep', { size: 18, className: 'text-brand' })}<span>บันทึกการนอน & ก้าวเดิน</span></h3>
-        <button type="button" data-close class="icon-btn !w-11 !h-11 text-slate-400" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+        <button type="button" data-close class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div class="col-span-2 sm:col-span-1"><label class="lbl" for="bz-date">วันที่</label><input type="date" id="bz-date" class="input" value="${esc(initDate)}"></div>
@@ -764,7 +782,7 @@ function openSleepStepsModal(prefill = null) {
       </div>
       <div class="flex justify-end gap-2 pt-1">
         <button type="button" data-close class="btn btn-ghost text-xs">ยกเลิก</button>
-        <button type="button" id="bz-save" class="btn btn-primary text-xs">${iconSvg('plus', { size: 15 })} บันทึก</button>
+        <button type="button" id="bz-save" class="btn btn-primary text-xs">${iconSvg('check', { size: 15 })} บันทึก</button>
       </div>
     </div>
   `);

@@ -24,7 +24,9 @@ export function setVapidPublicKey(key) {
 }
 
 export function isIosDevice() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const ua = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+  return /iphone|ipad|ipod/i.test(ua) || (/macintel/i.test(platform) && (navigator.maxTouchPoints || 0) > 1);
 }
 
 export function isStandalonePwa() {

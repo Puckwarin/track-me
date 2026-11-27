@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { getPreviewRecordsInRange, isPreviewMode } from './preview.js';
 import { $, esc, localDateStr, toNum, round1 } from './util.js';
 import { iconSvg } from './icons.js';
-import { bindChartInspector } from './ui.js';
+import { bindChartInspector, detailsToggleHtml } from './ui.js';
 import { computeWorkoutTotalMinutes, effortLevelToSessionRpe, formatIntensityBreakdown } from './workoutConstants.js';
 
 let root, dashboardData = null, loading = false;
@@ -325,10 +325,10 @@ function render(monthCount) {
       <article class="db-chart-card">${chartHead('expense', 'text-rose-500 shrink-0', 'ค่าใช้จ่ายรายเดือน (บาท)', financeMeta)}${barChart(d, 'expenseTotal', expenseColor, 'บาท', 0)}</article>
     </div>
 
-    <details class="card space-y-3" open>
-      <summary class="cursor-pointer list-none font-bold text-slate-800 text-sm flex items-center justify-between gap-2">
-        <span class="inline-flex items-center gap-2">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน (${monthCount} เดือน)</span></span>
-        <span class="text-xs font-normal text-slate-500">แตะเพื่อย่อ/ขยาย</span>
+    <details class="tm-details card space-y-3" open>
+      <summary class="tm-details-summary cursor-pointer list-none font-bold text-slate-800 text-sm">
+        <span class="inline-flex items-center gap-2 min-w-0">${iconSvg('table', { size: 15, className: 'text-slate-600 shrink-0' })}<span>ตารางเปรียบเทียบรายเดือน (${monthCount} เดือน)</span></span>
+        ${detailsToggleHtml()}
       </summary>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">

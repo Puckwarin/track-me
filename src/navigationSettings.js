@@ -1,6 +1,6 @@
 import { GROUPS } from './categories.js';
 import { getAllNavigationTabs, readNavigationPreferences, saveNavigationPreferences, isProtectedNavigationTab } from './navigation.js';
-import { $, toast } from './util.js';
+import { $, toast, confirmDialog } from './util.js';
 import { state } from './state.js';
 import { iconSvg } from './icons.js';
 
@@ -87,7 +87,7 @@ export function mountNavigationSettings(root) {
     }
   });
 
-  root.addEventListener('click', event => {
+  root.addEventListener('click', async event => {
     const move = event.target.closest('[data-nav-move]');
     if (move) {
       const { navMove, tab, direction } = move.dataset;
@@ -100,7 +100,14 @@ export function mountNavigationSettings(root) {
       return;
     }
     if (event.target.closest('#st-nav-reset')) {
-      if (!window.confirm('รีเซ็ตทางลัด ลำดับเมนู และหน้าเริ่มต้นเป็นค่าเริ่มต้นหรือไม่? ข้อมูลอื่นของบัญชีจะไม่เปลี่ยนแปลง')) return;
+      const ok = await confirmDialog({
+        title: 'รีเซ็ตเมนูและทางลัด?',
+        message: 'รีเซ็ตทางลัด ลำดับเมนู และหน้าเริ่มต้นเป็นค่าเริ่มต้นหรือไม่? ข้อมูลอื่นของบัญชีจะไม่เปลี่ยนแปลง',
+        confirmText: 'รีเซ็ตเมนู',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
       preferences = readNavigationPreferences(null);
       preferences.customized = false;
       try {

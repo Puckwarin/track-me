@@ -2,7 +2,7 @@ import { collection, getDocs, query, where, writeBatch, deleteDoc, doc } from 'f
 import { db, userDoc } from './firebase.js';
 import { state } from './state.js';
 import { guardPreviewWrite } from './preview.js';
-import { $, esc, toast } from './util.js';
+import { $, esc, toast, confirmDialog } from './util.js';
 import { SANITIZERS } from './schema.js';
 import { iconSvg } from './icons.js';
 
@@ -15,7 +15,7 @@ export function mountMigrate(el) {
   el.innerHTML = `
     <h3 class="font-bold text-slate-800 flex items-center gap-2">${iconSvg('truck', { size: 17, className: 'text-brand shrink-0' })}<span>ย้ายข้อมูลจาก Room Code เดิม</span></h3>
     <p class="text-xs text-slate-500">ถ้าเคยบันทึกข้อมูลไว้ก่อนมีระบบล็อกอิน ใส่รหัสห้องเดิมเพื่อย้ายข้อมูลเข้าบัญชีนี้ (ย้ายซ้ำได้ ไม่เกิดข้อมูลซ้ำ) — ต้องใช้ Firestore Rules ชุดย้ายข้อมูล (firestore.rules.migration) ก่อน</p>
-    <div class="flex gap-2"><input id="mg-room" class="input" placeholder="รหัสห้องเดิม" value="${esc(localStorage.getItem('room_code') || '')}"><button id="mg-scan" class="btn btn-soft whitespace-nowrap">ตรวจสอบ</button></div>
+    <div class="flex gap-2"><input id="mg-room" class="input" placeholder="รหัสห้องเดิม" value="${esc(localStorage.getItem('room_code') || '')}"><button id="mg-scan" class="btn btn-soft whitespace-nowrap">${iconSvg('search', { size: 15 })} ตรวจสอบ</button></div>
     <div id="mg-out" class="text-sm space-y-2"></div>`;
   $('#mg-scan', el).addEventListener('click', () => scan(el));
 }
@@ -31,8 +31,8 @@ async function scan(el) {
     const total = Object.values(found).reduce((a, l) => a + l.length, 0);
     if (!total) { out.textContent = 'ไม่พบข้อมูลในห้องนี้'; return; }
     out.innerHTML = `<p>พบ: อาหาร ${found.food_records.length} · ประจำเดือน ${found.period_records.length} · น้ำหนัก ${found.body_records.length} รายการ</p>
-      <button id="mg-go" class="btn btn-primary">ย้ายเข้าบัญชีนี้</button>
-      <button id="mg-del" class="btn btn-ghost hidden">ลบข้อมูลเดิมในห้องนี้ (หลังตรวจว่าย้ายครบแล้ว)</button>`;
+      <button id="mg-go" class="btn btn-primary">${iconSvg('check', { size: 15 })} ย้ายเข้าบัญชีนี้</button>
+      <button id="mg-del" class="btn btn-ghost hidden">${iconSvg('trash', { size: 15 })} ลบข้อมูลเดิมในห้องนี้ (หลังตรวจว่าย้ายครบแล้ว)</button>`;
     $('#mg-go', out).addEventListener('click', () => run(out));
     $('#mg-del', out).addEventListener('click', () => removeOld(out));
   } catch (e) {
@@ -61,7 +61,14 @@ async function run(out) {
 }
 
 async function removeOld(out) {
-  if (!confirm('ลบข้อมูลเดิมในห้องนี้ถาวร? (ข้อมูลที่ย้ายมาแล้วในบัญชีนี้จะไม่ถูกลบ) ควรสำรองข้อมูลเป็นไฟล์ก่อน')) return;
+  const ok = await confirmDialog({
+    title: 'ลบข้อมูลเดิมถาวร?',
+    message: 'ลบข้อมูลเดิมในห้องนี้ถาวร? (ข้อมูลที่ย้ายมาแล้วในบัญชีนี้จะไม่ถูกลบ) ควรสำรองข้อมูลเป็นไฟล์ก่อน',
+    confirmText: 'ลบข้อมูลเดิมถาวร',
+    cancelText: 'ยกเลิก',
+    danger: true
+  });
+  if (!ok) return;
   try {
     for (const c of OLD) for (const d of found[c]) await deleteDoc(doc(db, c, d.id));
     toast('ลบข้อมูลเดิมแล้ว'); out.innerHTML = 'ลบข้อมูลในห้องเดิมเรียบร้อย';

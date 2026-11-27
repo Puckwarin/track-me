@@ -1,13 +1,13 @@
 import { addDoc, setDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, toast, openModal } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, toast, openModal, confirmDialog } from './util.js';
 import { watch } from './sync.js';
 import { readPetFoodLabel, explainGeminiError, runImageBatch, formatImageProgress } from './nutrition.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindChartInspector, bindSwipeRows } from './ui.js';
+import { bindChartInspector, bindSwipeRows, detailsToggleHtml } from './ui.js';
 
 const PET_SYMPTOMS = [
   ['appetite', 'เบื่ออาหาร / กินน้อย'],
@@ -54,7 +54,7 @@ export function mountCare(el) {
   root.innerHTML = `
   <section class="card space-y-3 lg:col-span-2">
     <header class="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 class="text-lg font-bold text-slate-800">🐾 Pet Health & Care</h2><p class="text-xs text-slate-500">ข้อมูลสุขภาพ น้ำหนัก อาหาร การแพ้ และผลเลือดของน้อง</p></div>
+      <div><h2 class="text-lg font-bold text-slate-800 inline-flex items-center gap-2">${iconSvg('care', { size: 18, className: 'text-brand shrink-0' })}<span>Pet Health &amp; Care</span></h2><p class="text-xs text-slate-500">ข้อมูลสุขภาพ น้ำหนัก อาหาร การแพ้ และผลเลือดของน้อง</p></div>
       <span class="text-xs text-slate-600 bg-lav-soft/70 px-2.5 py-1 rounded-lg">📌 ตารางนัด/วัคซีนอยู่ที่เมนู <b>บันทึกเตือน</b></span>
     </header>
     <div id="pet-profile" class="rounded-xl bg-amber-50 border border-amber-200/70 p-3 text-sm tabular-nums text-slate-800"></div>
@@ -67,8 +67,8 @@ export function mountCare(el) {
 
   <div id="care-panel-care" class="lg:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
     <section class="card space-y-4">
-      <details id="pet-profile-edit" class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3" open>
-        <summary class="cursor-pointer text-xs font-semibold text-slate-700 select-none">ข้อมูลน้องและบันทึกน้ำหนัก</summary>
+      <details id="pet-profile-edit" class="tm-details rounded-2xl border border-slate-200 bg-slate-50/70 p-3" open>
+        <summary class="tm-details-summary cursor-pointer text-xs font-semibold text-slate-700 select-none"><span>ข้อมูลน้องและบันทึกน้ำหนัก</span>${detailsToggleHtml({ compact: true })}</summary>
         <div class="mt-3 space-y-3">
           <div class="grid sm:grid-cols-2 gap-3">
             <div><label class="lbl" for="pet-name">ชื่อน้อง *</label><input id="pet-name" class="input" placeholder="ชื่อน้อง"></div>
@@ -77,7 +77,7 @@ export function mountCare(el) {
             <div><label class="lbl" for="pet-weight">น้ำหนัก (kg) *</label><input id="pet-weight" type="number" min="0.1" step="0.1" class="input" placeholder="เช่น 4.5"></div>
             <div class="sm:col-span-2"><label class="lbl" for="pet-life">ช่วงวัยและกิจกรรม</label><select id="pet-life" class="input"><option value="neutered">โตเต็มวัย ทำหมัน</option><option value="intact">โตเต็มวัย ยังไม่ทำหมัน</option><option value="inactive">กิจกรรมน้อย/น้ำหนักขึ้นง่าย</option><option value="puppy-young">ลูกสุนัขอายุต่ำกว่า 4 เดือน</option><option value="puppy-old">ลูกสุนัข 4 เดือนขึ้นไป</option></select></div>
           </div>
-          <button id="pet-save" class="btn btn-primary">บันทึก</button>
+          <button id="pet-save" class="btn btn-primary">${iconSvg('save', { size: 15 })} บันทึก</button>
         </div>
       </details>
       <section id="pet-daily-care" class="rounded-2xl border border-amber-200 bg-amber-50/50 p-3 space-y-3" aria-labelledby="pet-daily-care-title">
@@ -108,7 +108,7 @@ export function mountCare(el) {
         <div><label class="lbl" for="pet-food-allergy">สถานะการแพ้</label><select id="pet-food-allergy" class="input"><option value="unknown">ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select></div>
         <div><label class="lbl" for="pet-food-notes">อาการ / รายละเอียด</label><input id="pet-food-notes" class="input" placeholder="เช่น คราบน้ำตา, โปรตีน 28%"></div>
       </div>
-      <button id="pet-food-save" class="btn btn-soft">บันทึก</button>
+      <button id="pet-food-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึก</button>
       <p id="pet-food-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อลบ</p>
       <div id="pet-food-list" class="tm-swipe-list tm-swipe-list--cards text-sm"></div>
       <p class="text-xs text-slate-500">ค่าพลังงานเป็นเพียงจุดเริ่มต้นโดยประมาณ ควรปรับตามสภาพร่างกายและคำแนะนำสัตวแพทย์</p>
@@ -119,7 +119,7 @@ export function mountCare(el) {
     <section id="pet-sx-card" class="card space-y-4 lg:col-span-3">
       <header class="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 class="text-base sm:text-lg font-bold text-slate-800">🐶 บันทึกอาการน้องหมา</h3>
+          <h3 class="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">${iconSvg('care', { size: 18, className: 'text-brand shrink-0' })}<span>บันทึกอาการน้องหมา</span></h3>
           <p class="text-xs text-slate-500">ติดตามความผิดปกติรายวัน เช่น กินอาหาร การขับถ่าย ซึม คัน อาเจียน และอุณหภูมิ</p>
         </div>
       </header>
@@ -130,8 +130,8 @@ export function mountCare(el) {
       <div id="pet-sx-grid" class="grid sm:grid-cols-2 gap-2.5"></div>
       <div><label class="lbl" for="pet-sx-note">รายละเอียดเพิ่มเติม</label><input id="pet-sx-note" class="input" placeholder="เช่น ถ่ายเหลว 2 รอบ, กินยาแล้วดีขึ้น, คันบริเวณหู"></div>
       <div class="flex flex-wrap justify-end gap-2">
-        <button type="button" id="pet-sx-cancel" class="btn btn-ghost hidden">ยกเลิก</button>
-        <button type="button" id="pet-sx-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกอาการ</button>
+        <button type="button" id="pet-sx-cancel" class="btn btn-ghost hidden">${iconSvg('close', { size: 15 })} ยกเลิก</button>
+        <button type="button" id="pet-sx-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกอาการ</button>
       </div>
     </section>
     <section class="card space-y-2.5 lg:col-span-2">
@@ -293,8 +293,8 @@ function openPetFoodScanModal(results, errors) {
 
   const m = openModal(`
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-lg text-slate-800">🐾 ตรวจสอบผลสแกนซองอาหาร (${prepared.length} รูป)</h3>
-      <button data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">${iconSvg('care', { size: 18, className: 'text-brand shrink-0' })}<span>ตรวจสอบผลสแกนซองอาหาร (${prepared.length} รูป)</span></h3>
+      <button type="button" data-close class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <p class="text-xs text-green-700 font-semibold bg-ok-soft rounded-xl px-3 py-2 mb-3">
       ✓ ประมวลผลครบ ${prepared.length} รูป${errors.length ? ` · ไม่สำเร็จ ${errors.length} รูป` : ''} (ไม่เก็บรูปภาพลงระบบ)
@@ -308,20 +308,20 @@ function openPetFoodScanModal(results, errors) {
             <span class="flex items-center gap-2"><input type="checkbox" class="pfs-chk" checked> รายการที่ ${i + 1} (${esc(item.fileName)})</span>
           </label>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div class="sm:col-span-2"><label class="lbl">ชื่ออาหาร/ขนม *</label><input class="input pfs-name text-xs" value="${esc(item.name)}"></div>
-            <div><label class="lbl">kcal / 100g</label><input type="number" min="0" step="1" class="input pfs-kcal text-xs" value="${esc(item.kcalPer100)}" placeholder="ถ้ามี"></div>
+            <div class="sm:col-span-2"><label class="lbl" for="pfs-name-${i}">ชื่ออาหาร/ขนม *</label><input id="pfs-name-${i}" class="input pfs-name text-xs" value="${esc(item.name)}"></div>
+            <div><label class="lbl" for="pfs-kcal-${i}">kcal / 100g</label><input id="pfs-kcal-${i}" type="number" min="0" step="1" class="input pfs-kcal text-xs" value="${esc(item.kcalPer100)}" placeholder="ถ้ามี"></div>
           </div>
           <div class="grid grid-cols-2 gap-2">
-            <div><label class="lbl">ปริมาณที่กิน (g) *</label><input type="number" min="0" step="1" class="input pfs-grams text-xs" placeholder="เช่น 50"></div>
-            <div><label class="lbl">สถานะการแพ้</label><select class="input pfs-allergy text-xs"><option value="unknown">ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select></div>
+            <div><label class="lbl" for="pfs-grams-${i}">ปริมาณที่กิน (g) *</label><input id="pfs-grams-${i}" type="number" min="0" step="1" class="input pfs-grams text-xs" placeholder="เช่น 50"></div>
+            <div><label class="lbl" for="pfs-allergy-${i}">สถานะการแพ้</label><select id="pfs-allergy-${i}" class="input pfs-allergy text-xs"><option value="unknown">ยังไม่ทราบ</option><option value="no">ไม่พบอาการแพ้</option><option value="yes">สงสัยว่าแพ้</option></select></div>
           </div>
-          <div><label class="lbl">สารอาหาร / หมายเหตุ</label><input class="input pfs-notes text-xs" value="${esc(item.notes)}" placeholder="โปรตีน ไขมัน ไฟเบอร์..."></div>
+          <div><label class="lbl" for="pfs-notes-${i}">สารอาหาร / หมายเหตุ</label><input id="pfs-notes-${i}" class="input pfs-notes text-xs" value="${esc(item.notes)}" placeholder="โปรตีน ไขมัน ไฟเบอร์..."></div>
         </div>`).join('')}
     </div>
     <div class="flex flex-wrap justify-end gap-2 mt-4">
       <button type="button" data-close class="btn btn-ghost">ยกเลิก</button>
-      <button type="button" id="pfs-fill" class="btn btn-soft text-xs">ใส่ฟอร์ม</button>
-      <button type="button" id="pfs-save" class="btn btn-primary text-xs">${iconSvg('check', { size: 14 })} บันทึกที่เลือก</button>
+      <button type="button" id="pfs-fill" class="btn btn-soft btn-sm min-h-[44px]">ใส่ฟอร์ม</button>
+      <button type="button" id="pfs-save" class="btn btn-primary btn-sm min-h-[44px]">${iconSvg('check', { size: 14 })} บันทึกที่เลือก</button>
     </div>`, { wide: true });
 
   $('#pfs-fill', m.el).addEventListener('click', () => {
@@ -455,7 +455,7 @@ function renderPetFoodPresets() {
   `;
 }
 
-async function savePetDailyCare(task) {
+export async function savePetDailyCare(task) {
   if (guardPreviewWrite('การบันทึกกิจวัตรดูแลสัตว์เลี้ยง')) return;
   const pet = (state.petProfiles || [])[0];
   if (!pet) return toast('บันทึกโปรไฟล์น้องก่อนเริ่มบันทึกกิจวัตรค่ะ', 'err');
@@ -465,19 +465,37 @@ async function savePetDailyCare(task) {
   const existing = (state.petCare || []).find(record => record.petId === pet.id && record.date === today && record.type === task.label && record.recordKind !== 'symptom');
   if (existing?.done) return toast(`บันทึก${task.label}วันนี้แล้ว`);
 
+  const prevPetCare = Array.isArray(state.petCare) ? [...state.petCare] : [];
+  const optimisticNow = new Date();
+  const tempId = existing ? existing.id : `optimistic:${pendingKey}:${Date.now()}`;
+  const newRecord = existing
+    ? null
+    : { petId: pet.id, category: 'สัตว์เลี้ยง', type: task.label, date: today, nextDate: null, done: true, createdAt: optimisticNow };
+
   pendingPetCare.add(pendingKey);
+  if (existing) {
+    state.petCare = prevPetCare.map(record => record.id === existing.id
+      ? { ...record, done: true, dismissedFor: null, updatedAt: optimisticNow }
+      : record);
+  } else {
+    state.petCare = [...prevPetCare, { ...newRecord, id: tempId }];
+  }
   renderPetDailyCare();
+  toast(`บันทึก${task.label}แล้ว`);
+
   try {
     if (existing) {
-      await updateDoc(userDoc(state.uid, 'pet_care_records', existing.id), { done: true, dismissedFor: null, updatedAt: new Date() });
-      state.petCare = (state.petCare || []).map(record => record.id === existing.id ? { ...record, done: true, dismissedFor: null, updatedAt: new Date() } : record);
+      await updateDoc(userDoc(state.uid, 'pet_care_records', existing.id), { done: true, dismissedFor: null, updatedAt: optimisticNow });
     } else {
-      const record = { petId: pet.id, category: 'สัตว์เลี้ยง', type: task.label, date: today, nextDate: null, done: true, createdAt: new Date() };
-      const saved = await addDoc(userCol(state.uid, 'pet_care_records'), record);
-      state.petCare = [...(state.petCare || []), { ...record, id: saved.id }];
+      const saved = await addDoc(userCol(state.uid, 'pet_care_records'), newRecord);
+      const current = state.petCare || [];
+      const hasSaved = current.some(record => record.id === saved.id);
+      state.petCare = hasSaved
+        ? current.filter(record => record.id !== tempId)
+        : current.map(record => (record.id === tempId ? { ...record, id: saved.id } : record));
     }
-    toast(`บันทึก${task.label}แล้ว`);
   } catch (error) {
+    state.petCare = prevPetCare;
     toast('บันทึกไม่สำเร็จ: ' + error.message, 'err');
   } finally {
     pendingPetCare.delete(pendingKey);
@@ -531,11 +549,20 @@ function renderPetFoods() {
     </div>
   </article>`).join('') || '<p class="text-xs text-slate-500">ยังไม่มีบันทึกอาหาร</p>';
   bindSwipeRows(foodListEl);
-  foodListEl.onclick = event => {
+  foodListEl.onclick = async event => {
     const button = event.target.closest('[data-del-pet-food]');
     if (!button) return;
     if (guardPreviewWrite('การลบบันทึกอาหารสัตว์เลี้ยง')) return;
-    if (confirm('ลบบันทึกอาหารน้องนี้?')) deleteDoc(userDoc(state.uid, 'pet_food_records', button.dataset.delPetFood)).catch(error => toast(error.message, 'err'));
+    const delId = button.dataset.delPetFood;
+    const ok = await confirmDialog({
+      title: 'ลบบันทึกอาหารสัตว์เลี้ยง?',
+      message: 'ลบบันทึกอาหารน้องนี้?',
+      confirmText: 'ลบบันทึก',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    deleteDoc(userDoc(state.uid, 'pet_food_records', delId)).catch(error => toast(error.message, 'err'));
   };
 }
 
@@ -562,7 +589,7 @@ function resetPetSymptomForm() {
   $r('#pet-sx-date').value = localDateStr();
   $r('#pet-sx-temp').value = '';
   $r('#pet-sx-note').value = '';
-  $r('#pet-sx-save').innerHTML = `${iconSvg('plus', { size: 15 })} บันทึกอาการ`;
+  $r('#pet-sx-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกอาการ`;
   $r('#pet-sx-cancel').classList.add('hidden');
   renderPetSymptomGrid();
 }
@@ -611,7 +638,7 @@ function savePetSymptom() {
   }
 }
 
-function onPetSymptomListClick(e) {
+async function onPetSymptomListClick(e) {
   const editBtn = e.target.closest('[data-edit-pet-sx]');
   if (editBtn) {
     const rec = (state.petCare || []).find(x => x.id === editBtn.dataset.editPetSx && x.recordKind === 'symptom');
@@ -622,7 +649,7 @@ function onPetSymptomListClick(e) {
     $r('#pet-sx-date').value = rec.date || localDateStr();
     $r('#pet-sx-temp').value = rec.value != null ? String(rec.value) : '';
     $r('#pet-sx-note').value = rec.note || '';
-    $r('#pet-sx-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึก`;
+    $r('#pet-sx-save').innerHTML = `${iconSvg('save', { size: 15 })} บันทึกการแก้ไข`;
     $r('#pet-sx-cancel').classList.remove('hidden');
     renderPetSymptomGrid();
     $r('#pet-sx-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -631,11 +658,18 @@ function onPetSymptomListClick(e) {
   const delBtn = e.target.closest('[data-del-pet-sx]');
   if (delBtn) {
     if (guardPreviewWrite('การลบบันทึกอาการสัตว์เลี้ยง')) return;
-    if (confirm('ลบบันทึกอาการน้องหมานี้?')) {
-      deleteDoc(userDoc(state.uid, 'pet_care_records', delBtn.dataset.delPetSx))
-        .catch(err => toast(err.message, 'err'));
-      if (editingSxId === delBtn.dataset.delPetSx) resetPetSymptomForm();
-    }
+    const delId = delBtn.dataset.delPetSx;
+    const ok = await confirmDialog({
+      title: 'ลบบันทึกอาการน้องหมา?',
+      message: 'ลบบันทึกอาการน้องหมานี้?',
+      confirmText: 'ลบบันทึก',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    deleteDoc(userDoc(state.uid, 'pet_care_records', delId))
+      .catch(err => toast(err.message, 'err'));
+    if (editingSxId === delId) resetPetSymptomForm();
   }
 }
 

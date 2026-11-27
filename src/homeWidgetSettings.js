@@ -1,8 +1,11 @@
 import { HOME_WIDGET_DEFS, getHomeWidgetConfig, saveHomeWidgetConfig } from './home.js';
-import { toast } from './util.js';
+import { getHomeShortcuts, readNavigationPreferences } from './navigation.js';
+import { state } from './state.js';
+import { toast, confirmDialog } from './util.js';
 import { iconSvg } from './icons.js';
 
 function render(root, config) {
+  const shortcutCount = getHomeShortcuts(readNavigationPreferences(state.uid)).length;
   root.innerHTML = `
     <div class="space-y-4">
       <div>
@@ -14,10 +17,13 @@ function render(root, config) {
           const widget = HOME_WIDGET_DEFS.find(item => item.id === id);
           if (!widget) return '';
           const hidden = config.hidden.has(id);
+          const subNote = id === 'shortcuts'
+            ? `<span class="block text-[11px] font-normal text-slate-500">${shortcutCount ? `ปักหมุดไว้ ${shortcutCount} รายการ` : 'ยังไม่ได้เลือกทางลัด · เลือกได้ที่การ์ด เมนูและทางลัด ด้านล่าง'}</span>`
+            : '';
           return `<div class="nav-pref-row" data-widget-row="${id}">
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <span class="tm-drag-handle !w-8 !min-h-[44px]" data-widget-drag="${id}" draggable="true" title="ลากเพื่อสลับลำดับ" aria-label="ลาก ${widget.label} เพื่อสลับลำดับ">${iconSvg('drag', { size: 15 })}</span>
-              <label class="nav-pref-label flex-1 cursor-pointer"><input type="checkbox" data-widget-visible="${id}" ${hidden ? '' : 'checked'}><span>${widget.label}</span></label>
+              <label class="nav-pref-label flex-1 cursor-pointer"><input type="checkbox" data-widget-visible="${id}" ${hidden ? '' : 'checked'}><span class="min-w-0">${widget.label}${subNote}</span></label>
             </div>
             <div class="nav-pref-actions">
               <button type="button" class="nav-pref-move" data-widget-move="${id}" data-direction="-1" aria-label="ย้าย ${widget.label} ขึ้น" ${index === 0 ? 'disabled' : ''}>${iconSvg('chevron-up', { size: 13 })}</button>
@@ -82,7 +88,7 @@ export function mountHomeWidgetSettings(root) {
     }
   });
 
-  root.addEventListener('click', event => {
+  root.addEventListener('click', async event => {
     const move = event.target.closest('[data-widget-move]');
     if (move) {
       const from = config.order.indexOf(move.dataset.widgetMove);
@@ -93,8 +99,15 @@ export function mountHomeWidgetSettings(root) {
       return;
     }
     if (event.target.closest('#st-home-widgets-reset')) {
-      if (!window.confirm('รีเซ็ตการแสดงผลและลำดับหน้าแรกเป็นค่าเริ่มต้นหรือไม่?')) return;
-      config = { order: HOME_WIDGET_DEFS.map(item => item.id), hidden: new Set(), pinnedShortcuts: [] };
+      const ok = await confirmDialog({
+        title: 'รีเซ็ตส่วนประกอบหน้าแรก?',
+        message: 'รีเซ็ตการแสดงผลและลำดับหน้าแรกเป็นค่าเริ่มต้นหรือไม่?',
+        confirmText: 'รีเซ็ตหน้าแรก',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      config = { order: HOME_WIDGET_DEFS.map(item => item.id), hidden: new Set(), pinnedShortcuts: config.pinnedShortcuts || [] };
       persist('รีเซ็ตหน้าแรกเป็นค่าเริ่มต้นแล้ว');
     }
   });
@@ -191,5 +204,6 @@ export function mountHomeWidgetSettings(root) {
   window.addEventListener('pointercancel', finishPointerDrag);
 
   window.addEventListener('trackme:auth-change', refresh);
+  window.addEventListener('trackme:navigation-change', refresh);
   render(root, config);
 }

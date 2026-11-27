@@ -1,12 +1,12 @@
 import { addDoc, updateDoc, deleteDoc, writeBatch, doc } from 'firebase/firestore';
 import { db, userCol, userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, daysBetween, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, daysBetween, toast, confirmDialog } from './util.js';
 import { REMIND_OPTIONS, remindLabel } from './periodStats.js';
 import { parseSmartReminder, resolveRuleNextDate, addMonthsSafe } from './reminderParser.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
-import { bindSwipeRows } from './ui.js';
+import { bindSwipeRows, detailsToggleHtml } from './ui.js';
 
 const KINDS = [
   ['สัตว์เลี้ยง', '🐾 สัตว์เลี้ยง'],
@@ -127,21 +127,21 @@ export function mountRemind(el) {
 
       <div id="rm-preview" class="hidden rounded-2xl border border-brand/25 bg-lav-soft/35 p-3 space-y-2 text-xs"></div>
 
-      <details id="rm-adjust-box" class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs">
-        <summary class="cursor-pointer font-semibold text-slate-600">ปรับค่าที่แปลงได้ด้วยตนเอง (ถ้าต้องการ)</summary>
+      <details id="rm-adjust-box" class="tm-details rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs">
+        <summary class="tm-details-summary cursor-pointer font-semibold text-slate-600"><span>ปรับค่าที่แปลงได้ด้วยตนเอง (ถ้าต้องการ)</span>${detailsToggleHtml({ compact: true })}</summary>
         <div class="grid grid-cols-2 gap-2.5 mt-2.5">
-          <div class="col-span-2"><label class="lbl">ชื่อรายการ</label><input id="rm-ov-title" class="input text-xs" placeholder="อัตโนมัติจากข้อความ"></div>
-          <div><label class="lbl">หมวดหมู่</label><select id="rm-ov-kind" class="input text-xs"><option value="">อัตโนมัติ</option>${KINDS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
-          <div><label class="lbl">เตือนล่วงหน้า</label><select id="rm-ov-remind" class="input text-xs"><option value="">อัตโนมัติ</option>${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></div>
-          <div><label class="lbl">วันครบกำหนดถัดไป</label><input id="rm-ov-next" type="date" class="input text-xs"></div>
-          <div><label class="lbl">เวลา (ถ้ามี)</label><input id="rm-ov-time" type="time" class="input text-xs"></div>
-          <div class="col-span-2"><label class="lbl">หมายเหตุเพิ่มเติม</label><input id="rm-ov-note" class="input text-xs" placeholder="คลินิก, รายละเอียด"></div>
+          <div class="col-span-2"><label class="lbl" for="rm-ov-title">ชื่อรายการ</label><input id="rm-ov-title" class="input text-xs" placeholder="อัตโนมัติจากข้อความ"></div>
+          <div><label class="lbl" for="rm-ov-kind">หมวดหมู่</label><select id="rm-ov-kind" class="input text-xs"><option value="">อัตโนมัติ</option>${KINDS.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
+          <div><label class="lbl" for="rm-ov-remind">เตือนล่วงหน้า</label><select id="rm-ov-remind" class="input text-xs"><option value="">อัตโนมัติ</option>${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></div>
+          <div><label class="lbl" for="rm-ov-next">วันครบกำหนดถัดไป</label><input id="rm-ov-next" type="date" class="input text-xs"></div>
+          <div><label class="lbl" for="rm-ov-time">เวลา (ถ้ามี)</label><input id="rm-ov-time" type="time" class="input text-xs"></div>
+          <div class="col-span-2"><label class="lbl" for="rm-ov-note">หมายเหตุเพิ่มเติม</label><input id="rm-ov-note" class="input text-xs" placeholder="คลินิก, รายละเอียด"></div>
         </div>
       </details>
 
       <div class="flex flex-wrap justify-end gap-2">
-        <button id="rm-cancel" type="button" class="btn btn-ghost hidden">ยกเลิกแก้ไข</button>
-        <button id="rm-save" class="btn btn-primary">${iconSvg('plus', { size: 15 })} บันทึกแจ้งเตือน</button>
+        <button id="rm-cancel" type="button" class="btn btn-ghost hidden">${iconSvg('close', { size: 15 })} ยกเลิกแก้ไข</button>
+        <button id="rm-save" class="btn btn-primary">${iconSvg('check', { size: 15 })} บันทึกแจ้งเตือน</button>
       </div>
     </section>
 
@@ -151,22 +151,22 @@ export function mountRemind(el) {
         <label class="text-xs text-slate-600 flex items-center gap-1.5 cursor-pointer min-h-[44px]"><input id="rm-show-done" type="checkbox"> แสดงที่ทำเสร็จแล้ว</label>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <input id="rm-search" class="input" placeholder="🔍 ค้นหารายการ...">
-        <select id="rm-filter" class="input"><option value="">ทุกหมวดหมู่</option>${KINDS.map(([v]) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>
+        <input id="rm-search" class="input" aria-label="ค้นหารายการแจ้งเตือน" placeholder="ค้นหารายการ...">
+        <select id="rm-filter" class="input" aria-label="กรองตามหมวดหมู่"><option value="">ทุกหมวดหมู่</option>${KINDS.map(([v]) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>
       </div>
       <div class="space-y-1.5 text-xs">
         <span class="block text-slate-500">ช่วงวันครบกำหนด:</span>
         <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex sm:flex-wrap items-center gap-2">
-          <input id="rm-from" type="date" class="input w-full sm:!w-auto !py-1.5 text-xs" aria-label="ตั้งแต่วันที่">
+          <input id="rm-from" type="date" class="input w-full sm:!w-auto text-xs" aria-label="ตั้งแต่วันที่">
           <span class="text-slate-500 text-center">–</span>
-          <input id="rm-to" type="date" class="input w-full sm:!w-auto !py-1.5 text-xs" aria-label="ถึงวันที่">
+          <input id="rm-to" type="date" class="input w-full sm:!w-auto text-xs" aria-label="ถึงวันที่">
           <button id="rm-clear-filter" type="button" class="chip min-h-[44px] col-span-3 sm:col-span-1 justify-center bg-slate-100 text-slate-700 hidden">ล้างตัวกรอง</button>
         </div>
       </div>
       <div id="rm-bulk" class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
         <label class="flex items-center gap-1.5 cursor-pointer min-h-[44px]"><input id="rm-sel-all" type="checkbox"> เลือกทั้งหมด (<span id="rm-vis-count">0</span>)</label>
         <span class="text-slate-500">เลือกแล้ว <b id="rm-sel-count">0</b></span>
-        <select id="rm-bulk-remind" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="rm-bulk-remind" aria-label="ระยะเวลาแจ้งเตือนล่วงหน้าแบบหลายรายการ" class="input !w-auto text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button id="rm-bulk-apply" type="button" class="chip min-h-[44px] bg-sky-soft text-blue-700" disabled>ตั้งเตือนรายการที่เลือก</button>
       </div>
       <p id="rm-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อแก้ไขหรือลบ</p>
@@ -296,7 +296,7 @@ function resetForm() {
   $r('#rm-smart').value = '';
   ['rm-ov-title', 'rm-ov-kind', 'rm-ov-remind', 'rm-ov-next', 'rm-ov-time', 'rm-ov-note'].forEach(id => { $r('#' + id).value = ''; });
   $r('#rm-adjust-box').open = false;
-  $r('#rm-save').innerHTML = `${iconSvg('plus', { size: 15 })} บันทึกแจ้งเตือน`;
+  $r('#rm-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกแจ้งเตือน`;
   $r('#rm-cancel').classList.add('hidden');
   updateSmartPreview();
 }
@@ -442,7 +442,7 @@ async function onListClick(e) {
     $r('#rm-ov-note').value = manualOverrides['rm-ov-note'];
     currentDraft = item.rule ? { ...parseSmartReminder($r('#rm-smart').value, rawItems(), localDateStr()), rule: item.rule } : null;
     updateSmartPreview(!currentDraft);
-    $r('#rm-save').innerHTML = `${iconSvg('check', { size: 15 })} บันทึกการแก้ไข`;
+    $r('#rm-save').innerHTML = `${iconSvg('save', { size: 15 })} บันทึกการแก้ไข`;
     $r('#rm-cancel').classList.remove('hidden');
     root.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
@@ -471,15 +471,21 @@ async function onListClick(e) {
 
   if (btn.dataset.del) {
     if (guardPreviewWrite('การลบรายการแจ้งเตือน')) return;
-    if (confirm(`ลบรายการ “${item.title}”?`)) {
-      selectedKeys.delete(item.uidKey);
-      try {
-        deleteDoc(userDoc(state.uid, item.col, item.id)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
-        if (editing?.id === item.id) resetForm();
-        toast('ลบรายการแล้ว');
-      } catch (err) {
-        toast('ลบไม่สำเร็จ: ' + err.message, 'err');
-      }
+    const ok = await confirmDialog({
+      title: 'ลบรายการแจ้งเตือน?',
+      message: `ลบรายการ “${item.title}”?`,
+      confirmText: 'ลบรายการ',
+      cancelText: 'ยกเลิก',
+      danger: true
+    });
+    if (!ok) return;
+    selectedKeys.delete(item.uidKey);
+    try {
+      deleteDoc(userDoc(state.uid, item.col, item.id)).catch(err => toast('ลบไม่สำเร็จ: ' + err.message, 'err'));
+      if (editing?.id === item.id) resetForm();
+      toast('ลบรายการแล้ว');
+    } catch (err) {
+      toast('ลบไม่สำเร็จ: ' + err.message, 'err');
     }
   }
 }
@@ -562,7 +568,7 @@ export function renderRemind() {
         <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
           <div class="flex items-center gap-1.5">
             <span class="text-[11px] text-slate-500">เตือน:</span>
-            <select data-rm-remind="${esc(x.uidKey)}" class="input !w-auto !py-1 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+            <select data-rm-remind="${esc(x.uidKey)}" aria-label="ระยะเวลาแจ้งเตือนล่วงหน้าสำหรับ ${esc(x.title)}" class="input !w-auto !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <button data-done="${esc(x.uidKey)}" class="chip min-h-[44px] bg-ok-soft text-green-800">${rep ? 'ทำแล้ว → รอบถัดไป' : x.done ? 'เปิดอีกครั้ง' : 'ทำเสร็จแล้ว'}</button>

@@ -208,7 +208,7 @@ export function copySummary() {
 
 function showCopyFallback(text) {
   openModal(`
-    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-base">คัดลอกสรุป</h3><button data-close class="text-slate-500 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
+    <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-base">คัดลอกสรุป</h3><button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button></div>
     <textarea class="input min-h-48 text-xs font-mono" readonly>${esc(text)}</textarea>
     <div class="flex justify-end mt-3"><button data-close class="btn btn-primary text-xs">ปิด</button></div>
   `);

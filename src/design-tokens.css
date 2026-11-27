@@ -481,7 +481,16 @@
 
 /* ---- Responsive utilities ---- */
 @media (max-width: 767px) {
-  .tm-input, .tm-select { font-size: 16px; min-height: 44px; }
+  .tm-input, .tm-select {
+    font-size: 16px;
+    line-height: 1.375;
+    height: 44px;
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    box-sizing: border-box;
+  }
+  textarea.tm-input { height: auto; }
   .tm-btn, .tm-icon-btn, .tm-chip, .tm-tab { min-height: 44px; }
   .tm-icon-btn { width: 44px; height: 44px; }
 }

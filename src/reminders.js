@@ -207,10 +207,16 @@ async function onChange(e) {
 
 async function onClick(e) {
   if (e.target.closest('#nt-notif-perm')) {
-    if ('Notification' in window) {
-      await Notification.requestPermission();
-      renderReminders();
+    if (!('Notification' in window)) {
+      toast('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน', 'warn');
+      return;
     }
+    if (Notification.permission === 'denied') {
+      toast('การแจ้งเตือนถูกบล็อกอยู่ — กรุณาเปิดอนุญาตในการตั้งค่าเบราว์เซอร์สำหรับเว็บไซต์นี้', 'warn');
+      return;
+    }
+    await Notification.requestPermission();
+    renderReminders();
     return;
   }
   if (e.target.closest('#nt-period-dismiss')) {
@@ -279,6 +285,47 @@ async function onClick(e) {
   }
 }
 
+export function getNotifPermissionMeta(permission) {
+  if (permission === 'granted') {
+    return {
+      permission: 'granted',
+      stateText: 'อนุญาตการแจ้งเตือนแล้ว',
+      label: 'แจ้งเตือนบนเครื่องเปิดอยู่',
+      icon: 'check-circle',
+      className: 'chip min-h-[44px] bg-emerald-50 border border-emerald-300 text-emerald-800 font-semibold',
+      disabled: true
+    };
+  }
+  if (permission === 'denied') {
+    return {
+      permission: 'denied',
+      stateText: 'ถูกบล็อกในเบราว์เซอร์',
+      label: 'ถูกบล็อกในเบราว์เซอร์',
+      icon: 'alert',
+      className: 'chip min-h-[44px] bg-rose-50 border border-rose-200 text-rose-700 font-semibold',
+      disabled: false
+    };
+  }
+  if (permission === 'default') {
+    return {
+      permission: 'default',
+      stateText: 'ยังไม่ได้อนุญาต',
+      label: 'อนุญาตแจ้งเตือน',
+      icon: 'notifications',
+      className: 'chip min-h-[44px] bg-white border border-brand/40 text-brand-dark hover:bg-sky-soft font-semibold',
+      disabled: false
+    };
+  }
+  return {
+    permission: 'unsupported',
+    stateText: 'เบราว์เซอร์ไม่รองรับ',
+    label: 'เบราว์เซอร์ไม่รองรับ',
+    icon: 'close',
+    className: 'chip min-h-[44px] bg-slate-100 border border-slate-200 text-slate-500',
+    disabled: true
+  };
+}
+
 export function renderReminders() {
   window.dispatchEvent(new Event('trackme:reminders'));
   if (!root?.isConnected) return;
@@ -292,9 +339,8 @@ export function renderReminders() {
   const cycle = periodStats(state.period || []);
   const pLead = getPeriodRemindDays();
   const pDismissed = cycle?.next && localStorage.getItem('reminder_dismissed') === cycle.next;
-  const notifState = 'Notification' in window
-    ? ({ granted: 'อนุญาตการแจ้งเตือนแล้ว', denied: 'ถูกบล็อกในเบราว์เซอร์', default: 'ยังไม่ได้อนุญาต' }[Notification.permission] || '')
-    : 'เบราว์เซอร์ไม่รองรับ';
+  const notifMeta = getNotifPermissionMeta('Notification' in window ? Notification.permission : 'unsupported');
+  const notifState = notifMeta.stateText;
 
   const renderActiveCard = x => {
     const diff = daysBetween(today, x.date);
@@ -331,7 +377,7 @@ export function renderReminders() {
           <span class="text-[11px] text-slate-500">ครบกำหนด ${esc(fmtDate(x.date))}${x.dueTime ? ` (${esc(x.dueTime)} น.)` : ''} · ${diff < 0 ? `เลย ${-diff} วัน` : diff === 0 ? 'วันนี้' : `อีก ${diff} วัน`}</span>
         </span>
       </label>
-      <select data-nt-remind="${esc(x.uidKey)}" class="input !w-auto !py-1.5 !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <select data-nt-remind="${esc(x.uidKey)}" aria-label="ระยะเวลาแจ้งเตือนล่วงหน้าสำหรับ ${esc(x.label)}" class="input !w-auto !px-2.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${x.remindDays === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
     </div>`;
   }).join('');
 
@@ -352,8 +398,8 @@ export function renderReminders() {
           <p class="text-xs text-slate-500">ค่าประมาณจากค่าเฉลี่ยรอบที่ผ่านมา · สถานะแจ้งเตือนของเครื่อง: ${esc(notifState)}</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <select id="nt-period-days" class="input !w-auto text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${pLead === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
-          <button id="nt-notif-perm" type="button" class="chip min-h-[44px] bg-white border border-pink-200 text-pink-700">อนุญาตแจ้งเตือน</button>
+          <select id="nt-period-days" aria-label="แจ้งเตือนรอบเดือนล่วงหน้า" class="input !w-auto text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${pLead === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          <button id="nt-notif-perm" type="button" data-perm="${esc(notifMeta.permission)}" class="${notifMeta.className}" aria-label="${esc(notifMeta.label)} (${esc(notifState)})"${notifMeta.disabled ? ' disabled' : ''}>${iconSvg(notifMeta.icon, { size: 15 })}<span>${esc(notifMeta.label)}</span></button>
           ${cycle?.next && pLead >= 0 && !pDismissed ? '<button id="nt-period-dismiss" type="button" class="chip min-h-[44px] bg-white border border-slate-200 text-slate-600">ปิดเตือนรอบนี้</button>' : ''}
         </div>
       </div>
@@ -367,7 +413,7 @@ export function renderReminders() {
       <div class="rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
         <label class="flex items-center gap-1.5 cursor-pointer min-h-[44px]"><input id="nt-sel-all" type="checkbox" ${sources.length > 0 && sources.every(x => selectedKeys.has(x.uidKey)) ? 'checked' : ''} ${sources.length === 0 ? 'disabled' : ''}> เลือกทั้งหมด (${sources.length})</label>
         <span class="text-slate-500">เลือกแล้ว <b>${selectedKeys.size}</b></span>
-        <select id="nt-bulk-days" class="input !w-auto !py-1.5 text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="nt-bulk-days" aria-label="ระยะเวลาแจ้งเตือนล่วงหน้าแบบหลายรายการ" class="input !w-auto text-xs">${REMIND_OPTIONS.map(([v, t]) => `<option value="${v}" ${v === 7 ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button id="nt-bulk-apply" type="button" class="chip min-h-[44px] bg-sky-soft text-blue-700" ${selectedKeys.size === 0 ? 'disabled' : ''}>ตั้งเตือนรายการที่เลือก</button>
       </div>
       <div class="space-y-2">${configHtml || '<p class="text-xs text-slate-500 py-2">ยังไม่มีรายการที่มีวันครบกำหนดในบันทึกเตือนหรือสต๊อก</p>'}</div>

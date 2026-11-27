@@ -1,8 +1,9 @@
 import { writeBatch, doc } from 'firebase/firestore';
 import { db, userCol } from './firebase.js';
 import { state } from './state.js';
-import { $, addDays, esc, fmtDate, localDateStr, mondayOf, openModal, round1, toast } from './util.js';
+import { $, addDays, esc, fmtDate, localDateStr, openModal, round1, toast } from './util.js';
 import { getFoodRecordsInRange } from './foodService.js';
+import { buildWeekStripRange, centerStripPill, weekNavBarHtml } from './ui.js';
 import { iconSvg } from './icons.js';
 import { MEAL_ICONS, MEAL_ORDER } from './foodConstants.js';
 import { foodLogName, foodLogPortion } from './foodCalculations.js';
@@ -21,7 +22,7 @@ export function openFoodHistorySearch() {
         <h3 class="font-bold text-lg text-slate-800 inline-flex items-center gap-2">${iconSvg('search', { size: 18, className: 'text-brand' })}<span>ค้นหาประวัติอาหาร</span></h3>
         <p class="text-xs text-slate-500 mt-0.5">ดูย้อนหลังหรือคัดลอกมื้อที่เคยบันทึกไปยังวันที่เลือก (${esc(fmtDate(targetDate()))})</p>
       </div>
-      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     <div class="space-y-2.5 mb-3">
       <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2.5 items-end">
@@ -38,7 +39,13 @@ export function openFoodHistorySearch() {
           </select>
         </div>
       </div>
-      <div id="fh-week-strip" class="tm-week-strip" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs font-semibold text-slate-600">เลือกวันที่</span>
+        <div class="ml-auto shrink-0">
+          ${weekNavBarHtml({ isToday: activeDate === today, todayAttrs: 'id="fh-wk-now"', showArrows: false })}
+        </div>
+      </div>
+      <div id="fh-week-strip" class="tm-week-strip tabular-nums" role="group" aria-label="เลือกวันที่แบบเลื่อนซ้ายขวา"></div>
     </div>
     <div id="fh-res" class="space-y-3 max-h-[58vh] overflow-y-auto pr-0.5 text-sm text-slate-500">กำลังโหลดประวัติอาหาร...</div>
   `, { size: 'xl' });
@@ -49,7 +56,32 @@ export function openFoodHistorySearch() {
   const collapsedDates = new Set();
   const collapsedMeals = new Set();
 
-  const copyRecords = async records => {
+  let isCopying = false;
+  const setCopyBusy = (busy, activeBtn = null) => {
+    const resEl = $('#fh-res', m.el);
+    if (!resEl) return;
+    resEl.querySelectorAll('[data-copy-meal-idx], [data-copy-item-idx]').forEach(btn => {
+      if (busy) {
+        btn.dataset.wasDisabled = btn.disabled ? '1' : '0';
+        btn.disabled = true;
+      } else {
+        btn.disabled = btn.dataset.wasDisabled === '1';
+        delete btn.dataset.wasDisabled;
+      }
+    });
+    if (activeBtn) {
+      if (busy) {
+        if (activeBtn.dataset.origHtml === undefined) activeBtn.dataset.origHtml = activeBtn.innerHTML;
+        activeBtn.textContent = 'กำลังบันทึก...';
+      } else if (activeBtn.dataset.origHtml !== undefined) {
+        activeBtn.innerHTML = activeBtn.dataset.origHtml;
+        delete activeBtn.dataset.origHtml;
+      }
+    }
+  };
+
+  const copyRecords = async (records, triggerBtn = null) => {
+    if (isCopying) return;
     if (guardPreviewWrite('การคัดลอกประวัติอาหาร')) return;
     if (!state.uid || !records.length) return;
     const destDate = targetDate();
@@ -73,9 +105,18 @@ export function openFoodHistorySearch() {
         copiedFrom: src.date || destDate
       });
     });
-    await batch.commit();
-    toast(`คัดลอก ${records.length} รายการลงวันที่ ${fmtDate(destDate)} แล้ว`);
-    m.close();
+    isCopying = true;
+    setCopyBusy(true, triggerBtn);
+    try {
+      await batch.commit();
+      toast(`คัดลอก ${records.length} รายการลงวันที่ ${fmtDate(destDate)} แล้ว`);
+      m.close();
+    } catch (err) {
+      toast('คัดลอกไม่สำเร็จ: ' + err.message, 'err');
+    } finally {
+      isCopying = false;
+      setCopyBusy(false, triggerBtn);
+    }
   };
 
   const renderGroups = rows => {
@@ -101,7 +142,7 @@ export function openFoodHistorySearch() {
     const html = [`
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-xs text-slate-500">พบทั้งหมด <b class="text-slate-700">${rows.length}</b> รายการ${rows.length > 150 ? ' (แสดง 150 รายการล่าสุด)' : ''}</p>
-        ${sortedDates.length > 1 ? `<button type="button" data-fh-toggle-all-dates class="chip bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold min-h-[44px] px-3">${allDatesCollapsed ? 'กางทุกวัน' : 'หุบทุกวัน'}</button>` : ''}
+        ${sortedDates.length > 1 ? `<button type="button" data-fh-toggle-all-dates aria-expanded="${!allDatesCollapsed}" class="chip bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold min-h-[44px] px-3">${iconSvg(allDatesCollapsed ? 'chevron-down' : 'chevron-up', { size: 14 })}<span>${allDatesCollapsed ? 'กางทุกวัน' : 'หุบทุกวัน'}</span></button>` : ''}
       </div>`];
 
     for (const d of sortedDates) {
@@ -128,7 +169,7 @@ export function openFoodHistorySearch() {
           <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <div class="bg-slate-50 ${isMealCollapsed ? '' : 'border-b border-slate-200'} px-2.5 sm:px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-2">
               <button type="button" data-fh-toggle-meal="${esc(mealKey)}" aria-expanded="${!isMealCollapsed}" aria-label="${isMealCollapsed ? 'กาง' : 'หุบ'}${esc(mealName)} (${esc(fmtDate(d))})" class="flex items-center gap-2 min-w-0 flex-1 min-h-[44px] px-1.5 py-1 rounded-xl text-left hover:bg-slate-100/80 transition cursor-pointer">
-                <span class="text-slate-500 shrink-0">${iconSvg(isMealCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
+                <span class="text-slate-500 shrink-0">${iconSvg(isMealCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 })}</span>
                 <span class="text-brand shrink-0">${iconSvg(mealIcon, { size: 15 })}</span>
                 <span class="font-semibold text-sm text-slate-800 truncate">${esc(mealName)}</span>
                 <span class="text-xs text-slate-500 tabular-nums truncate">${mealRows.length} รายการ · ${mealKcal.toLocaleString()} kcal · P ${mealPro}g</span>
@@ -161,7 +202,7 @@ export function openFoodHistorySearch() {
         <section class="space-y-2">
           <button type="button" data-fh-toggle-date="${esc(d)}" aria-expanded="${!isDateCollapsed}" aria-label="${isDateCollapsed ? 'กาง' : 'หุบ'}รายการวันที่ ${esc(fmtDate(d))}" class="w-full flex items-center justify-between gap-2 px-3 py-1.5 min-h-[44px] rounded-xl bg-slate-100/80 hover:bg-slate-100 border border-slate-200/80 text-left transition cursor-pointer">
             <span class="inline-flex items-center gap-2 min-w-0">
-              <span class="text-slate-500 shrink-0">${iconSvg(isDateCollapsed ? 'chevron-down' : 'chevron-up', { size: 15 })}</span>
+              <span class="text-slate-500 shrink-0">${iconSvg(isDateCollapsed ? 'chevron-down' : 'chevron-up', { size: 16 })}</span>
               <h4 class="text-xs font-bold text-slate-700 truncate">${esc(fmtDate(d))} <span class="font-normal text-slate-400">(${esc(d)})</span></h4>
             </span>
             <span class="text-xs font-semibold text-slate-600 tabular-nums shrink-0">${mealsPresent.length} มื้อ · รวม ${dayTotalKcal.toLocaleString()} kcal</span>
@@ -174,28 +215,25 @@ export function openFoodHistorySearch() {
     out.scrollTop = prevScrollTop;
   };
 
-  const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
-  const renderStrip = (centerIfInitial = false) => {
+  const renderStrip = (centerMode = false) => {
+    const wkNowBtn = $('#fh-wk-now', m.el);
+    if (wkNowBtn) wkNowBtn.classList.toggle('is-current', activeDate === today);
     const stripEl = $('#fh-week-strip', m.el);
     if (!stripEl) return;
     const prevScroll = stripEl.scrollLeft;
     const hadPills = stripEl.children.length > 0;
-    const baseMon = mondayOf(today);
-    const rangeStart = addDays(baseMon, -28);
-    const rangeEnd = addDays(baseMon, 13);
-    const finalStart = activeDate < rangeStart ? mondayOf(activeDate) : rangeStart;
-    const finalEnd = activeDate > rangeEnd ? addDays(mondayOf(activeDate), 6) : rangeEnd;
-    const pills = [];
-    for (let ds = finalStart; ds <= finalEnd; ds = addDays(ds, 1)) {
-      const [yy, mm, dd] = ds.split('-').map(Number);
-      const dow = DOW[new Date(yy, mm - 1, dd).getDay()];
-      const active = ds === activeDate;
-      const isToday = ds === today;
-      pills.push(`<button type="button" data-fh-day="${ds}" aria-pressed="${active}" aria-label="${esc(ds)}" class="tm-day-pill ${active ? 'is-active' : ''} ${isToday ? 'is-today' : ''}"><span class="tm-day-dow">${dow}</span><span class="tm-day-num">${dd}</span></button>`);
+    const stripDays = buildWeekStripRange(today, activeDate);
+    stripEl.innerHTML = stripDays.map(day => {
+      const active = day.date === activeDate;
+      return `<button type="button" data-fh-day="${day.date}" aria-pressed="${active}" aria-label="${esc(day.date)}" class="tm-day-pill ${active ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}"><span class="tm-day-dow">${day.dow}</span><span class="tm-day-num">${day.dayNum}</span></button>`;
+    }).join('');
+    if (!hadPills || centerMode === true || centerMode === 'auto') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'auto' });
+    } else if (centerMode === 'smooth') {
+      centerStripPill(stripEl, '.is-active', { behavior: 'smooth' });
+    } else if (prevScroll > 0) {
+      stripEl.scrollLeft = prevScroll;
     }
-    stripEl.innerHTML = pills.join('');
-    if (!centerIfInitial && hadPills && prevScroll > 0) stripEl.scrollLeft = prevScroll;
-    else requestAnimationFrame(() => stripEl.querySelector('.is-active')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
   };
 
   let searchTimer = null;
@@ -246,25 +284,22 @@ export function openFoodHistorySearch() {
     const mealBtn = e.target.closest('[data-copy-meal-idx]');
     if (mealBtn) {
       const group = mealGroups[Number(mealBtn.dataset.copyMealIdx)];
-      if (group?.length) {
-        mealBtn.disabled = true;
-        copyRecords(group).catch(err => {
-          mealBtn.disabled = false;
-          toast('คัดลอกไม่สำเร็จ: ' + err.message, 'err');
-        });
-      }
+      if (group?.length) void copyRecords(group, mealBtn);
       return;
     }
     const itemBtn = e.target.closest('[data-copy-item-idx]');
     if (itemBtn) {
       const row = flatRows[Number(itemBtn.dataset.copyItemIdx)];
-      if (row) {
-        itemBtn.disabled = true;
-        copyRecords([row]).catch(err => {
-          itemBtn.disabled = false;
-          toast('คัดลอกไม่สำเร็จ: ' + err.message, 'err');
-        });
-      }
+      if (row) void copyRecords([row], itemBtn);
+    }
+  });
+  $('#fh-wk-now', m.el)?.addEventListener('click', () => {
+    if (activeDate !== today) {
+      activeDate = today;
+      renderStrip('smooth');
+      search();
+    } else {
+      renderStrip('smooth');
     }
   });
   $('#fh-week-strip', m.el).addEventListener('click', e => {

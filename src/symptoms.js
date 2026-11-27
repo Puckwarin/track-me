@@ -1,7 +1,7 @@
 import { setDoc, deleteDoc } from 'firebase/firestore';
 import { userDoc } from './firebase.js';
 import { state } from './state.js';
-import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, toast } from './util.js';
+import { $, esc, fmtDate, isValidCalendarDate, localDateStr, addDays, toast, confirmDialog } from './util.js';
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindSwipeRows } from './ui.js';
@@ -102,8 +102,8 @@ export function mountSymptoms(el) {
           <input id="s-note" class="input flex-1" placeholder="เช่น กินยาแก้ปวด, นอนน้อย">
         </div>
         <div class="flex justify-end gap-2">
-          <button id="s-del" class="btn btn-ghost hidden">ลบวันนี้</button>
-          <button id="s-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการ</button>
+          <button id="s-del" class="btn btn-ghost text-rose-700 border-rose-200 hover:bg-rose-50 hidden">${iconSvg('trash', { size: 15 })} ลบวันนี้</button>
+          <button id="s-save" class="btn btn-pink">${iconSvg('check', { size: 15 })} บันทึกอาการ</button>
         </div>
       </div>
       <div class="card space-y-2.5 lg:col-span-2">
@@ -127,8 +127,8 @@ export function mountSymptoms(el) {
           <textarea id="skin-result" class="input flex-1" placeholder="ผลลัพธ์/สิ่งที่สังเกต เช่น ผิวชุ่มชื้นขึ้นหลังใช้ผลิตภัณฑ์"></textarea>
         </div>
         <div class="flex justify-end gap-2">
-          <button id="skin-del" class="btn btn-ghost hidden">ลบบันทึกผิว</button>
-          <button id="skin-save" class="btn btn-pink">${iconSvg('save', { size: 15 })} บันทึกอาการผิว</button>
+          <button id="skin-del" class="btn btn-ghost text-rose-700 border-rose-200 hover:bg-rose-50 hidden">${iconSvg('trash', { size: 15 })} ลบบันทึกผิว</button>
+          <button id="skin-save" class="btn btn-pink">${iconSvg('check', { size: 15 })} บันทึกอาการผิว</button>
         </div>
       </div>
       <div class="card space-y-2.5 lg:col-span-2">
@@ -182,21 +182,39 @@ export function mountSymptoms(el) {
   $('#s-del', root).addEventListener('click', del);
   $('#skin-save', root).addEventListener('click', saveSkin);
   $('#skin-del', root).addEventListener('click', delSkin);
-  $('#s-list', root).addEventListener('click', e => {
+  $('#s-list', root).addEventListener('click', async e => {
     const delBtn = e.target.closest('[data-del-sx]');
     if (delBtn) {
       if (guardPreviewWrite('การลบบันทึกอาการ')) return;
-      if (confirm('ลบบันทึกอาการของวันที่เลือก?')) deleteDoc(userDoc(state.uid, 'symptom_records', delBtn.dataset.delSx)).catch(err => toast(err.message, 'err'));
+      const delId = delBtn.dataset.delSx;
+      const ok = await confirmDialog({
+        title: 'ลบบันทึกอาการ?',
+        message: 'ลบบันทึกอาการของวันที่เลือก?',
+        confirmText: 'ลบบันทึก',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      deleteDoc(userDoc(state.uid, 'symptom_records', delId)).catch(err => toast(err.message, 'err'));
       return;
     }
     const b = e.target.closest('[data-d]');
     if (b) selectDate(b.dataset.d, 'symptoms');
   });
-  $('#skin-list', root).addEventListener('click', e => {
+  $('#skin-list', root).addEventListener('click', async e => {
     const delBtn = e.target.closest('[data-del-skin]');
     if (delBtn) {
       if (guardPreviewWrite('การลบบันทึกผิว')) return;
-      if (confirm('ลบบันทึกผิวของวันที่เลือก?')) deleteDoc(userDoc(state.uid, 'skin_records', delBtn.dataset.delSkin)).catch(err => toast(err.message, 'err'));
+      const delId = delBtn.dataset.delSkin;
+      const ok = await confirmDialog({
+        title: 'ลบบันทึกผิว?',
+        message: 'ลบบันทึกผิวของวันที่เลือก?',
+        confirmText: 'ลบบันทึก',
+        cancelText: 'ยกเลิก',
+        danger: true
+      });
+      if (!ok) return;
+      deleteDoc(userDoc(state.uid, 'skin_records', delId)).catch(err => toast(err.message, 'err'));
       return;
     }
     const b = e.target.closest('[data-skin-d]');
@@ -338,10 +356,18 @@ function save() {
   }).catch(e => toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'));
   toast('บันทึกอาการแล้ว');
 }
-function del() {
+async function del() {
   if (guardPreviewWrite('การลบบันทึกอาการ')) return;
   const date = $('#s-date', root).value;
-  if (confirm('ลบบันทึกอาการของวันนี้?')) deleteDoc(userDoc(state.uid, 'symptom_records', date)).catch(e => toast(e.message, 'err'));
+  const ok = await confirmDialog({
+    title: 'ลบบันทึกอาการวันนี้?',
+    message: 'ลบบันทึกอาการของวันนี้?',
+    confirmText: 'ลบบันทึก',
+    cancelText: 'ยกเลิก',
+    danger: true
+  });
+  if (!ok) return;
+  deleteDoc(userDoc(state.uid, 'symptom_records', date)).catch(e => toast(e.message, 'err'));
 }
 
 function saveSkin() {
@@ -352,8 +378,16 @@ function saveSkin() {
   setDoc(userDoc(state.uid, 'skin_records', date), { date, symptoms, result: $('#skin-result', root).value.trim(), updatedAt: new Date() })
     .then(() => toast('บันทึกอาการผิวแล้ว')).catch(e => toast('บันทึกอาการผิวไม่สำเร็จ: ' + e.message, 'err'));
 }
-function delSkin() {
+async function delSkin() {
   if (guardPreviewWrite('การลบบันทึกผิว')) return;
   const date = $('#s-date', root).value;
-  if (confirm('ลบบันทึกผิวของวันนี้?')) deleteDoc(userDoc(state.uid, 'skin_records', date)).catch(e => toast(e.message, 'err'));
+  const ok = await confirmDialog({
+    title: 'ลบบันทึกผิววันนี้?',
+    message: 'ลบบันทึกผิวของวันนี้?',
+    confirmText: 'ลบบันทึก',
+    cancelText: 'ยกเลิก',
+    danger: true
+  });
+  if (!ok) return;
+  deleteDoc(userDoc(state.uid, 'skin_records', date)).catch(e => toast(e.message, 'err'));
 }

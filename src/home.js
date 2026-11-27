@@ -6,15 +6,19 @@ import { getTargets, getMeals } from './profile.js';
 import { buildMealDonutParts } from './donutChart.js';
 import { buildMealCaloriePieData, getMealPiePalette } from './foodCalculations.js';
 import { CATEGORIES } from './categories.js';
-import { getPushStatus, enablePushNotifications } from './push.js';
+import { getPushStatus, enablePushNotifications, isIosDevice, isStandalonePwa } from './push.js';
+import { openPwaInstallGuideModal } from './pwaInstall.js';
 import { reportRuntimeError } from './runtimeErrorMonitor.js';
 import { iconSvg } from './icons.js';
+import { getHomeShortcuts, readNavigationPreferences } from './navigation.js';
 import { animateNumberTicker, bindChartInspector } from './ui.js';
 
-export const HOME_WIDGET_IDS = ['planner', 'daily-overview'];
+export const HOME_WIDGET_IDS = ['shortcuts', 'planner', 'daily-overview', 'summary'];
 export const HOME_WIDGET_DEFS = [
+  { id: 'shortcuts', label: 'ทางลัดที่ปักหมุด' },
   { id: 'planner', label: 'Weekly Planner' },
-  { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' }
+  { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
+  { id: 'summary', label: 'สรุปภาพรวมทั้งหมด' }
 ];
 
 const WIDGET_STORAGE_KEY = 'trackme_home_widgets:v1:';
@@ -276,7 +280,7 @@ function renderPlannerTeaser(host, today) {
           <p class="hx-plan-compact-sub">${esc(desc)}</p>
         </div>
       </div>
-      <button type="button" id="home-planner-open" class="pl-collapse-btn" aria-label="กาง Weekly Planner" title="กางดู">
+      <button type="button" id="home-planner-open" class="pl-collapse-btn" aria-expanded="false" aria-label="กาง Weekly Planner" title="กาง">
         ${iconSvg('chevron-down', { size: 16 })}
       </button>
     </section>`;
@@ -285,12 +289,17 @@ function renderPlannerTeaser(host, today) {
 export function mountHome(navigate) {
   go = navigate;
   const el = $('#home-today');
+  const existingShortcuts = $('#home-shortcuts');
+  const existingSummary = $('#summary-section');
   el.innerHTML = `
     <section id="home-head" class="hx-head"></section>
     <div id="home-widgets" class="hx-widgets">
       <div id="home-planner"></div>
       <div id="home-slot-daily-overview"></div>
     </div>`;
+  const widgetsWrap = $('#home-widgets', el);
+  if (widgetsWrap && existingShortcuts) widgetsWrap.prepend(existingShortcuts);
+  if (widgetsWrap && existingSummary) widgetsWrap.appendChild(existingSummary);
 
   el.addEventListener('click', async e => {
     const plannerBtn = e.target.closest('#home-planner-open');
@@ -308,6 +317,11 @@ export function mountHome(navigate) {
     }
     const pushBtn = e.target.closest('#home-push-btn');
     if (pushBtn) {
+      if (isIosDevice() && !isStandalonePwa()) {
+        toast('บน iPhone / iPad กรุณาเพิ่มแอปลงหน้าจอโฮมก่อนเปิดรับการแจ้งเตือน');
+        openPwaInstallGuideModal();
+        return;
+      }
       pushBtn.disabled = true;
       try {
         await enablePushNotifications();
@@ -315,7 +329,8 @@ export function mountHome(navigate) {
         renderHome();
       } catch (err) {
         toast(err.message, 'err');
-        if (err.message.includes('VAPID')) go('settings', 'st-push-card');
+        if (err.message.includes('เพิ่มไปยังหน้าจอโฮม')) openPwaInstallGuideModal();
+        else if (err.message.includes('VAPID')) go('settings', 'st-push-card');
       } finally {
         pushBtn.disabled = false;
       }
@@ -349,17 +364,23 @@ export function renderHome() {
   const targets = getTargets();
 
   const slots = {
+    shortcuts: $('#home-shortcuts'),
     planner: $('#home-planner', el),
-    'daily-overview': $('#home-slot-daily-overview', el)
+    'daily-overview': $('#home-slot-daily-overview', el),
+    summary: $('#summary-section')
   };
 
+  const hasShortcuts = getHomeShortcuts(readNavigationPreferences(state.uid)).length > 0;
   const widgetsWrap = $('#home-widgets', el);
   if (widgetsWrap) {
     config.order.forEach(id => {
       const slot = slots[id];
       if (!slot) return;
       widgetsWrap.appendChild(slot);
-      slot.classList.toggle('hidden', config.hidden.has(id));
+      const isHidden = id === 'shortcuts'
+        ? (config.hidden.has('shortcuts') || !hasShortcuts)
+        : config.hidden.has(id);
+      slot.classList.toggle('hidden', isHidden);
     });
   }
 
@@ -400,8 +421,10 @@ async function refreshHomePushBtn() {
     return;
   }
   if (st.subscribedHere) {
-    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push">${iconSvg('notifications', { size: 15 })}<span>รับแจ้งเตือนแล้ว</span></button>`;
+    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push is-on" aria-pressed="true" title="เปิดรับแจ้งเตือนอยู่ · แตะเพื่อตั้งค่า"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('check-circle', { size: 15 })}<span>เปิดแจ้งเตือนอยู่</span></button>`;
+  } else if (st.permission === 'denied') {
+    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push is-blocked" aria-pressed="false" title="การแจ้งเตือนถูกปิดกั้นในเบราว์เซอร์"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('alert', { size: 15 })}<span>แจ้งเตือนถูกปิดกั้น</span></button>`;
   } else {
-    slot.innerHTML = `<button type="button" id="home-push-btn" class="hx-push">${iconSvg('notifications', { size: 15 })}<span>เปิดรับการแจ้งเตือน</span></button>`;
+    slot.innerHTML = `<button type="button" id="home-push-btn" class="hx-push is-off" aria-pressed="false" title="ปิดรับแจ้งเตือนอยู่ · แตะเพื่อเปิด"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('notifications', { size: 15 })}<span>ปิดอยู่ · เปิดแจ้งเตือน</span></button>`;
   }
 }

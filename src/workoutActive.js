@@ -767,7 +767,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         `<div class="space-y-3">
           <div class="flex items-center justify-between gap-2">
             <h4 class="font-bold text-slate-800 break-words min-w-0">${esc(zoomBtn.dataset.zoomName || 'ภาพประกอบท่า')}</h4>
-            <button type="button" data-close class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+            <button type="button" data-close class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
           </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-2 flex items-center justify-center max-h-[68vh] overflow-hidden">
             <img src="${esc(zoomBtn.dataset.zoomImg)}" alt="${esc(zoomBtn.dataset.zoomName || '')}" referrerpolicy="no-referrer" class="max-h-[64vh] w-auto object-contain rounded-xl">

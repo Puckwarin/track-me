@@ -1,7 +1,7 @@
 import { onAuthStateChanged, signInWithPopup, reauthenticateWithPopup, signOut } from 'firebase/auth';
 import { auth, provider } from './firebase.js';
 import { state, emit } from './state.js';
-import { $, toast } from './util.js';
+import { $, toast, confirmDialog } from './util.js';
 import { clearSummaryCache } from './summary.js';
 import { hasDevicePin, showDeviceLock, removeDevicePin } from './local-lock.js';
 import { reportRuntimeError, setRuntimeErrorUser } from './runtimeErrorMonitor.js';
@@ -114,7 +114,14 @@ export async function signOutUser() {
     exitPreviewMode();
     return;
   }
-  if (!confirm('ออกจากระบบ?')) return;
+  const ok = await confirmDialog({
+    title: 'ออกจากระบบ?',
+    message: 'ต้องการออกจากระบบบัญชีนี้ใช่หรือไม่?',
+    confirmText: 'ออกจากระบบ',
+    cancelText: 'ยกเลิก',
+    danger: true
+  });
+  if (!ok) return;
   clearSummaryCache();
   try { await signOut(auth); } catch (e) {
     reportRuntimeError(e, { category: 'firebase', source: 'auth' });

@@ -26,7 +26,7 @@ export function openFoodEditor({ id, prefill = {}, scan, onSaved }) {
   const m = openModal(`
     <div class="flex justify-between items-center gap-2 mb-3">
       <h3 class="font-bold text-lg text-slate-800">${id ? 'แก้ไขเมนู' : scan ? 'ตรวจสอบข้อมูลจากฉลาก' : 'เพิ่มเมนูของฉัน'}</h3>
-      <button data-close type="button" class="text-slate-400 hover:text-slate-700 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
+      <button data-close type="button" class="tm-modal-close shrink-0" aria-label="ปิด">${iconSvg('close', { size: 18 })}</button>
     </div>
     ${scan ? `<div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 space-y-1 mb-3">
       <p class="inline-flex items-center gap-1.5 font-medium">${iconSvg('alert', { size: 15, className: 'text-amber-600 shrink-0' })}<span>${basisMsg}${scan.servingSizeText ? ` · บนฉลาก: ${esc(scan.servingSizeText)}` : ''}</span></p>

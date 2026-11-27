@@ -113,7 +113,7 @@ function renderMeals() {
   $('#pf-meals', root).innerHTML = meals.map((m, i) => `
     <div class="flex items-center gap-2">
       <input data-k="name" data-i="${i}" class="input min-h-[44px]" value="${esc(m.name)}" maxlength="30" aria-label="ชื่อมื้อ">
-      <button type="button" data-rm="${i}" class="text-rose-500 hover:text-rose-700 min-w-[44px] min-h-[44px] rounded-xl hover:bg-rose-50 inline-flex items-center justify-center shrink-0" aria-label="ลบมื้อ">${iconSvg('trash', { size: 15 })}</button>
+      <button type="button" data-rm="${i}" class="tm-row-action-btn is-del shrink-0" aria-label="ลบมื้อ">${iconSvg('trash', { size: 15 })}</button>
     </div>`).join('');
   preview();
 }

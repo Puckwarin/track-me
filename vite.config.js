@@ -30,12 +30,13 @@ export default defineConfig({
         start_url: BASE,
         scope: BASE,
         display: 'standalone',
-        background_color: '#E9F1FC',
-        theme_color: '#E9F1FC',
+        background_color: '#EAF3FD',
+        theme_color: '#EAF3FD',
         icons: [
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ],
         share_target: {
           action: `${BASE}share-target`,
@@ -53,6 +54,9 @@ export default defineConfig({
             ]
           }
         }
+      },
+      devOptions: {
+        enabled: true
       },
       workbox: {
         importScripts: ['push-sw.js'],
