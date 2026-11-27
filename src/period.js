@@ -54,14 +54,14 @@ export function mountPeriod(el) {
         <h3 id="c-title" class="font-bold text-slate-800 text-center"></h3>
         <button id="c-next" class="btn btn-ghost !px-3 min-w-[44px] min-h-[44px]" aria-label="เดือนถัดไป">${iconSvg('chevron-right', { size: 16 })}</button>
       </div>
-      <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 font-medium">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
+      <div class="grid grid-cols-7 gap-1 text-center text-xs period-weekdays font-medium">${['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(d => `<div>${d}</div>`).join('')}</div>
       <div id="c-grid" class="grid grid-cols-7 gap-1 tabular-nums"></div>
       <div class="flex flex-wrap gap-3 text-xs text-slate-600">
-        <span><span class="inline-block w-3 h-3 rounded bg-pink-500 align-middle"></span> มีประจำเดือน</span>
-        <span><span class="inline-block w-3 h-3 rounded border border-dashed border-pink-400 bg-pink-50 align-middle"></span> คาดการณ์ (ค่าประมาณ)</span>
-        <span><span class="inline-block w-2 h-2 rounded-full bg-slate-700 align-middle"></span> มีบันทึกอาการ</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded period-legend-period"></span> มีประจำเดือน</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded period-legend-pred"></span> คาดการณ์ (ค่าประมาณ)</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full period-legend-dot"></span> มีบันทึกอาการ</span>
       </div>
-      <div id="c-selected-bar" class="hidden rounded-2xl border border-sky-200 bg-sky-soft/70 p-3 flex flex-wrap items-center justify-between gap-2"></div>
+      <div id="c-selected-bar" class="hidden rounded-2xl border period-selected-bar p-3 flex flex-wrap items-center justify-between gap-2"></div>
     </div>
   </div>
 
@@ -78,7 +78,7 @@ export function mountPeriod(el) {
         <p id="p-swipe-hint" class="tm-swipe-hint hidden">ปัดซ้ายที่รายการเพื่อลบ</p>
         <div id="p-mobile-list" class="lg:hidden tm-swipe-list tm-swipe-list--cards tabular-nums"></div>
         <div class="hidden lg:block overflow-x-auto"><table class="w-full text-left text-sm">
-          <thead class="bg-slate-100 text-slate-600"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
+          <thead class="period-table-head"><tr><th class="p-3">เริ่ม</th><th class="p-3">สิ้นสุด</th><th class="p-3 text-right">มา (วัน)</th><th class="p-3 text-right">รอบ (วัน)</th><th class="p-3">หมายเหตุ</th><th class="p-3 text-center">ลบ</th></tr></thead>
           <tbody id="p-body" class="divide-y divide-slate-100 tabular-nums"></tbody></table></div>
       </div>
     </div>
@@ -224,7 +224,7 @@ function renderSelectedBar() {
       <p class="text-[11px] text-slate-600">${esc(statusText)}</p>
     </div>
     <div class="flex items-center gap-1.5 shrink-0">
-      <button type="button" data-c-go-symptoms class="btn btn-primary btn-sm min-h-[44px]">
+      <button type="button" data-c-go-symptoms class="btn btn-pink btn-sm min-h-[44px]">
         <span>เปิดอาการ &amp; ผิว</span>
         ${iconSvg('chevron-right', { size: 14 })}
       </button>
@@ -261,8 +261,8 @@ export function render() {
   const desc = state.period.slice().sort((a, b) => b.start.localeCompare(a.start));
   $('#p-body', root).innerHTML = desc.length ? desc.map((p, i) => {
     const older = desc[i + 1];
-    const endCell = p.end ? esc(fmtDate(p.end)) : `<button data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700">หมดวันนี้</button>`;
-    return `<tr class="hover:bg-pink-soft/30"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600 whitespace-nowrap">${endCell}</td>
+    const endCell = p.end ? esc(fmtDate(p.end)) : `<button type="button" data-end="${esc(p.id)}" class="chip period-end-chip min-h-[44px]">หมดวันนี้</button>`;
+    return `<tr class="period-table-row"><td class="p-3 font-medium whitespace-nowrap">${esc(fmtDate(p.start))}</td><td class="p-3 text-slate-600 whitespace-nowrap">${endCell}</td>
       <td class="p-3 text-right text-slate-600">${p.end ? daysBetween(p.start, p.end) + 1 : '—'}</td><td class="p-3 text-right text-slate-600">${older ? daysBetween(older.start, p.start) : '—'}</td>
       <td class="p-3 text-xs text-slate-500">${esc([p.flow, p.note].filter(Boolean).join(' · '))}</td>
       <td class="p-3 text-center"><button type="button" data-del="${esc(p.id)}" class="tm-row-action-btn is-del !mx-auto" aria-label="ลบบันทึกประจำเดือน ${esc(fmtDate(p.start))}">${iconSvg('trash', { size: 15 })}<span>ลบ</span></button></td></tr>`;
@@ -289,7 +289,7 @@ export function render() {
               </div>
               <p class="text-[11px] text-slate-500">${esc([dur, cycle, meta].filter(Boolean).join(' · '))}</p>
             </div>
-            ${!p.end ? `<button type="button" data-end="${esc(p.id)}" class="chip bg-pink-soft text-pink-700 shrink-0 min-h-[44px]">หมดวันนี้</button>` : ''}
+            ${!p.end ? `<button type="button" data-end="${esc(p.id)}" class="chip period-end-chip shrink-0 min-h-[44px]">หมดวันนี้</button>` : ''}
           </div>
         </div>`;
     }).join('') : '<p class="py-4 text-center text-slate-500 text-xs">ยังไม่มีข้อมูลประจำเดือน — เพิ่มวันแรกที่มาด้านบนได้เลย</p>';

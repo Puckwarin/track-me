@@ -3,6 +3,18 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v6.3.0] - 2026-11-27
+
+### ยกระดับการมองเห็นธีม Scoped Pastel Pink ประจำเดือน, โครงสร้างหน้าประวัติ & รายงาน และซิงค์เวอร์ชัน `v6.3.0`
+- **Scoped Pastel Pink ครบทั้งหน้าใน `#tab-period` (`src/style.css`, `src/period.js`)**:
+  - ขยายตัวแปร `--period-*` ภายใต้ `#tab-period` ให้ครอบคลุมพื้นผิวไล่โทนอ่อนของการ์ด (`#tab-period .card`), สีหัวข้อ `.card h2/h3` (`--period-ink`), ป้ายกำกับช่องกรอกและหัววันปฏิทิน (`.period-weekdays`, `--period-muted`), ขอบ `.input`, ปุ่ม `#tab-period .btn-ghost` (ปุ่มเลื่อนเดือน `<` / `>`), หัวตาราง `.period-table-head` และแถวการ์ดมือถือ `.tm-swipe-row.is-soft` โดยจำกัดขอบเขตเฉพาะในแท็บประจำเดือนเท่านั้น
+- **โครงสร้าง 2 ส่วนและแถบ KPI สรุปใน `ประวัติ & รายงาน` (`src/dashboard.js`, `src/weekly.js`, `src/style.css`)**:
+  - เพิ่มกรอบส่วนที่ชัดเจน `.db-section` และ `.db-section-head` แยกระหว่าง **ส่วนที่ 1 · สรุปช่วงเวลาเดียว (`#db-section-1`)** กับ **ส่วนที่ 2 · แนวโน้มระยะยาวข้ามเดือน (`#db-section-2`)**
+  - เพิ่มแถบ KPI สรุปรวม 4 ช่อง (`.db-metrics` / `.db-stat`: น้ำหนักล่าสุด, แคลอรี่เฉลี่ย/วัน, ออกกำลังกายรวม, การเงินสุทธิ) เหนือกราฟแนวโน้มทั้ง 4 ช่องใน `dashboard.js` และปรับพื้นหลังช่องสถิติอาหารใน `weekly.js` เป็นโทน `#F4F9FE` ให้แยกจากพื้นการ์ดขาวชัดเจนขึ้น
+- **ซิงค์เวอร์ชัน `v6.3.0` & Tests (`package.json`, `package-lock.json`, `src/version.js`, `src/uiOverhaul.test.js`, `docs/*`)**:
+  - อัปเดตเวอร์ชันเป็น `6.3.0` และเพิ่มการตรวจสอบคลาส Scoped Period (`period-table-head`, `#tab-period .card`), กรอบ `.db-section` / `.db-metrics` และความสอดคล้องของเวอร์ชัน `6.3.0` ใน `src/uiOverhaul.test.js`
+
+---
 ## [v6.2.0] - 2026-11-27
 
 ### UI Standardization (Phases 1–3), Dynamic Toast Stack, Optimistic UI & Copy Guard, Desktop Input Unification & Accessibility Hardening
@@ -21,6 +33,10 @@
   - เติม `for=` / `id=` และ `aria-label` ที่ขาดในฟอร์ม/Modal/ตัวกรองของ `reports.js`, `food.js`, `workout.js`, `body.js`, `inventory.js`, `lab.js`, `remindLog.js`, `reminders.js` และ `care.js`
 - **ความครอบคลุม Phase 1–2, Tests & ซิงค์เวอร์ชัน `v6.2.0`**:
   - คงมาตรฐาน Phase 1–2 (`weekNavBarHtml`, `buildWeekStripRange`, `confirmDialog()`, `.tm-row-action-btn` บน Desktop และไอคอน `src/icons.js`) พร้อมเพิ่มชุดทดสอบ **`src/uiStandardizationPhase3.test.js`** ร่วมกับ `Phase1` และ `Phase2` tests และซิงค์เวอร์ชัน `package.json`, `package-lock.json`, `src/version.js` และเอกสารภาษาไทยเป็น `6.2.0` โดยไม่เปลี่ยน `firestore.rules`
+- **ปรับปรุงระบบสี Token, Scoped Pastel Pink ประจำเดือน, Active Workout, ประวัติ & รายงาน & Shared Charts**:
+  - **Tokens, Bell Badge & Scoped Pastel Pink (`src/design-tokens.css`, `src/style.css`, `src/app.js`, `src/period.js`)**: เพิ่ม `--color-danger-solid` / `.tm-btn-danger` และ `.tm-btn-danger-soft`, ปรับ `.bell-badge` เป็นหน่วย `px` คงที่ (`20px`) พร้อม `.is-multi` และ `aria-label` บน `#btn-bell`, และจำกัดชุดสี Pastel Pink (`--period-*`) เฉพาะใน `#tab-period` (รวมไอคอนหัวข้อ `.card h2/h3`, Legend, `.period-selected-bar`, `.btn-pink` และ `.period-end-chip`) ไม่ให้สีน้ำเงินหลักทับหรือรั่วออกนอกแท็บ
+  - **Active Workout (`src/workoutActive.js`, `src/icons.js`, `src/style.css`)**: ปรับรายการท่าและสรุปผลเป็น 1 คอลัมน์อ่านง่ายพร้อมโหมด **`โฟกัสทีละท่า` / `ดูทั้งหมด`**, ปุ่มกดไว **`เสร็จเซตที่ X`** (`data-next-set`), แถบจับเวลาพักติดขอบล่าง **`#wa-rest-dock`** (ตั้งค่าเวลาพัก 30/60/90 วิ, พักอัตโนมัติ, `-15`/`+15 วิ`, พักชั่วคราว/ข้าม และแจ้งเตือนเสียง/สั่นเมื่อครบเวลา) และเปลี่ยนปุ่มย้อนกลับเป็นไอคอน `arrow-left`
+  - **ประวัติ & รายงาน & Shared Chart Primitives (`src/chartPrimitives.js`, `src/overviewLogic.js`, `src/dashboard.js`, `src/weekly.js`, `src/reports.js`, `src/summary.js`, `src/body.js`, `src/care.js`, `src/lab.js`, `src/chatWidget.js`)**: สร้าง `chartPrimitives.js` (`getChartPalette`, `lineChartSvg`, `barChartSvg`, `sparklineSvg`) รองรับ `role="img"` / `aria-label` และ CSS tokens ใน `dashboard.js`, `weekly.js`, `body.js`, `care.js` และ `lab.js`; แยกส่วนสรุปช่วงเวลาเดียว vs แนวโน้มระยะยาวข้ามเดือนและจำค่า `activeMonthCount` ใน `dashboard.js`; รวม `aggregateMonthlyOverview()`, `summarizeFinanceRange()` (ไม่นับรายการ `transfer` เป็นรายจ่าย) และ `summarizePeriodMetrics()` ให้ `dashboard.js`, `weekly.js` และ `summary.js` ใช้ร่วมกัน; จัดวาง `weekly.js` ให้มี 5 หมวดสอดคล้องกันทั้งรายสัปดาห์/รายเดือน พร้อมป้าย `ณ ปัจจุบัน` สำหรับสต๊อก/แจ้งเตือนและส่วน `ข้อสังเกต` รวมถึงเปลี่ยนป้ายหมวดแบบอ่านอย่างเดียวใน `chatWidget.js` เป็น `.tm-badge`
 
 ---
 ## [v6.1.0] - 2026-11-26

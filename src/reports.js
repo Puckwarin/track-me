@@ -22,6 +22,7 @@ import {
 } from './workoutConstants.js';
 import { labFlag, refText } from './lab.js';
 import { iconSvg } from './icons.js';
+import { errorState, loadingState } from './ui.js';
 
 let root, data = null;
 
@@ -113,12 +114,12 @@ async function generate() {
     btn.innerHTML = `${iconSvg('fa-spinner fa-spin', { size: 15 })} กำลังสร้างรายงาน...`;
   }
   if (preview) {
-    preview.innerHTML = `<p class="text-sm text-slate-500 py-4 text-center inline-flex items-center justify-center gap-1.5 w-full">${iconSvg('fa-spinner fa-spin', { size: 15 })}<span>กำลังดึงข้อมูลและจัดเตรียมรายงาน...</span></p>`;
+    preview.innerHTML = loadingState({ label: 'กำลังดึงข้อมูลและจัดเตรียมรายงาน...' });
   }
   try {
     data = await load();
   } catch (e) {
-    if (preview) preview.innerHTML = `<p class="text-sm text-rose-700 bg-rose-50 rounded-xl p-3">โหลดข้อมูลไม่สำเร็จ: ${esc(e.message)}</p>`;
+    if (preview) preview.innerHTML = errorState({ message: `โหลดข้อมูลไม่สำเร็จ: ${e.message}` });
     toast(e.message, 'err');
     return;
   } finally {

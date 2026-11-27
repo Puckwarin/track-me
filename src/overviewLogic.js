@@ -1,7 +1,13 @@
 import { localDateStr, parseLocal, round1, shiftMonth } from './util.js';
-import { computeWorkoutTotalMinutes } from './workoutConstants.js';
+import {
+  computeWorkoutTotalMinutes,
+  effortLevelToSessionRpe,
+  formatIntensityBreakdown,
+  summarizeWorkoutCollection
+} from './workoutConstants.js';
 
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : (Number.isFinite(Number(v)) ? Number(v) : 0));
+const avgNums = arr => (arr.length ? arr.reduce((sum, x) => sum + x, 0) / arr.length : null);
 
 export function buildMonthKeys(monthsCount = 6, today = localDateStr()) {
   const count = [3, 6, 12].includes(Number(monthsCount)) ? Number(monthsCount) : 6;
@@ -38,6 +44,8 @@ export function aggregateMonthlyOverview({
     workoutCount: 0,
     workoutMinutes: 0,
     workoutKcal: 0,
+    workoutRpe: [],
+    workoutIntensity: { light: 0, moderate: 0, vigorous: 0 },
     expenseTotal: 0,
     incomeTotal: 0,
     expenseCount: 0
@@ -67,13 +75,19 @@ export function aggregateMonthlyOverview({
     if (!b || row?.status === 'planned') continue;
     b.workoutCount += 1;
     b.workoutMinutes += Math.max(0, Math.round(computeWorkoutTotalMinutes(row)));
-    b.workoutKcal += Math.max(0, Math.round(num(row.estKcal)));
+    b.workoutKcal += Math.max(0, Math.round(num(row.estKcal ?? row.caloriesBurn)));
+    if (row?.intensity && Object.hasOwn(b.workoutIntensity, row.intensity)) {
+      b.workoutIntensity[row.intensity] += 1;
+    }
+    const rpe = row?.sessionRpe != null ? Number(row.sessionRpe) : effortLevelToSessionRpe(row?.effortLevel);
+    if (Number.isFinite(rpe) && rpe >= 1 && rpe <= 10) b.workoutRpe.push(rpe);
   }
 
   for (const row of expenses || []) {
     const ym = String(row?.date || '').slice(0, 7);
     const b = buckets[ym];
     if (!b) continue;
+    if (row?.type === 'transfer') continue;
     const amount = Math.max(0, num(row.amount));
     if (row.type === 'income') {
       b.incomeTotal += amount;
@@ -102,22 +116,35 @@ export function aggregateMonthlyOverview({
 
     const expenseTotal = Math.round(b.expenseTotal);
     const incomeTotal = Math.round(b.incomeTotal);
+    const workoutRpeSum = b.workoutRpe.reduce((a, x) => a + x, 0);
+    const workoutRpeCount = b.workoutRpe.length;
+    const workoutAvgRpe = workoutRpeCount ? round1(workoutRpeSum / workoutRpeCount) : null;
 
     return {
       ym,
+      month: ym,
       label: b.label,
       weightAvg,
       weightLatest,
+      weight: weightLatest,
       weightCount: sortedWeights.length,
       foodDays,
       calAvgPerLoggedDay,
+      avgKcal: calAvgPerLoggedDay,
       proteinAvgPerLoggedDay,
       workoutCount: b.workoutCount,
       workoutMinutes: b.workoutMinutes,
+      workoutMin: b.workoutMinutes,
       workoutKcal: b.workoutKcal,
+      workoutRpeSum,
+      workoutRpeCount,
+      workoutAvgRpe,
+      workoutIntensity: b.workoutIntensity,
+      workoutIntensityText: formatIntensityBreakdown(b.workoutIntensity),
       expenseTotal,
       incomeTotal,
       netTotal: incomeTotal - expenseTotal,
+      net: incomeTotal - expenseTotal,
       expenseCount: b.expenseCount
     };
   });
@@ -149,6 +176,106 @@ export function aggregateMonthlyOverview({
       totalExpense: months.reduce((s, m) => s + m.expenseTotal, 0),
       totalIncome: months.reduce((s, m) => s + m.incomeTotal, 0)
     }
+  };
+}
+
+export function summarizeFinanceRange(expenses = [], start, end) {
+  const rows = (Array.isArray(expenses) ? expenses : []).filter(
+    x => x && x.date >= start && x.date <= end && x.type !== 'transfer'
+  );
+  const income = rows.filter(x => x.type === 'income').reduce((a, x) => a + Math.max(0, num(x.amount)), 0);
+  const expense = rows.filter(x => x.type !== 'income').reduce((a, x) => a + Math.max(0, num(x.amount)), 0);
+  const cats = {};
+  rows.filter(x => x.type !== 'income').forEach(x => {
+    const cat = x.category || 'อื่น ๆ';
+    cats[cat] = (cats[cat] || 0) + Math.max(0, num(x.amount));
+  });
+  const topCats = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return { count: rows.length, income, expense, net: income - expense, topCats };
+}
+
+export function summarizePeriodMetrics({
+  start,
+  end,
+  prevStart = '',
+  prevEnd = '',
+  body = [],
+  workouts = [],
+  symptoms = [],
+  period = []
+} = {}) {
+  const safeBody = Array.isArray(body) ? body : [];
+  const weightInRange = (a, b) => safeBody
+    .filter(r => r && typeof r.weight === 'number' && Number.isFinite(r.weight) && r.date >= a && r.date <= b)
+    .sort((p, q) => p.date.localeCompare(q.date));
+
+  const weightRecords = weightInRange(start, end);
+  const prevWeightRecords = prevStart && prevEnd ? weightInRange(prevStart, prevEnd) : [];
+  const weightAvg = avgNums(weightRecords.map(r => r.weight));
+  const prevWeightAvg = avgNums(prevWeightRecords.map(r => r.weight));
+  const weightDelta = weightAvg !== null && prevWeightAvg !== null
+    ? round1(weightAvg - prevWeightAvg)
+    : (weightRecords.length > 1 ? round1(weightRecords[weightRecords.length - 1].weight - weightRecords[0].weight) : null);
+
+  const rangeBody = safeBody.filter(r => r && r.date >= start && r.date <= end);
+  const sleepVals = rangeBody
+    .map(r => (typeof r.sleepHours === 'number' ? r.sleepHours : (typeof r.sleepMinutes === 'number' ? r.sleepMinutes / 60 : null)))
+    .filter(v => v !== null && Number.isFinite(v));
+  const stepVals = rangeBody
+    .map(r => (typeof r.steps === 'number' ? r.steps : null))
+    .filter(v => v !== null && Number.isFinite(v));
+
+  const doneWorkouts = (Array.isArray(workouts) ? workouts : []).filter(
+    w => w && w.date >= start && w.date <= end && w.status !== 'planned'
+  );
+  const workoutSummary = summarizeWorkoutCollection(doneWorkouts);
+  const intensityText = formatIntensityBreakdown(workoutSummary.byIntensity);
+  const effortText = Object.entries(workoutSummary.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const feelingText = Object.entries(workoutSummary.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const recoveryText = Object.entries(workoutSummary.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
+  const evalText = [
+    workoutSummary.avgSessionRpe != null ? `RPE เฉลี่ย ${workoutSummary.avgSessionRpe}/10` : '',
+    effortText || feelingText,
+    recoveryText ? `ฟื้นตัว: ${recoveryText}` : ''
+  ].filter(Boolean).join(' · ');
+
+  const symptomDays = (Array.isArray(symptoms) ? symptoms : []).filter(
+    s => s && s.date >= start && s.date <= end && Object.values(s.symptoms || {}).some(v => v > 0)
+  ).length;
+
+  const periodRecords = (Array.isArray(period) ? period : []).filter(
+    p => p && p.start && p.start <= end && (p.end || p.start) >= start
+  );
+
+  return {
+    weight: {
+      records: weightRecords,
+      count: weightRecords.length,
+      avg: weightAvg !== null ? round1(weightAvg) : null,
+      prevAvg: prevWeightAvg !== null ? round1(prevWeightAvg) : null,
+      delta: weightDelta,
+      first: weightRecords[0]?.weight ?? null,
+      last: weightRecords[weightRecords.length - 1]?.weight ?? null
+    },
+    sleep: {
+      vals: sleepVals,
+      count: sleepVals.length,
+      avg: avgNums(sleepVals) !== null ? round1(avgNums(sleepVals)) : null
+    },
+    steps: {
+      vals: stepVals,
+      count: stepVals.length,
+      avg: avgNums(stepVals) !== null ? Math.round(avgNums(stepVals)) : null,
+      total: Math.round(stepVals.reduce((a, b) => a + b, 0))
+    },
+    workouts: {
+      list: doneWorkouts,
+      summary: workoutSummary,
+      intensityText,
+      evalText
+    },
+    symptomDays,
+    periodCount: periodRecords.length
   };
 }
 

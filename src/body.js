@@ -7,21 +7,22 @@ import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindChartInspector, bindSwipeRows } from './ui.js';
 import { BODY_MEASUREMENT_KEYS, bodyLatest, resolvedSleepHours, sortBodyDesc } from './bodyStats.js';
+import { getChartPalette, lineChartSvg } from './chartPrimitives.js';
 
 export { bodyLatest, sortBodyDesc };
 
 const CHART_METRICS = [
-  { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', color: '#1F4A74' },
-  { key: 'waist', label: 'รอบเอว', unit: 'ซม.', color: '#4A7FAE' },
-  { key: 'hip', label: 'สะโพก', unit: 'ซม.', color: '#C95B72' },
-  { key: 'arm', label: 'รอบแขน', unit: 'ซม.', color: '#217A68' },
-  { key: 'thigh', label: 'รอบขา', unit: 'ซม.', color: '#C58F1E' },
-  { key: 'bust', label: 'รอบอก', unit: 'ซม.', color: '#647F9C' }
+  { key: 'weight', label: 'น้ำหนัก', unit: 'กก.', paletteKey: 'brandDark' },
+  { key: 'waist', label: 'รอบเอว', unit: 'ซม.', paletteKey: 'brand' },
+  { key: 'hip', label: 'สะโพก', unit: 'ซม.', paletteKey: 'error' },
+  { key: 'arm', label: 'รอบแขน', unit: 'ซม.', paletteKey: 'success' },
+  { key: 'thigh', label: 'รอบขา', unit: 'ซม.', paletteKey: 'warning' },
+  { key: 'bust', label: 'รอบอก', unit: 'ซม.', paletteKey: 'axisSubtle' }
 ];
 
 const SLEEP_STEPS_METRICS = [
-  { key: 'sleepHours', label: 'การนอน (ชม.)', unit: 'ชม.', color: '#1F4A74', decimals: 1 },
-  { key: 'steps', label: 'ก้าวเดิน', unit: 'ก้าว', color: '#217A68', decimals: 0 }
+  { key: 'sleepHours', label: 'การนอน (ชม.)', unit: 'ชม.', paletteKey: 'brandDark', decimals: 1 },
+  { key: 'steps', label: 'ก้าวเดิน', unit: 'ก้าว', paletteKey: 'success', decimals: 0 }
 ];
 
 const hasBodyMeasurement = r => BODY_MEASUREMENT_KEYS.some(k => typeof r?.[k] === 'number');
@@ -231,32 +232,40 @@ export function resetBodyToToday() {
 export function metricChartSvg(items, metricKey = 'weight') {
   const meta = CHART_METRICS.find(m => m.key === metricKey) || SLEEP_STEPS_METRICS.find(m => m.key === metricKey) || CHART_METRICS[0];
   const valOf = i => (metricKey === 'sleepHours' ? resolvedSleepHours(i) : (typeof i[meta.key] === 'number' ? i[meta.key] : null));
-  const pts = items.map(i => ({ date: i.date, val: valOf(i) })).filter(i => typeof i.val === 'number' && i.date).sort((a, b) => a.date.localeCompare(b.date)).slice(-60);
+  const pts = items
+    .map(i => ({ date: i.date, val: valOf(i) }))
+    .filter(i => typeof i.val === 'number' && i.date)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-60);
   if (pts.length < 2) return `<p class="text-xs text-slate-500">บันทึก${esc(meta.label)}อย่างน้อย 2 ครั้งเพื่อดูกราฟ</p>`;
-  const W = 320, H = 165, P = 34;
-  const vs = pts.map(p => p.val);
-  let min = Math.min(...vs), max = Math.max(...vs);
-  if (max - min < 1) { min = Math.max(0, min - 0.5); max += 0.5; }
+
+  const palette = getChartPalette();
+  const color = palette[meta.paletteKey] || palette.brandDark;
   const ts = pts.map(p => parseLocal(p.date).getTime());
-  const t0 = ts[0], t1 = ts[ts.length - 1];
-  const x = t => P + ((t - t0) / (t1 - t0 || 1)) * (W - 2 * P);
-  const y = w => H - P - ((w - min) / (max - min)) * (H - 2 * P);
-  const decimals = meta.decimals ?? 1;
-  const fmtVal = v => decimals === 0 ? Math.round(v).toLocaleString() : v.toFixed(decimals);
-  const line = pts.map((p, i) => `${x(ts[i]).toFixed(1)},${y(p.val).toFixed(1)}`).join(' ');
-  const dots = pts.map((p, i) => {
-    const cx = x(ts[i]).toFixed(1);
-    const cy = y(p.val).toFixed(1);
-    const valStr = `${fmtVal(p.val)} ${meta.unit}`;
-    return `<g>
-      <circle cx="${cx}" cy="${cy}" r="3.4" fill="${meta.color}"></circle>
-      <circle cx="${cx}" cy="${cy}" r="11" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(p.date))}: ${esc(valStr)}" data-chart-sub="${esc(meta.label)}" data-chart-color="${meta.color}" aria-label="${esc(fmtDate(p.date))} ${esc(valStr)}"><title>${esc(fmtDate(p.date))}: ${esc(valStr)}</title></circle>
-    </g>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแนวโน้ม${esc(meta.label)}"><polyline points="${line}" fill="none" stroke="${meta.color}" stroke-width="2.2"/>${dots}
-    <text x="4" y="${y(max) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtVal(max))}</text><text x="4" y="${y(min) + 4}" font-size="9.5" fill="#4A6685">${esc(fmtVal(min))}</text>
-    <text x="${P}" y="${H - 6}" font-size="10" fill="#4A6685">${esc(fmtDate(pts[0].date))}</text>
-    <text x="${W - P}" y="${H - 6}" font-size="10" fill="#4A6685" text-anchor="end">${esc(fmtDate(pts[pts.length - 1].date))}</text></svg>`;
+  const t0 = ts[0];
+  const t1 = ts[ts.length - 1];
+  const span = t1 - t0 || 1;
+
+  return lineChartSvg({
+    data: pts,
+    labelKey: 'date',
+    valueKey: 'val',
+    color,
+    unit: meta.unit,
+    decimals: meta.decimals ?? 1,
+    width: 320,
+    height: 165,
+    pad: 34,
+    dotRadius: 3.4,
+    strokeWidth: 2.2,
+    minPoints: 2,
+    xAxisMode: 'ends',
+    ariaLabel: `กราฟแนวโน้ม${meta.label}`,
+    xRatio: (_item, idx) => (ts[idx] - t0) / span,
+    xLabelFormatter: item => fmtDate(item.date),
+    tipFormatter: (item, valStr) => `${fmtDate(item.date)}: ${valStr}`,
+    subFormatter: () => meta.label
+  });
 }
 
 export function weightChartSvg(items) {
@@ -274,6 +283,7 @@ export function sleepCandlestickSvg(items) {
     .slice(-14);
   if (!pts.length) return '<p class="text-xs text-slate-500">บันทึกการนอนอย่างน้อย 1 ครั้งเพื่อดูกราฟแท่งเทียน</p>';
 
+  const palette = getChartPalette();
   const W = 340, H = 185, PL = 34, PR = 12, PT = 16, PB = 28;
   const maxHours = Math.max(9.5, ...pts.map(p => p.hours)) + 0.5;
   const plotW = W - PL - PR;
@@ -296,17 +306,17 @@ export function sleepCandlestickSvg(items) {
     const yTop = yOf(r.hours);
     const yBottom = yOf(0);
 
-    let bodyHtml = `<line x1="${cx.toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="#647F9C" stroke-width="1.3"/>
-      <line x1="${(cx - 3).toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${(cx + 3).toFixed(1)}" y2="${Math.max(PT, yTop - 3).toFixed(1)}" stroke="#647F9C" stroke-width="1.2"/>`;
+    let bodyHtml = `<line x1="${cx.toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="${palette.axisSubtle}" stroke-width="1.3"/>
+      <line x1="${(cx - 3).toFixed(1)}" y1="${Math.max(PT, yTop - 3).toFixed(1)}" x2="${(cx + 3).toFixed(1)}" y2="${Math.max(PT, yTop - 3).toFixed(1)}" stroke="${palette.axisSubtle}" stroke-width="1.2"/>`;
 
     if (hasStages) {
       const denom = Math.max(totalMin, stageSum, 1);
       const bodyH = Math.max(4, yBottom - yTop);
       const segs = [
-        { min: deep, color: '#194971' },
-        { min: rem, color: '#C95B72' },
-        { min: light, color: '#A8D0EF' },
-        { min: Math.max(0, totalMin - stageSum), color: '#D0DBF7' }
+        { min: deep, color: palette.brandDark },
+        { min: rem, color: palette.error },
+        { min: light, color: palette.primary400 },
+        { min: Math.max(0, totalMin - stageSum), color: palette.lavSoft }
       ].filter(s => s.min > 0);
       let cursorY = yBottom;
       segs.forEach(seg => {
@@ -316,7 +326,7 @@ export function sleepCandlestickSvg(items) {
         cursorY = sy;
       });
     } else {
-      const fill = r.hours >= 7 ? '#217A68' : '#C58F1E';
+      const fill = r.hours >= 7 ? palette.success : palette.warning;
       bodyHtml += `<rect x="${xLeft.toFixed(1)}" y="${yTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${Math.max(4, yBottom - yTop).toFixed(1)}" rx="3" fill="${fill}" opacity="0.9"/>`;
     }
 
@@ -324,30 +334,30 @@ export function sleepCandlestickSvg(items) {
     const stageSub = hasStages
       ? `ลึก ${Math.round(deep)}น. · ตื้น ${Math.round(light)}น.${rem ? ` · REM ${Math.round(rem)}น.` : ''}`
       : (r.bedTime || r.wakeTime ? `${r.bedTime || '?'}–${r.wakeTime || '?'}` : sourceBadgeLabel(r.source));
-    const tipColor = hasStages ? '#1F4A74' : (r.hours >= 7 ? '#217A68' : '#C58F1E');
+    const tipColor = hasStages ? palette.brandDark : (r.hours >= 7 ? palette.success : palette.warning);
     const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
-    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#4A6685">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="${palette.axis}">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
 
     return `<g>
       ${bodyHtml}
       ${xLabel}
-      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: นอน ${esc(durLabel)}" data-chart-sub="${esc(stageSub)}" data-chart-color="${tipColor}" aria-label="${esc(fmtDate(r.date))} นอน ${esc(durLabel)}"><title>${esc(fmtDate(r.date))}: นอน ${esc(durLabel)} (${esc(stageSub)})</title></rect>
+      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: นอน ${esc(durLabel)}" data-chart-sub="${esc(stageSub)}" data-chart-color="${esc(tipColor)}" aria-label="${esc(fmtDate(r.date))} นอน ${esc(durLabel)}"><title>${esc(fmtDate(r.date))}: นอน ${esc(durLabel)} (${esc(stageSub)})</title></rect>
     </g>`;
   }).join('');
 
   return `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนการนอนและระยะหลับลึกตื้น">
-      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#4A7FAE" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.75"/>
-      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#194971">เป้า 7 ชม.</text>
-      <text x="4" y="${PT + 6}" font-size="9" fill="#4A6685">${Math.round(maxHours)}ชม.</text>
-      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#4A6685">0</text>
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="${palette.brand}" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.75"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="${palette.brandDark}">เป้า 7 ชม.</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="${palette.axis}">${Math.round(maxHours)}ชม.</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="${palette.axis}">0</text>
       ${candles}
     </svg>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#194971]"></span>หลับลึก</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#C95B72]"></span>REM</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#A8D0EF]"></span>หลับตื้น</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#217A68]"></span>ไม่มีข้อมูลระยะ (≥7ชม.)</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.brandDark}"></span>หลับลึก</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.error}"></span>REM</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.primary400}"></span>หลับตื้น</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.success}"></span>ไม่มีข้อมูลระยะ (≥7ชม.)</span>
     </div>`;
 }
 
@@ -358,6 +368,7 @@ export function stepsCandlestickSvg(items) {
     .slice(-14);
   if (!pts.length) return '<p class="text-xs text-slate-500">บันทึกก้าวเดินอย่างน้อย 1 ครั้งเพื่อดูกราฟแท่งเทียน</p>';
 
+  const palette = getChartPalette();
   const W = 340, H = 185, PL = 38, PR = 12, PT = 16, PB = 28;
   const maxSteps = Math.max(9000, ...pts.map(p => p.steps)) * 1.08;
   const plotW = W - PL - PR;
@@ -374,7 +385,7 @@ export function stepsCandlestickSvg(items) {
     const open = prev;
     const close = r.steps;
     const bull = close >= open;
-    const color = bull ? '#217A68' : '#C95B72';
+    const color = bull ? palette.success : palette.error;
     const topV = Math.max(open, close);
     const botV = Math.min(open, close);
     const wickLow = Math.max(0, Math.round(botV * 0.8));
@@ -389,27 +400,27 @@ export function stepsCandlestickSvg(items) {
       : `${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ก้าวเทียบวันก่อน`;
     const sub = `${diffStr}${typeof r.distanceKm === 'number' ? ` · ${r.distanceKm} กม.` : ''}`;
     const showX = pts.length <= 7 || i === 0 || i === pts.length - 1 || i % Math.ceil(pts.length / 5) === 0;
-    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="#4A6685">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
+    const xLabel = showX ? `<text x="${cx.toFixed(1)}" y="${H - 7}" font-size="9" text-anchor="middle" fill="${palette.axis}">${esc(r.date.slice(8))}/${esc(r.date.slice(5, 7))}</text>` : '';
 
     return `<g>
       <line x1="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1.5"/>
       <rect x="${(cx - candleW / 2).toFixed(1)}" y="${yBodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" rx="2.5" fill="${color}" opacity="0.9"/>
       ${xLabel}
-      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว" data-chart-sub="${esc(sub)}" data-chart-color="${color}" aria-label="${esc(fmtDate(r.date))} ${r.steps.toLocaleString()} ก้าว"><title>${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว (${esc(sub)})</title></rect>
+      <rect x="${(PL + i * colW).toFixed(1)}" y="${PT}" width="${colW.toFixed(1)}" height="${plotH}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว" data-chart-sub="${esc(sub)}" data-chart-color="${esc(color)}" aria-label="${esc(fmtDate(r.date))} ${r.steps.toLocaleString()} ก้าว"><title>${esc(fmtDate(r.date))}: ${r.steps.toLocaleString()} ก้าว (${esc(sub)})</title></rect>
     </g>`;
   }).join('');
 
   return `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแท่งเทียนก้าวเดินรายวัน">
-      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="#217A68" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.7"/>
-      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="#145245">เป้า 8,000 ก้าว</text>
-      <text x="4" y="${PT + 6}" font-size="9" fill="#4A6685">${Math.round(maxSteps / 1000)}k</text>
-      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="#4A6685">0</text>
+      <line x1="${PL}" x2="${W - PR}" y1="${targetY.toFixed(1)}" y2="${targetY.toFixed(1)}" stroke="${palette.success}" stroke-dasharray="4 3" stroke-width="1.1" opacity="0.7"/>
+      <text x="${W - PR}" y="${Math.max(11, targetY - 3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="${palette.successFg}">เป้า 8,000 ก้าว</text>
+      <text x="4" y="${PT + 6}" font-size="9" fill="${palette.axis}">${Math.round(maxSteps / 1000)}k</text>
+      <text x="4" y="${yOf(0) + 3}" font-size="9" fill="${palette.axis}">0</text>
       ${candles}
     </svg>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#217A68]"></span>เพิ่ม / คงที่จากวันก่อน</span>
-      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-[#C95B72]"></span>ลดลงจากวันก่อน</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.success}"></span>เพิ่ม / คงที่จากวันก่อน</span>
+      <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm" style="background:${palette.error}"></span>ลดลงจากวันก่อน</span>
     </div>`;
 }
 

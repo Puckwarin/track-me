@@ -3,6 +3,7 @@ import archive from '@phosphor-icons/core/assets/regular/archive.svg?raw';
 import arrowClockwise from '@phosphor-icons/core/assets/regular/arrow-clockwise.svg?raw';
 import arrowCounterClockwise from '@phosphor-icons/core/assets/regular/arrow-counter-clockwise.svg?raw';
 import arrowDown from '@phosphor-icons/core/assets/regular/arrow-down.svg?raw';
+import arrowLeft from '@phosphor-icons/core/assets/regular/arrow-left.svg?raw';
 import arrowRight from '@phosphor-icons/core/assets/regular/arrow-right.svg?raw';
 import arrowSquareOut from '@phosphor-icons/core/assets/regular/arrow-square-out.svg?raw';
 import arrowUp from '@phosphor-icons/core/assets/regular/arrow-up.svg?raw';
@@ -69,6 +70,7 @@ import listChecks from '@phosphor-icons/core/assets/regular/list-checks.svg?raw'
 import lock from '@phosphor-icons/core/assets/regular/lock.svg?raw';
 import magicWand from '@phosphor-icons/core/assets/regular/magic-wand.svg?raw';
 import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw';
+import minus from '@phosphor-icons/core/assets/regular/minus.svg?raw';
 import moon from '@phosphor-icons/core/assets/regular/moon.svg?raw';
 import note from '@phosphor-icons/core/assets/regular/note.svg?raw';
 import notePencil from '@phosphor-icons/core/assets/regular/note-pencil.svg?raw';
@@ -76,6 +78,7 @@ import packageIcon from '@phosphor-icons/core/assets/regular/package.svg?raw';
 import paintBrush from '@phosphor-icons/core/assets/regular/paint-brush.svg?raw';
 import palette from '@phosphor-icons/core/assets/regular/palette.svg?raw';
 import paperPlaneTilt from '@phosphor-icons/core/assets/regular/paper-plane-tilt.svg?raw';
+import pause from '@phosphor-icons/core/assets/regular/pause.svg?raw';
 import pawPrint from '@phosphor-icons/core/assets/regular/paw-print.svg?raw';
 import pencilSimple from '@phosphor-icons/core/assets/regular/pencil-simple.svg?raw';
 import pill from '@phosphor-icons/core/assets/regular/pill.svg?raw';
@@ -146,6 +149,7 @@ const ICONS = {
   moon,
   'arrow-up': arrowUp,
   'arrow-down': arrowDown,
+  'arrow-left': arrowLeft,
   'arrow-right': arrowRight,
   ellipsis: dotsThree,
   sleep: bed,
@@ -184,6 +188,8 @@ const ICONS = {
   'rotate-left': arrowCounterClockwise,
   'rotate-right': arrowClockwise,
   eraser,
+  minus,
+  pause,
   play,
   stop,
   table,
@@ -303,6 +309,8 @@ const ICONS = {
   'fa-rotate-right': arrowClockwise,
   'fa-arrows-rotate': arrowsClockwise,
   'fa-eraser': eraser,
+  'fa-minus': minus,
+  'fa-pause': pause,
   'fa-play': play,
   'fa-stop': stop,
   'fa-paper-plane': paperPlaneTilt,

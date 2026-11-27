@@ -1,15 +1,15 @@
 import { state } from './state.js';
 import { isPreviewMode } from './demo.js';
-import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, mondayOf } from './util.js';
+import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, toast, openModal, mondayOf, monthEndDate } from './util.js';
 import { periodStats } from './periodStats.js';
 import { bodyLatest } from './bodyStats.js';
 import { syncLineText, renderSyncStatus } from './sync.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { summarizeWorkoutCollection, formatIntensityBreakdown } from './workoutConstants.js';
+import { summarizeFinanceRange } from './overviewLogic.js';
 
 let current = null;
 const cacheKey = () => 'summary_cache_' + state.uid;
-const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const fmtMoney = n => Math.round(n || 0).toLocaleString();
 
 export function clearSummaryCache() { if (state.uid) localStorage.removeItem(cacheKey()); }
@@ -20,10 +20,8 @@ function buildLiveSummary() {
   const wkStart = mondayOf(today);
   const wkEnd = addDays(wkStart, 6);
 
-  const monthEx = (state.expenses || []).filter(x => String(x.date || '').startsWith(ym));
-  const income = monthEx.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
-  const expense = monthEx.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-  const finance = { ym, income, expense, net: income - expense, count: monthEx.length };
+  const monthFin = summarizeFinanceRange(state.expenses, `${ym}-01`, monthEndDate(ym));
+  const finance = { ym, income: monthFin.income, expense: monthFin.expense, net: monthFin.net, count: monthFin.count };
 
   const wkWorkouts = (state.workouts || []).filter(w => w.date >= wkStart && w.date <= wkEnd);
   const doneWorkouts = wkWorkouts.filter(w => w.status !== 'planned');

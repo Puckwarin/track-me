@@ -1,4 +1,4 @@
-import { openModal, confirmDialog, esc } from './util.js';
+import { openModal, confirmDialog, esc, toast } from './util.js';
 import { safeHttpUrl } from './workoutParser.js';
 import {
   WORKOUT_FEELINGS,
@@ -148,6 +148,42 @@ export function countTotalSets(rows = []) {
   return rows.reduce((sum, r) => sum + Math.max(1, Math.min(30, Number(r?.sets) || 1)), 0);
 }
 
+export function findNextIncompleteSetIndex(checkedFlags = []) {
+  return (checkedFlags || []).findIndex(flag => !flag);
+}
+
+export function formatRestClock(seconds = 0) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  const mm = String(Math.floor(safe / 60)).padStart(2, '0');
+  const ss = String(safe % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+function playRestChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [587.33, 880].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+      gain.gain.setValueAtTime(0.001, now + idx * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.09, now + idx * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.24);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.14);
+      osc.stop(now + idx * 0.14 + 0.26);
+    });
+    setTimeout(() => { void ctx.close?.().catch(() => {}); }, 700);
+  } catch {
+    // Ignore blocked audio context
+  }
+}
+
 function imageMarkup(r) {
   const validImg = safeHttpUrl(r.imageUrl);
   if (validImg) {
@@ -180,10 +216,33 @@ function refMarkup(r) {
 
 export function runActiveWorkout(rows, onFinish, meta = {}) {
   const started = Date.now();
+  const AUTO_REST_KEY = 'trackme_wa_auto_rest';
+  const REST_PRESET_KEY = 'trackme_wa_rest_sec';
+  const readBoolPref = (k, fallback) => {
+    try {
+      const v = localStorage.getItem(k);
+      return v === null ? fallback : v === '1';
+    } catch { return fallback; }
+  };
+  const readNumPref = (k, fallback) => {
+    try {
+      const v = Number(localStorage.getItem(k));
+      return [30, 60, 90].includes(v) ? v : fallback;
+    } catch { return fallback; }
+  };
+  const writePref = (k, v) => {
+    try { localStorage.setItem(k, String(v)); } catch {}
+  };
+
   let restTimer = null;
   let restSeconds = 0;
-  let activeRestPreset = 0;
+  let restPaused = false;
+  let restExpired = false;
+  let defaultRestSec = readNumPref(REST_PRESET_KEY, 60);
+  let autoRestEnabled = readBoolPref(AUTO_REST_KEY, true);
   let activeSection = 'all';
+  let viewMode = 'list'; // 'list' | 'focus'
+  let focusIndex = 0;
   let showCompletedCards = false;
   let step = 'play'; // 'play' | 'reflect'
   let snapshotDone = [];
@@ -230,10 +289,13 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
               ${refMarkup(r)}
             </div>
           </div>
-          <div class="space-y-2 pt-0.5">
-            <div class="flex items-center justify-between gap-2 text-xs lg:text-sm text-slate-500">
-              <span class="tabular-nums" data-card-progress="${ri}">0 / ${count} เซต</span>
-              ${count > 1 ? `<button type="button" data-toggle-all="${ri}" class="text-xs lg:text-sm font-semibold text-brand-dark hover:underline py-1 px-1.5 whitespace-nowrap">เลือกครบทุกเซต</button>` : ''}
+          <div class="space-y-2.5 pt-0.5">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs lg:text-sm text-slate-500">
+              <span class="tabular-nums font-medium" data-card-progress="${ri}">0 / ${count} เซต</span>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" data-next-set="${ri}" class="wa-next-set-btn">${iconSvg('check', { size: 15 })}<span>เสร็จเซตที่ 1</span></button>
+                ${count > 1 ? `<button type="button" data-toggle-all="${ri}" class="btn btn-ghost btn-sm min-h-[44px] text-xs whitespace-nowrap">เลือกครบทุกเซต</button>` : ''}
+              </div>
             </div>
             <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">${checks}</div>
           </div>
@@ -246,7 +308,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
           <h3 class="text-sm sm:text-base lg:text-lg font-bold text-slate-800">${esc(SECTION_TITLES[section])}</h3>
           <span data-wa-sec-count="${section}" class="text-xs lg:text-sm text-slate-500 tabular-nums">${members.length} ท่า</span>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 lg:gap-5">${cards}</div>
+        <div class="grid grid-cols-1 gap-3.5 sm:gap-4">${cards}</div>
         <p data-wa-sec-done-msg="${section}" class="hidden rounded-xl bg-white/80 border border-slate-200 px-3.5 py-2.5 text-xs sm:text-sm text-emerald-700 font-medium">✓ ทำครบทุกท่าในช่วงนี้แล้ว</p>
       </section>`;
   }).join('');
@@ -258,7 +320,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   ].filter(Boolean);
 
   const sectionTabsHtml = activeSections.length > 1
-    ? `<div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 overflow-x-auto mt-3" role="tablist" aria-label="ช่วงการฝึก">
+    ? `<div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 overflow-x-auto" role="tablist" aria-label="ช่วงการฝึก">
         <button type="button" role="tab" aria-selected="true" data-sec-tab="all" class="wa-sec-tab is-active">ทั้งหมด (${rows.length})</button>
         ${activeSections.map(sec => {
           const cnt = rows.filter(r => r.section === sec).length;
@@ -268,58 +330,79 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     : '';
 
   const m = openModal(
-    `<header class="wa-header shrink-0 px-4 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-3.5 space-y-3">
+    `<header class="wa-header shrink-0 px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-3 space-y-2.5">
       <div class="flex items-start justify-between gap-3 min-w-0">
         <div class="min-w-0 flex-1 space-y-0.5">
           <h3 id="wa-modal-title" class="font-bold text-lg sm:text-xl lg:text-2xl text-slate-800 leading-snug break-words [overflow-wrap:anywhere]">${esc(meta.title || 'กำลังออกกำลังกาย')}</h3>
-          <p id="wa-modal-sub" class="text-xs sm:text-sm lg:text-base text-slate-500 break-words">${esc(subtitleParts.join(' · '))}</p>
+          <p id="wa-modal-sub" class="text-xs sm:text-sm text-slate-500 break-words">${esc(subtitleParts.join(' · '))}</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <div class="text-right">
-            <span class="block text-[11px] lg:text-xs text-slate-500 leading-none">เวลาฝึก</span>
-            <b id="active-time" class="text-xl sm:text-2xl lg:text-[1.75rem] font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
+            <span class="block text-[11px] text-slate-500 leading-none">เวลาฝึก</span>
+            <b id="active-time" class="text-xl sm:text-2xl font-bold tabular-nums text-slate-800 leading-tight">00:00</b>
           </div>
           <button type="button" data-wa-close class="icon-btn min-w-[44px] min-h-[44px]" aria-label="ปิดหน้าต่างฝึก">${iconSvg('close', { size: 18 })}</button>
         </div>
       </div>
 
-      <div id="wa-play-controls" class="space-y-3">
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between gap-2 text-xs lg:text-sm text-slate-600 tabular-nums">
-            <span id="active-progress-text">ความคืบหน้า: 0 / ${totalSetsAll} เซต (0%)</span>
-            <span>แตะที่เซตเมื่อทำเสร็จ</span>
+      <div id="wa-play-controls" class="space-y-2">
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 tabular-nums">
+            <span id="active-progress-text" class="font-semibold">ความคืบหน้า: 0 / ${totalSetsAll} เซต (0%)</span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" id="wa-view-mode-btn" class="chip bg-slate-100 text-slate-700 hover:bg-sky-soft !min-h-[44px] text-xs font-semibold">${iconSvg('target', { size: 14 })}<span>โฟกัสทีละท่า</span></button>
+              <button type="button" id="wa-toggle-done-cards" class="hidden chip bg-slate-100 text-slate-700 hover:bg-slate-200 !min-h-[44px] text-xs"></button>
+            </div>
           </div>
           <div class="progress h-2"><span id="active-progress-bar" style="width:0%"></span></div>
         </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-xs lg:text-sm font-semibold text-slate-600 mr-0.5 whitespace-nowrap">จับเวลาพัก:</span>
-            <button type="button" data-rest-sec="30" class="wa-rest-btn">30 วิ</button>
-            <button type="button" data-rest-sec="60" id="active-rest" class="wa-rest-btn">60 วิ</button>
-            <button type="button" data-rest-sec="90" class="wa-rest-btn">90 วิ</button>
-            <button type="button" id="active-rest-stop" class="wa-rest-btn hidden">หยุด</button>
-          </div>
-          <div class="flex items-center gap-2.5 ml-auto">
-            <button type="button" id="wa-toggle-done-cards" class="hidden chip bg-slate-100 text-slate-700 hover:bg-slate-200 !min-h-[44px] text-xs lg:text-sm"></button>
-            <span id="active-rest-time" class="wa-rest-time text-sm lg:text-base font-bold tabular-nums whitespace-nowrap"></span>
-          </div>
-        </div>
-
         ${sectionTabsHtml}
       </div>
     </header>
 
     <div class="wa-body flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-      <div id="wa-play-view" class="space-y-6">
+      <div id="wa-play-view" class="space-y-5 max-w-4xl mx-auto">
+        <div id="wa-focus-bar" class="hidden flex items-center justify-between gap-2 rounded-2xl bg-white border border-slate-200 px-3 py-2">
+          <button type="button" id="wa-focus-prev" class="btn btn-ghost btn-sm min-h-[44px]">${iconSvg('chevron-left', { size: 15 })}<span>ท่าก่อน</span></button>
+          <span id="wa-focus-label" class="text-xs sm:text-sm font-bold text-slate-800 tabular-nums text-center">ท่าที่ 1 / ${rows.length}</span>
+          <button type="button" id="wa-focus-next" class="btn btn-ghost btn-sm min-h-[44px]"><span>ท่าถัดไป</span>${iconSvg('chevron-right', { size: 15 })}</button>
+        </div>
         <div id="wa-all-done-banner" class="hidden rounded-2xl bg-white border border-emerald-200 p-5 text-center space-y-2">
           <p class="text-base sm:text-lg font-bold text-emerald-700">🎉 ทำครบทุกท่าในแผนนี้แล้ว</p>
           <p class="text-xs sm:text-sm text-slate-600">กด "จบและประเมินผล" ด้านล่าง หรือกด "แสดงท่าที่เสร็จแล้ว" ด้านบนหากต้องการแก้ไขเซต</p>
         </div>
         ${groups}
       </div>
-      <div id="wa-reflect-view" class="hidden space-y-5"></div>
+      <div id="wa-reflect-view" class="hidden space-y-5 max-w-4xl mx-auto"></div>
     </div>
+
+    <section id="wa-rest-dock" class="wa-rest-dock shrink-0 space-y-2" aria-label="ตัวจับเวลาพักระหว่างเซต">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 mr-0.5 whitespace-nowrap">${iconSvg('clock', { size: 14 })}<span>พักระหว่างเซต:</span></span>
+          <button type="button" data-rest-sec="30" class="wa-rest-btn ${defaultRestSec === 30 ? 'is-active' : ''}">30 วิ</button>
+          <button type="button" data-rest-sec="60" id="active-rest" class="wa-rest-btn ${defaultRestSec === 60 ? 'is-active' : ''}">60 วิ</button>
+          <button type="button" data-rest-sec="90" class="wa-rest-btn ${defaultRestSec === 90 ? 'is-active' : ''}">90 วิ</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 ml-auto">
+          <label class="wa-auto-pill">
+            <input type="checkbox" id="wa-auto-rest" class="accent-brand" ${autoRestEnabled ? 'checked' : ''}>
+            <span>เริ่มพักอัตโนมัติ</span>
+          </label>
+          <span id="active-rest-time" class="wa-rest-time text-base sm:text-lg font-bold tabular-nums whitespace-nowrap min-w-[4.5rem] text-right" aria-live="polite">พร้อม (${formatRestClock(defaultRestSec)})</span>
+        </div>
+      </div>
+      <div id="wa-rest-running-bar" class="hidden flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="active-rest-minus" class="btn btn-ghost btn-sm min-h-[44px]" aria-label="ลดเวลาพัก 15 วินาที">${iconSvg('minus', { size: 14 })}<span>15 วิ</span></button>
+          <button type="button" id="active-rest-plus" class="btn btn-ghost btn-sm min-h-[44px]" aria-label="เพิ่มเวลาพัก 15 วินาที">${iconSvg('plus', { size: 14 })}<span>15 วิ</span></button>
+        </div>
+        <div class="flex items-center gap-1.5 ml-auto">
+          <button type="button" id="active-rest-pause" class="btn btn-soft btn-sm min-h-[44px]">${iconSvg('pause', { size: 14 })}<span>พักชั่วคราว</span></button>
+          <button type="button" id="active-rest-stop" class="btn btn-ghost btn-sm min-h-[44px]">${iconSvg('forward', { size: 14 })}<span>ข้าม</span></button>
+        </div>
+      </div>
+    </section>
 
     <footer id="wa-play-footer" class="wa-footer shrink-0 px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
       <span id="active-summary" class="text-xs sm:text-sm lg:text-base font-medium text-slate-600 tabular-nums">ทำแล้ว 0 / ${totalSetsAll} เซต</span>
@@ -329,7 +412,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       </div>
     </footer>
     <footer id="wa-reflect-footer" class="wa-footer hidden shrink-0 px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-2">
-      <button type="button" id="wa-back-play" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">← กลับไปแก้ไขเซต</button>
+      <button type="button" id="wa-back-play" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm" aria-label="ย้อนกลับไปแก้ไขเซต">${iconSvg('arrow-left', { size: 15 })}<span>ย้อนกลับ</span></button>
       <div class="flex items-center gap-2 ml-auto">
         <button type="button" id="wa-skip-save" class="btn btn-ghost min-h-[44px] text-xs sm:text-sm">ข้ามและบันทึกเลย</button>
         <button type="button" id="wa-save-all" class="btn btn-primary min-h-[44px]">${iconSvg('check', { size: 15 })} บันทึกผลทั้งหมด</button>
@@ -341,8 +424,11 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   const titleEl = m.el.querySelector('#wa-modal-title');
   const subEl = m.el.querySelector('#wa-modal-sub');
   const timeEl = m.el.querySelector('#active-time');
+  const restDock = m.el.querySelector('#wa-rest-dock');
   const restEl = m.el.querySelector('#active-rest-time');
-  const restStopBtn = m.el.querySelector('#active-rest-stop');
+  const restRunningBar = m.el.querySelector('#wa-rest-running-bar');
+  const restPauseBtn = m.el.querySelector('#active-rest-pause');
+  const autoRestInput = m.el.querySelector('#wa-auto-rest');
   const progressText = m.el.querySelector('#active-progress-text');
   const progressBar = m.el.querySelector('#active-progress-bar');
   const summaryEl = m.el.querySelector('#active-summary');
@@ -356,22 +442,74 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   const skipSaveBtn = m.el.querySelector('#wa-skip-save');
   const backPlayBtn = m.el.querySelector('#wa-back-play');
   const toggleDoneCardsBtn = m.el.querySelector('#wa-toggle-done-cards');
+  const viewModeBtn = m.el.querySelector('#wa-view-mode-btn');
+  const focusBar = m.el.querySelector('#wa-focus-bar');
+  const focusLabel = m.el.querySelector('#wa-focus-label');
+  const focusPrevBtn = m.el.querySelector('#wa-focus-prev');
+  const focusNextBtn = m.el.querySelector('#wa-focus-next');
   const allDoneBanner = m.el.querySelector('#wa-all-done-banner');
 
   const clock = setInterval(() => {
     if (step !== 'play') return;
     const n = Math.floor((Date.now() - started) / 1000);
-    timeEl.textContent = String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+    timeEl.textContent = formatRestClock(n);
   }, 1000);
 
-  const stopRestTimer = (label = '', { expired = false } = {}) => {
+  const syncRestDockUI = () => {
+    const running = restTimer !== null || restPaused;
+    restDock?.classList.toggle('is-running', running && !restExpired);
+    restDock?.classList.toggle('is-expired', restExpired);
+    restEl.classList.toggle('is-expired', restExpired);
+    restRunningBar?.classList.toggle('hidden', !running);
+    if (restPauseBtn) {
+      restPauseBtn.innerHTML = restPaused
+        ? `${iconSvg('play', { size: 14 })}<span>เดินต่อ</span>`
+        : `${iconSvg('pause', { size: 14 })}<span>พักชั่วคราว</span>`;
+    }
+    m.el.querySelectorAll('[data-rest-sec]').forEach(b => {
+      b.classList.toggle('is-active', Number(b.dataset.restSec) === defaultRestSec);
+    });
+    if (restExpired) {
+      restEl.textContent = 'พักครบแล้ว ✓';
+    } else if (running) {
+      restEl.textContent = `${restPaused ? 'หยุดชั่วคราว ' : 'พัก '}${formatRestClock(restSeconds)}`;
+    } else {
+      restEl.textContent = `พร้อม (${formatRestClock(defaultRestSec)})`;
+    }
+  };
+
+  const stopRestTimer = ({ expired = false } = {}) => {
     clearInterval(restTimer);
     restTimer = null;
-    activeRestPreset = 0;
-    restEl.textContent = label;
-    restEl.classList.toggle('is-expired', !!expired);
-    restStopBtn?.classList.add('hidden');
-    m.el.querySelectorAll('[data-rest-sec]').forEach(b => b.classList.remove('is-active'));
+    restPaused = false;
+    restExpired = !!expired;
+    if (!expired) restSeconds = 0;
+    syncRestDockUI();
+  };
+
+  const runRestInterval = () => {
+    clearInterval(restTimer);
+    restTimer = setInterval(() => {
+      if (restPaused) return;
+      restSeconds--;
+      if (restSeconds > 0) {
+        syncRestDockUI();
+      } else {
+        stopRestTimer({ expired: true });
+        playRestChime();
+        try { navigator.vibrate?.([140, 60, 140]); } catch {}
+        toast('พักครบแล้ว — พร้อมลุยเซตถัดไป!');
+      }
+    }, 1000);
+  };
+
+  const startRestTimer = sec => {
+    const clean = Math.max(5, Number(sec) || defaultRestSec || 60);
+    restSeconds = clean;
+    restPaused = false;
+    restExpired = false;
+    runRestInterval();
+    syncRestDockUI();
   };
 
   const clearTimers = () => {
@@ -406,6 +544,20 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   };
   document.addEventListener('keydown', onEsc);
 
+  const visibleFocusIndices = () => {
+    const cards = [...m.el.querySelectorAll('[data-ex-card]')];
+    return cards
+      .filter(card => {
+        const sec = card.dataset.exSec || 'main';
+        const secMatch = activeSection === 'all' || sec === activeSection;
+        if (!secMatch) return false;
+        const doneInCard = card.querySelectorAll('[data-done]:checked').length;
+        const totalCardSets = Number(card.dataset.exSets) || 1;
+        return showCompletedCards || doneInCard < totalCardSets;
+      })
+      .map(c => Number(c.dataset.exCard));
+  };
+
   const syncProgressUI = () => {
     const checked = getCheckedCount();
     const pct = totalSetsAll ? Math.round((checked / totalSetsAll) * 100) : 0;
@@ -417,10 +569,11 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     const secStats = {};
 
     m.el.querySelectorAll('[data-ex-card]').forEach(card => {
-      const ri = card.dataset.exCard;
+      const ri = Number(card.dataset.exCard);
       const sec = card.dataset.exSec || 'main';
       const totalCardSets = Number(card.dataset.exSets) || 1;
-      const doneInCard = card.querySelectorAll('[data-done]:checked').length;
+      const boxes = [...card.querySelectorAll('[data-done]')];
+      const doneInCard = boxes.filter(b => b.checked).length;
       const isComplete = doneInCard === totalCardSets;
       if (isComplete) completedCardsCount++;
       const s = (secStats[sec] ||= { total: 0, done: 0 });
@@ -428,10 +581,18 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       if (isComplete) s.done++;
 
       card.classList.toggle('is-complete', isComplete);
-      card.classList.toggle('hidden', isComplete && !showCompletedCards);
       card.querySelector('[data-card-done-badge]')?.classList.toggle('hidden', !isComplete);
       const cardProg = card.querySelector(`[data-card-progress="${ri}"]`);
       if (cardProg) cardProg.textContent = `${doneInCard} / ${totalCardSets} เซต`;
+      const nextBtn = card.querySelector(`[data-next-set="${ri}"]`);
+      if (nextBtn) {
+        const nextIdx = findNextIncompleteSetIndex(boxes.map(b => b.checked));
+        nextBtn.classList.toggle('hidden', nextIdx < 0);
+        if (nextIdx >= 0) {
+          const span = nextBtn.querySelector('span:last-child');
+          if (span) span.textContent = `เสร็จเซตที่ ${nextIdx + 1}`;
+        }
+      }
       const toggleBtn = card.querySelector(`[data-toggle-all="${ri}"]`);
       if (toggleBtn) toggleBtn.textContent = isComplete ? 'ล้างการติ๊ก' : 'เลือกครบทุกเซต';
 
@@ -447,6 +608,32 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       });
     });
 
+    const focusPool = visibleFocusIndices();
+    if (viewMode === 'focus') {
+      if (!focusPool.includes(focusIndex)) {
+        focusIndex = focusPool[0] ?? 0;
+      }
+      focusBar?.classList.toggle('hidden', focusPool.length === 0);
+      const pos = Math.max(0, focusPool.indexOf(focusIndex));
+      if (focusLabel && focusPool.length) {
+        focusLabel.textContent = `ท่าที่ ${pos + 1} / ${focusPool.length}`;
+      }
+      if (focusPrevBtn) focusPrevBtn.disabled = pos <= 0;
+      if (focusNextBtn) focusNextBtn.disabled = pos >= focusPool.length - 1;
+    } else {
+      focusBar?.classList.add('hidden');
+    }
+
+    m.el.querySelectorAll('[data-ex-card]').forEach(card => {
+      const ri = Number(card.dataset.exCard);
+      const isComplete = card.classList.contains('is-complete');
+      if (viewMode === 'focus') {
+        card.classList.toggle('hidden', !focusPool.includes(ri) || ri !== focusIndex);
+      } else {
+        card.classList.toggle('hidden', isComplete && !showCompletedCards);
+      }
+    });
+
     for (const sec of activeSections) {
       const st = secStats[sec] || { total: 0, done: 0 };
       const remaining = Math.max(0, st.total - st.done);
@@ -458,8 +645,20 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       }
       const doneMsgEl = m.el.querySelector(`[data-wa-sec-done-msg="${sec}"]`);
       if (doneMsgEl) {
-        doneMsgEl.classList.toggle('hidden', !(remaining === 0 && st.total > 0 && !showCompletedCards));
+        doneMsgEl.classList.toggle('hidden', !(remaining === 0 && st.total > 0 && !showCompletedCards && viewMode !== 'focus'));
       }
+      const secEl = m.el.querySelector(`[data-wa-section="${sec}"]`);
+      if (secEl) {
+        const secAllowed = activeSection === 'all' || sec === activeSection;
+        const hasVisibleCard = viewMode !== 'focus' || focusPool.some(ri => m.el.querySelector(`[data-ex-card="${ri}"]`)?.dataset.exSec === sec);
+        secEl.classList.toggle('hidden', !(secAllowed && hasVisibleCard));
+      }
+    }
+
+    if (viewModeBtn) {
+      viewModeBtn.innerHTML = viewMode === 'focus'
+        ? `${iconSvg('list', { size: 14 })}<span>ดูทั้งหมด</span>`
+        : `${iconSvg('target', { size: 14 })}<span>โฟกัสทีละท่า</span>`;
     }
 
     if (toggleDoneCardsBtn) {
@@ -474,6 +673,12 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       allDoneBanner.classList.toggle('hidden', !(completedCardsCount === rows.length && rows.length > 0 && !showCompletedCards));
     }
   };
+
+  function maybeAutoStartRest(wasCheckedNow) {
+    if (!wasCheckedNow || !autoRestEnabled || step !== 'play') return;
+    if (getCheckedCount() >= totalSetsAll) return;
+    startRestTimer(defaultRestSec);
+  }
 
   function renderReflectStep() {
     const mainIndices = getMainExerciseIndices(rows);
@@ -566,14 +771,14 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
           <p class="text-xs lg:text-sm text-slate-500">ประเมินเฉพาะท่าหลัก (Main Workout) ไม่รวมท่าวอร์มอัพและคูลดาวน์ ระบบจะคำนวณคำแนะนำรอบถัดไปให้อัตโนมัติ</p>
         </div>
         ${mainIndices.length
-          ? `<div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 lg:gap-4">${exCardsHtml}</div>`
+          ? `<div class="grid grid-cols-1 gap-3.5">${exCardsHtml}</div>`
           : `<div class="wa-card p-4 text-xs lg:text-sm text-slate-600">รอบนี้ไม่มีท่าในช่วง "ท่าหลัก (Main Workout)" จึงไม่ต้องประเมินรายท่า — สามารถบันทึกผลการประเมินด้านบนได้เลย</div>`}
       </section>`;
   }
 
   function enterReflectStep() {
     step = 'reflect';
-    stopRestTimer('');
+    stopRestTimer({ expired: false });
     snapshotMinutes = Math.max(1, Math.round((Date.now() - started) / 60000));
     snapshotCheckedCounts = {};
     snapshotDone = [...m.el.querySelectorAll('[data-done]:checked')].map(c => {
@@ -596,6 +801,7 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     subEl.textContent = `${meta.title || 'บันทึกผลการฝึก'} · ทำแล้ว ${snapshotDone.length} / ${totalSetsAll} เซต · ${snapshotMinutes} นาที`;
     playControls.classList.add('hidden');
     playView.classList.add('hidden');
+    restDock?.classList.add('hidden');
     playFooter.classList.add('hidden');
     reflectView.classList.remove('hidden');
     reflectFooter.classList.remove('hidden');
@@ -611,7 +817,9 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     reflectFooter.classList.add('hidden');
     playControls.classList.remove('hidden');
     playView.classList.remove('hidden');
+    restDock?.classList.remove('hidden');
     playFooter.classList.remove('hidden');
+    syncRestDockUI();
   }
 
   async function submitFinish(skipReflection = false) {
@@ -646,12 +854,47 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
   }
 
   m.el.addEventListener('change', e => {
-    if (e.target.matches('[data-done]')) syncProgressUI();
+    if (e.target.matches('#wa-auto-rest')) {
+      autoRestEnabled = !!autoRestInput?.checked;
+      writePref(AUTO_REST_KEY, autoRestEnabled ? '1' : '0');
+      return;
+    }
+    if (e.target.matches('[data-done]')) {
+      const wasChecked = !!e.target.checked;
+      syncProgressUI();
+      maybeAutoStartRest(wasChecked);
+    }
   });
 
   m.el.addEventListener('click', e => {
     if (e.target.closest('[data-wa-close]')) {
       attemptClose();
+      return;
+    }
+
+    if (e.target.closest('#wa-view-mode-btn')) {
+      viewMode = viewMode === 'focus' ? 'list' : 'focus';
+      syncProgressUI();
+      return;
+    }
+
+    if (e.target.closest('#wa-focus-prev')) {
+      const pool = visibleFocusIndices();
+      const idx = pool.indexOf(focusIndex);
+      if (idx > 0) {
+        focusIndex = pool[idx - 1];
+        syncProgressUI();
+      }
+      return;
+    }
+
+    if (e.target.closest('#wa-focus-next')) {
+      const pool = visibleFocusIndices();
+      const idx = pool.indexOf(focusIndex);
+      if (idx >= 0 && idx < pool.length - 1) {
+        focusIndex = pool[idx + 1];
+        syncProgressUI();
+      }
       return;
     }
 
@@ -715,10 +958,20 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
         btn.classList.toggle('is-active', isOn);
         btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
       });
-      m.el.querySelectorAll('[data-wa-section]').forEach(secEl => {
-        const show = activeSection === 'all' || secEl.dataset.waSection === activeSection;
-        secEl.classList.toggle('hidden', !show);
-      });
+      syncProgressUI();
+      return;
+    }
+
+    const nextSetBtn = e.target.closest('[data-next-set]');
+    if (nextSetBtn) {
+      const card = nextSetBtn.closest('[data-ex-card]');
+      const boxes = [...(card?.querySelectorAll('[data-done]') || [])];
+      const nextIdx = findNextIncompleteSetIndex(boxes.map(b => b.checked));
+      if (nextIdx >= 0 && boxes[nextIdx]) {
+        boxes[nextIdx].checked = true;
+        syncProgressUI();
+        maybeAutoStartRest(true);
+      }
       return;
     }
 
@@ -729,35 +982,47 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
       const allChecked = boxes.length > 0 && boxes.every(b => b.checked);
       boxes.forEach(b => { b.checked = !allChecked; });
       syncProgressUI();
+      maybeAutoStartRest(!allChecked);
       return;
     }
 
     if (e.target.closest('#active-rest-stop')) {
-      stopRestTimer('');
+      stopRestTimer({ expired: false });
+      return;
+    }
+
+    if (e.target.closest('#active-rest-pause')) {
+      if (restTimer !== null || restPaused) {
+        restPaused = !restPaused;
+        syncRestDockUI();
+      }
+      return;
+    }
+
+    if (e.target.closest('#active-rest-minus')) {
+      if (restTimer !== null || restPaused) {
+        restSeconds = Math.max(5, restSeconds - 15);
+        restExpired = false;
+        syncRestDockUI();
+      }
+      return;
+    }
+
+    if (e.target.closest('#active-rest-plus')) {
+      if (restTimer !== null || restPaused) {
+        restSeconds = Math.min(600, restSeconds + 15);
+        restExpired = false;
+        syncRestDockUI();
+      }
       return;
     }
 
     const restBtn = e.target.closest('[data-rest-sec]');
     if (restBtn) {
       const sec = Math.max(5, Number(restBtn.dataset.restSec) || 60);
-      clearInterval(restTimer);
-      restSeconds = sec;
-      activeRestPreset = sec;
-      restEl.classList.remove('is-expired');
-      m.el.querySelectorAll('[data-rest-sec]').forEach(b => {
-        b.classList.toggle('is-active', Number(b.dataset.restSec) === activeRestPreset);
-      });
-      restStopBtn?.classList.remove('hidden');
-      const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-      restEl.textContent = `พัก ${fmt(restSeconds)}`;
-      restTimer = setInterval(() => {
-        restSeconds--;
-        if (restSeconds > 0) {
-          restEl.textContent = `พัก ${fmt(restSeconds)}`;
-        } else {
-          stopRestTimer('พักครบแล้ว ✓', { expired: true });
-        }
-      }, 1000);
+      defaultRestSec = sec;
+      writePref(REST_PRESET_KEY, sec);
+      startRestTimer(sec);
       return;
     }
 
@@ -788,6 +1053,8 @@ export function runActiveWorkout(rows, onFinish, meta = {}) {
     holder?.append(placeholder);
   }, true);
 
+  syncProgressUI();
+  syncRestDockUI();
   finishBtn.onclick = () => enterReflectStep();
   backPlayBtn.onclick = () => returnToPlayStep();
   skipSaveBtn.onclick = () => submitFinish(true);

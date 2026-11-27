@@ -1022,7 +1022,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <span class="font-bold text-slate-800">${esc(n.name || n.title || 'โน้ต')}</span>
-                  <span class="chip bg-lav-soft text-brand-dark text-[10px] ml-1">${esc(n.category || 'ทั่วไป')}</span>
+                  <span class="tm-badge tm-badge-info ml-1">${esc(n.category || 'ทั่วไป')}</span>
                   ${n.date ? `<span class="text-[11px] text-slate-400 ml-1">${esc(fmtDate(n.date))}</span>` : ''}
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
@@ -1129,7 +1129,7 @@ export function openNotesAndFeedbackModal(initialTab = 'notes') {
             <div class="rounded-xl border border-slate-100 bg-white p-2.5 text-xs space-y-1">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                  <span class="chip bg-sky-soft text-slate-700 text-[10px]">${esc(FB_LABEL[f.category] || f.category || 'ทั่วไป')}</span>
+                  <span class="tm-badge tm-badge-info">${esc(FB_LABEL[f.category] || f.category || 'ทั่วไป')}</span>
                   ${f.value != null ? `<span class="text-amber-600 font-semibold ml-1">⭐ ${f.value}/5</span>` : ''}
                   ${f.type ? `<span class="text-[11px] text-slate-500 ml-1">· ${esc(f.type)}</span>` : ''}
                   ${f.date ? `<span class="text-[11px] text-slate-400 ml-1">(${esc(fmtDate(f.date))})</span>` : ''}

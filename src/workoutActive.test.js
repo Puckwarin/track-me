@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildExerciseFeedbackSummary,
@@ -5,8 +7,10 @@ import {
   COMPLETION_STATUSES,
   countTotalSets,
   EFFORT_LEVELS,
+  findNextIncompleteSetIndex,
   formatExercisePrescription,
   formatFeelingLabel,
+  formatRestClock,
   getMainExerciseIndices,
   suggestNextProgression,
   summarizeSessionNextStep,
@@ -74,6 +78,31 @@ describe('workoutActive helpers', () => {
       { sets: 40 }
     ])).toBe(35);
     expect(countTotalSets([])).toBe(0);
+  });
+
+  it('finds next incomplete set index and formats rest clock cleanly', () => {
+    expect(findNextIncompleteSetIndex([false, false, false])).toBe(0);
+    expect(findNextIncompleteSetIndex([true, false, true])).toBe(1);
+    expect(findNextIncompleteSetIndex([true, true])).toBe(-1);
+    expect(findNextIncompleteSetIndex([])).toBe(-1);
+
+    expect(formatRestClock(90)).toBe('01:30');
+    expect(formatRestClock(60)).toBe('01:00');
+    expect(formatRestClock(5)).toBe('00:05');
+    expect(formatRestClock(0)).toBe('00:00');
+    expect(formatRestClock(-4)).toBe('00:00');
+  });
+
+  it('uses single-column layout, focus mode toggle, per-card next-set CTA, and sticky rest dock without raw back arrows', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/workoutActive.js'), 'utf8');
+    expect(src).toContain('id="wa-view-mode-btn"');
+    expect(src).toContain('id="wa-focus-bar"');
+    expect(src).toContain('id="wa-rest-dock"');
+    expect(src).toContain('id="wa-auto-rest"');
+    expect(src).toContain('data-next-set="${ri}"');
+    expect(src).toContain("iconSvg('arrow-left', { size: 15 })");
+    expect(src).not.toContain('←');
+    expect(src).not.toContain('lg:grid-cols-2');
   });
 
   it('suggests next-session progression based on RPE, RIR, and set completion', () => {

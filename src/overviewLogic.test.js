@@ -6,6 +6,8 @@ import {
   buildMonthKeys,
   clearOverviewCacheForUid,
   readOverviewCache,
+  summarizeFinanceRange,
+  summarizePeriodMetrics,
   writeOverviewCache
 } from './overviewLogic.js';
 
@@ -35,7 +37,7 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
     expect(buildMonthKeys(12, '2026-11-17')[0]).toBe('2025-12');
   });
 
-  it('aggregates weight, logged-day average calories, completed workouts, and expenses vs income accurately', () => {
+  it('aggregates weight, logged-day average calories, completed workouts, and expenses vs income while excluding transfers', () => {
     const result = aggregateMonthlyOverview({
       monthsCount: 3,
       today: '2026-11-17',
@@ -52,13 +54,15 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
         { date: '2026-10-02', calories: 2000, protein: 100 } // day 2 total: 2000 kcal, 100g -> avg 1800 kcal
       ],
       workouts: [
-        { date: '2026-10-10', status: 'done', durationMin: 45, estKcal: 300 },
+        { date: '2026-10-10', status: 'done', durationMin: 45, estKcal: 300, intensity: 'moderate', sessionRpe: 7 },
         { date: '2026-10-12', status: 'planned', durationMin: 60, estKcal: 400 },
         {
           date: '2026-11-03',
           status: 'done',
           durationMin: null,
           estKcal: 210,
+          intensity: 'light',
+          effortLevel: 'easy',
           performedSets: [
             { section: 'warmup', repUnit: 'min', reps: 5, completed: true },
             { section: 'main', repUnit: 'min', reps: 25, completed: true }
@@ -66,9 +70,10 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
         }
       ],
       expenses: [
-        { date: '2026-11-01', type: 'income', amount: 30000 },
-        { date: '2026-11-02', type: 'expense', amount: 450 },
-        { date: '2026-11-05', type: 'expense', amount: 1550 }
+        { date: '2026-11-01', type: 'income', amount: 30000, category: 'เงินเดือน' },
+        { date: '2026-11-02', type: 'expense', amount: 450, category: 'อาหาร' },
+        { date: '2026-11-04', type: 'transfer', amount: 12000, category: 'โอนย้ายบัญชี' },
+        { date: '2026-11-05', type: 'expense', amount: 1550, category: 'ของใช้' }
       ]
     });
 
@@ -87,9 +92,11 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
       weightAvg: null,
       foodDays: 2,
       calAvgPerLoggedDay: 1800,
+      avgKcal: 1800,
       proteinAvgPerLoggedDay: 90,
       workoutCount: 1,
-      workoutMinutes: 45
+      workoutMinutes: 45,
+      workoutAvgRpe: 7
     });
     expect(result.months[2]).toMatchObject({
       ym: '2026-11',
@@ -99,7 +106,9 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
       workoutMinutes: 30,
       expenseTotal: 2000,
       incomeTotal: 30000,
-      netTotal: 28000
+      netTotal: 28000,
+      net: 28000,
+      expenseCount: 3
     });
 
     expect(result.summary).toMatchObject({
@@ -112,6 +121,53 @@ describe('overviewLogic monthly dashboard aggregation and localStorage cache', (
       totalExpense: 2000,
       totalIncome: 30000
     });
+  });
+
+  it('summarizes finance ranges without counting transfers and aggregates period metrics consistently', () => {
+    const fin = summarizeFinanceRange([
+      { date: '2026-11-01', type: 'income', amount: 5000, category: 'เงินเดือน' },
+      { date: '2026-11-02', type: 'expense', amount: 300, category: 'อาหาร' },
+      { date: '2026-11-03', type: 'transfer', amount: 2500, category: 'โอนย้ายบัญชี' },
+      { date: '2026-11-04', type: 'expense', amount: 200, category: 'เดินทาง' }
+    ], '2026-11-01', '2026-11-07');
+
+    expect(fin).toEqual({
+      count: 3,
+      income: 5000,
+      expense: 500,
+      net: 4500,
+      topCats: [['อาหาร', 300], ['เดินทาง', 200]]
+    });
+
+    const metrics = summarizePeriodMetrics({
+      start: '2026-11-09',
+      end: '2026-11-15',
+      prevStart: '2026-11-02',
+      prevEnd: '2026-11-08',
+      body: [
+        { date: '2026-11-05', weight: 56.0 },
+        { date: '2026-11-10', weight: 55.4, sleepHours: 7.5, steps: 8200 },
+        { date: '2026-11-14', weight: 55.0, sleepMinutes: 420, steps: 9800 }
+      ],
+      workouts: [
+        { date: '2026-11-11', status: 'done', durationMin: 40, estKcal: 250, type: 'strength' },
+        { date: '2026-11-12', status: 'planned', durationMin: 30 }
+      ],
+      symptoms: [
+        { date: '2026-11-10', symptoms: { fatigue: 2 } },
+        { date: '2026-11-11', symptoms: { fatigue: 0 } }
+      ],
+      period: [
+        { id: 'p1', start: '2026-11-08', end: '2026-11-11' }
+      ]
+    });
+
+    expect(metrics.weight).toMatchObject({ count: 2, avg: 55.2, prevAvg: 56, delta: -0.8, first: 55.4, last: 55 });
+    expect(metrics.sleep).toMatchObject({ count: 2, avg: 7.3 });
+    expect(metrics.steps).toMatchObject({ count: 2, avg: 9000, total: 18000 });
+    expect(metrics.workouts.summary.count).toBe(1);
+    expect(metrics.symptomDays).toBe(1);
+    expect(metrics.periodCount).toBe(1);
   });
 
   it('handles empty inputs safely', () => {

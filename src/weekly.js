@@ -3,23 +3,27 @@ import { getFoodRecordsInRange } from './foodService.js';
 import { isPreviewMode } from './preview.js';
 import { $, esc, fmtDate, localDateStr, addDays, daysBetween, round1, addMonthsLocal, mondayOf, shiftMonth, monthEndDate } from './util.js';
 import { getTargets } from './profile.js';
-import { TYPES, formatIntensityBreakdown, summarizeWorkoutCollection } from './workoutConstants.js';
+import { TYPES } from './workoutConstants.js';
 import { collectReminders, trackedSources } from './reminders.js';
 import { iconSvg } from './icons.js';
-import { bindChartInspector } from './ui.js';
+import { bindChartInspector, emptyState, loadingState } from './ui.js';
+import { summarizeFinanceRange, summarizePeriodMetrics } from './overviewLogic.js';
+import { barChartSvg, getChartPalette } from './chartPrimitives.js';
 
-let root, weekStart = mondayOf(localDateStr()), selectedMonth = localDateStr().slice(0, 7), summaryMode = 'weekly', seq = 0;
+let root;
+let weekStart = mondayOf(localDateStr());
+let selectedMonth = localDateStr().slice(0, 7);
+let summaryMode = 'weekly';
+let seq = 0;
+
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
 const fmtMoney = n => Math.round(n || 0).toLocaleString();
+const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 function renderLoadingSkeleton(message) {
   const body = $('#wk-body', root);
   if (!body) return;
-  body.innerHTML = `
-    <div class="card lg:col-span-3 py-10 text-center space-y-2 text-sm text-slate-600" role="status" aria-live="polite">
-      <p class="flex justify-center text-brand">${iconSvg('fa-spinner fa-spin', { size: 22 })}</p>
-      <p>${esc(message)}</p>
-    </div>`;
+  body.innerHTML = `<div class="card lg:col-span-3" role="status" aria-live="polite">${loadingState({ label: message })}</div>`;
 }
 
 function inventoryAndReminderSummary(today) {
@@ -34,14 +38,149 @@ function inventoryAndReminderSummary(today) {
   return { total: products.length, lowCount, expiringCount, activeCount: active.length, overdueCount, scheduledTotal: trackedSources().length };
 }
 
-function financeRangeSummary(start, end) {
-  const rows = (state.expenses || []).filter(x => x.date >= start && x.date <= end);
-  const income = rows.filter(x => x.type === 'income').reduce((a, x) => a + num(x.amount), 0);
-  const expense = rows.filter(x => x.type !== 'income').reduce((a, x) => a + num(x.amount), 0);
-  const cats = {};
-  rows.filter(x => x.type !== 'income').forEach(x => { cats[x.category || 'อื่น ๆ'] = (cats[x.category || 'อื่น ๆ'] || 0) + num(x.amount); });
-  const topCats = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  return { count: rows.length, income, expense, net: income - expense, topCats };
+function buildFoodInsights({ foodError, loggedCount, totalDays, periodLabel, avgP, targetProtein, over, under, periodMetrics, compareEnd, today, weightCompareLabel }) {
+  const tips = [];
+  if (foodError) tips.push('ไม่สามารถดึงข้อมูลอาหารจากเซิร์ฟเวอร์ได้ในขณะนี้ (แสดงเฉพาะข้อมูลส่วนอื่นในเครื่อง)');
+  else if (!loggedCount) tips.push(`${periodLabel}ยังไม่มีบันทึกอาหาร`);
+  else {
+    const minLoggedThreshold = Math.max(3, Math.round(totalDays * 0.65));
+    if (loggedCount < minLoggedThreshold && compareEnd < today) {
+      tips.push(`บันทึกอาหาร ${loggedCount}/${totalDays} วัน — ยิ่งบันทึกครบ สรุปยิ่งแม่น`);
+    }
+    if (avgP !== null && avgP < targetProtein * 0.8) {
+      tips.push(`โปรตีนเฉลี่ย ${Math.round(avgP)} g ต่ำกว่าเป้า ${targetProtein} g`);
+    }
+    if (over >= Math.max(3, Math.round(totalDays * 0.35))) {
+      tips.push(`เกินเป้าแคลอรี่ ${over} วัน — ลองวางแผนมื้อล่วงหน้า`);
+    }
+    if (under >= Math.max(3, Math.round(totalDays * 0.35))) {
+      tips.push(`ต่ำกว่าเป้ามาก ${under} วัน — กินน้อยเกินไปต่อเนื่องอาจเหนื่อยง่าย`);
+    }
+  }
+
+  const wSum = periodMetrics.workouts.summary;
+  const ws = periodMetrics.workouts.list;
+  if (ws.length === 0 && compareEnd < today) tips.push(`${periodLabel}ไม่ได้ออกกำลังกายตามที่บันทึก`);
+  if (ws.length >= (totalDays > 10 ? 8 : 3)) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก`);
+  if ((wSum.avgSessionRpe != null && wSum.avgSessionRpe >= 8.5) || ws.some(w => w.feeling === 'exhausted' || w.effortLevel === 'very_hard' || w.nextDayRecovery === 'sore_multi')) {
+    tips.push('ความเหนื่อยสะสมจากการออกกำลังกายค่อนข้างสูง ลองจัดวันพักฟื้นหรือลดความหนักสลับกัน');
+  }
+
+  const wDelta = periodMetrics.weight.delta;
+  if (wDelta !== null && Math.abs(wDelta) >= 1) {
+    tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. ${weightCompareLabel} (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
+  }
+  if (periodMetrics.sleep.avg !== null && periodMetrics.sleep.avg < 6) {
+    tips.push(`${periodLabel}นอนเฉลี่ย ${periodMetrics.sleep.avg} ชม./คืน — ลองพักผ่อนให้ใกล้เคียง 7–8 ชม. จะช่วยการฟื้นตัวและความอยากอาหารได้`);
+  }
+  return tips;
+}
+
+function renderUnifiedPeriodBody({
+  mode,
+  foodError,
+  loggedCount,
+  totalDays,
+  avgCal,
+  avgP,
+  over,
+  under,
+  targets,
+  chartHtml,
+  metrics,
+  fin,
+  invRem,
+  tips,
+  weightCompareLabel,
+  periodNoun
+}) {
+  const palette = getChartPalette();
+  const stat = (label, val, sub = '') => `
+    <div class="bg-[#F4F9FE] border border-slate-200/90 rounded-xl p-3">
+      <p class="text-xs text-slate-600">${label}</p>
+      <p class="text-lg font-bold text-slate-800 tabular-nums">${val}</p>
+      ${sub ? `<p class="text-[11px] text-slate-500 tabular-nums">${sub}</p>` : ''}
+    </div>`;
+
+  const { weight, sleep, steps, workouts, symptomDays, periodCount } = metrics;
+  const wSum = workouts.summary;
+  const foodHeading = mode === 'monthly' ? 'อาหาร & โภชนาการรายเดือน' : 'อาหาร & โภชนาการรายสัปดาห์';
+  const financeHeading = mode === 'monthly' ? 'การเงินเดือนนี้' : 'การเงินสัปดาห์นี้';
+
+  $('#wk-body', root).innerHTML = `
+    <div class="card space-y-3 lg:col-span-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('food', { size: 17, className: 'text-brand' })}<span>${foodHeading}</span></h3>
+        ${foodError ? '<span class="tm-badge tm-badge-warning">โหลดบันทึกอาหารไม่สำเร็จ</span>' : ''}
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        ${stat('วันที่บันทึกอาหาร', `${loggedCount}/${totalDays} วัน`)}
+        ${stat('พลังงานเฉลี่ย/วัน', avgCal === null ? '—' : `${Math.round(avgCal).toLocaleString()} kcal`, `เป้า ${targets.kcal.toLocaleString()} kcal`)}
+        ${stat('โปรตีนเฉลี่ย/วัน', avgP === null ? '—' : `${round1(avgP)} g`, `เป้า ${targets.protein} g`)}
+        ${stat('เกิน / ต่ำกว่าเป้า', loggedCount ? `${over} / ${under} วัน` : '—', 'เกิน >110% · ต่ำ <80%')}
+      </div>
+      ${chartHtml}
+    </div>
+
+    <div class="space-y-4">
+      <div class="card space-y-2.5">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('body', { size: 17, className: 'text-brand' })}<span>น้ำหนัก · การนอน · ก้าวเดิน</span></h3>
+        ${weight.avg === null
+          ? `<p class="text-xs text-slate-500">ไม่มีการชั่งน้ำหนักใน${periodNoun}</p>`
+          : `<p class="text-lg font-bold tabular-nums">${weight.avg} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${weight.count} ครั้ง)</span></p>
+             ${weight.count > 1 ? `<p class="text-xs text-slate-600 tabular-nums">ต้นช่วง ${weight.first} → ปลาย ${weight.last} กก.</p>` : ''}
+             <p class="text-xs tabular-nums ${weight.delta === null ? 'text-slate-500' : weight.delta > 0 ? 'text-rose-600' : 'text-emerald-700'}">${weight.delta === null ? 'ไม่มีข้อมูลช่วงก่อนให้เทียบ' : `${weightCompareLabel} ${weight.delta > 0 ? '+' : ''}${weight.delta} กก.`}</p>`}
+        ${(sleep.avg !== null || steps.avg !== null) ? `<div class="border-t border-slate-100 pt-2 text-xs text-slate-600 space-y-1 tabular-nums">
+          ${sleep.avg !== null ? `<p>นอนเฉลี่ย <b>${sleep.avg}</b> ชม./คืน (${sleep.count} คืน)</p>` : ''}
+          ${steps.avg !== null ? `<p>ก้าวเดินเฉลี่ย <b>${steps.avg.toLocaleString()}</b> ก้าว/วัน (รวม ${steps.total.toLocaleString()})</p>` : ''}
+        </div>` : ''}
+      </div>
+
+      <div class="card space-y-2">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 17, className: 'text-brand' })}<span>ออกกำลังกาย</span></h3>
+        ${wSum.count
+          ? `<p class="text-lg font-bold tabular-nums">${wSum.count} ครั้ง <span class="text-xs font-normal text-slate-500">${wSum.totalMinutes ? `· ${wSum.totalMinutes} นาที รวม` : ''}${wSum.totalKcal ? ` · ~${wSum.totalKcal} kcal` : ''}</span></p>
+             ${Object.entries(wSum.byType).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
+             ${workouts.intensityText ? `<p class="text-xs text-slate-600 tabular-nums">ความหนัก: ${esc(workouts.intensityText)}</p>` : ''}
+             ${workouts.evalText ? `<p class="text-xs text-brand-dark tabular-nums">${esc(workouts.evalText)}</p>` : ''}`
+          : `<p class="text-xs text-slate-500">ยังไม่มีบันทึกออกกำลังกายใน${periodNoun}</p>`}
+      </div>
+
+      <div class="card space-y-2">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('period', { size: 17, className: 'text-pink-500' })}<span>ประจำเดือน & อาการ</span></h3>
+        <div class="text-xs text-slate-600 space-y-1 tabular-nums">
+          <p>รอบประจำเดือนในช่วงนี้: <b>${periodCount}</b> รอบ</p>
+          <p>วันที่มีบันทึกอาการ: <b>${symptomDays}</b> วัน</p>
+        </div>
+      </div>
+
+      <div class="card space-y-2">
+        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>${financeHeading}</span></h3>
+        ${fin.count
+          ? `<p class="text-sm tabular-nums">รับ <b class="text-emerald-700">฿${fmtMoney(fin.income)}</b> · จ่าย <b class="text-rose-600">฿${fmtMoney(fin.expense)}</b></p>
+             <p class="text-xs text-slate-600 tabular-nums">สุทธิ: <b class="${fin.net < 0 ? 'text-rose-600' : 'text-emerald-700'}">${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</b> (${fin.count} รายการ)</p>
+             ${fin.topCats.length ? `<p class="text-[11px] text-slate-500 tabular-nums">ใช้จ่ายหลัก: ${fin.topCats.map(([c, v]) => `${esc(c)} ฿${fmtMoney(v)}`).join(' · ')}</p>` : ''}`
+          : `<p class="text-xs text-slate-500">ไม่มีรายการรายรับ-รายจ่ายใน${periodNoun}</p>`}
+      </div>
+
+      <div class="card space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-brand' })}<span>สต๊อก & แจ้งเตือน</span></h3>
+          <span class="tm-badge tm-badge-info">ณ ปัจจุบัน</span>
+        </div>
+        <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> · ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b></p>
+        <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="font-semibold" style="color:${palette.errorFg}">เลยกำหนด ${invRem.overdueCount}</span>)` : ''} · ทั้งหมด ${invRem.scheduledTotal} กำหนดการ</p>
+      </div>
+    </div>
+
+    <div class="card lg:col-span-3">
+      <h3 class="font-bold text-slate-800 mb-2">ข้อสังเกต</h3>
+      ${tips.length
+        ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`
+        : '<p class="text-sm text-slate-600">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้</p>'}
+      <p class="text-[11px] text-slate-500 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p>
+    </div>`;
+  bindChartInspector($('#wk-food-chart', root), { hint: 'แตะแท่งกราฟเพื่อดูแคลอรี่แต่ละวัน' });
 }
 
 export function mountWeekly(el) {
@@ -64,12 +203,28 @@ export function mountWeekly(el) {
     </div>
     <div id="wk-body" class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6"></div>
   </div>`;
-  $('#wk-prev', root).addEventListener('click', () => { if (summaryMode === 'monthly') { selectedMonth = shiftMonth(selectedMonth, -1); renderWeekly(); } else { weekStart = addDays(weekStart, -7); renderWeekly(); } });
-  $('#wk-next', root).addEventListener('click', () => { if (summaryMode === 'monthly') { selectedMonth = shiftMonth(selectedMonth, 1); renderWeekly(); } else { weekStart = addDays(weekStart, 7); renderWeekly(); } });
-  $('#sum-week', root).onclick = () => { summaryMode = 'weekly'; renderWeekly(); };
-  $('#sum-month', root).onclick = () => { summaryMode = 'monthly'; renderWeekly(); };
+  $('#wk-prev', root).addEventListener('click', () => {
+    if (summaryMode === 'monthly') {
+      selectedMonth = shiftMonth(selectedMonth, -1);
+      void renderWeekly();
+    } else {
+      weekStart = addDays(weekStart, -7);
+      void renderWeekly();
+    }
+  });
+  $('#wk-next', root).addEventListener('click', () => {
+    if (summaryMode === 'monthly') {
+      selectedMonth = shiftMonth(selectedMonth, 1);
+      void renderWeekly();
+    } else {
+      weekStart = addDays(weekStart, 7);
+      void renderWeekly();
+    }
+  });
+  $('#sum-week', root).onclick = () => { summaryMode = 'weekly'; void renderWeekly(); };
+  $('#sum-month', root).onclick = () => { summaryMode = 'monthly'; void renderWeekly(); };
   window.addEventListener('trackme:overview-refresh', () => { if (root?.isConnected) void renderWeekly(); });
-  renderWeekly();
+  void renderWeekly();
 }
 
 export function resetWeeklyToToday() {
@@ -77,8 +232,6 @@ export function resetWeeklyToToday() {
   weekStart = mondayOf(today);
   selectedMonth = today.slice(0, 7);
 }
-
-const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 export async function renderWeekly() {
   if (!root || (!state.uid && !isPreviewMode())) return;
@@ -92,9 +245,12 @@ export async function renderWeekly() {
   $('#wk-next', root).setAttribute('aria-label', summaryMode === 'monthly' ? 'เดือนถัดไป' : 'สัปดาห์ถัดไป');
   if (summaryMode === 'monthly') return renderMonthly();
 
-  const my = ++seq, end = addDays(weekStart, 6), days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  $('#wk-range', root).textContent = `${fmtDate(weekStart)} – ${fmtDate(end)}${weekStart === mondayOf(localDateStr()) ? ' (สัปดาห์นี้)' : ''}`;
-  $('#wk-next', root).disabled = weekStart >= mondayOf(localDateStr());
+  const my = ++seq;
+  const end = addDays(weekStart, 6);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const today = localDateStr();
+  $('#wk-range', root).textContent = `${fmtDate(weekStart)} – ${fmtDate(end)}${weekStart === mondayOf(today) ? ' (สัปดาห์นี้)' : ''}`;
+  $('#wk-next', root).disabled = weekStart >= mondayOf(today);
   renderLoadingSkeleton('กำลังโหลดสรุปรายสัปดาห์...');
 
   let food = [];
@@ -106,118 +262,113 @@ export async function renderWeekly() {
   }
   if (my !== seq) return;
 
-  const T = getTargets(), today = localDateStr();
+  const T = getTargets();
   const byDay = Object.fromEntries(days.map(d => [d, { cal: 0, p: 0, n: 0 }]));
-  food.forEach(f => { const x = byDay[f.date]; if (x) { x.cal += num(f.calories); x.p += num(f.protein); x.n++; } });
+  food.forEach(f => {
+    const x = byDay[f.date];
+    if (x) {
+      x.cal += num(f.calories);
+      x.p += num(f.protein);
+      x.n += 1;
+    }
+  });
   const logged = days.filter(d => byDay[d].n > 0 && d <= today);
-  const avgCal = avg(logged.map(d => byDay[d].cal)), avgP = avg(logged.map(d => byDay[d].p));
-  const over = logged.filter(d => byDay[d].cal > T.kcal * 1.1).length, under = logged.filter(d => byDay[d].cal < T.kcal * 0.8).length;
+  const avgCal = avg(logged.map(d => byDay[d].cal));
+  const avgP = avg(logged.map(d => byDay[d].p));
+  const over = logged.filter(d => byDay[d].cal > T.kcal * 1.1).length;
+  const under = logged.filter(d => byDay[d].cal < T.kcal * 0.8).length;
 
-  const W = 320, H = 150, P = 22, max = Math.max(T.kcal * 1.3, ...days.map(d => byDay[d].cal), 1), bw = (W - 2 * P) / 7;
-  const y = v => H - P - v / max * (H - 2 * P);
-  const bars = days.map((d, i) => {
-    const v = byDay[d].cal, x = P + i * bw + 4, h = H - P - y(v), c = v > T.kcal * 1.1 ? '#C58F1E' : '#1F4A74';
-    const sub = v ? (v > T.kcal * 1.1 ? 'เกินเป้า' : v < T.kcal * 0.8 ? 'ต่ำกว่าเป้า' : 'ใกล้เคียงเป้า') : 'ไม่มีบันทึก';
-    return `<g>
-      <rect x="${x}" y="${y(v)}" width="${bw - 8}" height="${Math.max(h, 0)}" rx="3" fill="${v ? c : '#E4E8F3'}"></rect>
-      <rect x="${P + i * bw}" y="6" width="${bw}" height="${H - P - 6}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${esc(sub)}" data-chart-color="${v ? c : '#647F9C'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
-      <text x="${x + (bw - 8) / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#4A6685">${['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'][i]}</text>
-    </g>`;
-  }).join('');
-  const chart = logged.length
-    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟพลังงานรายวันตลอดสัปดาห์">${bars}<line x1="${P}" x2="${W - P}" y1="${y(T.kcal)}" y2="${y(T.kcal)}" stroke="#C95B72" stroke-dasharray="4 3"/><text x="${W - P}" y="${y(T.kcal) - 3}" font-size="9" text-anchor="end" fill="#B03F58">เป้า ${T.kcal}</text></svg></div>`
-    : `<p class="text-xs text-slate-500 bg-slate-50 rounded-xl py-6 text-center">${foodError ? 'โหลดบันทึกอาหารไม่สำเร็จในขณะนี้' : 'สัปดาห์นี้ยังไม่มีบันทึกอาหาร'}</p>`;
+  const dowShort = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+  const chartRows = days.map((d, i) => ({
+    date: d,
+    label: dowShort[i],
+    cal: Math.round(byDay[d].cal),
+    protein: Math.round(byDay[d].p)
+  }));
+  const chartHtml = logged.length
+    ? `<div id="wk-food-chart">${barChartSvg({
+        data: chartRows,
+        labelKey: 'label',
+        valueKey: 'cal',
+        unit: 'kcal',
+        width: 340,
+        height: 155,
+        padL: 34,
+        padR: 16,
+        padT: 14,
+        padB: 26,
+        showYAxis: false,
+        targetValue: T.kcal,
+        targetLabel: `เป้า ${T.kcal.toLocaleString()}`,
+        ariaLabel: 'กราฟพลังงานรายวันตลอดสัปดาห์',
+        barColorFn: (row, _i, palette) => (row.cal > T.kcal * 1.1 ? palette.warning : palette.brandDark),
+        tipFormatter: row => `${fmtDate(row.date)}: ${row.cal.toLocaleString()} kcal`,
+        subFormatter: row => (row.cal
+          ? (row.cal > T.kcal * 1.1 ? 'เกินเป้า' : row.cal < T.kcal * 0.8 ? 'ต่ำกว่าเป้า' : 'ใกล้เคียงเป้า')
+          : 'ไม่มีบันทึก')
+      })}</div>`
+    : emptyState({
+        icon: 'food',
+        title: foodError ? 'โหลดบันทึกอาหารไม่สำเร็จในขณะนี้' : 'สัปดาห์นี้ยังไม่มีบันทึกอาหาร',
+        description: foodError ? 'แสดงข้อมูลส่วนอื่นที่มีอยู่ในเครื่องให้ตามปกติ' : ''
+      });
 
-  const wOf = (a, b) => state.body.filter(r => typeof r.weight === 'number' && r.date >= a && r.date <= b).sort((p, q) => p.date.localeCompare(q.date));
-  const wk = wOf(weekStart, end), prev = wOf(addDays(weekStart, -7), addDays(weekStart, -1));
-  const wAvg = avg(wk.map(r => r.weight)), pAvg = avg(prev.map(r => r.weight));
-  const wDelta = wAvg !== null && pAvg !== null ? round1(wAvg - pAvg) : null;
-
-  const ssRange = state.body.filter(r => r.date >= weekStart && r.date <= end);
-  const sleepVals = ssRange.map(r => typeof r.sleepHours === 'number' ? r.sleepHours : (typeof r.sleepMinutes === 'number' ? r.sleepMinutes / 60 : null)).filter(v => v !== null);
-  const stepVals = ssRange.map(r => typeof r.steps === 'number' ? r.steps : null).filter(v => v !== null);
-  const sleepAvg = avg(sleepVals);
-  const stepsAvg = avg(stepVals);
-  const stepsTotal = stepVals.reduce((a, b) => a + b, 0);
-
-  const ws = state.workouts.filter(w => w.date >= weekStart && w.date <= end && w.status !== 'planned');
-  const wSum = summarizeWorkoutCollection(ws);
-  const wIntensityText = formatIntensityBreakdown(wSum.byIntensity);
-  const wEffortText = Object.entries(wSum.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wFeelingText = Object.entries(wSum.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wRecoveryText = Object.entries(wSum.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wEvalText = [
-    wSum.avgSessionRpe != null ? `RPE เฉลี่ย ${wSum.avgSessionRpe}/10` : '',
-    wEffortText || wFeelingText,
-    wRecoveryText ? `ฟื้นตัว: ${wRecoveryText}` : ''
-  ].filter(Boolean).join(' · ');
-  const sx = state.symptoms.filter(s => s.date >= weekStart && s.date <= end && Object.values(s.symptoms || {}).some(v => v > 0)).length;
-
-  const tips = [];
-  if (foodError) tips.push('ไม่สามารถดึงข้อมูลอาหารจากเซิร์ฟเวอร์ได้ในขณะนี้ (แสดงเฉพาะข้อมูลส่วนอื่นในเครื่อง)');
-  else if (!logged.length) tips.push('สัปดาห์นี้ยังไม่มีบันทึกอาหาร');
-  else {
-    if (logged.length < 5 && end < today) tips.push(`บันทึกอาหารแค่ ${logged.length}/7 วัน — ยิ่งบันทึกครบ สรุปยิ่งแม่น`);
-    if (avgP !== null && avgP < T.protein * 0.8) tips.push(`โปรตีนเฉลี่ย ${Math.round(avgP)} g ต่ำกว่าเป้า ${T.protein} g`);
-    if (over >= 3) tips.push(`เกินเป้าแคลอรี่ ${over} วัน — ลองวางแผนมื้อล่วงหน้า`);
-    if (under >= 3) tips.push(`ต่ำกว่าเป้ามาก ${under} วัน — กินน้อยเกินไปต่อเนื่องอาจเหนื่อยง่าย`);
-  }
-  if (ws.length === 0 && end < today) tips.push('สัปดาห์นี้ไม่ได้ออกกำลังกายตามที่บันทึก');
-  if (ws.length >= 3) tips.push(`ออกกำลังกาย ${ws.length} ครั้ง เยี่ยมมาก`);
-  if ((wSum.avgSessionRpe != null && wSum.avgSessionRpe >= 8.5) || ws.some(w => w.feeling === 'exhausted' || w.effortLevel === 'very_hard' || w.nextDayRecovery === 'sore_multi')) {
-    tips.push('ความเหนื่อยสะสมจากการออกกำลังกายค่อนข้างสูง ลองจัดวันพักฟื้นหรือลดความหนักสลับกัน');
-  }
-  if (wDelta !== null && Math.abs(wDelta) >= 1) tips.push(`น้ำหนักเฉลี่ย${wDelta > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(wDelta)} กก. จากสัปดาห์ก่อน (ความผันผวนรายวันเป็นเรื่องปกติ ดูแนวโน้มหลายสัปดาห์)`);
-  if (sleepAvg !== null && sleepAvg < 6) tips.push(`สัปดาห์นี้นอนเฉลี่ย ${round1(sleepAvg)} ชม./คืน — ลองพักผ่อนให้ใกล้เคียง 7–8 ชม. จะช่วยการฟื้นตัวและความอยากอาหารได้`);
-
-  const fin = financeRangeSummary(weekStart, end);
+  const metrics = summarizePeriodMetrics({
+    start: weekStart,
+    end,
+    prevStart: addDays(weekStart, -7),
+    prevEnd: addDays(weekStart, -1),
+    body: state.body,
+    workouts: state.workouts,
+    symptoms: state.symptoms,
+    period: state.period
+  });
+  const fin = summarizeFinanceRange(state.expenses, weekStart, end);
   const invRem = inventoryAndReminderSummary(today);
+  const tips = buildFoodInsights({
+    foodError,
+    loggedCount: logged.length,
+    totalDays: 7,
+    periodLabel: 'สัปดาห์นี้',
+    avgP,
+    targetProtein: T.protein,
+    over,
+    under,
+    periodMetrics: metrics,
+    compareEnd: end,
+    today,
+    weightCompareLabel: 'เทียบสัปดาห์ก่อน'
+  });
 
-  const stat = (label, val, sub = '') => `<div class="bg-white border border-slate-100 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${val}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
-  $('#wk-body', root).innerHTML = `
-    <div class="card space-y-3 lg:col-span-2">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('food', { size: 17, className: 'text-brand' })}<span>อาหาร</span></h3>
-        ${foodError ? '<span class="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">โหลดบันทึกอาหารไม่สำเร็จ</span>' : ''}
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        ${stat('บันทึกอาหาร', `${logged.length}/7 วัน`)}
-        ${stat('พลังงานเฉลี่ย/วัน', avgCal === null ? '—' : Math.round(avgCal).toLocaleString() + ' kcal', `เป้า ${T.kcal.toLocaleString()}`)}
-        ${stat('โปรตีนเฉลี่ย/วัน', avgP === null ? '—' : Math.round(avgP) + ' g', `เป้า ${T.protein} g`)}
-        ${stat('เกิน / ต่ำกว่าเป้า', logged.length ? `${over} / ${under} วัน` : '—', 'เกิน >110% · ต่ำ <80%')}
-      </div>${chart}</div>
-    <div class="space-y-6">
-      <div class="card space-y-3"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('body', { size: 17, className: 'text-brand' })}<span>น้ำหนัก · การนอน · ก้าวเดิน</span></h3>
-        ${wAvg === null ? '<p class="text-xs text-slate-500">ไม่มีการชั่งน้ำหนักในสัปดาห์นี้</p>' : `<p class="text-lg font-bold tabular-nums">${round1(wAvg)} กก. <span class="text-xs font-normal text-slate-500">เฉลี่ย (${wk.length} ครั้ง)</span></p>
-        <p class="text-xs text-slate-600 tabular-nums">${wk.length > 1 ? `ต้นสัปดาห์ ${wk[0].weight} → ปลาย ${wk[wk.length - 1].weight} กก.` : ''}</p>
-        <p class="text-xs tabular-nums ${wDelta === null ? 'text-slate-500' : wDelta > 0 ? 'text-rose-600' : 'text-green-700'}">${wDelta === null ? 'ไม่มีข้อมูลสัปดาห์ก่อนให้เทียบ' : `เทียบสัปดาห์ก่อน ${wDelta > 0 ? '+' : ''}${wDelta} กก.`}</p>`}
-        ${(sleepAvg !== null || stepsAvg !== null) ? `<div class="border-t border-slate-100 pt-2 text-xs text-slate-600 space-y-1 tabular-nums">
-          ${sleepAvg !== null ? `<p>นอนเฉลี่ย <b>${round1(sleepAvg)}</b> ชม./คืน (${sleepVals.length} วัน)</p>` : ''}
-          ${stepsAvg !== null ? `<p>ก้าวเดินเฉลี่ย <b>${Math.round(stepsAvg).toLocaleString()}</b> ก้าว/วัน (รวม ${Math.round(stepsTotal).toLocaleString()})</p>` : ''}
-        </div>` : ''}</div>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('workout', { size: 17, className: 'text-brand' })}<span>ออกกำลังกาย</span></h3>
-        ${wSum.count
-          ? `<p class="text-lg font-bold tabular-nums">${wSum.count} ครั้ง <span class="text-xs font-normal text-slate-500">${wSum.totalMinutes ? `· ${wSum.totalMinutes} นาที รวม` : ''}${wSum.totalKcal ? ` · เผาผลาญ ~${wSum.totalKcal} kcal` : ''}</span></p>
-             ${Object.entries(wSum.byType).map(([t, n]) => `<p class="text-xs text-slate-600 tabular-nums">${esc(TYPES[t] || t)}: ${n} ครั้ง</p>`).join('')}
-             ${wIntensityText ? `<p class="text-xs text-slate-600 tabular-nums">ความหนัก: ${esc(wIntensityText)}</p>` : ''}
-             ${wEvalText ? `<p class="text-xs text-brand-dark tabular-nums">${esc(wEvalText)}</p>` : ''}`
-          : '<p class="text-xs text-slate-500">ยังไม่มีบันทึกออกกำลังกายในสัปดาห์นี้</p>'}
-        ${sx ? `<p class="text-xs text-slate-500 pt-1 tabular-nums">มีบันทึกอาการ ${sx} วัน</p>` : ''}</div>
-      <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>การเงินสัปดาห์นี้</span></h3>
-        ${fin.count ? `<p class="text-sm tabular-nums">รับ <b class="text-emerald-700">฿${fmtMoney(fin.income)}</b> · จ่าย <b class="text-rose-600">฿${fmtMoney(fin.expense)}</b></p>
-        <p class="text-xs text-slate-600 tabular-nums">สุทธิ: <b class="${fin.net < 0 ? 'text-rose-600' : 'text-emerald-700'}">${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)}</b> (${fin.count} รายการ)</p>
-        ${fin.topCats.length ? `<p class="text-[11px] text-slate-500 tabular-nums">ใช้จ่ายหลัก: ${fin.topCats.map(([c, v]) => `${esc(c)} ฿${fmtMoney(v)}`).join(' · ')}</p>` : ''}` : '<p class="text-xs text-slate-500">ไม่มีรายการรายรับ-รายจ่ายในช่วงนี้</p>'}</div>
-      <div class="card space-y-1.5"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-brand' })}<span>สต๊อก & แจ้งเตือน</span></h3>
-        <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> · ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b></p>
-        <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''} · ทั้งหมด ${invRem.scheduledTotal} กำหนดการ</p></div>
-    </div>
-    <div class="card lg:col-span-3"><h3 class="font-bold text-slate-800 mb-2">ข้อสังเกต</h3>${tips.length ? `<ul class="list-disc pl-5 text-sm text-slate-700 space-y-1">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="text-sm text-slate-600">ทุกอย่างอยู่ในเกณฑ์ที่ตั้งไว้</p>'}
-      <p class="text-[11px] text-slate-500 mt-2">สรุปจากข้อมูลที่บันทึกเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p></div>`;
-  bindChartInspector($('#wk-food-chart', root), { hint: 'แตะแท่งกราฟเพื่อดูแคลอรี่แต่ละวัน' });
+  renderUnifiedPeriodBody({
+    mode: 'weekly',
+    foodError,
+    loggedCount: logged.length,
+    totalDays: 7,
+    avgCal,
+    avgP,
+    over,
+    under,
+    targets: T,
+    chartHtml,
+    metrics,
+    fin,
+    invRem,
+    tips,
+    weightCompareLabel: 'เทียบสัปดาห์ก่อน',
+    periodNoun: 'สัปดาห์นี้'
+  });
 }
 
 async function renderMonthly() {
-  const my = ++seq, [y, m] = selectedMonth.split('-').map(Number), start = selectedMonth + '-01', end = monthEndDate(selectedMonth), today = localDateStr();
+  const my = ++seq;
+  const [y, m] = selectedMonth.split('-').map(Number);
+  const start = `${selectedMonth}-01`;
+  const end = monthEndDate(selectedMonth);
+  const prevYm = shiftMonth(selectedMonth, -1);
+  const prevStart = `${prevYm}-01`;
+  const prevEnd = monthEndDate(prevYm);
+  const today = localDateStr();
   $('#wk-range', root).textContent = new Date(y, m - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   $('#wk-next', root).disabled = selectedMonth >= today.slice(0, 7);
   renderLoadingSkeleton('กำลังโหลดสรุปรายเดือน...');
@@ -231,59 +382,99 @@ async function renderMonthly() {
   }
   if (my !== seq) return;
 
-  const loggedDays = new Set(food.map(x => x.date)), avgCal = loggedDays.size ? food.reduce((a, x) => a + num(x.calories), 0) / loggedDays.size : null, avgP = loggedDays.size ? food.reduce((a, x) => a + num(x.protein), 0) / loggedDays.size : null;
-  const weights = state.body.filter(x => x.date >= start && x.date <= end && typeof x.weight === 'number').sort((a, b) => a.date.localeCompare(b.date));
-  const workouts = state.workouts.filter(x => x.date >= start && x.date <= end && x.status !== 'planned');
-  const wSum = summarizeWorkoutCollection(workouts);
-  const wIntText = formatIntensityBreakdown(wSum.byIntensity);
-  const wEffortText = Object.entries(wSum.byEffort).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wFeelText = Object.entries(wSum.byFeeling).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wRecoveryText = Object.entries(wSum.byRecovery).map(([lbl, n]) => `${lbl} ${n}`).join(' · ');
-  const wSubParts = [
-    wSum.totalMinutes ? `${wSum.totalMinutes} นาที รวม` : '',
-    wIntText ? `ความหนัก: ${wIntText}` : '',
-    wSum.avgSessionRpe != null ? `RPE เฉลี่ย ${wSum.avgSessionRpe}/10` : '',
-    wEffortText || wFeelText,
-    wRecoveryText ? `ฟื้นตัว: ${wRecoveryText}` : ''
-  ].filter(Boolean).join(' · ');
-  const symptoms = state.symptoms.filter(x => x.date >= start && x.date <= end && Object.values(x.symptoms || {}).some(v => v > 0)).length, targets = getTargets();
-  const stat = (label, value, sub = '') => `<div class="bg-white border border-slate-100 rounded-xl p-3"><p class="text-xs text-slate-600">${label}</p><p class="text-lg font-bold text-slate-800 tabular-nums">${value}</p><p class="text-[11px] text-slate-500 tabular-nums">${sub}</p></div>`;
+  const T = getTargets();
   const daysInMonth = Array.from({ length: new Date(y, m, 0).getDate() }, (_, i) => `${selectedMonth}-${String(i + 1).padStart(2, '0')}`);
-  const byDay = Object.fromEntries(daysInMonth.map(d => [d, { cal: 0, p: 0 }]));
-  food.forEach(f => { const x = byDay[f.date]; if (x) { x.cal += num(f.calories); x.p += num(f.protein); } });
-  const W = 680, H = 170, P = 26, maxCal = Math.max(...daysInMonth.map(d => byDay[d].cal), 1), bw = (W - 2 * P) / daysInMonth.length;
-  const yPos = v => H - P - v / maxCal * (H - 2 * P);
-  const bars = daysInMonth.map((d, i) => {
-    const v = byDay[d].cal, x = P + i * bw, h = Math.max(H - P - yPos(v), 0);
-    return `<g>
-      <rect x="${x}" y="${yPos(v)}" width="${Math.max(bw - 1.5, 1)}" height="${h}" rx="1.5" fill="${v ? '#1F4A74' : '#E4E8F3'}"></rect>
-      <rect x="${x}" y="8" width="${Math.max(bw, 8)}" height="${H - P - 8}" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(fmtDate(d))}: ${Math.round(v).toLocaleString()} kcal" data-chart-sub="${v ? `โปรตีน ${Math.round(byDay[d].p)} g` : 'ไม่มีบันทึก'}" data-chart-color="${v ? '#1F4A74' : '#647F9C'}" aria-label="${esc(fmtDate(d))} ${Math.round(v)} kcal"><title>${esc(fmtDate(d))}: ${Math.round(v)} kcal</title></rect>
-      ${(i % 5 === 0 || i === daysInMonth.length - 1 ? `<text x="${x}" y="${H - 8}" font-size="9" text-anchor="middle" fill="#4A6685">${i + 1}</text>` : '')}
-    </g>`;
-  }).join('');
-  const chart = loggedDays.size
-    ? `<div id="wk-food-chart"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="กราฟแคลอรี่รายเดือน">${bars}</svg></div>`
-    : `<p class="text-xs text-slate-500 bg-slate-50 rounded-xl py-6 text-center">${foodError ? 'โหลดบันทึกอาหารเดือนนี้ไม่สำเร็จ' : 'เดือนนี้ยังไม่มีบันทึกอาหาร'}</p>`;
+  const byDay = Object.fromEntries(daysInMonth.map(d => [d, { cal: 0, p: 0, n: 0 }]));
+  food.forEach(f => {
+    const x = byDay[f.date];
+    if (x) {
+      x.cal += num(f.calories);
+      x.p += num(f.protein);
+      x.n += 1;
+    }
+  });
+  const logged = daysInMonth.filter(d => byDay[d].n > 0 && d <= today);
+  const avgCal = avg(logged.map(d => byDay[d].cal));
+  const avgP = avg(logged.map(d => byDay[d].p));
+  const over = logged.filter(d => byDay[d].cal > T.kcal * 1.1).length;
+  const under = logged.filter(d => byDay[d].cal < T.kcal * 0.8).length;
 
-  const ssMonth = state.body.filter(x => x.date >= start && x.date <= end);
-  const mSleep = ssMonth.map(r => typeof r.sleepHours === 'number' ? r.sleepHours : (typeof r.sleepMinutes === 'number' ? r.sleepMinutes / 60 : null)).filter(v => v !== null);
-  const mSteps = ssMonth.map(r => typeof r.steps === 'number' ? r.steps : null).filter(v => v !== null);
-  const fin = financeRangeSummary(start, end);
+  const chartRows = daysInMonth.map((d, i) => ({
+    date: d,
+    dayNum: i + 1,
+    label: String(i + 1),
+    cal: Math.round(byDay[d].cal),
+    protein: Math.round(byDay[d].p)
+  }));
+  const chartHtml = logged.length
+    ? `<div id="wk-food-chart">${barChartSvg({
+        data: chartRows,
+        labelKey: 'label',
+        valueKey: 'cal',
+        unit: 'kcal',
+        width: 680,
+        height: 170,
+        padL: 26,
+        padR: 16,
+        padT: 14,
+        padB: 26,
+        showYAxis: false,
+        targetValue: T.kcal,
+        targetLabel: `เป้า ${T.kcal.toLocaleString()}`,
+        ariaLabel: 'กราฟแคลอรี่รายเดือน',
+        xLabelFilter: (_row, i, total) => i % 5 === 0 || i === total - 1,
+        tipFormatter: row => `${fmtDate(row.date)}: ${row.cal.toLocaleString()} kcal`,
+        subFormatter: row => (row.cal ? `โปรตีน ${row.protein} g` : 'ไม่มีบันทึก')
+      })}</div>`
+    : emptyState({
+        icon: 'food',
+        title: foodError ? 'โหลดบันทึกอาหารเดือนนี้ไม่สำเร็จ' : 'เดือนนี้ยังไม่มีบันทึกอาหาร',
+        description: foodError ? 'แสดงข้อมูลส่วนอื่นที่มีอยู่ในเครื่องให้ตามปกติ' : ''
+      });
+
+  const metrics = summarizePeriodMetrics({
+    start,
+    end,
+    prevStart,
+    prevEnd,
+    body: state.body,
+    workouts: state.workouts,
+    symptoms: state.symptoms,
+    period: state.period
+  });
+  const fin = summarizeFinanceRange(state.expenses, start, end);
   const invRem = inventoryAndReminderSummary(today);
-  $('#wk-body', root).innerHTML = `<div class="card space-y-3 lg:col-span-2"><div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-800">สรุปรายเดือน</h3>${foodError ? '<span class="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">โหลดบันทึกอาหารไม่สำเร็จ</span>' : ''}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-    ${stat('วันที่บันทึกอาหาร', `${loggedDays.size} วัน`)}${stat('พลังงานเฉลี่ย/วันที่บันทึก', avgCal === null ? '—' : Math.round(avgCal).toLocaleString() + ' kcal', `เป้า ${targets.kcal.toLocaleString()} kcal`)}${stat('โปรตีนเฉลี่ย/วันที่บันทึก', avgP === null ? '—' : round1(avgP) + ' g', `เป้า ${targets.protein} g`)}
-    ${stat('น้ำหนัก', weights.length ? round1(weights[weights.length - 1].weight) + ' กก.' : '—', weights.length ? `เปลี่ยนจากครั้งแรก ${round1(weights[weights.length - 1].weight - weights[0].weight)} กก.` : 'ไม่มีบันทึกเดือนนี้')}
-    ${stat('ออกกำลังกาย', wSum.count ? `${wSum.count} ครั้ง` : '—', wSum.count ? esc(wSubParts || 'บันทึกแล้ว') : 'ยังไม่มีบันทึก')}${stat('วันที่มีบันทึกอาการ', `${symptoms} วัน`)}
-    ${(mSleep.length || mSteps.length) ? stat('การนอน / ก้าวเดิน', mSleep.length ? `${round1(avg(mSleep))} ชม.` : `${Math.round(avg(mSteps)).toLocaleString()} ก้าว`, `${mSleep.length ? `นอน ${mSleep.length} คืน` : ''}${mSleep.length && mSteps.length ? ' · ' : ''}${mSteps.length ? `เดินเฉลี่ย ${Math.round(avg(mSteps)).toLocaleString()} ก้าว/วัน` : ''}`) : ''}
-  </div>${chart}<p class="text-xs text-slate-500">สรุปตามวันที่มีข้อมูล ไม่ใช่คำแนะนำทางการแพทย์</p></div>
-  <div class="space-y-6">
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('expense', { size: 17, className: 'text-brand' })}<span>การเงินเดือนนี้</span></h3>
-      ${fin.count ? `${stat('รายรับ / รายจ่าย', `฿${fmtMoney(fin.income)} / ฿${fmtMoney(fin.expense)}`, `สุทธิ ${fin.net >= 0 ? '+' : ''}฿${fmtMoney(fin.net)} (${fin.count} รายการ)`)}
-      ${fin.topCats.length ? `<p class="text-xs text-slate-600 tabular-nums">หมวดใช้จ่ายสูง: ${fin.topCats.map(([c, v]) => `${esc(c)} (฿${fmtMoney(v)})`).join(', ')}</p>` : ''}`
-        : '<p class="text-xs text-slate-500">ยังไม่มีรายการรายรับ-รายจ่ายในเดือนนี้</p>'}</div>
-    <div class="card space-y-2"><h3 class="font-bold text-slate-800 inline-flex items-center gap-1.5">${iconSvg('inventory', { size: 17, className: 'text-brand' })}<span>สต๊อก & แจ้งเตือน</span></h3>
-      <p class="text-xs text-slate-600 tabular-nums">สต๊อกทั้งหมด <b>${invRem.total}</b> รายการ (ใกล้หมด <b>${invRem.lowCount}</b> · ใกล้หมดอายุ <b>${invRem.expiringCount}</b>)</p>
-      <p class="text-xs text-slate-600 tabular-nums">แจ้งเตือนที่ถึงกำหนด <b>${invRem.activeCount}</b> รายการ${invRem.overdueCount ? ` (<span class="text-rose-600 font-semibold">เลยกำหนด ${invRem.overdueCount}</span>)` : ''}</p></div>
-  </div>`;
-  bindChartInspector($('#wk-food-chart', root), { hint: 'แตะแท่งกราฟเพื่อดูแคลอรี่แต่ละวัน' });
+  const tips = buildFoodInsights({
+    foodError,
+    loggedCount: logged.length,
+    totalDays: daysInMonth.length,
+    periodLabel: 'เดือนนี้',
+    avgP,
+    targetProtein: T.protein,
+    over,
+    under,
+    periodMetrics: metrics,
+    compareEnd: end,
+    today,
+    weightCompareLabel: 'เทียบเดือนก่อน'
+  });
+
+  renderUnifiedPeriodBody({
+    mode: 'monthly',
+    foodError,
+    loggedCount: logged.length,
+    totalDays: daysInMonth.length,
+    avgCal,
+    avgP,
+    over,
+    under,
+    targets: T,
+    chartHtml,
+    metrics,
+    fin,
+    invRem,
+    tips,
+    weightCompareLabel: 'เทียบเดือนก่อน',
+    periodNoun: 'เดือนนี้'
+  });
 }

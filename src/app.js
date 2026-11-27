@@ -445,8 +445,13 @@ function updateBell() {
   if (!mod) return;
   const n = mod.collectReminders().length;
   const badge = $('#bell-badge');
-  badge.textContent = n > 9 ? '9+' : String(n);
-  badge.classList.toggle('hidden', !n);
+  const btnBell = $('#btn-bell');
+  if (badge) {
+    badge.textContent = n > 9 ? '9+' : String(n);
+    badge.classList.toggle('is-multi', n > 9);
+    badge.classList.toggle('hidden', !n);
+  }
+  btnBell?.setAttribute('aria-label', n > 0 ? `แจ้งเตือน (${n} รายการ)` : 'แจ้งเตือน');
 }
 
 let quickTrigger = null;

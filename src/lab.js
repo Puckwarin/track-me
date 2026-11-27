@@ -7,6 +7,7 @@ import { LAB_PANEL_TEMPLATES, findLatestLabDefaults, parseBulkLabText } from './
 import { iconSvg } from './icons.js';
 import { guardPreviewWrite } from './preview.js';
 import { bindChartInspector, bindSwipeRows, detailsToggleHtml } from './ui.js';
+import { getChartPalette, sparklineSvg } from './chartPrimitives.js';
 
 // ค่าอ้างอิงทั่วไปเพื่อช่วยกรอกเร็ว — ค่าจริงต่างกันตามห้องแล็บ/ชนิดสัตว์/อายุ ให้แก้ตามใบผลตรวจเสมอ
 export const LAB_PRESETS = [
@@ -445,21 +446,26 @@ function save() {
 
 function spark(rows) {
   if (rows.length < 2) return '';
-  const W = 128, H = 34, vs = rows.map(r => r.value), min = Math.min(...vs), max = Math.max(...vs), rng = max - min || 1;
-  const cx = i => (i / (rows.length - 1) * (W - 10) + 5);
-  const cy = r => (H - 5 - (r.value - min) / rng * (H - 10));
-  const pts = rows.map((r, i) => `${cx(i).toFixed(1)},${cy(r).toFixed(1)}`).join(' ');
-  const dots = rows.map((r, i) => {
-    const x = cx(i).toFixed(1), y = cy(r).toFixed(1);
-    const valStr = `${r.value}${r.unit ? ' ' + r.unit : ''}`;
-    const flag = labFlag(r);
-    const sub = `${fmtDate(r.date)}${flag && FLAG[flag] ? ` · ${FLAG[flag][0]}` : ''}`;
-    return `<g>
-      <circle cx="${x}" cy="${y}" r="2.6" fill="#1F4A74"/>
-      <circle cx="${x}" cy="${y}" r="9" fill="transparent" tabindex="0" role="button" data-chart-tip="${esc(r.name)}: ${esc(valStr)}" data-chart-sub="${esc(sub)}" data-chart-color="#1F4A74" aria-label="${esc(r.name)} ${esc(fmtDate(r.date))} ${esc(valStr)}"><title>${esc(fmtDate(r.date))}: ${esc(valStr)}</title></circle>
-    </g>`;
-  }).join('');
-  return `<svg role="img" aria-label="แนวโน้มค่าผลตรวจ" viewBox="0 0 ${W} ${H}" class="w-32 h-8 shrink-0"><polyline points="${pts}" fill="none" stroke="#1F4A74" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
+  const palette = getChartPalette();
+  return sparklineSvg({
+    points: rows.map(r => ({
+      value: r.value,
+      row: r,
+      ariaLabel: `${r.name} ${fmtDate(r.date)} ${r.value}${r.unit ? ` ${r.unit}` : ''}`
+    })),
+    color: palette.brandDark,
+    ariaLabel: `แนวโน้มค่าผลตรวจ ${rows[0]?.name || ''}`.trim(),
+    tipFormatter: p => {
+      const r = p.row;
+      const valStr = `${r.value}${r.unit ? ` ${r.unit}` : ''}`;
+      return `${r.name}: ${valStr}`;
+    },
+    subFormatter: p => {
+      const r = p.row;
+      const flag = labFlag(r);
+      return `${fmtDate(r.date)}${flag && FLAG[flag] ? ` · ${FLAG[flag][0]}` : ''}`;
+    }
+  });
 }
 
 export function render() {
