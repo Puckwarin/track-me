@@ -30,8 +30,8 @@ describe('home widget customization contract', () => {
   it('exposes stable widget IDs and definitions matching all slots', () => {
     expect(HOME_WIDGET_IDS).toEqual([
       'shortcuts',
-      'planner',
       'daily-overview',
+      'planner',
       'summary'
     ]);
     expect(HOME_WIDGET_DEFS.map(def => def.id)).toEqual(HOME_WIDGET_IDS);
@@ -100,6 +100,20 @@ describe('home widget customization contract', () => {
     state.uid = 'user-b';
     state.homeWidgets = null;
     expect(getHomeWidgetConfig().order).toEqual(HOME_WIDGET_IDS);
+  });
+
+  it('preserves user custom order even when planner is moved before daily-overview', () => {
+    state.homeWidgets = {
+      order: ['planner', 'daily-overview', 'summary', 'shortcuts'],
+      hidden: [],
+      pinnedShortcuts: []
+    };
+    expect(getHomeWidgetConfig().order).toEqual([
+      'planner',
+      'daily-overview',
+      'summary',
+      'shortcuts'
+    ]);
   });
 
   it('does not read or save preferences without a signed-in account', () => {

@@ -289,17 +289,33 @@ export function mountWorkout(el) {
         <div id="w-import-preview" class="hidden space-y-3 pt-2 border-t border-brand/20"></div>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div><label class="lbl" for="w-date">วันที่</label><input type="date" id="w-date" class="input"></div>
-        <div><label class="lbl" for="w-status">สถานะ</label><select id="w-status" class="input"><option value="done">ทำจริงแล้ว</option><option value="planned">วางแผนไว้</option></select></div>
-        <div><label class="lbl" for="w-type">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
-        <div><label class="lbl" for="w-dur">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
-        <div><label class="lbl" for="w-int">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
-        <div><label class="lbl" for="w-tpl">เริ่มจากเทมเพลต</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
-        <div class="col-span-2 sm:col-span-2"><label class="lbl" for="w-title">ชื่อโปรแกรม (ไม่บังคับ)</label><input id="w-title" class="input" placeholder="เช่น Day A — Lower Body"></div>
-        <div class="col-span-2 sm:col-span-1"><label class="lbl" for="w-muscle">กลุ่มกล้ามเนื้อ</label><input id="w-muscle" class="input" placeholder="เช่น ขาและสะโพก"></div>
+      <div id="w-form-core" class="rounded-2xl border border-slate-200/90 bg-slate-50/40 p-3.5 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-700 inline-flex items-center gap-1.5">${iconSvg('sliders', { size: 14, className: 'text-brand' })}<span>ข้อมูลพื้นฐาน</span></span>
+          <span class="text-[11px] text-slate-500">เลือกข้อมูลหลักเพื่อบันทึกได้เร็ว</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+          <div class="col-span-1 sm:col-span-2"><label class="lbl" for="w-date">วันที่</label><input type="date" id="w-date" class="input"></div>
+          <div class="col-span-1 sm:col-span-2"><label class="lbl" for="w-status">สถานะ</label><select id="w-status" class="input"><option value="done">ทำจริงแล้ว</option><option value="planned">วางแผนไว้</option></select></div>
+          <div class="col-span-2 sm:col-span-2"><label class="lbl" for="w-type">ประเภท</label><select id="w-type" class="input">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
+          <div class="col-span-1 sm:col-span-3"><label class="lbl" for="w-dur">ระยะเวลารวม (นาที)</label><input id="w-dur" type="number" inputmode="numeric" class="input" placeholder="ไม่บังคับ"></div>
+          <div class="col-span-1 sm:col-span-3"><label class="lbl" for="w-int">ความหนัก</label><select id="w-int" class="input"><option value="light">เบา (คุยได้สบาย)</option><option value="moderate" selected>ปานกลาง</option><option value="vigorous">หนัก (เหนื่อยมาก)</option></select></div>
+        </div>
+        <p id="w-burn" class="text-xs text-slate-500"></p>
       </div>
-      <p id="w-burn" class="text-xs text-slate-500 -mt-1"></p>
+
+      <details id="w-meta-more" class="tm-details rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5">
+        <summary class="tm-details-summary cursor-pointer min-h-[44px] flex items-center justify-between gap-2 text-xs font-semibold text-slate-700 select-none">
+          <span class="inline-flex items-center gap-1.5 min-w-0">${iconSvg('bookmark', { size: 14, className: 'text-brand shrink-0' })}<span>รายละเอียดเพิ่มเติม · เทมเพลตและชื่อโปรแกรม</span></span>
+          ${detailsToggleHtml({ compact: true })}
+        </summary>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2.5">
+          <div><label class="lbl" for="w-tpl">เริ่มจากเทมเพลต</label><select id="w-tpl" class="input"><option value="">เลือกเทมเพลต…</option></select></div>
+          <div><label class="lbl" for="w-title">ชื่อโปรแกรม (ไม่บังคับ)</label><input id="w-title" class="input" placeholder="เช่น Day A — Lower Body"></div>
+          <div><label class="lbl" for="w-muscle">กลุ่มกล้ามเนื้อ</label><input id="w-muscle" class="input" placeholder="เช่น ขาและสะโพก"></div>
+        </div>
+      </details>
+
       <div id="w-sections" class="space-y-5"></div>
       <div><label class="lbl" for="w-note">หมายเหตุ</label><input id="w-note" class="input" placeholder="เช่น รู้สึกเหนื่อยง่าย, ปรับลดน้ำหนักลง, เพิ่มท่า"></div>
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -634,11 +650,27 @@ export function mountWorkout(el) {
   render();
 }
 
+function syncWorkoutMetaDetails({ forceOpen = null } = {}) {
+  const box = $('#w-meta-more', root);
+  if (!box) return;
+  if (typeof forceOpen === 'boolean') {
+    box.open = forceOpen;
+    return;
+  }
+  const hasMeta = Boolean(
+    $('#w-title', root)?.value?.trim() ||
+    $('#w-muscle', root)?.value?.trim() ||
+    $('#w-tpl', root)?.value
+  );
+  if (hasMeta) box.open = true;
+}
+
 function loadTemplate(t, silent = false) {
   if (!t) return;
   if (t.name) $('#w-title', root).value = t.name;
   if (t.muscleGroup) $('#w-muscle', root).value = t.muscleGroup;
   if (t.durationMin) $('#w-dur', root).value = String(t.durationMin);
+  syncWorkoutMetaDetails();
   loadSections(t.sections, t.type, silent);
   burnPreview();
 }
@@ -746,6 +778,7 @@ async function handleRecordAction(e) {
       $('#w-muscle', root).value = r.muscleGroup || '';
       $('#w-int', root).value = ['light', 'moderate', 'vigorous'].includes(r.intensity) ? r.intensity : 'moderate';
       if (r.durationMin) $('#w-dur', root).value = String(r.durationMin);
+      syncWorkoutMetaDetails();
       loadSections(r.sections, r.type);
       burnPreview();
       window.scrollTo({ top: root.offsetTop, behavior: 'smooth' });
@@ -796,6 +829,7 @@ function startRecordEdit(id) {
   $('#w-dur', root).value = r.durationMin ?? '';
   $('#w-int', root).value = ['light', 'moderate', 'vigorous'].includes(r.intensity) ? r.intensity : 'moderate';
   $('#w-note', root).value = r.note || '';
+  syncWorkoutMetaDetails();
   draft = { warmup: [], main: [], cooldown: [] };
   for (const k of Object.keys(draft)) draft[k] = (r.sections?.[k] || []).map(row => ({ ...blankRow(), ...row }));
   updateRecordEditUi();
@@ -842,6 +876,7 @@ function clearForm() {
   $('#w-muscle', root).value = '';
   $('#w-note', root).value = '';
   $('#w-dur', root).value = '';
+  syncWorkoutMetaDetails({ forceOpen: false });
   weekStart = mondayOf(today);
   stripScrollMode = 'center';
   clearImportBox({ keepOpen: false });
@@ -860,6 +895,7 @@ function startTemplateEdit(id) {
   $('#w-title', root).value = t.name || '';
   $('#w-muscle', root).value = t.muscleGroup || '';
   $('#w-dur', root).value = t.durationMin ?? '';
+  syncWorkoutMetaDetails();
   $('#w-tpl-edit-bar', root).classList.remove('hidden');
   loadSections(t.sections, t.type, true);
   burnPreview();
@@ -922,6 +958,7 @@ function useLast() {
   if (last.title) $('#w-title', root).value = last.title;
   if (last.muscleGroup) $('#w-muscle', root).value = last.muscleGroup;
   if (last.durationMin) $('#w-dur', root).value = String(last.durationMin);
+  syncWorkoutMetaDetails();
   loadSections(last.sections, type);
   burnPreview();
 }
@@ -1316,6 +1353,7 @@ function applyImportToForm({ keepPanel = false } = {}) {
   if (p.muscleGroup) $('#w-muscle', root).value = p.muscleGroup;
   if (p.durationMin) $('#w-dur', root).value = String(p.durationMin);
   if (p.suggestedType && TYPES[p.suggestedType]) $('#w-type', root).value = p.suggestedType;
+  syncWorkoutMetaDetails();
 
   const secNotes = Object.entries(p.sectionNotes || {})
     .filter(([, v]) => v)

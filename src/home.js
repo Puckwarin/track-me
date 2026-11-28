@@ -13,11 +13,11 @@ import { iconSvg } from './icons.js';
 import { getHomeShortcuts, readNavigationPreferences } from './navigation.js';
 import { animateNumberTicker, bindChartInspector } from './ui.js';
 
-export const HOME_WIDGET_IDS = ['shortcuts', 'planner', 'daily-overview', 'summary'];
+export const HOME_WIDGET_IDS = ['shortcuts', 'daily-overview', 'planner', 'summary'];
 export const HOME_WIDGET_DEFS = [
   { id: 'shortcuts', label: 'ทางลัดที่ปักหมุด' },
-  { id: 'planner', label: 'Weekly Planner' },
   { id: 'daily-overview', label: 'สรุปภาพรวมวันนี้' },
+  { id: 'planner', label: 'Weekly Planner' },
   { id: 'summary', label: 'สรุปภาพรวมทั้งหมด' }
 ];
 
@@ -176,20 +176,24 @@ function dailyOverviewSubtitle(pct, hasFood, goal) {
 
 function buildDailyOverviewHtml(today, foods, targets) {
   const foodLoaded = !!state.loaded?.todayFood;
+  const isFoodLoading = !foodLoaded && foods.length === 0;
   const sum = k => foods.reduce((a, i) => a + num(i[k]), 0);
   const kcal = Math.round(sum('calories'));
   const goal = num(targets.kcal) || 0;
   const pct = goal ? Math.round((kcal / goal) * 100) : 0;
   const left = goal - kcal;
   const title = dailyEncouragementForDate(today);
-  const subtitle = dailyOverviewSubtitle(pct, foods.length > 0, goal);
+  const subtitle = isFoodLoading
+    ? 'กำลังโหลดข้อมูลมื้ออาหารของวันนี้...'
+    : dailyOverviewSubtitle(pct, foods.length > 0, goal);
 
   const pie = buildMealCaloriePieData(foods, getMeals(), getMealPiePalette());
   const donut = buildMealDonutParts({
     slices: pie.slices,
     totalKcal: pie.totalKcal,
     targetKcal: goal,
-    hasData: foods.length > 0 && pie.totalKcal > 0
+    hasData: !isFoodLoading && foods.length > 0 && pie.totalKcal > 0,
+    isLoading: isFoodLoading
   });
 
   const macroTile = (tone, label, v, g, unit = 'g', warnOver = false) => {
@@ -220,12 +224,14 @@ function buildDailyOverviewHtml(today, foods, targets) {
           <h2 class="hx-hero-title">${esc(title)}</h2>
           <p class="hx-hero-sub">${esc(subtitle)}</p>
           <button type="button" data-go="food" class="hx-hero-kcal tabular-nums">
-            ${!foodLoaded && !foods.length
+            ${isFoodLoading
               ? '<span>กำลังโหลด...</span>'
               : `<b id="home-kcal-ticker">${kcal.toLocaleString()}</b><span>${goal ? ` / ${goal.toLocaleString()} kcal` : (foods.length ? ' kcal' : ' kcal · ยังไม่มีรายการวันนี้')}</span>`}
           </button>
           ${goal
-            ? `<p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>`
+            ? (isFoodLoading
+              ? `<p class="hx-hero-left tabular-nums">เป้าหมายวันนี้ ${goal.toLocaleString()} kcal</p>`
+              : `<p class="hx-hero-left tabular-nums ${left < 0 ? 'is-over' : ''}">${left >= 0 ? `เหลืออีก ${Math.round(left).toLocaleString()} kcal` : `เกินเป้า ${Math.round(-left).toLocaleString()} kcal`}</p>`)
             : `<button type="button" data-go="settings" class="hx-hero-left is-link">ยังไม่ได้ตั้งเป้าหมายพลังงาน · แตะเพื่อตั้งค่า</button>`}
         </div>
         <div class="hx-hero-ring">
@@ -294,9 +300,10 @@ export function mountHome(navigate) {
   el.innerHTML = `
     <section id="home-head" class="hx-head"></section>
     <div id="home-widgets" class="hx-widgets">
-      <div id="home-planner"></div>
       <div id="home-slot-daily-overview"></div>
-    </div>`;
+      <div id="home-planner"></div>
+    </div>
+    <div id="home-push-slot" class="hx-push-foot"></div>`;
   const widgetsWrap = $('#home-widgets', el);
   if (widgetsWrap && existingShortcuts) widgetsWrap.prepend(existingShortcuts);
   if (widgetsWrap && existingSummary) widgetsWrap.appendChild(existingSummary);
@@ -354,10 +361,9 @@ export function renderHome() {
       <div class="hx-head-copy">
         <p class="hx-date">${esc(dateText)}</p>
         <h1 class="hx-hello">${greeting()}${name ? `, ${esc(name)}` : ''}</h1>
-      </div>
-      <div id="home-push-slot" class="shrink-0"></div>`;
-    refreshHomePushBtn();
+      </div>`;
   }
+  refreshHomePushBtn();
 
   const config = getHomeWidgetConfig();
   const foods = state.todayFood || [];
@@ -418,12 +424,14 @@ async function refreshHomePushBtn() {
   if (!slot.isConnected) return;
   if (!st.supported && !st.needsIosInstall) {
     slot.innerHTML = '';
+    slot.classList.add('hidden');
     return;
   }
+  slot.classList.remove('hidden');
   if (st.subscribedHere) {
     slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push is-on" aria-pressed="true" title="เปิดรับแจ้งเตือนอยู่ · แตะเพื่อตั้งค่า"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('check-circle', { size: 15 })}<span>เปิดแจ้งเตือนอยู่</span></button>`;
   } else if (st.permission === 'denied') {
-    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push is-blocked" aria-pressed="false" title="การแจ้งเตือนถูกปิดกั้นในเบราว์เซอร์"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('alert', { size: 15 })}<span>แจ้งเตือนถูกปิดกั้น</span></button>`;
+    slot.innerHTML = `<button type="button" data-go="settings" data-focus="st-push-card" class="hx-push is-blocked" aria-pressed="false" title="การแจ้งเตือนถูกปิดกั้นในเบราว์เซอร์ · แตะเพื่อดูวิธีตั้งค่า"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('notifications', { size: 15 })}<span>แจ้งเตือนถูกปิดกั้น · ตั้งค่า</span></button>`;
   } else {
     slot.innerHTML = `<button type="button" id="home-push-btn" class="hx-push is-off" aria-pressed="false" title="ปิดรับแจ้งเตือนอยู่ · แตะเพื่อเปิด"><span class="hx-push-dot" aria-hidden="true"></span>${iconSvg('notifications', { size: 15 })}<span>ปิดอยู่ · เปิดแจ้งเตือน</span></button>`;
   }

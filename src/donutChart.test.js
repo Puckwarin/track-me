@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDonutRing, mealSlicesToSegments } from './donutChart.js';
+import { buildDonutRing, buildMealDonutParts, mealSlicesToSegments } from './donutChart.js';
 
 describe('buildDonutRing', () => {
   it('renders an empty dashed ring with a fallback label when there is no data', () => {
@@ -45,6 +45,28 @@ describe('buildDonutRing', () => {
     const circumference = (2 * Math.PI * 52).toFixed(2);
     expect(html).toContain(`stroke-dasharray="${circumference} ${circumference}"`);
     expect(html).toContain(`stroke-dasharray="0.00 ${circumference}"`);
+  });
+
+  it('renders loading ring exclusively without 0% or empty label when isLoading is true', () => {
+    const html = buildDonutRing({ isLoading: true, loadingLabel: 'กำลังโหลด...' });
+    expect(html).toContain('hx-ring--loading');
+    expect(html).toContain('กำลังโหลด...');
+    expect(html).not.toContain('0%');
+    expect(html).not.toContain('ยังไม่มีข้อมูล');
+    expect(html).not.toContain('hx-ring-bar');
+
+    const parts = buildMealDonutParts({ slices: [], totalKcal: 0, targetKcal: 1800, hasData: false, isLoading: true });
+    expect(parts.isLoading).toBe(true);
+    expect(parts.ringHtml).toContain('กำลังโหลด...');
+    expect(parts.ringHtml).not.toContain('0<small>%</small>');
+    expect(parts.ringHtml).not.toContain('ยังไม่มีข้อมูล');
+
+    const loadedEmpty = buildMealDonutParts({ slices: [], totalKcal: 0, targetKcal: 1800, hasData: false, isLoading: false });
+    expect(loadedEmpty.isLoading).toBe(false);
+    expect(loadedEmpty.isEmpty).toBe(true);
+    expect(loadedEmpty.ringHtml).toContain('0<small>%</small>');
+    expect(loadedEmpty.ringHtml).toContain('ยังไม่มีข้อมูล');
+    expect(loadedEmpty.ringHtml).not.toContain('กำลังโหลด...');
   });
 });
 

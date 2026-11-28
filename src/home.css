@@ -27,17 +27,20 @@
 .hx-head-copy { min-width: 0; }
 .hx-date { font-size: .8125rem; color: var(--hx-muted); }
 .hx-hello { font-size: 1.45rem; line-height: 1.25; font-weight: 700; color: var(--hx-ink); letter-spacing: -.02em; text-wrap: balance; }
-.hx-push { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; padding: 0 .85rem; border-radius: 999px; background: var(--hx-soft); color: var(--hx-brand-strong); font-size: .78rem; font-weight: 600; border: 1px solid var(--hx-line); cursor: pointer; white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s, transform .1s; }
-.hx-push:hover { filter: brightness(.97); }
+.hx-push-foot { display: flex; justify-content: flex-start; padding-top: .1rem; }
+.hx-push-foot.hidden { display: none; }
+.hx-push { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; padding: 0 .85rem; border-radius: 999px; background: var(--hx-surface); color: var(--hx-muted); font-size: .75rem; font-weight: 500; border: 1px solid var(--hx-line); cursor: pointer; white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s, transform .1s; }
+.hx-push:hover { background: var(--hx-soft); color: var(--hx-ink); }
 .hx-push:active { transform: scale(.98); }
-.hx-push-dot { width: .5rem; height: .5rem; border-radius: 9999px; flex: none; background: currentColor; }
-.hx-push.is-on { background: #E4F4F0; border-color: #7CCBB8; color: #145245; }
-.hx-push.is-on .hx-push-dot { background: #16A34A; box-shadow: 0 0 0 2px rgb(22 163 74 / .20); }
-.hx-push.is-off { background: #FFFFFF; border: 1.5px dashed var(--color-border-strong); color: var(--hx-muted); }
+.hx-push-dot { width: .45rem; height: .45rem; border-radius: 9999px; flex: none; background: currentColor; }
+.hx-push.is-on { background: #F1FAF7; border-color: #BDE4D8; color: #1F5B4E; }
+.hx-push.is-on .hx-push-dot { background: #16A34A; box-shadow: 0 0 0 2px rgb(22 163 74 / .16); }
+.hx-push.is-off { background: #FFFFFF; border: 1px dashed var(--color-border-strong); color: var(--hx-muted); }
 .hx-push.is-off .hx-push-dot { background: #94A3B8; }
 .hx-push.is-off:hover { background: var(--hx-soft); border-color: var(--hx-brand); color: var(--hx-ink); }
-.hx-push.is-blocked { background: #FCECEF; border-color: #EFAEC0; color: #86263C; }
-.hx-push.is-blocked .hx-push-dot { background: #C95B72; }
+.hx-push.is-blocked { background: transparent; border: 1px solid var(--hx-line); color: var(--hx-muted); }
+.hx-push.is-blocked .hx-push-dot { background: #94A3B8; }
+.hx-push.is-blocked:hover { background: var(--hx-surface); border-color: var(--color-border-strong); color: var(--hx-ink); }
 
 /* 2. Weekly Planner (Compact & Responsive) */
 .hx-plan-compact { display: flex; align-items: center; justify-content: space-between; gap: .75rem; background: var(--hx-plan-bg); color: var(--hx-plan-fg); border: 1px solid var(--hx-line); border-radius: 1.35rem; padding: .7rem .95rem; }

@@ -56,10 +56,12 @@
   --nav-h: 4.25rem;
   --rail-w: 0px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --bottom-clearance: 0px;
+  --mobile-nav-clearance: max(var(--bottom-clearance, 0px), calc(var(--nav-h) + var(--safe-b) + 2.75rem));
 }
 html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 body { background: var(--color-app-bg); color: var(--color-ink); }
-#app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 2rem); }
+#app-shell { padding-bottom: calc(var(--mobile-nav-clearance) + 2.5rem); }
 button { touch-action: manipulation; }
 
 /* ---------- ส่วนประกอบพื้นฐาน ---------- */
@@ -910,7 +912,10 @@ input.input::-webkit-datetime-edit { padding: 0; }
 
 /* ---------- Responsive usability refinements ---------- */
 :where(button, a, input, select, textarea) { min-width: 0; }
-:where(button, a, input, select) { scroll-margin-block: 6rem; }
+:where(button, a, input, select, textarea) {
+  scroll-margin-top: calc(var(--header-h) + var(--nav-bar-h) + env(safe-area-inset-top) + 1rem);
+  scroll-margin-bottom: calc(var(--mobile-nav-clearance) + 1.5rem);
+}
 :where(button, a, input, select, textarea):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--color-brand) 68%, white);
   outline-offset: 2px;
@@ -928,7 +933,6 @@ input.input::-webkit-datetime-edit { padding: 0; }
 img, video, canvas, svg { max-width: 100%; }
 
 @media (max-width: 640px) {
-  #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 2rem); }
   .page { margin-top: .75rem; }
   .card { padding: 1rem; border-radius: 1.25rem; }
   .subnav { margin-inline: .25rem; }
@@ -974,7 +978,7 @@ img, video, canvas, svg { max-width: 100%; }
 
 /* Left Vertical Sidebar on Tablet & Desktop (>= 768px): always-visible categories + collapsible sub-menus */
 @media (min-width: 768px) {
-  :root { --nav-h: 0px; --nav-bar-h: 0px; --rail-w: 12.75rem; }
+  :root { --nav-h: 0px; --nav-bar-h: 0px; --rail-w: 12.75rem; --mobile-nav-clearance: 0px; }
   #app-shell { padding-left: var(--rail-w); padding-bottom: calc(var(--safe-b) + 2.5rem); }
   .desktop-nav {
     position: fixed;
@@ -1102,9 +1106,12 @@ img, video, canvas, svg { max-width: 100%; }
 }
 
 @media (max-width: 767px) {
-  html { font-size: 14px; }
-  #app-shell { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 2rem); }
-  .page { margin-top: .5rem; padding-bottom: 1rem; }
+  html { font-size: 14px; scroll-padding-bottom: calc(var(--mobile-nav-clearance) + 1.5rem); }
+  #app-shell { padding-bottom: calc(var(--mobile-nav-clearance) + 2.5rem); }
+  .page { margin-top: .5rem; padding-bottom: 1.5rem; }
+  :where(button, a, input, select, textarea, summary, [tabindex]):not(.nav-item):not(.nav-plus) {
+    scroll-margin-bottom: calc(var(--mobile-nav-clearance) + 1.5rem);
+  }
   .page > .card, .page .card { padding: .875rem; border-radius: 1.125rem; }
   .card h2 { font-size: 1rem; line-height: 1.35; }
   .card h3 { font-size: .9375rem; line-height: 1.35; }
@@ -1140,7 +1147,7 @@ img, video, canvas, svg { max-width: 100%; }
   .icon-btn { width: 44px; height: 44px; }
   .subnav-row { gap: .375rem; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
   .sub-chip { gap: .3rem; padding: .35rem .7rem; font-size: .75rem; }
-  .scroll-fabs { right: .85rem; bottom: calc(var(--nav-h) + var(--safe-b) + .85rem); }
+  .scroll-fabs { right: .85rem; bottom: calc(var(--mobile-nav-clearance) + .65rem); }
   .fab-scroll-btn { width: 44px; height: 44px; }
 }
 

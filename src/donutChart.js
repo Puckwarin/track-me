@@ -27,7 +27,9 @@ function clampPct(v) {
  * @param {string} opts.ariaLabel   คำอธิบายรวมสำหรับโปรแกรมอ่านหน้าจอ
  * @param {boolean} opts.interactive  true = แต่ละส่วนกดโฟกัส/แตะดู tooltip ได้ (ใช้กับ bindChartInspector)
  * @param {boolean} opts.isEmpty    true = ยังไม่มีข้อมูล แสดงวงแหวนจุดประแทน
+ * @param {boolean} opts.isLoading  true = กำลังโหลดข้อมูล แสดงสถานะโหลดอย่างเดียว
  * @param {string} opts.emptyLabel ข้อความกลางวงแหวนตอนยังไม่มีข้อมูล
+ * @param {string} opts.loadingLabel ข้อความกลางวงแหวนตอนกำลังโหลด
  */
 export function buildDonutRing({
   segments = [],
@@ -37,8 +39,23 @@ export function buildDonutRing({
   ariaLabel = '',
   interactive = false,
   isEmpty = false,
-  emptyLabel = 'ยังไม่มีข้อมูล'
+  isLoading = false,
+  emptyLabel = 'ยังไม่มีข้อมูล',
+  loadingLabel = 'กำลังโหลด...'
 } = {}) {
+  if (isLoading) {
+    return `
+    <div class="hx-ring hx-ring--loading" role="img" aria-label="${esc(ariaLabel || loadingLabel)}">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="hx-ring-track" cx="60" cy="60" r="${R}" stroke-dasharray="6 6" />
+      </svg>
+      <div class="hx-ring-center">
+        <span class="hx-ring-value hx-ring-value--empty tabular-nums">${esc(centerValue || '...')}</span>
+        <span class="hx-ring-label">${esc(centerLabel || loadingLabel)}</span>
+      </div>
+    </div>`;
+  }
+
   if (isEmpty || !segments.length) {
     return `
     <div class="hx-ring" role="img" aria-label="${esc(ariaLabel || emptyLabel)}">
@@ -155,8 +172,20 @@ export function buildMealDonutParts({
   slices = [],
   totalKcal = 0,
   targetKcal = 0,
-  hasData = false
+  hasData = false,
+  isLoading = false
 } = {}) {
+  if (isLoading) {
+    const ringHtml = buildDonutRing({
+      isLoading: true,
+      centerValue: '...',
+      centerLabel: 'กำลังโหลด...',
+      ariaLabel: 'กำลังโหลดข้อมูลพลังงานวันนี้',
+      loadingLabel: 'กำลังโหลด...'
+    });
+    return { ringHtml, legendHtml: '', readoutHtml: '', pct: 0, isEmpty: true, isLoading: true };
+  }
+
   const hasGoal = Number(targetKcal) > 0;
   const pct = hasGoal ? Math.round((totalKcal / Number(targetKcal)) * 100) : 0;
   const segments = hasData ? mealSlicesToSegments(slices, targetKcal) : [];
@@ -180,5 +209,5 @@ export function buildMealDonutParts({
     ? ''
     : `<div class="tm-chart-readout is-empty" data-chart-readout aria-live="polite"><span>${esc(DONUT_TOOLTIP_HINT)}</span></div>`;
 
-  return { ringHtml, legendHtml, readoutHtml, pct, isEmpty };
+  return { ringHtml, legendHtml, readoutHtml, pct, isEmpty, isLoading: false };
 }

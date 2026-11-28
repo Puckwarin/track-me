@@ -26,6 +26,7 @@ import { CATEGORIES, GROUPS, SUBTABS, groupOf } from './categories.js';
 import { getHomeShortcuts, getSubnavTabs, readNavigationPreferences } from './navigation.js';
 import { iconSvg, iconBubble } from './icons.js';
 import { getHomeWidgetConfig, mountHome, renderHome, resetHomePlannerState, resetHomePlannerToToday } from './home.js';
+import { ensureFocusedElementAboveBottomNav, measureBottomNavClearance } from './ui.js';
 import { getPeriodRemindDays } from './periodStats.js';
 import { createOnboardingProgressStore, shouldShowOnboarding } from './onboardingState.js';
 import { refreshProfile } from './profile.js';
@@ -346,21 +347,41 @@ function mountChatFab() {
 function updateStickyOffsets() {
   const header = $('.app-header');
   const desktopNav = $('#desktop-nav');
+  const bottomNav = $('#bottom-nav');
   const headerHeight = header?.getBoundingClientRect().height || 0;
   const safeArea = Number.parseFloat(header ? getComputedStyle(header).paddingTop : '0') || 0;
   const navRect = desktopNav?.getBoundingClientRect();
   const isVerticalRail = !!(desktopNav && getComputedStyle(desktopNav).position === 'fixed' && navRect && navRect.height > 120);
+  const bottomClearance = measureBottomNavClearance({ bottomNav, header });
   document.documentElement.style.setProperty('--header-h', `${Math.max(0, headerHeight - safeArea)}px`);
   document.documentElement.style.setProperty('--nav-bar-h', `${isVerticalRail ? 0 : (navRect?.height || 0)}px`);
+  document.documentElement.style.setProperty('--bottom-clearance', `${bottomClearance}px`);
 }
 
 const stickyOffsetObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateStickyOffsets);
 const stickyHeader = $('.app-header');
 const stickyDesktopNav = $('#desktop-nav');
+const stickyBottomNav = $('#bottom-nav');
 if (stickyHeader) stickyOffsetObserver?.observe(stickyHeader);
 if (stickyDesktopNav) stickyOffsetObserver?.observe(stickyDesktopNav);
+if (stickyBottomNav) stickyOffsetObserver?.observe(stickyBottomNav);
 window.addEventListener('resize', updateStickyOffsets, { passive: true });
+window.visualViewport?.addEventListener('resize', updateStickyOffsets, { passive: true });
 updateStickyOffsets();
+
+let focusClearanceTimer = 0;
+document.addEventListener('focusin', event => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  clearTimeout(focusClearanceTimer);
+  requestAnimationFrame(() => {
+    ensureFocusedElementAboveBottomNav(target);
+  });
+  focusClearanceTimer = window.setTimeout(() => {
+    updateStickyOffsets();
+    if (document.activeElement === target) ensureFocusedElementAboveBottomNav(target);
+  }, 220);
+});
 
 export function showTab(name, { preserveDate = false } = {}) {
   if (!TABS.includes(name)) name = 'home';
@@ -632,7 +653,7 @@ async function migrateLegacyExpensesIfNeeded(uid) {
 }
 
 function hydratePreviewState() {
-  state.loaded = { period: true, body: true };
+  state.loaded = { period: true, body: true, todayFood: true };
   state.period = getPreviewCollection('period_records');
   state.body = getPreviewCollection('body_records');
   state.customFoods = getPreviewCollection('custom_foods');
@@ -697,7 +718,7 @@ function startData() {
   const uid = state.uid;
   expenseRecordsLoaded = false;
   legacyMigrationBlocked = false;
-  state.loaded = { period: false, body: false };
+  state.loaded = { period: false, body: false, todayFood: false };
   watch('period_records', userCol(uid, 'period_records'), list => { state.period = list; state.loaded.period = true; periodLoader.get()?.render?.(); renderSummary(); checkPeriodReminderIfNeeded(); remindersLoader.get()?.renderReminders?.(); scheduleBellSync(); renderHome(); });
   watch('body_records', userCol(uid, 'body_records'), list => { state.body = list; state.loaded.body = true; bodyLoader.get()?.render?.(); remindersLoader.get()?.renderReminders?.(); renderSummary(); refreshProfile(); emit('profile'); renderHome(); overviewLoader.get()?.renderDashboard?.(); });
   watch('custom_foods', userCol(uid, 'custom_foods'), list => { state.customFoods = list; emit('customFoods'); });
@@ -771,13 +792,20 @@ let todayKey = null;
 function watchToday() {
   if (!state.uid) return;
   todayKey = localDateStr();
+  state.loaded = { ...(state.loaded || {}), todayFood: false };
   if (isPreviewMode()) {
     state.todayFood = getPreviewFoodByDate(todayKey);
+    state.loaded.todayFood = true;
     renderHome();
     renderSummary();
     return;
   }
-  watch('food-today', query(userCol(state.uid, 'food_records'), where('date', '==', todayKey)), list => { state.todayFood = list; renderHome(); renderSummary(); });
+  watch('food-today', query(userCol(state.uid, 'food_records'), where('date', '==', todayKey)), list => {
+    state.todayFood = list;
+    state.loaded.todayFood = true;
+    renderHome();
+    renderSummary();
+  });
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && state.uid && todayKey !== localDateStr()) { watchToday(); renderHome(); renderSummary(); } });
 
@@ -789,6 +817,7 @@ on('auth', user => {
   onboardingModule?.unmountOnboarding?.();
   overviewLoader.get()?.resetDashboardState?.();
   resetHomePlannerState();
+  state.loaded = { period: false, body: false, todayFood: false };
   state.period = []; state.body = []; state.customFoods = []; state.demoFoodRecords = []; state.symptoms = []; state.labs = []; state.workouts = []; state.templates = []; state.profile = null; state.homeWidgets = null; state.planner = null; state.pushSettings = null; state.expenses = []; state.expenseRecords = []; state.expenseSettings = []; state.legacyExpenseDocs = []; state.todayFood = [];
   ['skincareProducts','skinRecords','petProfiles','petCare','petFoods','ingredientBlacklist','trackedProducts','replacements','assistantNotes','userFeedback'].forEach(k => { state[k] = []; });
   $('#preview-banner')?.classList.toggle('hidden', !isPreviewMode());

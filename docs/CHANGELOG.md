@@ -3,6 +3,24 @@
 บันทึกการเปลี่ยนแปลงและฟีเจอร์ในแต่ละเวอร์ชันของแอป **Track Me**
 
 ---
+## [v6.4.0] - 2026-11-28
+
+### แก้ระยะกันแถบเมนูล่างมือถือ, สถานะโหลดวงแหวนพลังงานหน้าแรก, ลำดับการ์ดหน้าแรก, ย้ายป้ายแจ้งเตือน & จัดกลุ่มฟอร์มออกกำลังกาย
+- **แก้เนื้อหาและช่องกรอกถูกแถบเมนูลอยด้านล่างบังบนมือถือ (`src/ui.js`, `src/app.js`, `src/style.css`)**:
+  - เพิ่ม `measureBottomNavClearance()` ใน `src/ui.js` เพื่อวัดความสูงจริงของ `#bottom-nav` รวมปุ่มลอย `.nav-plus` และอัปเดต `--bottom-clearance` / `--mobile-nav-clearance` บน `< 768px` (ใช้กับ `#app-shell`, `.page`, `scroll-padding-bottom`, `scroll-margin-bottom` ของตัวควบคุมอินพุต และระยะยก `.scroll-fabs` พร้อม `visualViewport` listener และ `ResizeObserver` บน `#bottom-nav`) โดยยังคงฟอนต์ช่องกรอกขั้นต่ำ `16px` บนมือถือและพื้นที่กด `>= 44px`
+  - เพิ่ม `ensureFocusedElementAboveBottomNav()` ใน `src/ui.js` และผูก `focusin` บน `document` ใน `src/app.js` เพื่อเลื่อนช่องกรอก (`input`, `select`, `textarea`) ที่ถูก `#bottom-nav` บังให้พ้นแถบเมนูล่างอัตโนมัติ (ข้าม checkbox/radio/file/range และช่องภายใน modal, sheet, `#bottom-nav`, `#ai-chat-drawer`)
+- **แยกสถานะโหลดออกจาก `0% ยังไม่มีข้อมูล` ในวงแหวนพลังงานหน้าหลัก (`src/app.js`, `src/preview.js`, `src/donutChart.js`, `src/home.js`)**:
+  - เพิ่มการติดตามสถานะ `state.loaded.todayFood` ตั้งแต่เริ่มโหลด (`startData()`, `watchToday()`, `on('auth')`) จนถึงเมื่อรับ snapshot แรกจาก `food-today` หรือเข้าโหมด Preview (`hydratePreviewState()`, `syncFoodLiveState()`)
+  - เพิ่มพารามิเตอร์ `isLoading` ใน `buildDonutRing()` และ `buildMealDonutParts()` (`src/donutChart.js`) เพื่อแสดงวงแหวน `.hx-ring--loading` (`...` / `กำลังโหลด...`) เพียงอย่างเดียวขณะกำลังโหลด โดยไม่แสดง `"0%"` หรือ `"ยังไม่มีข้อมูล"` ซ้อนทับ และปรับ `buildDailyOverviewHtml()` (`src/home.js`) ให้แสดงข้อความกำลังโหลดและเป้าหมายวันนี้แทนการคำนวณแคลอรี่คงเหลือระหว่างรอข้อมูล
+- **จัดลำดับวิดเจ็ตหน้าแรกและลดความเด่นของป้ายสถานะการแจ้งเตือน (`src/home.js`, `src/home.css`)**:
+  - ปรับลำดับเริ่มต้นของ `HOME_WIDGET_IDS` และ `HOME_WIDGET_DEFS` เป็น `['shortcuts', 'daily-overview', 'planner', 'summary']` ให้ **สรุปภาพรวมวันนี้** แสดงก่อน **Weekly Planner** โดยยังคงลำดับและการซ่อน/แสดงที่ผู้ใช้ตั้งค่าเองไว้เหมือนเดิม
+  - ย้าย `#home-push-slot` ออกจาก `#home-head` ไปวางไว้ที่ท้าย `#home-today` (`.hx-push-foot`) และปรับโทนสีของ `.hx-push` / `.hx-push.is-blocked` ให้กลมกลืนไม่แย่งสายตาจากหัวข้อทักทาย ขณะยังคงการทำงานเปิดแจ้งเตือนและเปิดหน้าต่างตั้งค่าได้ตามเดิม
+- **จัดกลุ่มฟอร์มส่วนบนของหน้าออกกำลังกาย (`src/workout.js`)**:
+  - แยกฟอร์มส่วนบนในแท็บ **วางแผน & บันทึก** ออกเป็นกลุ่มข้อมูลหลัก (`#w-form-core`: วันที่, สถานะ, ประเภท, เวลา, ความหนัก) และพับกลุ่มข้อมูลเสริม (`#w-meta-more`: เทมเพลต, ชื่อโปรแกรม, กล้ามเนื้อหลัก) ด้วย `<details class="tm-details">` + `detailsToggleHtml({ compact: true })` โดยคงปุ่มยกเลิก, ช่วง **วอร์มอัพ / ท่าหลัก / คูลดาวน์**, และการเปิด `#w-meta-more` อัตโนมัติเมื่อโหลดเทมเพลต แก้ไข ทำซ้ำ หรือนำเข้าตาราง
+- **Tests & ซิงค์เวอร์ชัน `v6.4.0`**:
+  - ขยาย `src/donutChart.test.js`, `src/homeWidgetContract.test.js` และ `src/uiOverhaul.test.js` ให้ครอบคลุมสถานะโหลดวงแหวน, ลำดับเริ่มต้นวิดเจ็ตหน้าแรก, `measureBottomNavClearance`, `ensureFocusedElementAboveBottomNav`, กฎ CSS ระยะกันขอบล่างมือถือ, `todayFood` loaded tracking, `#home-push-slot.hx-push-foot`, และ `#w-form-core` / `#w-meta-more` พร้อมซิงค์เวอร์ชัน `6.4.0` ใน `package.json`, `package-lock.json` และ `src/version.js`
+
+---
 ## [v6.3.0] - 2026-11-27
 
 ### ยกระดับการมองเห็นธีม Scoped Pastel Pink ประจำเดือน, โครงสร้างหน้าประวัติ & รายงาน และซิงค์เวอร์ชัน `v6.3.0`

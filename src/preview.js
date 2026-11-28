@@ -412,6 +412,7 @@ export function registerPreviewFoodWatcher(date, cb) {
 function syncFoodLiveState() {
   const today = localDateStr();
   state.todayFood = getPreviewFoodByDate(today);
+  state.loaded = { ...(state.loaded || {}), todayFood: true };
   if (watchedFoodCallback && watchedFoodDate) {
     watchedFoodCallback(getPreviewFoodByDate(watchedFoodDate));
   }

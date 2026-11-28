@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { barChartSvg, getChartPalette, lineChartSvg, sparklineSvg } from './chartPrimitives.js';
 import { iconSvg } from './icons.js';
+import { ensureFocusedElementAboveBottomNav, measureBottomNavClearance } from './ui.js';
 
 const readSrc = relPath => readFileSync(resolve(process.cwd(), relPath), 'utf8');
 
@@ -137,13 +138,88 @@ describe('UI Overhaul Phases 1–3: Tokens, Scoped Period, Charts & Structural C
     expect(chatSrc).toContain('<span class="tm-badge tm-badge-info');
   });
 
-  it('keeps package.json, package-lock.json, and src/version.js synced at v6.3.0', () => {
+  it('keeps package.json, package-lock.json, and src/version.js synced at v6.4.0', () => {
     const pkg = JSON.parse(readSrc('package.json'));
     const lock = JSON.parse(readSrc('package-lock.json'));
     const versionSrc = readSrc('src/version.js');
-    expect(pkg.version).toBe('6.3.0');
-    expect(lock.version).toBe('6.3.0');
-    expect(lock.packages?.['']?.version).toBe('6.3.0');
-    expect(versionSrc).toContain("'6.3.0'");
+    expect(pkg.version).toBe('6.4.0');
+    expect(lock.version).toBe('6.4.0');
+    expect(lock.packages?.['']?.version).toBe('6.4.0');
+    expect(versionSrc).toContain("'6.4.0'");
+  });
+
+  it('measures mobile bottom-nav overhang including .nav-plus and scrolls obscured focused inputs clear', () => {
+    const fakePlus = { getBoundingClientRect: () => ({ top: 730, bottom: 786, height: 56 }) };
+    const fakeInner = { getBoundingClientRect: () => ({ top: 758, bottom: 826, height: 68 }) };
+    const fakeBottomNav = {
+      getBoundingClientRect: () => ({ top: 758, bottom: 844, height: 86 }),
+      querySelector: sel => (sel === '.nav-plus' ? fakePlus : sel === '.bottom-nav-inner' ? fakeInner : null)
+    };
+    const fakeHeader = { getBoundingClientRect: () => ({ top: 0, bottom: 60, height: 60 }) };
+    const visibleStyle = () => ({ display: 'block', visibility: 'visible' });
+
+    // 844 - 730 = 114px overhang + 8px halo buffer = 122px
+    expect(measureBottomNavClearance({
+      bottomNav: fakeBottomNav,
+      header: fakeHeader,
+      viewportHeight: 844,
+      getStyle: visibleStyle
+    })).toBe(122);
+
+    // Hidden on desktop -> 0 clearance
+    expect(measureBottomNavClearance({
+      bottomNav: fakeBottomNav,
+      header: fakeHeader,
+      viewportHeight: 844,
+      getStyle: () => ({ display: 'none', visibility: 'visible' })
+    })).toBe(0);
+
+    const scrollBy = vi.fn();
+    const obscuredInput = {
+      tagName: 'SELECT',
+      getAttribute: () => null,
+      closest: () => null,
+      getBoundingClientRect: () => ({ top: 710, bottom: 754, height: 44 })
+    };
+    const scrolled = ensureFocusedElementAboveBottomNav(obscuredInput, {
+      bottomNav: fakeBottomNav,
+      header: fakeHeader,
+      win: { innerHeight: 844, scrollBy },
+      getStyle: visibleStyle
+    });
+    expect(scrolled).toBe(true);
+    // safeBottom = 844 - 122 - 16 = 706; 754 - 706 = 48px
+    expect(scrollBy).toHaveBeenCalledWith({ top: 48, behavior: 'smooth' });
+
+    const css = readSrc('src/style.css');
+    expect(css).toContain('--bottom-clearance:');
+    expect(css).toContain('--mobile-nav-clearance:');
+    expect(css).toContain('scroll-padding-bottom: calc(var(--mobile-nav-clearance) + 1.5rem);');
+    expect(css).toContain('scroll-margin-bottom: calc(var(--mobile-nav-clearance) + 1.5rem);');
+    expect(css).toContain('font-size: 16px;');
+  });
+
+  it('tracks state.loaded.todayFood, separates home ring loading/empty states, moves push status out of #home-head, and groups upper workout form', () => {
+    const appSrc = readSrc('src/app.js');
+    expect(appSrc).toContain('todayFood: false');
+    expect(appSrc).toContain('state.loaded.todayFood = true');
+    expect(appSrc).toContain('measureBottomNavClearance');
+    expect(appSrc).toContain('ensureFocusedElementAboveBottomNav');
+
+    const homeSrc = readSrc('src/home.js');
+    expect(homeSrc).toContain('const isFoodLoading = !foodLoaded && foods.length === 0;');
+    expect(homeSrc).toContain('isLoading: isFoodLoading');
+    expect(homeSrc).toContain('<section id="home-head" class="hx-head"></section>');
+    expect(homeSrc).toContain('<div id="home-push-slot" class="hx-push-foot"></div>');
+    expect(homeSrc).toMatch(/<section id="home-head" class="hx-head"><\/section>\s*<div id="home-widgets"[\s\S]*?<\/div>\s*<div id="home-push-slot" class="hx-push-foot"><\/div>/);
+
+    const homeCss = readSrc('src/home.css');
+    expect(homeCss).toContain('.hx-push-foot');
+    expect(homeCss).toContain('.hx-push.is-blocked { background: transparent;');
+
+    const workoutSrc = readSrc('src/workout.js');
+    expect(workoutSrc).toContain('id="w-form-core"');
+    expect(workoutSrc).toContain('<details id="w-meta-more" class="tm-details');
+    expect(workoutSrc).toContain('syncWorkoutMetaDetails');
   });
 });

@@ -698,3 +698,87 @@ export function weekNavBarHtml({
     ${showArrows ? `<button type="button" ${nextAttrs} class="pl-week-nav-btn" aria-label="สัปดาห์ถัดไป" title="สัปดาห์ถัดไป">${iconSvg('chevron-right', { size: 14 })}</button>` : ''}
   </div>`;
 }
+
+/* ---- Mobile Bottom Nav Clearance & Focus Scroll Protection ---- */
+export function measureBottomNavClearance({
+  bottomNav = typeof document !== 'undefined' ? document.getElementById('bottom-nav') : null,
+  header = typeof document !== 'undefined' ? document.querySelector('.app-header') : null,
+  viewportHeight = typeof window !== 'undefined' ? (window.visualViewport?.height || window.innerHeight || 0) : 0,
+  getStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null
+} = {}) {
+  if (!bottomNav || !viewportHeight) return 0;
+  const navStyle = getStyle?.(bottomNav);
+  if (navStyle?.display === 'none' || navStyle?.visibility === 'hidden') return 0;
+  const plusBtn = bottomNav.querySelector?.('.nav-plus');
+  const innerEl = bottomNav.querySelector?.('.bottom-nav-inner');
+  const rects = [bottomNav, innerEl, plusBtn]
+    .filter(Boolean)
+    .map(el => el.getBoundingClientRect?.())
+    .filter(r => r && r.height > 0 && r.bottom > 0);
+  if (!rects.length) return 0;
+  const topMost = Math.min(...rects.map(r => r.top));
+  const rawClearance = Math.ceil(Math.max(0, viewportHeight - topMost));
+  if (!rawClearance) return 0;
+  const headerRect = header?.getBoundingClientRect?.();
+  if (headerRect && headerRect.bottom >= viewportHeight) return rawClearance;
+  // +8px covers the outer halo/shadow around .nav-plus
+  return rawClearance + 8;
+}
+
+export function ensureFocusedElementAboveBottomNav(target, {
+  bottomNav = typeof document !== 'undefined' ? document.getElementById('bottom-nav') : null,
+  header = typeof document !== 'undefined' ? document.querySelector('.app-header') : null,
+  subnav = typeof document !== 'undefined' ? document.getElementById('subnav') : null,
+  win = typeof window !== 'undefined' ? window : null,
+  getStyle = typeof getComputedStyle === 'function' ? getComputedStyle : null,
+  gap = 16
+} = {}) {
+  if (!target || !win || typeof target.getBoundingClientRect !== 'function') return false;
+  if (target.closest?.('#bottom-nav, .modal-backdrop, .modal-box, .tm-modal-backdrop, .tm-modal-box, .sheet-backdrop, .ai-chat-drawer')) {
+    return false;
+  }
+  const tag = String(target.tagName || '').toUpperCase();
+  const type = String(target.getAttribute?.('type') || '').toLowerCase();
+  if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return false;
+  if (tag === 'INPUT' && ['hidden', 'checkbox', 'radio', 'range', 'file', 'button', 'submit', 'reset'].includes(type)) {
+    return false;
+  }
+  const navStyle = bottomNav ? getStyle?.(bottomNav) : null;
+  if (!bottomNav || navStyle?.display === 'none' || navStyle?.visibility === 'hidden') return false;
+
+  const viewportHeight = win.visualViewport?.height || win.innerHeight || 0;
+  const viewportTop = win.visualViewport?.offsetTop || 0;
+  const clearance = measureBottomNavClearance({ bottomNav, header, viewportHeight, getStyle });
+  if (!clearance || !viewportHeight) return false;
+
+  const rect = target.getBoundingClientRect();
+  const safeBottom = viewportTop + viewportHeight - clearance - gap;
+  const headerBottom = Math.max(
+    header?.getBoundingClientRect?.()?.bottom || 0,
+    subnav && getStyle?.(subnav)?.display !== 'none' ? (subnav.getBoundingClientRect?.()?.bottom || 0) : 0
+  );
+  const safeTop = viewportTop + headerBottom + gap;
+
+  const reduced = typeof win.matchMedia === 'function' && win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const behavior = reduced ? 'auto' : 'smooth';
+
+  if (rect.bottom > safeBottom) {
+    const delta = Math.ceil(rect.bottom - safeBottom);
+    if (typeof win.scrollBy === 'function') {
+      win.scrollBy({ top: delta, behavior });
+      return true;
+    }
+    target.scrollIntoView?.({ block: 'center', behavior });
+    return true;
+  }
+  if (rect.top < safeTop) {
+    const delta = Math.floor(rect.top - safeTop);
+    if (typeof win.scrollBy === 'function') {
+      win.scrollBy({ top: delta, behavior });
+      return true;
+    }
+    target.scrollIntoView?.({ block: 'center', behavior });
+    return true;
+  }
+  return false;
+}
